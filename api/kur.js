@@ -1,40 +1,26 @@
+export const config = { maxDuration: 30 };
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   if (req.method === "OPTIONS") return res.status(200).end();
   try {
-    const KEY = process.env.VITE_ANTHROPIC_KEY;
-    const r = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": KEY,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 1024,
-        tools: [{ type: "web_search_20250305", name: "web_search" }],
-        tool_choice: { type: "any" },
-        messages: [{
-          role: "user",
-          content: `Web'de ara: bugünkü döviz kurları USD/TRY EUR/TRY GBP/TRY. Aradıktan sonra SADECE şu JSON formatında ver:\n{"USD_TRY":sayı,"EUR_TRY":sayı,"GBP_TRY":sayı,"CHF_TRY":sayı,"SAR_TRY":sayı,"AED_TRY":sayı,"JPY100_TRY":sayı,"XAU_USD":sayı,"XAU_TRY_gram":sayı,"XAG_TRY_gram":sayı,"EUR_USD":sayı}`
-        }]
-      })
-    });
+    // Ücretsiz kur API - key gerektirmez
+    const r = await fetch("https://api.frankfurter.app/latest?from=USD&to=TRY,EUR,GBP,CHF,SAR,AED,JPY");
     const d = await r.json();
-
-    // Tüm içeriği logla (debug)
-    const allContent = JSON.stringify(d);
-
-    // text bloğu ara
-    const textBlock = d.content?.find(b => b.type === "text");
-    if (textBlock) {
-      const clean = textBlock.text.replace(/```json|```/g, "").trim();
-      try {
-        return res.status(200).json(JSON.parse(clean));
-      } catch(pe) {
-        return res.status(200).json({ error: "parse_fail", raw: textBlock.text.slice(0,200) });
-      }
-    }
-
-    // tool_result varsa ve içinde JSON varsa
+    const USD_TRY = d.rates.TRY;
+    const EUR_TRY = USD_TRY / d.rates.EUR;
+    const GBP_TRY = USD_TRY / d.rates.GBP;
+    const CHF_TRY = USD_TRY / d.rates.CHF;
+    const SAR_TRY = USD_TRY / d.rates.SAR;
+    const AED_TRY = USD_TRY / d.rates.AED;
+    const JPY100_TRY = (USD_TRY / d.rates.JPY) * 100;
+    const EUR_USD = 1 / d.rates.EUR;
+    res.status(200).json({
+      USD_TRY, EUR_TRY, GBP_TRY, CHF_TRY,
+      SAR_TRY, AED_TRY, JPY100_TRY, EUR_USD,
+      XAU_USD: null, XAU_TRY_gram: null, XAG_TRY_gram: null
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+}
