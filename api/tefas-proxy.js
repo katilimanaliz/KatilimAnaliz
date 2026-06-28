@@ -1,7 +1,3 @@
-// api/tefas-proxy.js
-// Vercel Cron: Her gün 08:30 TR (05:30 UTC)
-// 23 saat cache — gün içi ek istek gitmez
-
 export default async function handler(req, res) {
   try {
     const API_KEY = process.env.FONOLOJI_KEY;
@@ -11,31 +7,47 @@ export default async function handler(req, res) {
 
     const headers = { "X-API-Key": API_KEY, "Accept": "application/json" };
 
-    // 20 sayfa × 50 = 1000 fon — katılım fonlarının tamamını kapsar (~260 adet)
-    const sayfalar = [0,50,100,150,200,250,300,350,400,450,500,550,600,650,700,750,800,850,900,950];
+    // Strateji: Sadece YAT (Yatırım Fonu) tipini çek, max 50
+    // Fonoloji'de type filtresi varsa çok daha az fon gelir
+    // Ardından isim filtresi uygula
+    const denemeler = [
+      "https://fonoloji.com/v1/funds?type=YAT&limit=50",
+      "https://fonoloji.com/v1/funds?fund_type=YAT&limit=50",
+      "https://fonoloji.com/v1/funds?category=katilim&limit=50",
+      "https://fonoloji.com/v1/funds?limit=50&offset=0",
+      "https://fonoloji.com/v1/funds?limit=50&offset=500",
+      "https://fonoloji.com/v1/funds?limit=50&offset=1000",
+      "https://fonoloji.com/v1/funds?limit=50&offset=1500",
+    ];
 
     const sonuclar = await Promise.all(
-      sayfalar.map(offset =>
-        fetch(`https://fonoloji.com/v1/funds?limit=50&offset=${offset}`, { headers })
+      denemeler.map(url =>
+        fetch(url, { headers })
           .then(r => r.ok ? r.json() : null)
           .catch(() => null)
       )
     );
 
+    const gorulmuKodlar = new Set();
     let tumFonlar = [];
+
     for (const d of sonuclar) {
       if (!d) continue;
       const items = d.items ?? d.funds ?? d.data ?? (Array.isArray(d) ? d : []);
-      tumFonlar = tumFonlar.concat(items);
+      for (const f of items) {
+        const kod = f.code || f.fund_code || "";
+        if (kod && gorulmuKodlar.has(kod)) continue;
+        gorulmuKodlar.add(kod);
+        tumFonlar.push(f);
+      }
     }
 
-    // Fon adında "KATILIM" geçenleri filtrele
     const katilimFonlar = tumFonlar
       .filter(f => (f.name || "").toUpperCase().includes("KATILIM"))
       .map(f => ({
         kod:      f.code || "",
         ad:       f.name || "",
-        yonetici: f.management_company || "",
+        yonetici: (f.management_company || "").trim(),
         portfoy:  f.aum || 0,
         gunluk:   parseFloat(((f.return_1d  || 0) * 100).toFixed(4)),
         haftalik: parseFloat(((f.return_1w  || 0) * 100).toFixed(2)),
