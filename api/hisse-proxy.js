@@ -3,68 +3,65 @@ const XK100_KODLARI = new Set([
   "ASELS","TUPRS","BIMAS","EREGL","KTLEV","GUBRF","MAGEN","ISDMR","ENJSA",
   "SASA","KCHOL","TOASO","FROTO","TTRAK","TSKB","YKBNK","SAHOL","SISE",
   "AKBNK","GARAN","ISCTR","VAKBN","HALKB","ALARK","AEFES","ARCLK","THYAO",
-  "PGSUS","TCELL","TURK","TAVHL","PETKM","BRISA","CCOLA","DOHOL","EKGYO",
-  "ENKAI","GESAN","SARKY","SELEC","MGROS","OTKAR","RYSAS","TTRAK","TKFEN",
-  "TKNSA","TMSN","TRKCM","TURSG","ULKER","YEOTK","ZOREN","AGHOL","AKSA",
-  "ATATP","BSOKE","CEMTS","DAPGM","DARDL","DCTTR","EKGYO","FORMT","GENIL",
-  "GENTS","GRSEL","IDGYO","KBORU","OBAMS","PAGYO","PNLSN","POLHO","RGYAS",
-  "RNPOL","SANEL","SARKY","SURGY","TARKM","TUREX","TUKAS","ULAS","VRGYO",
-  "BIENY","CIMSA","DENGE","HEKTS","IHLGM","PETKM","KRDMD","ALBRK",
-  "CCOLA","ANSGR","ENJSA","CLEBI","ASUZU","DOHOL","ARCLK","GRSEL",
+  "PGSUS","TCELL","TAVHL","PETKM","BRISA","CCOLA","DOHOL","EKGYO","ENKAI",
+  "GESAN","SARKY","SELEC","MGROS","OTKAR","RYSAS","TTRAK","TKFEN","TKNSA",
+  "TURSG","ULKER","YEOTK","ZOREN","AGHOL","AKSA","ATATP","BSOKE","CEMTS",
+  "DAPGM","DARDL","DCTTR","FORMT","GENIL","GENTS","GRSEL","IDGYO","KBORU",
+  "OBAMS","PAGYO","PNLSN","POLHO","RGYAS","RNPOL","SANEL","SURGY","TARKM",
+  "TUREX","TUKAS","ULAS","VRGYO","BIENY","CIMSA","DENGE","HEKTS","IHLGM",
+  "KRDMD","ASUZU","DOHOL","ARCLK","GRSEL","ALBRK","ANSGR",
 ]);
 
 export default async function handler(req, res) {
   try {
     const API_KEY = process.env.FONOLOJI_KEY;
-    if (!API_KEY) {
-      return res.status(500).json({ success: false, error: "FONOLOJI_KEY tanımlı değil" });
-    }
+    if (!API_KEY) return res.status(500).json({ success:false, error:"FONOLOJI_KEY yok" });
 
     const headers = { "X-API-Key": API_KEY, "Accept": "application/json" };
 
-    // Paralel: screener (temel veriler) + stocks/list (fiyat)
-    const [screenerRes, listRes] = await Promise.all([
+    // Paralel: screener (temel) + stocks/list (fiyat + değişimler)
+    const [sRes, lRes] = await Promise.all([
       fetch("https://fonoloji.com/v1/screener/bist?sort_by=market_cap&sort_order=desc&limit=200", { headers }),
       fetch("https://fonoloji.com/v1/stocks/list", { headers }),
     ]);
 
-    if (!screenerRes.ok) throw new Error(`Screener hatası: ${screenerRes.status}`);
+    if (!sRes.ok) throw new Error(`Screener: ${sRes.status}`);
 
-    const screenerData = await screenerRes.json();
-    const screenerListe = screenerData.stocks ?? screenerData.items ?? screenerData.data ?? (Array.isArray(screenerData) ? screenerData : []);
+    const sData = await sRes.json();
+    const screener = sData.stocks ?? sData.items ?? sData.data ?? (Array.isArray(sData) ? sData : []);
 
-    // Fiyat map'i oluştur
+    // Fiyat + değişim map
     const fiyatMap = {};
-    if (listRes.ok) {
-      const listData = await listRes.json();
-      const listListe = listData.stocks ?? listData.items ?? listData.data ?? (Array.isArray(listData) ? listData : []);
-      for (const s of listListe) {
-        const ticker = s.ticker || s.symbol || "";
-        if (ticker) {
-          fiyatMap[ticker] = {
-            fiyat:   s.price || s.last_price || s.close || 0,
-            degisim: parseFloat((s.change_percent || s.daily_change || 0).toFixed(2)),
-            piyasaDegeri: s.market_cap || 0,
-          };
-        }
+    if (lRes.ok) {
+      const lData = await lRes.json();
+      const liste = lData.stocks ?? lData.items ?? lData.data ?? (Array.isArray(lData) ? lData : []);
+      for (const s of liste) {
+        const t = s.ticker || s.symbol || "";
+        if (t) fiyatMap[t] = s; // ham veriyi sakla
       }
     }
 
-    const hisseler = screenerListe.map(h => {
-      const ticker = h.ticker || h.symbol || "";
-      const fiyatBilgi = fiyatMap[ticker] || {};
+    const hisseler = screener.map(h => {
+      const t = h.ticker || h.symbol || "";
+      const f = fiyatMap[t] || {};
       return {
-        ticker,
+        ticker:       t,
         sirket:       h.name || h.company_name || "",
         sektor:       h.sector || "",
-        fiyat:        fiyatBilgi.fiyat || 0,
-        degisim:      fiyatBilgi.degisim || 0,
-        piyasaDegeri: fiyatBilgi.piyasaDegeri || h.market_cap || 0,
-        fk:           h.pe_ratio || h.pe || null,
-        pddd:         h.pb_ratio || h.pb || null,
-        roe:          h.return_on_equity || h.roe || null,
-        temetu:       h.dividend_yield || null,
-        katilimEndeksi: XK100_KODLARI.has(ticker),
+        fiyat:        f.price ?? f.last_price ?? f.close ?? 0,
+        degisim1g:    f.change_percent ?? f.return_1d ?? f.daily_return ?? 0,
+        degisim1h:    f.return_1w ?? f.weekly_return ?? null,
+        degisim1a:    f.return_1m ?? f.monthly_return ?? null,
+        degisim3a:    f.return_3m ?? null,
+        degisim1y:    f.return_1y ?? f.yearly_return ?? null,
+        piyasaDegeri: f.market_cap ?? h.market_cap ?? 0,
+        fk:           h.pe_ratio ?? h.pe ?? null,
+        pddd:         h.pb_ratio ?? h.pb ?? null,
+        roe:          h.return_on_equity ?? h.roe ?? null,
+        temetu:       h.dividend_yield ?? null,
+        katilimEndeksi: XK100_KODLARI.has(t),
+        // Debug: ham alan adları (ilk çalıştırmada görmek için)
+        _fKeys: Object.keys(f).join(","),
       };
     });
 
@@ -73,12 +70,14 @@ export default async function handler(req, res) {
     res.status(200).json({
       success: true,
       count: hisseler.length,
-      katilimCount: hisseler.filter(h => h.katilimEndeksi).length,
+      katilimCount: hisseler.filter(h=>h.katilimEndeksi).length,
       guncelleme: new Date().toISOString(),
+      // İlk hissenin ham alanlarını göster
+      debugKeys: Object.keys(fiyatMap[hisseler[0]?.ticker] || {}),
       data: hisseler,
     });
 
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+  } catch(e) {
+    res.status(500).json({ success:false, error: e.message });
   }
 }
