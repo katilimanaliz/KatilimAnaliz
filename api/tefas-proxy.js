@@ -11,8 +11,8 @@ export default async function handler(req, res) {
 
     const headers = { "X-API-Key": API_KEY, "Accept": "application/json" };
 
-    // 10 sayfa × 50 = 500 fon paralel çek
-    const sayfalar = [0,50,100,150,200,250,300,350,400,450];
+    // 20 sayfa × 50 = 1000 fon — katılım fonlarının tamamını kapsar (~260 adet)
+    const sayfalar = [0,50,100,150,200,250,300,350,400,450,500,550,600,650,700,750,800,850,900,950];
 
     const sonuclar = await Promise.all(
       sayfalar.map(offset =>
