@@ -5,30 +5,44 @@ export default async function handler(req, res) {
       return res.status(500).json({ success: false, error: "FONOLOJI_KEY tanımlı değil" });
     }
 
-    // Fonoloji: items[] içinde geliyor, limit 2000 yeterli
-    const response = await fetch(
-      "https://fonoloji.com/v1/funds?limit=2000",
-      { headers: { "X-API-Key": API_KEY } }
-    );
+    const headers = { "X-API-Key": API_KEY };
+    let tumFonlar = [];
+    let offset = 0;
+    const limit = 50; // Ücretsiz plan max
+    let devam = true;
 
-    if (!response.ok) {
-      throw new Error(`Fonoloji API hatası: ${response.status}`);
+    // Tüm sayfaları çek (pagination)
+    while (devam) {
+      const r = await fetch(
+        `https://fonoloji.com/v1/funds?limit=${limit}&offset=${offset}`,
+        { headers }
+      );
+
+      if (!r.ok) throw new Error(`Fonoloji API hatası: ${r.status}`);
+
+      const d = await r.json();
+      const items = d.items ?? d.funds ?? d.data ?? (Array.isArray(d) ? d : []);
+
+      if (items.length === 0) break;
+
+      tumFonlar = tumFonlar.concat(items);
+      offset += limit;
+
+      // 50'den az döndüyse son sayfa
+      if (items.length < limit) devam = false;
+
+      // Rate limit: 30 istek/dakika — kısa bekle
+      if (devam) await new Promise(ok => setTimeout(ok, 200));
     }
 
-    const data = await response.json();
-
-    // Gerçek format: { items: [...] }
-    const liste = data.items ?? data.funds ?? data.data ?? (Array.isArray(data) ? data : []);
-
     // Fon adında "KATILIM" geçenleri filtrele
-    const katilimFonlar = liste
+    const katilimFonlar = tumFonlar
       .filter(f => (f.name || "").toUpperCase().includes("KATILIM"))
       .map(f => ({
-        kod:      f.code       || "",
-        ad:       f.name       || "",
+        kod:      f.code || "",
+        ad:       f.name || "",
         yonetici: f.management_company || "",
-        portfoy:  f.aum        || 0,
-        // Fonoloji ondalık döndürüyor (0.05 = %5), biz yüzdeye çeviriyoruz
+        portfoy:  f.aum || 0,
         gunluk:   parseFloat(((f.return_1d  || 0) * 100).toFixed(4)),
         haftalik: parseFloat(((f.return_1w  || 0) * 100).toFixed(2)),
         aylik:    parseFloat(((f.return_1m  || 0) * 100).toFixed(2)),
@@ -42,6 +56,7 @@ export default async function handler(req, res) {
     res.status(200).json({
       success: true,
       count: katilimFonlar.length,
+      toplam_fon: tumFonlar.length,
       guncelleme: new Date().toISOString(),
       data: katilimFonlar,
     });
