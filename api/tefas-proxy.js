@@ -1,45 +1,46 @@
 export default async function handler(req, res) {
   try {
-    // Bugünün tarihini al
-    const bugun = new Date();
-    const bitisTarihi = bugun.toLocaleDateString("tr-TR").split(".").reverse().join("-");
-    // 2 gün geriye git (hafta sonu/tatil ihtimaline karşı)
-    bugun.setDate(bugun.getDate() - 2);
-    const baslangicTarihi = bugun.toLocaleDateString("tr-TR").split(".").reverse().join("-");
+    const API_KEY = process.env.FONOLOJI_KEY;
+    if (!API_KEY) {
+      return res.status(500).json({ success: false, error: "FONOLOJI_KEY tanımlı değil" });
+    }
 
-    const url = `https://www.tefas.gov.tr/api/funds/fonGnlBlgSiraliGetir?fontip=YAT&baslangicTarihi=${baslangicTarihi}&bitisTarihi=${bitisTarihi}`;
+    const response = await fetch(
+      "https://fonoloji.com/v1/funds?limit=2000",
+      { headers: { "X-API-Key": API_KEY } }
+    );
 
-    const response = await fetch(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "application/json, text/plain, */*",
-        "Accept-Language": "tr-TR,tr;q=0.9",
-        "Referer": "https://www.tefas.gov.tr/",
-        "Origin": "https://www.tefas.gov.tr",
-      },
-    });
-
-    if (!response.ok) throw new Error(`TEFAS yanıt hatası: ${response.status}`);
+    if (!response.ok) {
+      throw new Error(`Fonoloji API hatası: ${response.status}`);
+    }
 
     const data = await response.json();
+    const liste = Array.isArray(data) ? data : (data.funds ?? data.data ?? []);
 
-    const liste = Array.isArray(data) ? data : (data.data ?? []);
-
-    // Fon adında "KATILIM" geçenleri filtrele
-    const katilimFonlar = liste.filter((f) => {
-      const ad = (
-        f.fonunvani || f.FonUnvani || f.fon_adi ||
-        f.FONUNVANI || f.fund_name || ""
-      ).toUpperCase();
-      return ad.includes("KATILIM");
-    });
+    const katilimFonlar = liste
+      .filter(f => {
+        const ad = (f.name || f.fund_name || f.fonunvani || "").toUpperCase();
+        return ad.includes("KATILIM");
+      })
+      .map(f => ({
+        kod:      f.code || f.fund_code || "",
+        ad:       f.name || f.fund_name || "",
+        yonetici: f.management_company || "",
+        portfoy:  f.aum || 0,
+        gunluk:   parseFloat(((f.return_1d  || 0) * 100).toFixed(4)),
+        haftalik: parseFloat(((f.return_1w  || 0) * 100).toFixed(2)),
+        aylik:    parseFloat(((f.return_1m  || 0) * 100).toFixed(2)),
+        uc_aylik: parseFloat(((f.return_3m  || 0) * 100).toFixed(2)),
+        ytd:      parseFloat(((f.return_ytd || 0) * 100).toFixed(2)),
+        yillik:   parseFloat(((f.return_1y  || 0) * 100).toFixed(2)),
+      }));
 
     res.setHeader("Cache-Control", "s-maxage=300, stale-while-revalidate=600");
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.status(200).json({
       success: true,
       count: katilimFonlar.length,
-      tarih: { baslangicTarihi, bitisTarihi },
+      guncelleme: new Date().toISOString(),
       data: katilimFonlar,
     });
 
