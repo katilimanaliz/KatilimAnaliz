@@ -6,63 +6,62 @@ export default async function handler(req, res) {
     }
 
     const headers = { "X-API-Key": API_KEY, "Accept": "application/json" };
-
-    // Strateji: Sadece YAT (Yatırım Fonu) tipini çek, max 50
-    // Fonoloji'de type filtresi varsa çok daha az fon gelir
-    // Ardından isim filtresi uygula
-    const denemeler = [
-      "https://fonoloji.com/v1/funds?type=YAT&limit=50",
-      "https://fonoloji.com/v1/funds?fund_type=YAT&limit=50",
-      "https://fonoloji.com/v1/funds?category=katilim&limit=50",
-      "https://fonoloji.com/v1/funds?limit=50&offset=0",
-      "https://fonoloji.com/v1/funds?limit=50&offset=500",
-      "https://fonoloji.com/v1/funds?limit=50&offset=1000",
-      "https://fonoloji.com/v1/funds?limit=50&offset=1500",
-    ];
-
-    const sonuclar = await Promise.all(
-      denemeler.map(url =>
-        fetch(url, { headers })
-          .then(r => r.ok ? r.json() : null)
-          .catch(() => null)
-      )
-    );
-
     const gorulmuKodlar = new Set();
-    let tumFonlar = [];
+    let katilimFonlar = [];
+    let toplam = 0;
 
-    for (const d of sonuclar) {
-      if (!d) continue;
+    // Sıralı istek — aralarında 300ms bekle (rate limit: 30/dakika = 2sn/istek)
+    // Vercel serverless max 10sn — 10 sayfa × 300ms = 3sn, güvenli
+    for (let offset = 0; offset <= 450; offset += 50) {
+      const r = await fetch(
+        `https://fonoloji.com/v1/funds?limit=50&offset=${offset}`,
+        { headers }
+      );
+
+      if (!r.ok) {
+        // 429 rate limit — o ana kadar topladıklarımızla devam et
+        if (r.status === 429) break;
+        continue;
+      }
+
+      const d = await r.json();
       const items = d.items ?? d.funds ?? d.data ?? (Array.isArray(d) ? d : []);
+      toplam += items.length;
+
       for (const f of items) {
-        const kod = f.code || f.fund_code || "";
+        const kod = f.code || "";
         if (kod && gorulmuKodlar.has(kod)) continue;
         gorulmuKodlar.add(kod);
-        tumFonlar.push(f);
-      }
-    }
 
-    const katilimFonlar = tumFonlar
-      .filter(f => (f.name || "").toUpperCase().includes("KATILIM"))
-      .map(f => ({
-        kod:      f.code || "",
-        ad:       f.name || "",
-        yonetici: (f.management_company || "").trim(),
-        portfoy:  f.aum || 0,
-        gunluk:   parseFloat(((f.return_1d  || 0) * 100).toFixed(4)),
-        haftalik: parseFloat(((f.return_1w  || 0) * 100).toFixed(2)),
-        aylik:    parseFloat(((f.return_1m  || 0) * 100).toFixed(2)),
-        uc_aylik: parseFloat(((f.return_3m  || 0) * 100).toFixed(2)),
-        ytd:      parseFloat(((f.return_ytd || 0) * 100).toFixed(2)),
-        yillik:   parseFloat(((f.return_1y  || 0) * 100).toFixed(2)),
-      }));
+        if ((f.name || "").toUpperCase().includes("KATILIM")) {
+          katilimFonlar.push({
+            kod,
+            ad:       f.name || "",
+            yonetici: (f.management_company || "").trim(),
+            portfoy:  f.aum || 0,
+            gunluk:   parseFloat(((f.return_1d  || 0) * 100).toFixed(4)),
+            haftalik: parseFloat(((f.return_1w  || 0) * 100).toFixed(2)),
+            aylik:    parseFloat(((f.return_1m  || 0) * 100).toFixed(2)),
+            uc_aylik: parseFloat(((f.return_3m  || 0) * 100).toFixed(2)),
+            ytd:      parseFloat(((f.return_ytd || 0) * 100).toFixed(2)),
+            yillik:   parseFloat(((f.return_1y  || 0) * 100).toFixed(2)),
+          });
+        }
+      }
+
+      // Son sayfaysa dur
+      if (items.length < 50) break;
+
+      // 300ms bekle
+      await new Promise(ok => setTimeout(ok, 300));
+    }
 
     res.setHeader("Cache-Control", "s-maxage=82800, stale-while-revalidate=3600");
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.status(200).json({
       success: true,
       count: katilimFonlar.length,
-      toplam: tumFonlar.length,
+      toplam,
       guncelleme: new Date().toISOString(),
       data: katilimFonlar,
     });
