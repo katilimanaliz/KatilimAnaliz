@@ -11,19 +11,18 @@ export default async function handler(req, res) {
 
     const headers = { "X-API-Key": API_KEY, "Accept": "application/json" };
 
-    // 10 sayfa × 50 = 500 fon — tüm TEFAS fonlarını kapsar (~2500 var ama katılım ~260)
-    // Ücretsiz plan: 30 istek/dakika, 1500/gün — 10 istek güvenli
+    // 10 sayfa × 50 = 500 fon paralel çek
     const sayfalar = [0,50,100,150,200,250,300,350,400,450];
 
-    const istekler = sayfalar.map(offset =>
-      fetch(`https://fonoloji.com/v1/funds?limit=50&offset=${offset}`, { headers })
-        .then(r => r.ok ? r.json() : null)
-        .catch(() => null)
+    const sonuclar = await Promise.all(
+      sayfalar.map(offset =>
+        fetch(`https://fonoloji.com/v1/funds?limit=50&offset=${offset}`, { headers })
+          .then(r => r.ok ? r.json() : null)
+          .catch(() => null)
+      )
     );
 
-    const sonuclar = await Promise.all(istekler);
-
-    let tumFonlar: any[] = [];
+    let tumFonlar = [];
     for (const d of sonuclar) {
       if (!d) continue;
       const items = d.items ?? d.funds ?? d.data ?? (Array.isArray(d) ? d : []);
@@ -46,7 +45,6 @@ export default async function handler(req, res) {
         yillik:   parseFloat(((f.return_1y  || 0) * 100).toFixed(2)),
       }));
 
-    // 23 saat cache
     res.setHeader("Cache-Control", "s-maxage=82800, stale-while-revalidate=3600");
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.status(200).json({
@@ -58,6 +56,6 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    res.status(500).json({ success: false, error: (error as any).message });
+    res.status(500).json({ success: false, error: error.message });
   }
 }
