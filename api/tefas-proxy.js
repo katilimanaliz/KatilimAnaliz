@@ -7,38 +7,42 @@ export default async function handler(req, res) {
 
     const headers = { "X-API-Key": API_KEY, "Accept": "application/json" };
 
-    // category=Katılım çalışıyor! Ücretsiz plan max 50/istek
-    // 2 sayfa × 50 = 100 fon — tüm katılım fonlarını kapsar
-    const [r1, r2, r3] = await Promise.all([
-      fetch("https://fonoloji.com/v1/funds?category=Kat%C4%B1l%C4%B1m&limit=50&offset=0",   { headers }),
-      fetch("https://fonoloji.com/v1/funds?category=Kat%C4%B1l%C4%B1m&limit=50&offset=50",  { headers }),
-      fetch("https://fonoloji.com/v1/funds?category=Kat%C4%B1l%C4%B1m&limit=50&offset=100", { headers }),
+    // Vakıf Katılım fonlarını direkt koddan çek (yeni ihraç, kategori listesinde görünmüyor)
+    const VAKIF_KODLARI = ["VPA","VLT","VHS","VKK","VKV"];
+
+    const [kategoriRes, ...vakifRes] = await Promise.all([
+      fetch("https://fonoloji.com/v1/funds?category=Kat%C4%B1l%C4%B1m&limit=50&offset=0", { headers }),
+      ...VAKIF_KODLARI.map(kod =>
+        fetch(`https://fonoloji.com/v1/funds/${kod}`, { headers })
+          .then(r => r.ok ? r.json() : null).catch(() => null)
+      )
     ]);
 
     const gorulmuKodlar = new Set();
     let katilimFonlar = [];
 
-    for (const r of [r1, r2, r3]) {
-      if (!r.ok) continue;
-      const d = await r.json();
+    // Önce Vakıf Katılım fonlarını ekle (öncelikli)
+    for (const d of vakifRes) {
+      if (!d) continue;
+      const f = d.fund ?? d; // /funds/:code yanıtı { fund: {...} } formatında
+      const kod = f.code || "";
+      if (!kod || gorulmuKodlar.has(kod)) continue;
+      gorulmuKodlar.add(kod);
+      katilimFonlar.push(mapFon(f, true));
+    }
+
+    // Sonra kategori listesinden gelenleri ekle
+    if (kategoriRes.ok) {
+      const d = await kategoriRes.json();
       const items = d.items ?? d.funds ?? d.data ?? (Array.isArray(d) ? d : []);
       for (const f of items) {
         const kod = f.code || "";
-        if (kod && gorulmuKodlar.has(kod)) continue;
+        if (!kod || gorulmuKodlar.has(kod)) continue;
+        if (!(f.name || "").toUpperCase().includes("KATILIM")) continue;
         gorulmuKodlar.add(kod);
-        if ((f.name || "").toUpperCase().includes("KATILIM")) {
-          katilimFonlar.push(mapFon(f));
-        }
+        katilimFonlar.push(mapFon(f, false));
       }
     }
-
-    // Vakıf Katılım öncelikli sıralama (proxy'de de uygula)
-    const VAKIF_KODLARI = ["VLT","VHS","VKK","VKV","VPA"];
-    katilimFonlar.sort((a, b) => {
-      const aV = VAKIF_KODLARI.includes(a.kod) ? 0 : 1;
-      const bV = VAKIF_KODLARI.includes(b.kod) ? 0 : 1;
-      return aV - bV;
-    });
 
     res.setHeader("Cache-Control", "s-maxage=82800, stale-while-revalidate=3600");
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -54,22 +58,14 @@ export default async function handler(req, res) {
   }
 }
 
-function mapFon(f) {
-  // Yönetici adı boşsa fon adından veya koddan çıkar
+function mapFon(f, vakif) {
   let yonetici = (f.management_company || "").trim();
-  if (!yonetici) {
-    const ad = f.name || "";
-    const kod = f.code || "";
-    const VAKIF_KODLARI = ["VLT","VHS","VKK","VKV","VPA","VYA","VBK","VEK"];
-    if (VAKIF_KODLARI.includes(kod) || ad.includes("VAKIF KATILIM")) 
-      yonetici = "Vakıf Katılım Portföy Yönetimi A.Ş.";
-    else if (ad.includes("KUVEYT")) yonetici = "Kuveyt türk Portföy Yönetimi A.Ş.";
-    else if (ad.includes("ZİRAAT")) yonetici = "Ziraat Portföy Yönetimi A.Ş.";
-  }
+  if (!yonetici || vakif) yonetici = "Vakıf Katılım Portföy Yönetimi A.Ş.";
   return {
     kod:      f.code || "",
     ad:       f.name || "",
     yonetici,
+    oncelik:  vakif ? 1 : 2,
     portfoy:  f.aum || 0,
     gunluk:   parseFloat(((f.return_1d  || 0) * 100).toFixed(4)),
     haftalik: parseFloat(((f.return_1w  || 0) * 100).toFixed(2)),
