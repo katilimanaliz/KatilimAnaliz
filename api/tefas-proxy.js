@@ -1,3 +1,7 @@
+// api/tefas-proxy.js
+// Her gün 08:30 TR saatinde Vercel Cron tarafından otomatik güncellenir.
+// Kullanıcı istekleri 23 saat boyunca cache'den döner.
+
 export default async function handler(req, res) {
   try {
     const API_KEY = process.env.FONOLOJI_KEY;
@@ -5,38 +9,18 @@ export default async function handler(req, res) {
       return res.status(500).json({ success: false, error: "FONOLOJI_KEY tanımlı değil" });
     }
 
-    const headers = { "X-API-Key": API_KEY };
-    let tumFonlar = [];
-    let offset = 0;
-    const limit = 50; // Ücretsiz plan max
-    let devam = true;
+    // q=katilim → Fonoloji sunucu tarafında filtreler, tek istekte döner
+    const response = await fetch(
+      "https://fonoloji.com/v1/funds?q=katilim&limit=50",
+      { headers: { "X-API-Key": API_KEY } }
+    );
 
-    // Tüm sayfaları çek (pagination)
-    while (devam) {
-      const r = await fetch(
-        `https://fonoloji.com/v1/funds?limit=${limit}&offset=${offset}`,
-        { headers }
-      );
+    if (!response.ok) throw new Error(`Fonoloji API hatası: ${response.status}`);
 
-      if (!r.ok) throw new Error(`Fonoloji API hatası: ${r.status}`);
+    const d = await response.json();
+    const items = d.items ?? d.funds ?? d.data ?? (Array.isArray(d) ? d : []);
 
-      const d = await r.json();
-      const items = d.items ?? d.funds ?? d.data ?? (Array.isArray(d) ? d : []);
-
-      if (items.length === 0) break;
-
-      tumFonlar = tumFonlar.concat(items);
-      offset += limit;
-
-      // 50'den az döndüyse son sayfa
-      if (items.length < limit) devam = false;
-
-      // Rate limit: 30 istek/dakika — kısa bekle
-      if (devam) await new Promise(ok => setTimeout(ok, 200));
-    }
-
-    // Fon adında "KATILIM" geçenleri filtrele
-    const katilimFonlar = tumFonlar
+    const katilimFonlar = items
       .filter(f => (f.name || "").toUpperCase().includes("KATILIM"))
       .map(f => ({
         kod:      f.code || "",
@@ -51,13 +35,14 @@ export default async function handler(req, res) {
         yillik:   parseFloat(((f.return_1y  || 0) * 100).toFixed(2)),
       }));
 
-    res.setHeader("Cache-Control", "s-maxage=300, stale-while-revalidate=600");
+    // 23 saat cache — sabah 08:30'da cron yenileyene kadar geçerli
+    res.setHeader("Cache-Control", "s-maxage=82800, stale-while-revalidate=3600");
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.status(200).json({
       success: true,
       count: katilimFonlar.length,
-      toplam_fon: tumFonlar.length,
       guncelleme: new Date().toISOString(),
+      sonGuncelleme: "Her gün 08:30 TR saatinde otomatik güncellenir",
       data: katilimFonlar,
     });
 
