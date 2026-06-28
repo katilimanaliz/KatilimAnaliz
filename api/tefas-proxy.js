@@ -1,7 +1,4 @@
 // api/tefas-proxy.js
-// Her gün 08:30 TR saatinde Vercel Cron tarafından otomatik güncellenir.
-// Kullanıcı istekleri 23 saat boyunca cache'den döner.
-
 export default async function handler(req, res) {
   try {
     const API_KEY = process.env.FONOLOJI_KEY;
@@ -9,9 +6,8 @@ export default async function handler(req, res) {
       return res.status(500).json({ success: false, error: "FONOLOJI_KEY tanımlı değil" });
     }
 
-    // q=katilim → Fonoloji sunucu tarafında filtreler, tek istekte döner
     const response = await fetch(
-      "https://fonoloji.com/v1/funds?q=katilim&limit=50",
+      "https://fonoloji.com/v1/funds?limit=50",
       { headers: { "X-API-Key": API_KEY } }
     );
 
@@ -35,12 +31,12 @@ export default async function handler(req, res) {
         yillik:   parseFloat(((f.return_1y  || 0) * 100).toFixed(2)),
       }));
 
-    // 23 saat cache — sabah 08:30'da cron yenileyene kadar geçerli
     res.setHeader("Cache-Control", "s-maxage=82800, stale-while-revalidate=3600");
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.status(200).json({
       success: true,
       count: katilimFonlar.length,
+      toplam: items.length,
       guncelleme: new Date().toISOString(),
       sonGuncelleme: "Her gün 08:30 TR saatinde otomatik güncellenir",
       data: katilimFonlar,
