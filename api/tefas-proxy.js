@@ -1,4 +1,7 @@
 // api/tefas-proxy.js
+// Vercel Cron: Her gün 08:30 TR (05:30 UTC) — vercel.json ile tanımlı
+// Sonuç 23 saat cache'de tutulur, gün içi ek istek gitmez
+
 export default async function handler(req, res) {
   try {
     const API_KEY = process.env.FONOLOJI_KEY;
@@ -6,17 +9,28 @@ export default async function handler(req, res) {
       return res.status(500).json({ success: false, error: "FONOLOJI_KEY tanımlı değil" });
     }
 
+    // Parametresiz istek — ilk 50 fonu çek, içinden KATILIM filtrele
     const response = await fetch(
       "https://fonoloji.com/v1/funds?limit=50",
-      { headers: { "X-API-Key": API_KEY } }
+      {
+        headers: {
+          "X-API-Key": API_KEY,
+          "Accept": "application/json",
+        },
+      }
     );
 
-    if (!response.ok) throw new Error(`Fonoloji API hatası: ${response.status}`);
+    if (!response.ok) {
+      throw new Error(`Fonoloji API hatası: ${response.status}`);
+    }
 
     const d = await response.json();
-    const items = d.items ?? d.funds ?? d.data ?? (Array.isArray(d) ? d : []);
 
-    const katilimFonlar = items
+    // Yanıt formatı: { items: [...] }
+    const liste = d.items ?? d.funds ?? d.data ?? (Array.isArray(d) ? d : []);
+
+    // Fon adında "KATILIM" geçenleri filtrele
+    const katilimFonlar = liste
       .filter(f => (f.name || "").toUpperCase().includes("KATILIM"))
       .map(f => ({
         kod:      f.code || "",
@@ -31,14 +45,14 @@ export default async function handler(req, res) {
         yillik:   parseFloat(((f.return_1y  || 0) * 100).toFixed(2)),
       }));
 
+    // 23 saat cache — sabah 08:30 cron yenileyene kadar geçerli
     res.setHeader("Cache-Control", "s-maxage=82800, stale-while-revalidate=3600");
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.status(200).json({
       success: true,
       count: katilimFonlar.length,
-      toplam: items.length,
+      toplam: liste.length,
       guncelleme: new Date().toISOString(),
-      sonGuncelleme: "Her gün 08:30 TR saatinde otomatik güncellenir",
       data: katilimFonlar,
     });
 
