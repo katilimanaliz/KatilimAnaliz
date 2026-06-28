@@ -1,6 +1,6 @@
 // api/tefas-proxy.js
-// Vercel Cron: Her gün 08:30 TR (05:30 UTC) — vercel.json ile tanımlı
-// Sonuç 23 saat cache'de tutulur, gün içi ek istek gitmez
+// Vercel Cron: Her gün 08:30 TR (05:30 UTC)
+// 23 saat cache — gün içi ek istek gitmez
 
 export default async function handler(req, res) {
   try {
@@ -9,28 +9,29 @@ export default async function handler(req, res) {
       return res.status(500).json({ success: false, error: "FONOLOJI_KEY tanımlı değil" });
     }
 
-    // Parametresiz istek — ilk 50 fonu çek, içinden KATILIM filtrele
-    const response = await fetch(
-      "https://fonoloji.com/v1/funds?limit=50",
-      {
-        headers: {
-          "X-API-Key": API_KEY,
-          "Accept": "application/json",
-        },
-      }
+    const headers = { "X-API-Key": API_KEY, "Accept": "application/json" };
+
+    // 10 sayfa × 50 = 500 fon — tüm TEFAS fonlarını kapsar (~2500 var ama katılım ~260)
+    // Ücretsiz plan: 30 istek/dakika, 1500/gün — 10 istek güvenli
+    const sayfalar = [0,50,100,150,200,250,300,350,400,450];
+
+    const istekler = sayfalar.map(offset =>
+      fetch(`https://fonoloji.com/v1/funds?limit=50&offset=${offset}`, { headers })
+        .then(r => r.ok ? r.json() : null)
+        .catch(() => null)
     );
 
-    if (!response.ok) {
-      throw new Error(`Fonoloji API hatası: ${response.status}`);
+    const sonuclar = await Promise.all(istekler);
+
+    let tumFonlar: any[] = [];
+    for (const d of sonuclar) {
+      if (!d) continue;
+      const items = d.items ?? d.funds ?? d.data ?? (Array.isArray(d) ? d : []);
+      tumFonlar = tumFonlar.concat(items);
     }
 
-    const d = await response.json();
-
-    // Yanıt formatı: { items: [...] }
-    const liste = d.items ?? d.funds ?? d.data ?? (Array.isArray(d) ? d : []);
-
     // Fon adında "KATILIM" geçenleri filtrele
-    const katilimFonlar = liste
+    const katilimFonlar = tumFonlar
       .filter(f => (f.name || "").toUpperCase().includes("KATILIM"))
       .map(f => ({
         kod:      f.code || "",
@@ -45,18 +46,18 @@ export default async function handler(req, res) {
         yillik:   parseFloat(((f.return_1y  || 0) * 100).toFixed(2)),
       }));
 
-    // 23 saat cache — sabah 08:30 cron yenileyene kadar geçerli
+    // 23 saat cache
     res.setHeader("Cache-Control", "s-maxage=82800, stale-while-revalidate=3600");
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.status(200).json({
       success: true,
       count: katilimFonlar.length,
-      toplam: liste.length,
+      toplam: tumFonlar.length,
       guncelleme: new Date().toISOString(),
       data: katilimFonlar,
     });
 
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: (error as any).message });
   }
 }
