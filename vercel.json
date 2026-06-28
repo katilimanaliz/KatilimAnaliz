@@ -1,8 +1,6 @@
 {
  "crons": [
-   {
-     "path": "/api/tefas-proxy",
-     "schedule": "30 5 * * *"
-   }
+   { "path": "/api/tefas-proxy",  "schedule": "30 5 * * *" },
+   { "path": "/api/hisse-proxy",  "schedule": "31 5 * * *" }
  ]
 }
