@@ -150,7 +150,8 @@ export default async function handler(req, res) {
       kategoriSayac[k] = (kategoriSayac[k] || 0) + 1;
     }
 
-    res.setHeader("Cache-Control", "s-maxage=82800, stale-while-revalidate=3600");
+    const noCache = req.query?.refresh === "1";
+    res.setHeader("Cache-Control", noCache ? "no-store" : "s-maxage=82800, stale-while-revalidate=3600");
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.status(200).json({
       success: true,
