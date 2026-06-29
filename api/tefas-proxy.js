@@ -52,13 +52,13 @@ export default async function handler(req, res) {
     // Vakıf Katılım fonlarını direkt koddan çek (yeni ihraç, kategori listesinde görünmüyor)
     const VAKIF_KODLARI = ["VPA","VLT","VHS","VKK","VKV"];
 
-    const [kategoriRes, ...vakifRes] = await Promise.all([
-      fetch("https://fonoloji.com/v1/funds?category=Kat%C4%B1l%C4%B1m&limit=50&offset=0", { headers }),
-      ...VAKIF_KODLARI.map(kod =>
+    // Vakıf Katılım fonlarını direkt çek
+    const vakifRes = await Promise.all(
+      VAKIF_KODLARI.map(kod =>
         fetch(`https://fonoloji.com/v1/funds/${kod}`, { headers })
           .then(r => r.ok ? r.json() : null).catch(() => null)
       )
-    ]);
+    );
 
     const gorulmuKodlar = new Set();
     let katilimFonlar = [];
@@ -66,24 +66,33 @@ export default async function handler(req, res) {
     // Önce Vakıf Katılım fonlarını ekle (öncelikli)
     for (const d of vakifRes) {
       if (!d) continue;
-      const f = d.fund ?? d; // /funds/:code yanıtı { fund: {...} } formatında
+      const f = d.fund ?? d;
       const kod = f.code || "";
       if (!kod || gorulmuKodlar.has(kod)) continue;
       gorulmuKodlar.add(kod);
       katilimFonlar.push(mapFon(f, true, takasAraligi));
     }
 
-    // Sonra kategori listesinden gelenleri ekle
-    if (kategoriRes.ok) {
-      const d = await kategoriRes.json();
+    // Tüm katılım fonlarını sayfalı çek (limit=100, max 5 sayfa = 500 fon)
+    const PAGE_SIZE = 100;
+    const MAX_PAGES = 5;
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const offset = page * PAGE_SIZE;
+      const url = `https://fonoloji.com/v1/funds?category=Kat%C4%B1l%C4%B1m&limit=${PAGE_SIZE}&offset=${offset}`;
+      const res = await fetch(url, { headers }).catch(() => null);
+      if (!res || !res.ok) break;
+      const d = await res.json().catch(() => null);
+      if (!d) break;
       const items = d.items ?? d.funds ?? d.data ?? (Array.isArray(d) ? d : []);
+      if (!items.length) break;
       for (const f of items) {
         const kod = f.code || "";
         if (!kod || gorulmuKodlar.has(kod)) continue;
-        if (!(f.name || "").toUpperCase().includes("KATILIM")) continue;
         gorulmuKodlar.add(kod);
         katilimFonlar.push(mapFon(f, false, takasAraligi));
       }
+      // Son sayfa geldiyse dur
+      if (items.length < PAGE_SIZE) break;
     }
 
     res.setHeader("Cache-Control", "s-maxage=82800, stale-while-revalidate=3600");
