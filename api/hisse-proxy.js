@@ -1,4 +1,3 @@
-// api/hisse-proxy.js
 const XK100_KODLARI = new Set([
   "ASELS","TUPRS","BIMAS","EREGL","KTLEV","GUBRF","MAGEN","ISDMR","ENJSA",
   "SASA","KCHOL","TOASO","FROTO","TTRAK","TSKB","YKBNK","SAHOL","SISE",
@@ -9,7 +8,7 @@ const XK100_KODLARI = new Set([
   "DAPGM","DARDL","DCTTR","FORMT","GENIL","GENTS","GRSEL","IDGYO","KBORU",
   "OBAMS","PAGYO","PNLSN","POLHO","RGYAS","RNPOL","SANEL","SURGY","TARKM",
   "TUREX","TUKAS","ULAS","VRGYO","BIENY","CIMSA","DENGE","HEKTS","IHLGM",
-  "KRDMD","ASUZU","DOHOL","ARCLK","GRSEL","ALBRK","ANSGR",
+  "KRDMD","ASUZU","ARCLK","GRSEL","ALBRK","ANSGR","CLEBI","DOHOL",
 ]);
 
 export default async function handler(req, res) {
@@ -19,10 +18,10 @@ export default async function handler(req, res) {
 
     const headers = { "X-API-Key": API_KEY, "Accept": "application/json" };
 
-    // Paralel: screener (temel) + stocks/list (fiyat + değişimler)
-    const [sRes, lRes] = await Promise.all([
+    // Paralel: screener + market movers (günlük değişim içeriyor)
+    const [sRes, mRes] = await Promise.all([
       fetch("https://fonoloji.com/v1/screener/bist?sort_by=market_cap&sort_order=desc&limit=200", { headers }),
-      fetch("https://fonoloji.com/v1/stocks/list", { headers }),
+      fetch("https://fonoloji.com/v1/market/stock-movers", { headers }),
     ]);
 
     if (!sRes.ok) throw new Error(`Screener: ${sRes.status}`);
@@ -30,14 +29,17 @@ export default async function handler(req, res) {
     const sData = await sRes.json();
     const screener = sData.stocks ?? sData.items ?? sData.data ?? (Array.isArray(sData) ? sData : []);
 
-    // Fiyat + değişim map
+    // Fiyat map'i - movers'dan doldur
     const fiyatMap = {};
-    if (lRes.ok) {
-      const lData = await lRes.json();
-      const liste = lData.stocks ?? lData.items ?? lData.data ?? (Array.isArray(lData) ? lData : []);
-      for (const s of liste) {
+    if (mRes.ok) {
+      const mData = await mRes.json();
+      // movers yapısı: { gainers: [...], losers: [...] } veya düz dizi
+      const gainers = mData.gainers ?? [];
+      const losers  = mData.losers  ?? [];
+      const all     = mData.stocks  ?? mData.items ?? (Array.isArray(mData) ? mData : []);
+      for (const s of [...gainers, ...losers, ...all]) {
         const t = s.ticker || s.symbol || "";
-        if (t) fiyatMap[t] = s; // ham veriyi sakla
+        if (t && !fiyatMap[t]) fiyatMap[t] = s;
       }
     }
 
@@ -49,19 +51,18 @@ export default async function handler(req, res) {
         sirket:       h.name || h.company_name || "",
         sektor:       h.sector || "",
         fiyat:        f.price ?? f.last_price ?? f.close ?? 0,
-        degisim1g:    f.change_percent ?? f.return_1d ?? f.daily_return ?? 0,
-        degisim1h:    f.return_1w ?? f.weekly_return ?? null,
-        degisim1a:    f.return_1m ?? f.monthly_return ?? null,
+        degisim1g:    parseFloat((f.change_percent ?? f.return_1d ?? f.daily_change ?? 0).toFixed(2)),
+        degisim1h:    f.return_1w ?? null,
+        degisim1a:    f.return_1m ?? null,
         degisim3a:    f.return_3m ?? null,
-        degisim1y:    f.return_1y ?? f.yearly_return ?? null,
+        degisim1y:    f.return_1y ?? null,
         piyasaDegeri: f.market_cap ?? h.market_cap ?? 0,
         fk:           h.pe_ratio ?? h.pe ?? null,
         pddd:         h.pb_ratio ?? h.pb ?? null,
         roe:          h.return_on_equity ?? h.roe ?? null,
         temetu:       h.dividend_yield ?? null,
         katilimEndeksi: XK100_KODLARI.has(t),
-        // Debug: ham alan adları (ilk çalıştırmada görmek için)
-        _fKeys: Object.keys(f).join(","),
+        _moversKeys:  Object.keys(f).slice(0,10).join(","),
       };
     });
 
@@ -71,9 +72,9 @@ export default async function handler(req, res) {
       success: true,
       count: hisseler.length,
       katilimCount: hisseler.filter(h=>h.katilimEndeksi).length,
+      moversStatus: mRes.status,
+      ornek_moversKeys: hisseler[0]?._moversKeys,
       guncelleme: new Date().toISOString(),
-      // İlk hissenin ham alanlarını göster
-      debugKeys: Object.keys(fiyatMap[hisseler[0]?.ticker] || {}),
       data: hisseler,
     });
 
