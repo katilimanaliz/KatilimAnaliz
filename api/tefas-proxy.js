@@ -70,7 +70,7 @@ export default async function handler(req, res) {
       const kod = f.code || "";
       if (!kod || gorulmuKodlar.has(kod)) continue;
       gorulmuKodlar.add(kod);
-      katilimFonlar.push(mapFon(f, true));
+      katilimFonlar.push(mapFon(f, true, takasAraligi));
     }
 
     // Sonra kategori listesinden gelenleri ekle
@@ -82,7 +82,7 @@ export default async function handler(req, res) {
         if (!kod || gorulmuKodlar.has(kod)) continue;
         if (!(f.name || "").toUpperCase().includes("KATILIM")) continue;
         gorulmuKodlar.add(kod);
-        katilimFonlar.push(mapFon(f, false));
+        katilimFonlar.push(mapFon(f, false, takasAraligi));
       }
     }
 
@@ -100,7 +100,7 @@ export default async function handler(req, res) {
   }
 }
 
-function mapFon(f, vakif) {
+function mapFon(f, vakif, takasAraligi) {
   let yonetici = (f.management_company || "").trim();
   if (!yonetici || vakif) yonetici = "Vakıf Katılım Portföy Yönetimi A.Ş.";
   return {
