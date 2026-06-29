@@ -79,17 +79,29 @@ export default async function handler(req, res) {
     const PAGE_SIZE = 100;
 
     // Kategori → filtre kuralı: true=tümünü al, false=sadece adında KATILIM geçenler
+    // Fonoloji gerçek kategori adları (API response'dan görülen)
     const KATEGORILER = [
-      {kat: "Katılım",                      tumunu: true},   // 104 fon, tümü katılım
-      {kat: "Hisse Senedi Şemsiye Fonu",    tumunu: false},  // 43 katılım fon
-      {kat: "Para Piyasası Şemsiye Fonu",   tumunu: false},  // 27 katılım fon
-      {kat: "Değişken Şemsiye Fonu",        tumunu: false},  // ~20 katılım fon
-      {kat: "Karma Şemsiye Fonu",           tumunu: false},  // ~20 katılım fon
-      {kat: "Fon Sepeti Şemsiye Fonu",      tumunu: false},  // 6 katılım fon
-      {kat: "Altın Şemsiye Fonu",           tumunu: false},  // altın
-      {kat: "Kıymetli Madenler Şemsiye Fonu", tumunu: false}, // 44 katılım fon
-      {kat: "Endeks Şemsiye Fonu",          tumunu: false},  // 5 katılım fon
-      {kat: "Serbest Şemsiye Fonu",         tumunu: false},  // emeklilik
+      // Tümünü al — bu kategoriler zaten katılım
+      {kat: "Katılım",                        tumunu: true},
+      {kat: "Altın Katılım Fonu",             tumunu: true},
+      {kat: "OKS Katılım Standart Fon",       tumunu: true},
+      {kat: "Katılım Değişken Fon",           tumunu: true},
+      {kat: "Katılım Katkı Fonu",             tumunu: true},
+      {kat: "Katılım Fonu",                   tumunu: true},
+      {kat: "Katılım Standart Fon",           tumunu: true},
+      {kat: "Başlangıç Katılım Fonu",         tumunu: true},
+      {kat: "Katılım Hisse Senedi Fonu",      tumunu: true},
+      {kat: "Kira Sertifikası Katılım Fonu",  tumunu: true},
+      // Diğer şemsiye kategoriler — adında KATILIM geçenler
+      {kat: "Hisse Senedi Şemsiye Fonu",      tumunu: false},
+      {kat: "Para Piyasası Şemsiye Fonu",     tumunu: false},
+      {kat: "Değişken Şemsiye Fonu",          tumunu: false},
+      {kat: "Karma Şemsiye Fonu",             tumunu: false},
+      {kat: "Fon Sepeti Şemsiye Fonu",        tumunu: false},
+      {kat: "Altın Şemsiye Fonu",             tumunu: false},
+      {kat: "Kıymetli Madenler Şemsiye Fonu", tumunu: false},
+      {kat: "Endeks Şemsiye Fonu",            tumunu: false},
+      {kat: "Serbest Şemsiye Fonu",           tumunu: false},
     ];
 
     const kategoriPromises = KATEGORILER.map(async ({kat, tumunu}) => {
