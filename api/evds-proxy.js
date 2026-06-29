@@ -1,8 +1,9 @@
 // api/evds-proxy.js
 // TCMB EVDS API proxy — CORS bypass + cache
 // Vercel env: EVDS_KEY
+// ÖNEMLİ: Nisan 2024'ten itibaren key URL'de değil, HTTP header'da gönderiliyor
 
-const CACHE_TTL_MS = 12 * 3600 * 1000; // 12 saat
+const CACHE_TTL_MS = 12 * 3600 * 1000;
 let cacheAnlik = { data: null, ts: 0 };
 let cacheTarihsel = {};
 
@@ -25,9 +26,8 @@ function sonDeger(items, seri) {
   const key = seri.replace(/\./g, "_");
   for (let i = items.length - 1; i >= 0; i--) {
     const v = items[i][key] ?? items[i][seri];
-    if (v !== null && v !== undefined && v !== "") {
+    if (v !== null && v !== undefined && v !== "")
       return { deger: parseFloat(v), tarih: items[i].Tarih };
-    }
   }
   return null;
 }
@@ -42,17 +42,16 @@ function tumDegerler(items, seri) {
   }).filter(Boolean);
 }
 
-async function evdsFetch(url) {
+async function evdsFetch(url, apiKey) {
   const r = await fetch(url, {
     headers: {
+      "key": apiKey,          // ← key artık header'da
       "Accept": "application/json",
-      "Content-Type": "application/json",
     }
   });
   const text = await r.text();
-  // HTML döndüyse hata ver
   if (text.trim().startsWith("<")) {
-    throw new Error(`EVDS HTML döndü (HTTP ${r.status}) — seri kodu veya key hatalı olabilir`);
+    throw new Error(`EVDS HTML döndü (HTTP ${r.status}) — seri kodu hatalı olabilir`);
   }
   return JSON.parse(text);
 }
@@ -61,48 +60,46 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   if (req.method === "OPTIONS") return res.status(200).end();
 
-  const key = process.env.EVDS_KEY;
-  if (!key) return res.status(500).json({ error: "EVDS_KEY env eksik" });
+  const apiKey = process.env.EVDS_KEY;
+  if (!apiKey) return res.status(500).json({ error: "EVDS_KEY env eksik" });
 
   const { grafik, seri } = req.query;
   const now = Date.now();
 
-  // ── GRAFİK MODU ──
+  // ── GRAFİK MODU: tek seri tarihsel ──
   if (grafik === "1" && seri) {
     const c = cacheTarihsel[seri];
     if (c && now - c.ts < CACHE_TTL_MS)
       return res.status(200).json({ tarihsel: { [seri]: c.data }, cached: true });
 
     try {
-      // EVDS3 doğru endpoint formatı
-      const url = `https://evds3.tcmb.gov.tr/service/evds/series=${encodeURIComponent(seri)}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&key=${key}&frequency=8&aggregationTypes=avg&formulas=0&deleteNullValues=true`;
-      const json = await evdsFetch(url);
+      const url = `https://evds3.tcmb.gov.tr/service/evds/series=${seri}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=8&aggregationTypes=avg&formulas=0&deleteNullValues=true`;
+      const json = await evdsFetch(url, apiKey);
       const items = json?.items || [];
       const degerler = tumDegerler(items, seri);
       cacheTarihsel[seri] = { data: degerler, ts: now };
       return res.status(200).json({ tarihsel: { [seri]: degerler } });
     } catch (err) {
       const c2 = cacheTarihsel[seri];
-      if (c2) return res.status(200).json({ tarihsel: { [seri]: c2.data }, cached: true, hata: err.message });
+      if (c2) return res.status(200).json({ tarihsel: { [seri]: c2.data }, cached: true });
       return res.status(500).json({ error: err.message });
     }
   }
 
-  // ── ANLIK MOD ──
+  // ── ANLIK MOD: tüm seriler ──
   if (cacheAnlik.data && now - cacheAnlik.ts < CACHE_TTL_MS)
     return res.status(200).json({ ...cacheAnlik.data, cached: true });
 
   try {
     const seriStr = SERILER_ANLIK.join("-");
-    const url = `https://evds3.tcmb.gov.tr/service/evds/series=${seriStr}&startDate=${onceki(60)}&endDate=${tarihStr(new Date())}&type=json&key=${key}&frequency=8&aggregationTypes=avg&formulas=0&deleteNullValues=true`;
-    const json = await evdsFetch(url);
+    const url = `https://evds3.tcmb.gov.tr/service/evds/series=${seriStr}&startDate=${onceki(60)}&endDate=${tarihStr(new Date())}&type=json&frequency=8&aggregationTypes=avg&formulas=0&deleteNullValues=true`;
+    const json = await evdsFetch(url, apiKey);
     const items = json?.items || [];
-    if (!items.length) throw new Error("EVDS boş yanıt döndü — seri kodları kontrol edilmeli");
+    if (!items.length) throw new Error("EVDS boş yanıt — seri kodları kontrol edilmeli");
 
     const sonuclar = {};
-    for (const s of SERILER_ANLIK) {
-      sonuclar[s] = sonDeger(items, s);
-    }
+    for (const s of SERILER_ANLIK) sonuclar[s] = sonDeger(items, s);
+
     const yanit = { tarih: tarihStr(new Date()), seriler: sonuclar };
     cacheAnlik = { data: yanit, ts: now };
     return res.status(200).json(yanit);
