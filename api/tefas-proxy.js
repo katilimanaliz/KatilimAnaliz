@@ -73,26 +73,52 @@ export default async function handler(req, res) {
       katilimFonlar.push(mapFon(f, true, takasAraligi));
     }
 
-    // Tüm katılım fonlarını sayfalı çek (limit=100, max 5 sayfa = 500 fon)
+    // İlk sayfadan toplam sayıyı öğren, sonra paralel çek
     const PAGE_SIZE = 100;
-    const MAX_PAGES = 5;
-    for (let page = 0; page < MAX_PAGES; page++) {
-      const offset = page * PAGE_SIZE;
-      const url = `https://fonoloji.com/v1/funds?category=Kat%C4%B1l%C4%B1m&limit=${PAGE_SIZE}&offset=${offset}`;
-      const res = await fetch(url, { headers }).catch(() => null);
-      if (!res || !res.ok) break;
-      const d = await res.json().catch(() => null);
-      if (!d) break;
-      const items = d.items ?? d.funds ?? d.data ?? (Array.isArray(d) ? d : []);
-      if (!items.length) break;
-      for (const f of items) {
+    const ilkRes = await fetch(`https://fonoloji.com/v1/funds?limit=${PAGE_SIZE}&offset=0`, { headers }).catch(() => null);
+    if (ilkRes && ilkRes.ok) {
+      const ilkD = await ilkRes.json().catch(() => ({}));
+      const total = ilkD.total ?? ilkD.count ?? 3500; // bilinmiyorsa 3500 varsay
+      const ilkItems = ilkD.items ?? ilkD.funds ?? ilkD.data ?? [];
+      
+      // İlk sayfayı işle
+      for (const f of ilkItems) {
         const kod = f.code || "";
         if (!kod || gorulmuKodlar.has(kod)) continue;
+        const isim = (f.name || "").toUpperCase();
+        const kat  = (f.category || "").toUpperCase();
+        if (!isim.includes("KATILIM") && !kat.includes("KATILIM")) continue;
         gorulmuKodlar.add(kod);
         katilimFonlar.push(mapFon(f, false, takasAraligi));
       }
-      // Son sayfa geldiyse dur
-      if (items.length < PAGE_SIZE) break;
+
+      // Kalan sayfaları paralel çek (max 30 sayfa = 3000 fon)
+      const toplamSayfa = Math.min(Math.ceil(total / PAGE_SIZE), 30);
+      const sayfaUrls = [];
+      for (let p = 1; p < toplamSayfa; p++) {
+        sayfaUrls.push(`https://fonoloji.com/v1/funds?limit=${PAGE_SIZE}&offset=${p * PAGE_SIZE}`);
+      }
+
+      // 5'li gruplar halinde çek (rate limit koruma)
+      for (let i = 0; i < sayfaUrls.length; i += 5) {
+        const grup = sayfaUrls.slice(i, i + 5);
+        const grupRes = await Promise.all(
+          grup.map(url => fetch(url, { headers }).then(r => r.ok ? r.json() : null).catch(() => null))
+        );
+        for (const d of grupRes) {
+          if (!d) continue;
+          const items = d.items ?? d.funds ?? d.data ?? [];
+          for (const f of items) {
+            const kod = f.code || "";
+            if (!kod || gorulmuKodlar.has(kod)) continue;
+            const isim = (f.name || "").toUpperCase();
+            const kat  = (f.category || "").toUpperCase();
+            if (!isim.includes("KATILIM") && !kat.includes("KATILIM")) continue;
+            gorulmuKodlar.add(kod);
+            katilimFonlar.push(mapFon(f, false, takasAraligi));
+          }
+        }
+      }
     }
 
     res.setHeader("Cache-Control", "s-maxage=82800, stale-while-revalidate=3600");
