@@ -17,9 +17,13 @@ export default async function handler(req, res) {
     try { data = JSON.parse(text); } catch { return res.status(502).json({ error: "JSON parse hatası" }); }
 
     const points = (data.value || []).map(p => ({
-      tarih: (p.HGDG_TARIH || "").slice(0, 10),
-      fiyat: parseFloat(p.HGDG_KAPANIS) || 0,
-    })).filter(p => p.fiyat > 0);
+      tarih:   (p.HGDG_TARIH   || "").slice(0, 10),
+      acilis:  parseFloat(p.HGDG_ACILIS)  || null,
+      yuksek:  parseFloat(p.HGDG_YUKSEK)  || null,
+      dusuk:   parseFloat(p.HGDG_DUSUK)   || null,
+      kapanis: parseFloat(p.HGDG_KAPANIS) || 0,
+      hacim:   parseFloat(p.HGDG_HACIM)   || null,
+    })).filter(p => p.kapanis > 0);
 
     res.setHeader("Cache-Control", "s-maxage=3600");
     res.status(200).json({ success: true, ticker, data: points });
