@@ -79,9 +79,9 @@ export default async function handler(req, res) {
     const PAGE_SIZE = 100;
 
     // Kategori → filtre kuralı: true=tümünü al, false=sadece adında KATILIM geçenler
-    // Fonoloji gerçek kategori adları (API response'dan görülen)
+    // Fonoloji gerçek kategori adları — adında KATILIM geçen kategoriler tümünü al
     const KATEGORILER = [
-      // Tümünü al — bu kategoriler zaten katılım
+      // Adı zaten KATILIM içeren kategoriler — tümünü al
       {kat: "Katılım",                        tumunu: true},
       {kat: "Altın Katılım Fonu",             tumunu: true},
       {kat: "OKS Katılım Standart Fon",       tumunu: true},
@@ -92,7 +92,7 @@ export default async function handler(req, res) {
       {kat: "Başlangıç Katılım Fonu",         tumunu: true},
       {kat: "Katılım Hisse Senedi Fonu",      tumunu: true},
       {kat: "Kira Sertifikası Katılım Fonu",  tumunu: true},
-      // Diğer şemsiye kategoriler — adında KATILIM geçenler
+      // Karma kategoriler — fon ADINDA KATILIM geçenler
       {kat: "Hisse Senedi Şemsiye Fonu",      tumunu: false},
       {kat: "Para Piyasası Şemsiye Fonu",     tumunu: false},
       {kat: "Değişken Şemsiye Fonu",          tumunu: false},
@@ -102,6 +102,9 @@ export default async function handler(req, res) {
       {kat: "Kıymetli Madenler Şemsiye Fonu", tumunu: false},
       {kat: "Endeks Şemsiye Fonu",            tumunu: false},
       {kat: "Serbest Şemsiye Fonu",           tumunu: false},
+      // Aşağıdakiler adında KATILIM geçmeyebilir — fon adı filtresi şart
+      {kat: "Altın Fonu",                     tumunu: false},
+      {kat: "Kıymetli Madenler",              tumunu: false},
     ];
 
     const kategoriPromises = KATEGORILER.map(async ({kat, tumunu}) => {
