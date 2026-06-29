@@ -177,6 +177,10 @@ function mapFon(f, vakif, takasAraligi) {
     yonetici,
     oncelik:   vakif ? 1 : 2,
     kategori:  f.category || f.fund_type || "",
+    katilimUygun: !!(f.is_participation || f.participation ||
+      (f.name||"").toUpperCase().includes("KATILIM") ||
+      (f.category||"").toUpperCase().includes("KATILIM")),
+    kaynakKategori: f.category || "",
     yatirimci: f.investor_count || f.investors || 0,
     portfoy:   f.aum || 0,
     takasAraligi: takasAraligi,
