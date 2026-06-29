@@ -120,6 +120,8 @@ export default async function handler(req, res) {
         const items = d.items ?? d.funds ?? d.data ?? (Array.isArray(d) ? d : []);
         if (!items.length) break;
         for (const f of items) {
+          // Sadece aktif (TEFAS'ta açık) fonlar
+          if (f.trading_status && f.trading_status !== "AKTİF") continue;
           if (!tumunu) {
             const isim = (f.name || "").toUpperCase();
             if (!isim.includes("KATILIM")) continue;
