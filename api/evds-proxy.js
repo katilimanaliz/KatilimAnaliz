@@ -1,12 +1,8 @@
-// api/evds-proxy.js
-// TCMB EVDS3 API proxy
-// Endpoint: evds3.tcmb.gov.tr/igmevdsms-dis/
-// Key: HTTP header
+// api/evds-proxy.js - EVDS3 proxy
 
 const CACHE_TTL_MS = 12 * 3600 * 1000;
 let cacheAnlik = { data: null, ts: 0 };
 let cacheTarihsel = {};
-
 const BASE = "https://evds3.tcmb.gov.tr/igmevdsms-dis";
 
 const SERILER_ANLIK = [
@@ -23,20 +19,14 @@ function tarihStr(d) {
 function onceki(gun) {
   const d = new Date(); d.setDate(d.getDate() - gun); return tarihStr(d);
 }
-
-// EVDS tarihi "2026-5" veya "2026-06-13" formatında gelebiliyor
-// Normalize et → "13-06-2026"
 function normalizeTarih(t) {
   if (!t) return t;
-  // "2026-5" (yıl-hafta) → olduğu gibi bırak, UI handle eder
-  // "2026-06-13" → "13-06-2026"
   const parts = t.split("-");
   if (parts.length === 3 && parts[0].length === 4) {
     return `${parts[2]}-${parts[1]}-${parts[0]}`;
   }
-  return t; // haftalık format (2026-5 gibi) aynen dön
+  return t;
 }
-
 function sonDeger(items, seri) {
   const key = seri.replace(/\./g, "_");
   for (let i = items.length - 1; i >= 0; i--) {
@@ -46,7 +36,6 @@ function sonDeger(items, seri) {
   }
   return null;
 }
-
 function tumDegerler(items, seri) {
   const key = seri.replace(/\./g, "_");
   return items.map(row => {
@@ -56,15 +45,11 @@ function tumDegerler(items, seri) {
     return null;
   }).filter(Boolean);
 }
-
 async function evdsFetch(path, apiKey) {
   const url = `${BASE}/${path}`;
-  const r = await fetch(url, {
-    headers: { "key": apiKey, "Accept": "application/json" }
-  });
+  const r = await fetch(url, { headers: { "key": apiKey, "Accept": "application/json" } });
   const text = await r.text();
-  if (text.trim().startsWith("<"))
-    throw new Error(`HTML döndü (HTTP ${r.status})`);
+  if (text.trim().startsWith("<")) throw new Error(`HTML döndü (HTTP ${r.status})`);
   return JSON.parse(text);
 }
 
@@ -72,13 +57,22 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   if (req.method === "OPTIONS") return res.status(200).end();
 
+  // Tüm env key'leri logla (debug)
   const apiKey = process.env.EVDS_KEY;
-  if (!apiKey) return res.status(500).json({ error: "EVDS_KEY env eksik" });
+  const envKeys = Object.keys(process.env).filter(k => k.includes("EVDS") || k.includes("KEY"));
+
+  if (!apiKey) {
+    return res.status(500).json({
+      error: "EVDS_KEY env eksik",
+      bulunan_env_keys: envKeys,
+      node_env: process.env.NODE_ENV,
+    });
+  }
 
   const { grafik, seri } = req.query;
   const now = Date.now();
 
-  // ── GRAFİK MODU: tek seri, 12 hafta tarihsel ──
+  // GRAFİK MODU
   if (grafik === "1" && seri) {
     const c = cacheTarihsel[seri];
     if (c && now - c.ts < CACHE_TTL_MS)
@@ -97,7 +91,7 @@ export default async function handler(req, res) {
     }
   }
 
-  // ── ANLIK MOD: tüm seriler son değer ──
+  // ANLIK MOD
   if (cacheAnlik.data && now - cacheAnlik.ts < CACHE_TTL_MS)
     return res.status(200).json({ ...cacheAnlik.data, cached: true });
 
@@ -106,11 +100,10 @@ export default async function handler(req, res) {
     const path = `series=${seriStr}&startDate=${onceki(60)}&endDate=${tarihStr(new Date())}&type=json&frequency=8&aggregationTypes=avg&formulas=0&deleteNullValues=true`;
     const json = await evdsFetch(path, apiKey);
     const items = json?.items || [];
-    if (!items.length) throw new Error("EVDS boş yanıt — seri kodları hatalı olabilir");
+    if (!items.length) throw new Error("EVDS boş yanıt");
 
     const sonuclar = {};
     for (const s of SERILER_ANLIK) sonuclar[s] = sonDeger(items, s);
-
     const yanit = { tarih: tarihStr(new Date()), seriler: sonuclar };
     cacheAnlik = { data: yanit, ts: now };
     return res.status(200).json(yanit);
