@@ -73,46 +73,54 @@ export default async function handler(req, res) {
       katilimFonlar.push(mapFon(f, true, takasAraligi));
     }
 
-    // Fonoloji kategori listesi — katılım içerebilecek tüm kategorileri çek
-    const KATEGORILER = [
-      "Kat%C4%B1l%C4%B1m",           // Katılım
-      "Hisse%20Senedi",               // Hisse Senedi
-      "Para%20Piyasas%C4%B1",         // Para Piyasası
-      "Bor%C3%A7lanma%20Ara%C3%A7lar%C4%B1", // Borçlanma Araçları
-      "De%C4%9Fi%C5%9Fken",           // Değişken
-      "Karma",
-      "Fon%20Sepeti",                 // Fon Sepeti
-      "Alt%C4%B1n",                   // Altın
-      "Endeks",
-    ];
-
+    // Kategori bazında paralel çek — fon adında KATILIM geçenleri al
+    // Fonoloji'deki dağılım: Katılım=104, Hisse=43, Para=27, Değişken/Karma=40, Sepet=6, Altın=44, Endeks=5
     const PAGE_SIZE = 100;
 
-    // Her kategoriyi sayfalı çek
-    for (const kategori of KATEGORILER) {
+    // Kategorileri paralel olarak çek (her biri için max 2 sayfa yeterli)
+    const KATEGORILER = [
+      "Hisse Senedi Şemsiye Fonu",       // 43 katılım fon
+      "Para Piyasası Şemsiye Fonu",       // 27 katılım fon
+      "Değişken Şemsiye Fonu",            // 40 katılım fon (karma dahil)
+      "Karma Şemsiye Fonu",               // değişken/karma
+      "Fon Sepeti Şemsiye Fonu",          // 6 katılım fon
+      "Altın Şemsiye Fonu",              // 44 katılım fon
+      "Kıymetli Madenler Şemsiye Fonu",  // altın kıymetli ek kategori
+      "Endeks Şemsiye Fonu",             // 5 katılım fon
+      "Serbest Şemsiye Fonu",            // emeklilik katılım fonları burada
+    ];
+
+    // Tüm kategorileri paralel çek
+    const kategoriPromises = KATEGORILER.map(async (kategori) => {
+      const sonuclar = [];
       let offset = 0;
+      const encKat = encodeURIComponent(kategori);
       while (true) {
-        const url = `https://fonoloji.com/v1/funds?category=${kategori}&limit=${PAGE_SIZE}&offset=${offset}`;
+        const url = `https://fonoloji.com/v1/funds?category=${encKat}&limit=${PAGE_SIZE}&offset=${offset}`;
         const res = await fetch(url, { headers }).catch(() => null);
         if (!res || !res.ok) break;
         const d = await res.json().catch(() => null);
         if (!d) break;
         const items = d.items ?? d.funds ?? d.data ?? (Array.isArray(d) ? d : []);
         if (!items.length) break;
-
-        for (const f of items) {
-          const kod = f.code || "";
-          if (!kod || gorulmuKodlar.has(kod)) continue;
-          const isim = (f.name || "").toUpperCase();
-          const kat  = (f.category || "").toUpperCase();
-          // Adında veya kategorisinde KATILIM geçenleri al
-          if (!isim.includes("KATILIM") && !kat.includes("KATILIM")) continue;
-          gorulmuKodlar.add(kod);
-          katilimFonlar.push(mapFon(f, false, takasAraligi));
-        }
-
+        sonuclar.push(...items);
         if (items.length < PAGE_SIZE) break;
         offset += PAGE_SIZE;
+      }
+      return sonuclar;
+    });
+
+    const tumKategoriSonuclari = await Promise.all(kategoriPromises);
+
+    for (const items of tumKategoriSonuclari) {
+      for (const f of items) {
+        const kod = f.code || "";
+        if (!kod || gorulmuKodlar.has(kod)) continue;
+        // Sadece fon ADINDA "KATILIM" geçenler
+        const isim = (f.name || "").toUpperCase();
+        if (!isim.includes("KATILIM")) continue;
+        gorulmuKodlar.add(kod);
+        katilimFonlar.push(mapFon(f, false, takasAraligi));
       }
     }
 
