@@ -1,11 +1,14 @@
 // api/evds-proxy.js
-// TCMB EVDS API proxy
-// NOT: evds3.tcmb.gov.tr/service/evds artık çalışmıyor (SPA dönüyor)
-// Doğru endpoint: evds2.tcmb.gov.tr/service/evds (key header olarak)
+// TCMB EVDS3 API proxy
+// Yeni endpoint: evds3.tcmb.gov.tr/igmevdsms-dis/
+// Key: HTTP header olarak
+// URL format: /igmevdsms-dis/series=X&startDate=...&type=json
 
 const CACHE_TTL_MS = 12 * 3600 * 1000;
 let cacheAnlik = { data: null, ts: 0 };
 let cacheTarihsel = {};
+
+const BASE = "https://evds3.tcmb.gov.tr/igmevdsms-dis";
 
 const SERILER_ANLIK = [
   "TP.KTF10","TP.KTF101","TP.KTF102","TP.KTF103",
@@ -42,16 +45,14 @@ function tumDegerler(items, seri) {
   }).filter(Boolean);
 }
 
-async function evdsFetch(url, apiKey) {
+async function evdsFetch(path, apiKey) {
+  const url = `${BASE}/${path}`;
   const r = await fetch(url, {
-    headers: {
-      "key": apiKey,
-      "Accept": "application/json",
-    }
+    headers: { "key": apiKey, "Accept": "application/json" }
   });
   const text = await r.text();
   if (text.trim().startsWith("<"))
-    throw new Error(`HTML döndü (HTTP ${r.status})`);
+    throw new Error(`HTML döndü (HTTP ${r.status}) — path: ${path}`);
   return JSON.parse(text);
 }
 
@@ -65,16 +66,17 @@ export default async function handler(req, res) {
   const { grafik, seri, test } = req.query;
   const now = Date.now();
 
-  // DEBUG modu
+  // DEBUG modu — her iki URL'yi test et
   if (test === "1") {
     const seriKodu = seri || "TP.DK.USD.A";
-    const url = `https://evds2.tcmb.gov.tr/service/evds/series=${seriKodu}&startDate=${onceki(30)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`;
+    const path = `series=${seriKodu}&startDate=${onceki(30)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`;
+    const url = `${BASE}/${path}`;
     const r = await fetch(url, { headers: { "key": apiKey } });
     const text = await r.text();
     return res.status(200).json({
       url, http_status: r.status,
       is_html: text.trim().startsWith("<"),
-      preview: text.substring(0, 300),
+      preview: text.substring(0, 400),
     });
   }
 
@@ -84,8 +86,8 @@ export default async function handler(req, res) {
     if (c && now - c.ts < CACHE_TTL_MS)
       return res.status(200).json({ tarihsel: { [seri]: c.data }, cached: true });
     try {
-      const url = `https://evds2.tcmb.gov.tr/service/evds/series=${seri}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=8&aggregationTypes=avg&formulas=0&deleteNullValues=true`;
-      const json = await evdsFetch(url, apiKey);
+      const path = `series=${seri}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=8&aggregationTypes=avg&formulas=0&deleteNullValues=true`;
+      const json = await evdsFetch(path, apiKey);
       const items = json?.items || [];
       const degerler = tumDegerler(items, seri);
       cacheTarihsel[seri] = { data: degerler, ts: now };
@@ -103,10 +105,10 @@ export default async function handler(req, res) {
 
   try {
     const seriStr = SERILER_ANLIK.join("-");
-    const url = `https://evds2.tcmb.gov.tr/service/evds/series=${seriStr}&startDate=${onceki(60)}&endDate=${tarihStr(new Date())}&type=json&frequency=8&aggregationTypes=avg&formulas=0&deleteNullValues=true`;
-    const json = await evdsFetch(url, apiKey);
+    const path = `series=${seriStr}&startDate=${onceki(60)}&endDate=${tarihStr(new Date())}&type=json&frequency=8&aggregationTypes=avg&formulas=0&deleteNullValues=true`;
+    const json = await evdsFetch(path, apiKey);
     const items = json?.items || [];
-    if (!items.length) throw new Error("EVDS boş yanıt");
+    if (!items.length) throw new Error("EVDS boş yanıt — seri kodları hatalı olabilir");
 
     const sonuclar = {};
     for (const s of SERILER_ANLIK) sonuclar[s] = sonDeger(items, s);
