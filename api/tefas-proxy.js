@@ -73,51 +73,46 @@ export default async function handler(req, res) {
       katilimFonlar.push(mapFon(f, true, takasAraligi));
     }
 
-    // İlk sayfadan toplam sayıyı öğren, sonra paralel çek
+    // Fonoloji kategori listesi — katılım içerebilecek tüm kategorileri çek
+    const KATEGORILER = [
+      "Kat%C4%B1l%C4%B1m",           // Katılım
+      "Hisse%20Senedi",               // Hisse Senedi
+      "Para%20Piyasas%C4%B1",         // Para Piyasası
+      "Bor%C3%A7lanma%20Ara%C3%A7lar%C4%B1", // Borçlanma Araçları
+      "De%C4%9Fi%C5%9Fken",           // Değişken
+      "Karma",
+      "Fon%20Sepeti",                 // Fon Sepeti
+      "Alt%C4%B1n",                   // Altın
+      "Endeks",
+    ];
+
     const PAGE_SIZE = 100;
-    const ilkRes = await fetch(`https://fonoloji.com/v1/funds?limit=${PAGE_SIZE}&offset=0`, { headers }).catch(() => null);
-    if (ilkRes && ilkRes.ok) {
-      const ilkD = await ilkRes.json().catch(() => ({}));
-      const total = ilkD.total ?? ilkD.count ?? 3500; // bilinmiyorsa 3500 varsay
-      const ilkItems = ilkD.items ?? ilkD.funds ?? ilkD.data ?? [];
-      
-      // İlk sayfayı işle
-      for (const f of ilkItems) {
-        const kod = f.code || "";
-        if (!kod || gorulmuKodlar.has(kod)) continue;
-        const isim = (f.name || "").toUpperCase();
-        const kat  = (f.category || "").toUpperCase();
-        if (!isim.includes("KATILIM") && !kat.includes("KATILIM")) continue;
-        gorulmuKodlar.add(kod);
-        katilimFonlar.push(mapFon(f, false, takasAraligi));
-      }
 
-      // Kalan sayfaları paralel çek (max 30 sayfa = 3000 fon)
-      const toplamSayfa = Math.min(Math.ceil(total / PAGE_SIZE), 30);
-      const sayfaUrls = [];
-      for (let p = 1; p < toplamSayfa; p++) {
-        sayfaUrls.push(`https://fonoloji.com/v1/funds?limit=${PAGE_SIZE}&offset=${p * PAGE_SIZE}`);
-      }
+    // Her kategoriyi sayfalı çek
+    for (const kategori of KATEGORILER) {
+      let offset = 0;
+      while (true) {
+        const url = `https://fonoloji.com/v1/funds?category=${kategori}&limit=${PAGE_SIZE}&offset=${offset}`;
+        const res = await fetch(url, { headers }).catch(() => null);
+        if (!res || !res.ok) break;
+        const d = await res.json().catch(() => null);
+        if (!d) break;
+        const items = d.items ?? d.funds ?? d.data ?? (Array.isArray(d) ? d : []);
+        if (!items.length) break;
 
-      // 5'li gruplar halinde çek (rate limit koruma)
-      for (let i = 0; i < sayfaUrls.length; i += 5) {
-        const grup = sayfaUrls.slice(i, i + 5);
-        const grupRes = await Promise.all(
-          grup.map(url => fetch(url, { headers }).then(r => r.ok ? r.json() : null).catch(() => null))
-        );
-        for (const d of grupRes) {
-          if (!d) continue;
-          const items = d.items ?? d.funds ?? d.data ?? [];
-          for (const f of items) {
-            const kod = f.code || "";
-            if (!kod || gorulmuKodlar.has(kod)) continue;
-            const isim = (f.name || "").toUpperCase();
-            const kat  = (f.category || "").toUpperCase();
-            if (!isim.includes("KATILIM") && !kat.includes("KATILIM")) continue;
-            gorulmuKodlar.add(kod);
-            katilimFonlar.push(mapFon(f, false, takasAraligi));
-          }
+        for (const f of items) {
+          const kod = f.code || "";
+          if (!kod || gorulmuKodlar.has(kod)) continue;
+          const isim = (f.name || "").toUpperCase();
+          const kat  = (f.category || "").toUpperCase();
+          // Adında veya kategorisinde KATILIM geçenleri al
+          if (!isim.includes("KATILIM") && !kat.includes("KATILIM")) continue;
+          gorulmuKodlar.add(kod);
+          katilimFonlar.push(mapFon(f, false, takasAraligi));
         }
+
+        if (items.length < PAGE_SIZE) break;
+        offset += PAGE_SIZE;
       }
     }
 
