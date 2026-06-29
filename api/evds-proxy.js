@@ -1,17 +1,17 @@
-// api/evds-proxy.js - EVDS3 proxy
+// api/evds-proxy.js - Seri kodu keşif + production
 
 const CACHE_TTL_MS = 12 * 3600 * 1000;
 let cacheAnlik = { data: null, ts: 0 };
 let cacheTarihsel = {};
 const BASE = "https://evds3.tcmb.gov.tr/igmevdsms-dis";
 
-const SERILER_ANLIK = [
-  "TP.KTF10","TP.KTF101","TP.KTF102","TP.KTF103",
-  "TP.KTF11","TP.KTF111","TP.KTF112","TP.KTF113",
-  "TP.KTF12","TP.KTF121","TP.KTF122","TP.KTF123",
-  "TP.KTF17","TP.KTF171","TP.KTF172",
-  "TP.TL.MT3","TP.TL.MT3.K","TP.TL.MT3.O","TP.TL.MT3.KT",
-];
+// Kredi faiz seri kodları - birden fazla alternatif deneyeceğiz
+const SERI_ALTERNATIFLERI = {
+  konut_tum:    ["TP.KTF10", "TP.KO10", "TP.KRF.KNT.TM"],
+  tasit_tum:    ["TP.KTF11", "TP.TK11", "TP.KRF.TST.TM"],
+  ihtiyac_tum:  ["TP.KTF12", "TP.IH12", "TP.KRF.IHT.TM"],
+  mevduat:      ["TP.TL.MT3", "TP.MT3", "TP.MF.TL.MT3"],
+};
 
 function tarihStr(d) {
   return `${String(d.getDate()).padStart(2,"0")}-${String(d.getMonth()+1).padStart(2,"0")}-${d.getFullYear()}`;
@@ -19,97 +19,77 @@ function tarihStr(d) {
 function onceki(gun) {
   const d = new Date(); d.setDate(d.getDate() - gun); return tarihStr(d);
 }
-function normalizeTarih(t) {
-  if (!t) return t;
-  const parts = t.split("-");
-  if (parts.length === 3 && parts[0].length === 4) {
-    return `${parts[2]}-${parts[1]}-${parts[0]}`;
-  }
-  return t;
-}
-function sonDeger(items, seri) {
-  const key = seri.replace(/\./g, "_");
-  for (let i = items.length - 1; i >= 0; i--) {
-    const v = items[i][key] ?? items[i][seri];
-    if (v !== null && v !== undefined && v !== "")
-      return { deger: parseFloat(v), tarih: normalizeTarih(items[i].Tarih) };
-  }
-  return null;
-}
-function tumDegerler(items, seri) {
-  const key = seri.replace(/\./g, "_");
-  return items.map(row => {
-    const v = row[key] ?? row[seri];
-    if (v !== null && v !== undefined && v !== "")
-      return { deger: parseFloat(v), tarih: normalizeTarih(row.Tarih) };
-    return null;
-  }).filter(Boolean);
-}
-async function evdsFetch(path, apiKey) {
-  const url = `${BASE}/${path}`;
-  const r = await fetch(url, { headers: { "key": apiKey, "Accept": "application/json" } });
+
+async function tekSeriTest(seri, apiKey) {
+  const url = `${BASE}/series=${seri}&startDate=${onceki(30)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`;
+  const r = await fetch(url, { headers: { "key": apiKey } });
   const text = await r.text();
-  if (text.trim().startsWith("<")) throw new Error(`HTML döndü (HTTP ${r.status})`);
-  return JSON.parse(text);
+  if (text.trim().startsWith("<")) return { seri, sonuc: "HTML", items: 0 };
+  const json = JSON.parse(text);
+  return { seri, sonuc: "JSON", items: json?.items?.length || 0, totalCount: json?.totalCount };
 }
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   if (req.method === "OPTIONS") return res.status(200).end();
 
-  // Tüm env key'leri logla (debug)
   const apiKey = process.env.EVDS_KEY;
-  const envKeys = Object.keys(process.env).filter(k => k.includes("EVDS") || k.includes("KEY"));
+  if (!apiKey) return res.status(500).json({ error: "EVDS_KEY eksik" });
 
-  if (!apiKey) {
-    return res.status(500).json({
-      error: "EVDS_KEY env eksik",
-      bulunan_env_keys: envKeys,
-      node_env: process.env.NODE_ENV,
-    });
+  const { mod, seri } = req.query;
+
+  // Seri kodu keşif modu
+  if (mod === "keşif") {
+    const testSeriler = [
+      // Kredi faiz oranları - eski kodlar
+      "TP.KTF10", "TP.KTF11", "TP.KTF12", "TP.KTF17",
+      // Alternatif formatlar
+      "TP.KO.KONUT", "TP.KRFAIZ.KNT",
+      // Mevduat
+      "TP.TL.MT3", "TP.MB.MT3", "TP.MF.MT3",
+      // Çalıştığını bildiğimiz kur serisi (kontrol)
+      "TP.DK.USD.A",
+    ];
+    const sonuclar = await Promise.all(testSeriler.map(s => tekSeriTest(s, apiKey)));
+    return res.status(200).json({ sonuclar });
   }
 
-  const { grafik, seri } = req.query;
-  const now = Date.now();
+  // Tek seri test
+  if (mod === "tek" && seri) {
+    const sonuc = await tekSeriTest(seri, apiKey);
+    return res.status(200).json(sonuc);
+  }
 
-  // GRAFİK MODU
-  if (grafik === "1" && seri) {
-    const c = cacheTarihsel[seri];
-    if (c && now - c.ts < CACHE_TTL_MS)
-      return res.status(200).json({ tarihsel: { [seri]: c.data }, cached: true });
-    try {
-      const path = `series=${seri}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=8&aggregationTypes=avg&formulas=0&deleteNullValues=true`;
-      const json = await evdsFetch(path, apiKey);
-      const items = json?.items || [];
-      const degerler = tumDegerler(items, seri);
-      cacheTarihsel[seri] = { data: degerler, ts: now };
-      return res.status(200).json({ tarihsel: { [seri]: degerler } });
-    } catch (err) {
-      const c2 = cacheTarihsel[seri];
-      if (c2) return res.status(200).json({ tarihsel: { [seri]: c2.data }, cached: true });
-      return res.status(500).json({ error: err.message });
+  // Kategori listesi
+  if (mod === "kategori") {
+    const url = `${BASE}/categories/type=json`;
+    const r = await fetch(url, { headers: { "key": apiKey } });
+    const text = await r.text();
+    if (text.trim().startsWith("<")) return res.status(200).json({ html: true });
+    return res.status(200).json(JSON.parse(text));
+  }
+
+  // Veri grubu listesi - kredi faiz içeren grupları bul
+  if (mod === "gruplar") {
+    const url = `${BASE}/datagroups/mode=0&type=json`;
+    const r = await fetch(url, { headers: { "key": apiKey } });
+    const text = await r.text();
+    if (text.trim().startsWith("<")) return res.status(200).json({ html: true });
+    const json = JSON.parse(text);
+    // Kredi/faiz ile ilgili grupları filtrele
+    const faizGruplari = json.filter(g =>
+      (g.DATAGROUP_NAME || "").match(/[Kk]redi|[Ff]aiz|[Mm]evduat|[Kk]atılım|[Ff]inansman/)
+    );
+    return res.status(200).json({ toplam: json.length, faiz_gruplari: faizGruplari });
+  }
+
+  return res.status(200).json({
+    mesaj: "Mod parametresi girin",
+    modlar: {
+      "?mod=keşif": "Bilinen seri kodlarını test et",
+      "?mod=kategori": "EVDS kategori listesi",
+      "?mod=gruplar": "Faiz/kredi veri grupları",
+      "?mod=tek&seri=TP.DK.USD.A": "Tek seri test",
     }
-  }
-
-  // ANLIK MOD
-  if (cacheAnlik.data && now - cacheAnlik.ts < CACHE_TTL_MS)
-    return res.status(200).json({ ...cacheAnlik.data, cached: true });
-
-  try {
-    const seriStr = SERILER_ANLIK.join("-");
-    const path = `series=${seriStr}&startDate=${onceki(60)}&endDate=${tarihStr(new Date())}&type=json&frequency=8&aggregationTypes=avg&formulas=0&deleteNullValues=true`;
-    const json = await evdsFetch(path, apiKey);
-    const items = json?.items || [];
-    if (!items.length) throw new Error("EVDS boş yanıt");
-
-    const sonuclar = {};
-    for (const s of SERILER_ANLIK) sonuclar[s] = sonDeger(items, s);
-    const yanit = { tarih: tarihStr(new Date()), seriler: sonuclar };
-    cacheAnlik = { data: yanit, ts: now };
-    return res.status(200).json(yanit);
-  } catch (err) {
-    if (cacheAnlik.data)
-      return res.status(200).json({ ...cacheAnlik.data, cached: true, hata: err.message });
-    return res.status(500).json({ error: err.message });
-  }
+  });
 }
