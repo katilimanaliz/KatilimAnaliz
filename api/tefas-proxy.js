@@ -140,8 +140,10 @@ export default async function handler(req, res) {
       for (const f of items) {
         const kod = f.code || "";
         if (!kod || gorulmuKodlar.has(kod)) continue;
+        const mapped = mapFon(f, false, takasAraligi);
+        if (!mapped.katilimUygun) continue;
         gorulmuKodlar.add(kod);
-        katilimFonlar.push(mapFon(f, false, takasAraligi));
+        katilimFonlar.push(mapped);
       }
     }
 
