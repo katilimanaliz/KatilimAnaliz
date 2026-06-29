@@ -73,28 +73,29 @@ export default async function handler(req, res) {
       katilimFonlar.push(mapFon(f, true, takasAraligi));
     }
 
-    // Kategori bazında paralel çek — fon adında KATILIM geçenleri al
-    // Fonoloji'deki dağılım: Katılım=104, Hisse=43, Para=27, Değişken/Karma=40, Sepet=6, Altın=44, Endeks=5
+    // Kategori bazında paralel çek
+    // 1. "Katılım" kategorisi — tüm fonları al (adında KATILIM geçmese de)
+    // 2. Diğer kategoriler — sadece adında KATILIM geçenler
     const PAGE_SIZE = 100;
 
-    // Kategorileri paralel olarak çek (her biri için max 2 sayfa yeterli)
-    const KATEGORILER = [
-      "Hisse Senedi Şemsiye Fonu",       // 43 katılım fon
-      "Para Piyasası Şemsiye Fonu",       // 27 katılım fon
-      "Değişken Şemsiye Fonu",            // 40 katılım fon (karma dahil)
-      "Karma Şemsiye Fonu",               // değişken/karma
-      "Fon Sepeti Şemsiye Fonu",          // 6 katılım fon
-      "Altın Şemsiye Fonu",              // 44 katılım fon
-      "Kıymetli Madenler Şemsiye Fonu",  // altın kıymetli ek kategori
-      "Endeks Şemsiye Fonu",             // 5 katılım fon
-      "Serbest Şemsiye Fonu",            // emeklilik katılım fonları burada
+    // Kategori → filtre kuralı: true=tümünü al, false=sadece adında KATILIM geçenler
+    const KATEGORILER: {kat: string, tumunu: boolean}[] = [
+      {kat: "Katılım",                      tumunu: true},   // 104 fon, tümü katılım
+      {kat: "Hisse Senedi Şemsiye Fonu",    tumunu: false},  // 43 katılım fon
+      {kat: "Para Piyasası Şemsiye Fonu",   tumunu: false},  // 27 katılım fon
+      {kat: "Değişken Şemsiye Fonu",        tumunu: false},  // ~20 katılım fon
+      {kat: "Karma Şemsiye Fonu",           tumunu: false},  // ~20 katılım fon
+      {kat: "Fon Sepeti Şemsiye Fonu",      tumunu: false},  // 6 katılım fon
+      {kat: "Altın Şemsiye Fonu",           tumunu: false},  // altın
+      {kat: "Kıymetli Madenler Şemsiye Fonu", tumunu: false}, // 44 katılım fon
+      {kat: "Endeks Şemsiye Fonu",          tumunu: false},  // 5 katılım fon
+      {kat: "Serbest Şemsiye Fonu",         tumunu: false},  // emeklilik
     ];
 
-    // Tüm kategorileri paralel çek
-    const kategoriPromises = KATEGORILER.map(async (kategori) => {
-      const sonuclar = [];
+    const kategoriPromises = KATEGORILER.map(async ({kat, tumunu}) => {
+      const sonuclar: any[] = [];
       let offset = 0;
-      const encKat = encodeURIComponent(kategori);
+      const encKat = encodeURIComponent(kat);
       while (true) {
         const url = `https://fonoloji.com/v1/funds?category=${encKat}&limit=${PAGE_SIZE}&offset=${offset}`;
         const res = await fetch(url, { headers }).catch(() => null);
@@ -103,7 +104,13 @@ export default async function handler(req, res) {
         if (!d) break;
         const items = d.items ?? d.funds ?? d.data ?? (Array.isArray(d) ? d : []);
         if (!items.length) break;
-        sonuclar.push(...items);
+        for (const f of items) {
+          if (!tumunu) {
+            const isim = (f.name || "").toUpperCase();
+            if (!isim.includes("KATILIM")) continue;
+          }
+          sonuclar.push(f);
+        }
         if (items.length < PAGE_SIZE) break;
         offset += PAGE_SIZE;
       }
@@ -116,12 +123,16 @@ export default async function handler(req, res) {
       for (const f of items) {
         const kod = f.code || "";
         if (!kod || gorulmuKodlar.has(kod)) continue;
-        // Sadece fon ADINDA "KATILIM" geçenler
-        const isim = (f.name || "").toUpperCase();
-        if (!isim.includes("KATILIM")) continue;
         gorulmuKodlar.add(kod);
         katilimFonlar.push(mapFon(f, false, takasAraligi));
       }
+    }
+
+    // Kategori bazında istatistik
+    const kategoriSayac = {};
+    for (const f of katilimFonlar) {
+      const k = f.kategori || "Bilinmiyor";
+      kategoriSayac[k] = (kategoriSayac[k] || 0) + 1;
     }
 
     res.setHeader("Cache-Control", "s-maxage=82800, stale-while-revalidate=3600");
@@ -130,6 +141,7 @@ export default async function handler(req, res) {
       success: true,
       count: katilimFonlar.length,
       guncelleme: new Date().toISOString(),
+      kategori_dagilim: kategoriSayac,
       data: katilimFonlar,
     });
 
