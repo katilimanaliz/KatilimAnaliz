@@ -79,7 +79,7 @@ export default async function handler(req, res) {
     const PAGE_SIZE = 100;
 
     // Kategori → filtre kuralı: true=tümünü al, false=sadece adında KATILIM geçenler
-    const KATEGORILER: {kat: string, tumunu: boolean}[] = [
+    const KATEGORILER = [
       {kat: "Katılım",                      tumunu: true},   // 104 fon, tümü katılım
       {kat: "Hisse Senedi Şemsiye Fonu",    tumunu: false},  // 43 katılım fon
       {kat: "Para Piyasası Şemsiye Fonu",   tumunu: false},  // 27 katılım fon
@@ -93,7 +93,7 @@ export default async function handler(req, res) {
     ];
 
     const kategoriPromises = KATEGORILER.map(async ({kat, tumunu}) => {
-      const sonuclar: any[] = [];
+      const sonuclar = [];
       let offset = 0;
       const encKat = encodeURIComponent(kat);
       while (true) {
