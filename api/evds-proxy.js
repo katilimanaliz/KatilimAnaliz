@@ -25,16 +25,18 @@ const AYLIK = [
   "TP_KBK_TRY_1","TP_KBK_USD_KBTF17","TP_KBK_EUR_KBTF17",
   "TP_KKP_TRY_KTF10","TP_KKP_TRY_17","TP_KKP_TRY_18",
   "TP_KKP_TRY_1","TP_KKP_USD_KTF17","TP_KKP_EUR_KTF17",
-  // Enflasyon (aylık)
-  "TP.FE.OKTG01",  // TÜFE yıllık değişim
-  "TP.FE.OKTG02",  // TÜFE aylık değişim
-  "TP.FE.OKTG09",  // Yİ-ÜFE yıllık
-  "TP.FE.OKTG10",  // Yİ-ÜFE aylık
-  "TP.FE.OKTG36",  // Çekirdek enflasyon C yıllık
-  // TCMB Politika Faizi & Koridor - test edilecek
+];
+
+// Enflasyon - TÜFE/Yİ-ÜFE ENDEKS SEVİYESİ (frequency=1, aylık veri ama günlük frekans parametresiyle çekiliyor)
+// TP.FE.OKTG01 = TÜFE genel endeks (2003=100), yüzde değil — YoY ve MoM kendimiz hesaplıyoruz
+const ENFLASYON = [
+  "TP.FE.OKTG01",  // TÜFE genel endeks
+  "TP.FE.OKTG02",  // A Endeksi (mevsimlik hariç)
+];
+
+// TCMB Politika Faizi & Koridor - test edilecek
+const POLITIKA = [
   "TP.APIFON4",    // 1 Hafta Repo (Ağırlıklı Ort. Fonlama Maliyeti)
-  "TP.TRY.MK02",   // Gecelik borç verme (üst bant) - test
-  "TP.TRY.MK01",   // Gecelik borçlanma (alt bant) - test
 ];
 
 // Günlük (frequency=1) - TLTEFK
@@ -126,16 +128,33 @@ export default async function handler(req,res){
     return res.status(200).json({...cacheAnlik.data,cached:true});
 
   try{
-    const [hafJson,ayJson,gunJson]=await Promise.all([
+    const [hafJson,ayJson,gunJson,enfJson,polJson]=await Promise.all([
       evdsFetch(`${BASE}/series=${HAFTALIK.join("-")}&startDate=${onceki(60)}&endDate=${tarihStr(new Date())}&type=json&frequency=8`,apiKey),
-      evdsFetch(`${BASE}/series=${AYLIK.join("-")}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=9`,apiKey),
-      evdsFetch(`${BASE}/series=${GUNLUK.join("-")}&startDate=${onceki(30)}&endDate=${tarihStr(new Date())}&type=json&frequency=1`,apiKey),
+      evdsFetch(`${BASE}/series=${AYLIK.join("-")}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=9`,apiKey).catch(()=>({items:[]})),
+      evdsFetch(`${BASE}/series=${GUNLUK.join("-")}&startDate=${onceki(30)}&endDate=${tarihStr(new Date())}&type=json&frequency=1`,apiKey).catch(()=>({items:[]})),
+      evdsFetch(`${BASE}/series=${ENFLASYON.join("-")}&startDate=${onceki(450)}&endDate=${tarihStr(new Date())}&type=json&frequency=1`,apiKey).catch(()=>({items:[]})),
+      evdsFetch(`${BASE}/series=${POLITIKA.join("-")}&startDate=${onceki(60)}&endDate=${tarihStr(new Date())}&type=json&frequency=8`,apiKey).catch(()=>({items:[]})),
     ]);
 
     const sonuclar={};
     for(const s of HAFTALIK) sonuclar[s]=sonDeger(hafJson?.items||[],s);
     for(const s of AYLIK)    sonuclar[s]=sonDeger(ayJson?.items||[],s);
     for(const s of GUNLUK)   sonuclar[s]=sonDeger(gunJson?.items||[],s);
+    for(const s of POLITIKA) sonuclar[s]=sonDeger(polJson?.items||[],s);
+
+    // TÜFE endeksinden YoY ve MoM hesapla
+    const enfItems=enfJson?.items||[];
+    const tufeDizi=tumDegerler(enfItems,"TP.FE.OKTG01");
+    if(tufeDizi.length>=13){
+      const son=tufeDizi[tufeDizi.length-1];
+      const oncekiAy=tufeDizi[tufeDizi.length-2];
+      const oncekiYil=tufeDizi[tufeDizi.length-13];
+      sonuclar["TUFE_YILLIK"]={deger:((son.deger-oncekiYil.deger)/oncekiYil.deger*100),tarih:son.tarih};
+      sonuclar["TUFE_AYLIK"]={deger:((son.deger-oncekiAy.deger)/oncekiAy.deger*100),tarih:son.tarih};
+    } else {
+      sonuclar["TUFE_YILLIK"]=null;
+      sonuclar["TUFE_AYLIK"]=null;
+    }
 
     const yanit={tarih:tarihStr(new Date()),seriler:sonuclar};
     cacheAnlik={data:yanit,ts:now};
