@@ -14,17 +14,34 @@ const XK100_KODLARI = new Set([
 const CACHE_TTL = 12 * 3600 * 1000; // şirket adları 12 saat cache
 let isimCache = { data: null, ts: 0 };
 
+let lastDebugInfo = {};
+
 async function sirketIsimleriniGetir() {
   const now = Date.now();
   if (isimCache.data && now - isimCache.ts < CACHE_TTL) return isimCache.data;
 
   try {
-    const r = await fetch("http://bigpara.hurriyet.com.tr/api/v1/hisse/list", {
+    const r = await fetch("https://bigpara.hurriyet.com.tr/api/v1/hisse/list", {
       headers: { "Accept": "application/json", "User-Agent": "Mozilla/5.0" }
     });
+    const text = await r.text();
+    lastDebugInfo = {
+      http_status: r.status,
+      http_ok: r.ok,
+      ham_yanit_ilk_500_karakter: text.slice(0, 500),
+    };
     if (!r.ok) return isimCache.data || {};
-    const json = await r.json();
+
+    let json;
+    try { json = JSON.parse(text); } catch(e) {
+      lastDebugInfo.parse_hatasi = e.message;
+      return isimCache.data || {};
+    }
+
     const liste = json?.data?.list || json?.list || json?.data || [];
+    lastDebugInfo.bulunan_liste_uzunlugu = Array.isArray(liste) ? liste.length : "liste degil";
+    lastDebugInfo.json_anahtarlari = Object.keys(json || {});
+    lastDebugInfo.ilk_kayit_ornegi = Array.isArray(liste) ? liste[0] : null;
 
     const isimMap = {};
     for (const h of liste) {
@@ -35,6 +52,7 @@ async function sirketIsimleriniGetir() {
     isimCache = { data: isimMap, ts: now };
     return isimMap;
   } catch (e) {
+    lastDebugInfo = { fetch_hatasi: e.message };
     return isimCache.data || {};
   }
 }
@@ -64,6 +82,7 @@ export default async function handler(req, res) {
       return res.status(200).json({
         midas_kayit_sayisi: midasListe.length,
         isim_kaynagi_kayit_sayisi: Object.keys(isimMap).length,
+        bigpara_debug: lastDebugInfo,
         isim_ornek: Object.entries(isimMap).slice(0, 5),
         eslesen_ornek: midasListe.slice(0, 5).map(h => ({
           kod: h.Code,
