@@ -5,7 +5,7 @@ export default async function handler(req, res) {
 
   try {
     const [dovizRes, erApiRes, gcRes, siRes, btcRes] = await Promise.allSettled([
-      fetch("https://api.frankfurter.app/latest?from=USD&to=TRY,EUR,GBP,CHF,JPY"),
+      fetch("https://api.frankfurter.app/latest?from=USD&to=TRY,EUR,GBP,CHF,JPY,CNY"),
       fetch("https://open.er-api.com/v6/latest/USD"), // SAR, RUB, AED dahil geniş kapsam - key gerektirmez
       fetch("https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1d&range=1d", {headers:{"User-Agent":"Mozilla/5.0"}}),
       fetch("https://query1.finance.yahoo.com/v8/finance/chart/SI=F?interval=1d&range=1d", {headers:{"User-Agent":"Mozilla/5.0"}}),
@@ -30,10 +30,11 @@ export default async function handler(req, res) {
     const XAG_TRY_gram = siFiyat && USD_TRY ? Math.round(siFiyat * USD_TRY / 32.1507 * 100) / 100 : null;
     const BTC_USD = btcData?.bitcoin?.usd ?? null;
 
-    // SAR ve RUB için open.er-api kullan (Frankfurter desteklemiyor)
+    // SAR, RUB, CNY için open.er-api kullan (Frankfurter desteklemiyor / yedek)
     const SAR_TRY = USD_TRY && erRates.SAR ? Math.round(USD_TRY / erRates.SAR * 10000) / 10000 : null;
     const RUB_TRY = USD_TRY && erRates.RUB ? Math.round(USD_TRY / erRates.RUB * 10000) / 10000 : null;
     const AED_TRY = USD_TRY && (rates.AED ?? erRates.AED) ? Math.round(USD_TRY / (rates.AED ?? erRates.AED) * 10000) / 10000 : null;
+    const CNY_TRY = USD_TRY && (rates.CNY ?? erRates.CNY) ? Math.round(USD_TRY / (rates.CNY ?? erRates.CNY) * 10000) / 10000 : null;
 
     res.json({
       USD_TRY,
@@ -43,6 +44,8 @@ export default async function handler(req, res) {
       SAR_TRY,
       RUB_TRY,
       AED_TRY,
+      CNY_TRY,
+      JPY_TRY: USD_TRY && rates.JPY ? Math.round(USD_TRY / rates.JPY * 10000) / 10000 : null,
       JPY100_TRY: USD_TRY && rates.JPY ? Math.round(USD_TRY / rates.JPY * 100 * 10000) / 10000 : null,
       EUR_USD: rates.EUR ? Math.round(1 / rates.EUR * 10000) / 10000 : null,
       XAU_USD: gcFiyat,
