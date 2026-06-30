@@ -8,7 +8,7 @@ const SERILER = [
   { id: "EUR6MTD156N", ad: "EURIBOR 6M",  kaynak: "EMMI via FRED" },
 ];
 
-const TIMEOUT_MS = 5000; // her FRED isteği en fazla 5sn beklesin
+const TIMEOUT_MS = 8000; // her FRED isteği en fazla 5sn beklesin
 
 function fetchWithTimeout(url, options, timeoutMs) {
   const controller = new AbortController();
