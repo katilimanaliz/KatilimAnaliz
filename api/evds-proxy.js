@@ -31,6 +31,10 @@ const AYLIK = [
   "TP.FE.OKTG09",  // Yİ-ÜFE yıllık
   "TP.FE.OKTG10",  // Yİ-ÜFE aylık
   "TP.FE.OKTG36",  // Çekirdek enflasyon C yıllık
+  // TCMB Politika Faizi & Koridor - test edilecek
+  "TP.APIFON4",    // 1 Hafta Repo (Ağırlıklı Ort. Fonlama Maliyeti)
+  "TP.TRY.MK02",   // Gecelik borç verme (üst bant) - test
+  "TP.TRY.MK01",   // Gecelik borçlanma (alt bant) - test
 ];
 
 // Günlük (frequency=1) - TLTEFK
