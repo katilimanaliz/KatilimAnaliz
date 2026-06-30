@@ -1,6 +1,7 @@
 // api/gecmis.js
 // Yahoo Finance üzerinden 30 günlük geçmiş fiyat verisi (Kur Grafik Modalı için)
-// Sembol formatı: USDTRY=X, EURTRY=X, GC=F (altın), SI=F (gümüş), BTC-USD vb.
+// Standart semboller: USDTRY=X, EURTRY=X, BTC-USD vb.
+// Özel mod: sembol=GRAM_ALTIN veya GRAM_GUMUS -> ons/USD × USD/TRY çarpılarak TL/gram hesaplanır
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Cache-Control", "s-maxage=900, stale-while-revalidate=300");
@@ -10,7 +11,66 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "sembol parametresi gerekli" });
   }
 
+  const GRAM_ONS = 31.1034768; // 1 ons = 31.1034768 gram
+
   try {
+    if (sembol === "GRAM_ALTIN" || sembol === "GRAM_GUMUS") {
+      const onsSembol = sembol === "GRAM_ALTIN" ? "GC=F" : "SI=F";
+      const [onsRes, usdRes] = await Promise.all([
+        fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${onsSembol}?interval=1d&range=1mo`, { headers: { "User-Agent": "Mozilla/5.0" } }),
+        fetch(`https://query1.finance.yahoo.com/v8/finance/chart/USDTRY=X?interval=1d&range=1mo`, { headers: { "User-Agent": "Mozilla/5.0" } }),
+      ]);
+      const onsJson = await onsRes.json();
+      const usdJson = await usdRes.json();
+
+      const onsResult = onsJson?.chart?.result?.[0];
+      const usdResult = usdJson?.chart?.result?.[0];
+      if (!onsResult || !usdResult) {
+        return res.status(200).json({ noktalar: [], guncelFiyat: null, oncekiKapanis: null });
+      }
+
+      // USD/TRY tarihe göre eşlemek için map oluştur
+      const usdMap = {};
+      (usdResult.timestamp || []).forEach((t, i) => {
+        const tarih = new Date(t * 1000).toISOString().slice(0, 10);
+        const c = usdResult.indicators?.quote?.[0]?.close?.[i];
+        if (c != null) usdMap[tarih] = c;
+      });
+
+      const onsTimestamps = onsResult.timestamp || [];
+      const onsCloses = onsResult.indicators?.quote?.[0]?.close || [];
+
+      let sonUsdTry = null;
+      const noktalar = onsTimestamps
+        .map((t, i) => {
+          const tarih = new Date(t * 1000).toISOString().slice(0, 10);
+          const onsFiyat = onsCloses[i];
+          const usdTry = usdMap[tarih] ?? sonUsdTry;
+          if (usdTry != null) sonUsdTry = usdTry;
+          if (onsFiyat == null || usdTry == null) return null;
+          const gramTL = (onsFiyat * usdTry) / GRAM_ONS;
+          return { tarih, fiyat: Math.round(gramTL * 100) / 100 };
+        })
+        .filter(p => p !== null && p.fiyat > 0);
+
+      const onsMeta = onsResult.meta || {};
+      const usdMeta = usdResult.meta || {};
+      const guncelOns = onsMeta.regularMarketPrice ?? (noktalar.length ? null : null);
+      const guncelUsd = usdMeta.regularMarketPrice;
+      const oncekiOns = onsMeta.previousClose ?? onsMeta.chartPreviousClose;
+      const oncekiUsd = usdMeta.previousClose ?? usdMeta.chartPreviousClose;
+
+      const guncelFiyat = (guncelOns != null && guncelUsd != null)
+        ? Math.round((guncelOns * guncelUsd / GRAM_ONS) * 100) / 100
+        : (noktalar.length ? noktalar[noktalar.length - 1].fiyat : null);
+      const oncekiKapanis = (oncekiOns != null && oncekiUsd != null)
+        ? Math.round((oncekiOns * oncekiUsd / GRAM_ONS) * 100) / 100
+        : (noktalar.length > 1 ? noktalar[noktalar.length - 2].fiyat : null);
+
+      return res.status(200).json({ noktalar, guncelFiyat, oncekiKapanis });
+    }
+
+    // Standart sembol modu (USD/TRY, EUR/TRY, BTC-USD vb.)
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sembol)}?interval=1d&range=1mo`;
     const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
