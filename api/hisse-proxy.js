@@ -11,21 +11,44 @@ const XK100_KODLARI = new Set([
   "KRDMD","ASUZU","ARCLK","GRSEL","ALBRK","ANSGR","CLEBI","DOHOL",
 ]);
 
-// Midas yanıtında şirket adı için olası alan adları
-function sirketAdiBul(h) {
-  return h.Name || h.StockName || h.Description || h.LongName ||
-         h.CompanyName || h.Title || h.FullName || h.SecurityName ||
-         h.Sirket || h.sirket_adi || null;
+const CACHE_TTL = 12 * 3600 * 1000; // şirket adları 12 saat cache
+let isimCache = { data: null, ts: 0 };
+
+async function sirketIsimleriniGetir() {
+  const now = Date.now();
+  if (isimCache.data && now - isimCache.ts < CACHE_TTL) return isimCache.data;
+
+  try {
+    const r = await fetch("http://bigpara.hurriyet.com.tr/api/v1/hisse/list", {
+      headers: { "Accept": "application/json", "User-Agent": "Mozilla/5.0" }
+    });
+    if (!r.ok) return isimCache.data || {};
+    const json = await r.json();
+    const liste = json?.data?.list || json?.list || json?.data || [];
+
+    const isimMap = {};
+    for (const h of liste) {
+      const kod = h.SHORTNAME || h.HisseKodu || h.code || h.symbol || h.KOD;
+      const isim = h.LONGNAME || h.HisseAdi || h.name || h.AD || h.title;
+      if (kod && isim) isimMap[kod] = isim;
+    }
+    isimCache = { data: isimMap, ts: now };
+    return isimMap;
+  } catch (e) {
+    return isimCache.data || {};
+  }
 }
 
 export default async function handler(req, res) {
   try {
     const debug = req.query.debug === "1";
 
-    const midasRes = await fetch(
-      "https://www.getmidas.com/wp-json/midas-api/v1/midas_table_data?sortId=&return=table",
-      { headers: { "Accept": "application/json", "User-Agent": "Mozilla/5.0" } }
-    );
+    const [midasRes, isimMap] = await Promise.all([
+      fetch("https://www.getmidas.com/wp-json/midas-api/v1/midas_table_data?sortId=&return=table", {
+        headers: { "Accept": "application/json", "User-Agent": "Mozilla/5.0" }
+      }),
+      sirketIsimleriniGetir(),
+    ]);
 
     let midasListe = [];
     if (midasRes.ok) {
@@ -37,23 +60,26 @@ export default async function handler(req, res) {
       } catch(e) {}
     }
 
-    // DEBUG MODU: Midas'tan gelen ham kaydın tüm alanlarını göster
     if (debug) {
       return res.status(200).json({
-        midas_ornek_kayit: midasListe[0] || null,
-        midas_tum_alan_adlari: midasListe[0] ? Object.keys(midasListe[0]) : [],
         midas_kayit_sayisi: midasListe.length,
+        isim_kaynagi_kayit_sayisi: Object.keys(isimMap).length,
+        isim_ornek: Object.entries(isimMap).slice(0, 5),
+        eslesen_ornek: midasListe.slice(0, 5).map(h => ({
+          kod: h.Code,
+          bulunan_isim: isimMap[h.Code] || "BULUNAMADI"
+        })),
       });
     }
 
     const hisseler = midasListe
-      .filter(h => h.Code && !h.Code.startsWith("X")) // endeks kodlarını atla
+      .filter(h => h.Code && !h.Code.startsWith("X"))
       .map(h => {
         const kod = h.Code;
         return {
           ticker:       kod,
-          sirket:       sirketAdiBul(h) || kod,
-          sektor:       h.Sector || h.SectorName || "",
+          sirket:       isimMap[kod] || kod,
+          sektor:       "",
           fiyat:        h.Last || h.Close || 0,
           degisim1g:    parseFloat((h.DailyChangePercent || 0).toFixed(2)),
           degisim1h:    h.WeeklyChangePercent != null ? parseFloat(h.WeeklyChangePercent.toFixed(2)) : null,
@@ -64,11 +90,11 @@ export default async function handler(req, res) {
           yuksek:       h.High || 0,
           dusuk:        h.Low || 0,
           hacim:        h.TotalVolume || 0,
-          piyasaDegeri: h.MarketCap || h.MarketValue || 0,
+          piyasaDegeri: h.MarketValue || 0,
           fk:           h.PriceEarning || null,
-          pddd:         h.PriceToBookValue || h.PBRatio || null,
-          roe:          h.ReturnOnEquity || h.ROE || null,
-          temetu:       h.DividendYield || null,
+          pddd:         h.PriceBookValue || null,
+          roe:          h.ReturnOnEquity != null ? h.ReturnOnEquity * 100 : null,
+          temetu:       null,
           katilimEndeksi: XK100_KODLARI.has(kod),
         };
       })
