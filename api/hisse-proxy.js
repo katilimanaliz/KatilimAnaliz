@@ -126,7 +126,7 @@ export default async function handler(req, res) {
       })
       .sort((a,b) => (b.piyasaDegeri||0) - (a.piyasaDegeri||0));
 
-    res.setHeader("Cache-Control", "s-maxage=82800, stale-while-revalidate=3600");
+    res.setHeader("Cache-Control", "s-maxage=600, stale-while-revalidate=120");
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.status(200).json({
       success: true,
