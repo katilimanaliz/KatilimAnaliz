@@ -12,7 +12,19 @@ const XK100_KODLARI = new Set([
 ]);
 
 const CACHE_TTL = 12 * 3600 * 1000; // şirket adları 12 saat cache
-let isimCache = { data: null, ts: 0 };
+let isimCache = { data: null, ts: 0, rawSample: null, rawCount: 0 };
+
+// BigPara'nın döndürdüğü alan adı (kod/ad) zaman içinde değişmiş/farklı casing kullanıyor olabilir.
+// Bilinen tüm olası varyantları dener — hangisi API'de gerçekten varsa onu kullanır.
+function ilkGecerliAlan(obj, adaylar) {
+  for (const k of adaylar) {
+    if (obj[k] !== undefined && obj[k] !== null && obj[k] !== "") return obj[k];
+  }
+  return null;
+}
+
+const KOD_ALANLARI = ["kod","Kod","KOD","sembol","Sembol","SEMBOL","symbol","Symbol","HisseKodu","hisseKodu"];
+const AD_ALANLARI  = ["ad","Ad","AD","hisseAdi","HisseAdi","HISSE_ADI","isim","Isim","IsimTam","name","Name","Aciklama","aciklama","Unvan","unvan","SirketAdi","sirketAdi"];
 
 async function sirketIsimleriniGetir() {
   const now = Date.now();
@@ -28,11 +40,19 @@ async function sirketIsimleriniGetir() {
 
     const isimMap = {};
     for (const h of liste) {
-      if (h.kod && h.ad) isimMap[h.kod] = h.ad;
+      const kod = ilkGecerliAlan(h, KOD_ALANLARI);
+      const ad  = ilkGecerliAlan(h, AD_ALANLARI);
+      if (kod && ad) isimMap[kod] = ad;
     }
-    isimCache = { data: isimMap, ts: now };
+    isimCache = {
+      data: isimMap,
+      ts: now,
+      rawSample: liste.slice(0, 2),   // BigPara'dan gelen ham ilk 2 kayıt — gerçek alan adlarını görmek için
+      rawCount: liste.length,
+    };
     return isimMap;
   } catch (e) {
+    isimCache.rawSample = isimCache.rawSample || [{ hata: String(e && e.message || e) }];
     return isimCache.data || {};
   }
 }
@@ -62,6 +82,9 @@ export default async function handler(req, res) {
       return res.status(200).json({
         midas_kayit_sayisi: midasListe.length,
         isim_kaynagi_kayit_sayisi: Object.keys(isimMap).length,
+        isim_kaynagi_ham_toplam: isimCache.rawCount,
+        // BigPara'dan gelen HAM ilk 2 kayıt — gerçek alan adlarını (kod/ad ne isimle geliyor) burada görürsünüz
+        isim_kaynagi_ham_ornek: isimCache.rawSample,
         eslesen_ornek: midasListe.slice(0, 5).map(h => ({
           kod: h.Code,
           bulunan_isim: isimMap[h.Code] || "BULUNAMADI"
