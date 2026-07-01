@@ -79,12 +79,18 @@ export default async function handler(req, res) {
     }
 
     if (debug) {
+      const tumKodlar = midasListe.filter(h => h.Code && !h.Code.startsWith("X")).map(h => h.Code);
+      const eslesenler = tumKodlar.filter(k => isimMap[k]);
+      const eslesmeyenler = tumKodlar.filter(k => !isimMap[k]);
       return res.status(200).json({
         midas_kayit_sayisi: midasListe.length,
         isim_kaynagi_kayit_sayisi: Object.keys(isimMap).length,
         isim_kaynagi_ham_toplam: isimCache.rawCount,
-        // BigPara'dan gelen HAM ilk 2 kayıt — gerçek alan adlarını (kod/ad ne isimle geliyor) burada görürsünüz
         isim_kaynagi_ham_ornek: isimCache.rawSample,
+        // GERÇEK EŞLEŞME ORANI — tüm 614 hissenin kaçında isim bulunuyor
+        eslesme_orani: `${eslesenler.length} / ${tumKodlar.length}`,
+        eslesmeyen_kod_sayisi: eslesmeyenler.length,
+        eslesmeyen_ornekler: eslesmeyenler.slice(0, 15),
         eslesen_ornek: midasListe.slice(0, 5).map(h => ({
           kod: h.Code,
           bulunan_isim: isimMap[h.Code] || "BULUNAMADI"
