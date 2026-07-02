@@ -1,7 +1,18 @@
 // api/finans-haberleri.js
-// Kaynak: Bloomberg HT RSS feed (resmi, ücretsiz, key gerektirmez)
+// Kaynaklar: Bloomberg HT + CNBC-e + Sözcü Ekonomi RSS feed'leri (üçü de resmi, ücretsiz, key gerektirmez)
+// NOT: Bloomberg HT'nin RSS'i zaman zaman uzun süre yenilenmiyor (tespit edildi: 1 Temmuz
+// 18:47'den itibaren donmuş kaldı; CNBC-e de benzer şekilde saatlerce güncellenmeyebiliyor).
+// Sözcü Ekonomi test edildiğinde dakikalar içinde güncelleniyordu — en taze kaynak. Tek
+// kaynağa bağımlı kalmamak için üç kaynak da çekilip birleştiriliyor; hangi kaynak daha
+// güncelse haberler ondan öne çıkıyor. Biri/ikisi erişilemez olursa kalanla devam edilir.
 const CACHE_TTL = 15 * 60 * 1000; // 15 dakika
 let cache = { data: null, ts: 0 };
+
+const KAYNAKLAR = [
+  { ad: "Bloomberg HT", url: "https://www.bloomberght.com/rss" },
+  { ad: "CNBC-e",       url: "https://www.cnbce.com/rss" },
+  { ad: "Sözcü Ekonomi", url: "https://www.sozcu.com.tr/feeds-rss-category-ekonomi" },
+];
 
 function xmlEtiketAl(blok, etiket) {
   // <etiket>içerik</etiket> veya <etiket><![CDATA[içerik]]></etiket>
@@ -14,7 +25,7 @@ function xmlEtiketAl(blok, etiket) {
   return "";
 }
 
-function parseRSS(xml) {
+function parseRSS(xml, kaynakAdi) {
   const items = [];
   const itemBloklari = xml.split(/<item[\s>]/i).slice(1);
   for (const blokRaw of itemBloklari) {
@@ -31,10 +42,37 @@ function parseRSS(xml) {
         tarih: tarihStr ? new Date(tarihStr).toISOString() : null,
         ozet: aciklama ? aciklama.slice(0, 200) : "",
         kategori: kategori || null,
+        kaynak: kaynakAdi,
       });
     }
   }
   return items;
+}
+
+// Aynı/çok benzer başlıkları (iki kaynak da aynı haberi geçmiş olabilir) sadeleştir
+function tekillestir(items) {
+  const gorulen = new Set();
+  const sonuc = [];
+  for (const it of items) {
+    const anahtar = it.baslik.toLowerCase().replace(/[^a-z0-9ığüşöç]/gi, "").slice(0, 60);
+    if (gorulen.has(anahtar)) continue;
+    gorulen.add(anahtar);
+    sonuc.push(it);
+  }
+  return sonuc;
+}
+
+async function kaynaktanCek(kaynak) {
+  try {
+    const r = await fetch(kaynak.url, {
+      headers: { "User-Agent": "Mozilla/5.0", "Accept": "application/rss+xml, application/xml, text/xml" }
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const xml = await r.text();
+    return parseRSS(xml, kaynak.ad);
+  } catch (e) {
+    return []; // bu kaynak başarısız oldu, diğerleriyle devam
+  }
 }
 
 export default async function handler(req, res) {
@@ -47,19 +85,23 @@ export default async function handler(req, res) {
   }
 
   try {
-    const r = await fetch("https://www.bloomberght.com/rss", {
-      headers: { "User-Agent": "Mozilla/5.0", "Accept": "application/rss+xml, application/xml, text/xml" }
-    });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const xml = await r.text();
-    const haberler = parseRSS(xml).slice(0, 30);
+    const sonuclar = await Promise.all(KAYNAKLAR.map(kaynaktanCek));
+    const hepsi = tekillestir(
+      sonuclar.flat().sort((a, b) => new Date(b.tarih).getTime() - new Date(a.tarih).getTime())
+    ).slice(0, 40);
+
+    if (hepsi.length === 0) throw new Error("Hiçbir kaynaktan haber alınamadı");
+
+    const basariliKaynaklar = KAYNAKLAR
+      .map((k, i) => (sonuclar[i].length > 0 ? k.ad : null))
+      .filter(Boolean);
 
     const yanit = {
       success: true,
-      count: haberler.length,
+      count: hepsi.length,
       guncelleme: new Date().toISOString(),
-      kaynak: "Bloomberg HT",
-      data: haberler,
+      kaynak: basariliKaynaklar.join(" + ") || "Bilinmiyor",
+      data: hepsi,
     };
     cache = { data: yanit, ts: now };
     return res.status(200).json(yanit);
