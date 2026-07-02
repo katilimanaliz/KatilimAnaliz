@@ -11,7 +11,7 @@ const XK100_KODLARI = new Set([
   "KRDMD","ASUZU","ARCLK","GRSEL","ALBRK","ANSGR","CLEBI","DOHOL",
 ]);
 
-const CACHE_TTL = 12 * 3600 * 1000; // şirket adları 12 saat cache
+const CACHE_TTL = 30 * 24 * 3600 * 1000; // şirket adları neredeyse hiç değişmiyor — 30 gün "taze" say
 let isimCache = { data: null, ts: 0, rawSample: null, rawCount: 0 };
 
 // BigPara'nın döndürdüğü alan adı (kod/ad) zaman içinde değişmiş/farklı casing kullanıyor olabilir.
@@ -26,17 +26,43 @@ function ilkGecerliAlan(obj, adaylar) {
 const KOD_ALANLARI = ["kod","Kod","KOD","sembol","Sembol","SEMBOL","symbol","Symbol","HisseKodu","hisseKodu"];
 const AD_ALANLARI  = ["ad","Ad","AD","hisseAdi","HisseAdi","HISSE_ADI","isim","Isim","IsimTam","name","Name","Aciklama","aciklama","Unvan","unvan","SirketAdi","sirketAdi"];
 
+// Zaman aşımlı fetch — BigPara yavaş kaldığında istek sonsuza kadar beklemesin
+function fetchZamanAsimli(url, opts, msTimeout) {
+  const controller = new AbortController();
+  const zamanlayici = setTimeout(() => controller.abort(), msTimeout);
+  return fetch(url, { ...opts, signal: controller.signal }).finally(() => clearTimeout(zamanlayici));
+}
+
+// BigPara isteği bazı soğuk başlangıçlarda (cold start) tek seferde başarısız/timeout olabiliyor
+// — bu, "şirket isimleri arada gelip gidiyor" şikayetinin asıl sebebiydi. 2 tekrar denemeyle
+// (kısa aralarla) bu geçici hataların büyük kısmı örtülüyor.
+async function bigparaCekTekrarli(deneme = 3) {
+  for (let i = 0; i < deneme; i++) {
+    try {
+      const r = await fetchZamanAsimli(
+        "https://bigpara.hurriyet.com.tr/api/v1/hisse/list",
+        { headers: { "Accept": "application/json", "User-Agent": "Mozilla/5.0" } },
+        6000
+      );
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const json = await r.json();
+      const liste = json?.data || [];
+      if (Array.isArray(liste) && liste.length > 0) return liste;
+      throw new Error("Boş liste döndü");
+    } catch (e) {
+      if (i === deneme - 1) throw e;
+      await new Promise(res => setTimeout(res, 500 * (i + 1))); // 500ms, 1000ms artan bekleme
+    }
+  }
+  return [];
+}
+
 async function sirketIsimleriniGetir() {
   const now = Date.now();
   if (isimCache.data && now - isimCache.ts < CACHE_TTL) return isimCache.data;
 
   try {
-    const r = await fetch("https://bigpara.hurriyet.com.tr/api/v1/hisse/list", {
-      headers: { "Accept": "application/json", "User-Agent": "Mozilla/5.0" }
-    });
-    if (!r.ok) return isimCache.data || {};
-    const json = await r.json();
-    const liste = json?.data || [];
+    const liste = await bigparaCekTekrarli(3);
 
     const isimMap = {};
     for (const h of liste) {
@@ -52,6 +78,9 @@ async function sirketIsimleriniGetir() {
     };
     return isimMap;
   } catch (e) {
+    // 3 deneme de başarısız oldu. Elimizde önceki (eski de olsa) bir isim haritası varsa
+    // onu kullanmaya devam et — boş {} dönüp tüm isimleri ticker'a düşürmek yerine bayat
+    // ama doğru isimler göstermek çok daha iyi bir kullanıcı deneyimi.
     isimCache.rawSample = isimCache.rawSample || [{ hata: String(e && e.message || e) }];
     return isimCache.data || {};
   }
@@ -82,12 +111,14 @@ export default async function handler(req, res) {
       const tumKodlar = midasListe.filter(h => h.Code && !h.Code.startsWith("X")).map(h => h.Code);
       const eslesenler = tumKodlar.filter(k => isimMap[k]);
       const eslesmeyenler = tumKodlar.filter(k => !isimMap[k]);
+      const tamListe = req.query.tam === "1";
       return res.status(200).json({
         midas_kayit_sayisi: midasListe.length,
         isim_kaynagi_kayit_sayisi: Object.keys(isimMap).length,
         isim_kaynagi_ham_toplam: isimCache.rawCount,
-        isim_kaynagi_ham_ornek: isimCache.rawSample,
-        // GERÇEK EŞLEŞME ORANI — tüm 614 hissenin kaçında isim bulunuyor
+        isim_kaynagi_ham_ornek: tamListe ? isimCache.rawSample : isimCache.rawSample?.slice(0, 2),
+        isim_kaynagi_cache_yasi_dk: isimCache.ts ? Math.round((Date.now() - isimCache.ts) / 60000) : null,
+        // GERÇEK EŞLEŞME ORANI — tüm hisselerin kaçında isim bulunuyor
         eslesme_orani: `${eslesenler.length} / ${tumKodlar.length}`,
         eslesmeyen_kod_sayisi: eslesmeyenler.length,
         eslesmeyen_ornekler: eslesmeyenler.slice(0, 15),
@@ -95,6 +126,8 @@ export default async function handler(req, res) {
           kod: h.Code,
           bulunan_isim: isimMap[h.Code] || "BULUNAMADI"
         })),
+        // ?tam=1 ile eklenir: statik listeye gömmek için kod->isim eşlemesinin TAMAMI
+        tam_isim_haritasi: tamListe ? isimMap : undefined,
       });
     }
 
