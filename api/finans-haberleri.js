@@ -75,9 +75,12 @@ function tekillestir(items) {
 
 async function kaynaktanCek(kaynak) {
   try {
+    const controller = new AbortController();
+    const zamanlayici = setTimeout(() => controller.abort(), 6000); // 6 sn zaman aşımı
     const r = await fetch(kaynak.url, {
-      headers: { "User-Agent": "Mozilla/5.0", "Accept": "application/rss+xml, application/xml, text/xml" }
-    });
+      headers: { "User-Agent": "Mozilla/5.0", "Accept": "application/rss+xml, application/xml, text/xml" },
+      signal: controller.signal,
+    }).finally(() => clearTimeout(zamanlayici));
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const xml = await r.text();
     return parseRSS(xml, kaynak.ad);
