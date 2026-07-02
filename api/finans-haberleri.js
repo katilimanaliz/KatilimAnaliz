@@ -14,6 +14,17 @@ const KAYNAKLAR = [
   { ad: "Sözcü Ekonomi", url: "https://www.sozcu.com.tr/feeds-rss-category-ekonomi" },
 ];
 
+// RSS başlık/özetleri genelde HTML entity-encode edilmiş geliyor (&#039; &quot; &amp; vb.)
+// — bunları çözmezsek ekranda "&#039;Avrupa..." gibi ham kod görünür.
+function htmlEntityCoz(metin) {
+  if (!metin) return metin;
+  const NAMED = { amp:"&", lt:"<", gt:">", quot:'"', apos:"'", nbsp:" ", rsquo:"'", lsquo:"'", rdquo:'"', ldquo:'"', ndash:"–", mdash:"—", hellip:"…" };
+  return metin
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(parseInt(dec, 10)))
+    .replace(/&([a-zA-Z]+);/g, (m, ad) => (NAMED[ad] !== undefined ? NAMED[ad] : m));
+}
+
 function xmlEtiketAl(blok, etiket) {
   // <etiket>içerik</etiket> veya <etiket><![CDATA[içerik]]></etiket>
   const cdataRegex = new RegExp(`<${etiket}[^>]*><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${etiket}>`, "i");
@@ -37,10 +48,10 @@ function parseRSS(xml, kaynakAdi) {
     const kategori = xmlEtiketAl(blok, "category");
     if (baslik) {
       items.push({
-        baslik,
+        baslik: htmlEntityCoz(baslik),
         link,
         tarih: tarihStr ? new Date(tarihStr).toISOString() : null,
-        ozet: aciklama ? aciklama.slice(0, 200) : "",
+        ozet: aciklama ? htmlEntityCoz(aciklama.slice(0, 200)) : "",
         kategori: kategori || null,
         kaynak: kaynakAdi,
       });
