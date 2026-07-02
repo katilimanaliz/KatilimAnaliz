@@ -57,15 +57,18 @@ export default async function handler(req, res) {
       const usdMeta = usdResult.meta || {};
       const guncelOns = onsMeta.regularMarketPrice ?? (noktalar.length ? null : null);
       const guncelUsd = usdMeta.regularMarketPrice;
-      const oncekiOns = onsMeta.previousClose ?? onsMeta.chartPreviousClose;
-      const oncekiUsd = usdMeta.previousClose ?? usdMeta.chartPreviousClose;
+      // Önceki kapanış için de aynı tutarlılık kuralı: önce kendi serimizin (noktalar)
+      // son-1 noktasını kullan, yalnızca yetersizse Yahoo'nun ayrı meta alanlarına düş.
+      const oncekiOnsMeta = onsMeta.previousClose ?? onsMeta.chartPreviousClose;
+      const oncekiUsdMeta = usdMeta.previousClose ?? usdMeta.chartPreviousClose;
 
       const guncelFiyat = (guncelOns != null && guncelUsd != null)
         ? Math.round((guncelOns * guncelUsd / GRAM_ONS) * 100) / 100
         : (noktalar.length ? noktalar[noktalar.length - 1].fiyat : null);
-      const oncekiKapanis = (oncekiOns != null && oncekiUsd != null)
-        ? Math.round((oncekiOns * oncekiUsd / GRAM_ONS) * 100) / 100
-        : (noktalar.length > 1 ? noktalar[noktalar.length - 2].fiyat : null);
+      const oncekiKapanis = (noktalar.length > 1 ? noktalar[noktalar.length - 2].fiyat : null)
+        ?? ((oncekiOnsMeta != null && oncekiUsdMeta != null)
+          ? Math.round((oncekiOnsMeta * oncekiUsdMeta / GRAM_ONS) * 100) / 100
+          : null);
 
       return res.status(200).json({ noktalar, guncelFiyat, oncekiKapanis });
     }
@@ -93,7 +96,13 @@ export default async function handler(req, res) {
       .filter(p => p.fiyat != null && p.fiyat > 0);
 
     const guncelFiyat = meta.regularMarketPrice ?? (noktalar.length ? noktalar[noktalar.length - 1].fiyat : null);
-    const oncekiKapanis = meta.previousClose ?? meta.chartPreviousClose ?? (noktalar.length > 1 ? noktalar[noktalar.length - 2].fiyat : null);
+    // Önceki kapanışı ÖNCELİKLE kendi serisinden (noktalar) hesapla — Yahoo'nun ayrı
+    // meta.previousClose alanı, vadeli kontrat rollover'larında (petrol/doğalgaz/bakır gibi
+    // sürekli kontrat sembollerinde) farklı bir kontrata ait, seriyle tutarsız bir değer
+    // döndürebiliyor ve yapay %20-30 sıçramalara yol açıyor. Kendi serimizin son iki noktası
+    // her zaman aynı sorgudan geldiği için içsel olarak tutarlıdır.
+    const oncekiKapanis = (noktalar.length > 1 ? noktalar[noktalar.length - 2].fiyat : null)
+      ?? meta.previousClose ?? meta.chartPreviousClose ?? null;
 
     res.status(200).json({ noktalar, guncelFiyat, oncekiKapanis });
   } catch (e) {
