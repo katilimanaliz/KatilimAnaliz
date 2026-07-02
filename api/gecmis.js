@@ -15,7 +15,7 @@ export default async function handler(req, res) {
 
   try {
     if (sembol === "GRAM_ALTIN" || sembol === "GRAM_GUMUS") {
-      const onsSembol = sembol === "GRAM_ALTIN" ? "GC=F" : "SI=F";
+      const onsSembol = sembol === "GRAM_ALTIN" ? "XAUUSD=X" : "XAGUSD=X";
       const [onsRes, usdRes] = await Promise.all([
         fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${onsSembol}?interval=1d&range=1mo`, { headers: { "User-Agent": "Mozilla/5.0" } }),
         fetch(`https://query1.finance.yahoo.com/v8/finance/chart/USDTRY=X?interval=1d&range=1mo`, { headers: { "User-Agent": "Mozilla/5.0" } }),
