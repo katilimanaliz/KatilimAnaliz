@@ -1,14 +1,23 @@
 // api/tefas-proxy.js
 // TEK fonksiyon, İKİ rol:
 //  1) Normal kullanıcı isteği (GET, header/param yok) → KV'den okur, hızlı yanıt verir
-//  2) Vercel Cron tetiklemesi (x-vercel-cron header'ı ya da ?cron=1) → Fonoloji'den
-//     taze veri çekip KV'ye YAZAR
+//  2) Vercel Cron tetiklemesi (?cron=1&parca=1|2|3) → Fonoloji'den O PARÇANIN
+//     kategorilerini çekip KV'deki mevcut veriyle BİRLEŞTİRİR (üzerine tamamen
+//     yazmaz — fon kodu bazında upsert yapar)
 //
-// NEDEN TEK DOSYA: Vercel Hobby plan deployment başına en fazla 12 Serverless
-// Function'a izin veriyor (bu repo zaten sınırda — daha önce fred-proxy.js bu
-// yüzden kaldırılmıştı). Ayrı bir cron-tefas-guncelle.js dosyası eklemek 13.
-// fonksiyona çıkarıp build'i kırdı. Cron mantığını buraya taşıyarak fonksiyon
-// sayısı ARTMIYOR.
+// NEDEN PARÇALARA BÖLÜNDÜ: Fonoloji "dakikada en fazla 30 istek" sınırı
+// uyguluyor (kendi hata mesajından doğrulandı: "Dakikada 30 istek sınırı
+// aşıldı"). Toplam ~34 isteği (5 Vakıf + 21 kategori + pagination) tek çağrıda
+// bu kurala uyacak şekilde yavaşlatınca süre ~75-90sn'ye çıkıyor — bu, Vercel
+// fonksiyon zaman aşımı sınırına (plana göre değişir) takılma riski taşıyor.
+// Çözüm: 21 kategori 3 dengeli PARÇAya bölündü (_lib/fonFetch.js'deki
+// KATEGORILER sıralamasına bkz), günde zaten var olan 3 cron saatine
+// (08:00/09:00/10:00 TR) birer parça dağıtıldı. Her çağrı ~20-45sn sürer,
+// güvenli. Sabah 10'a gelindiğinde 3 parça birikip tam liste oluşur.
+//
+// NEDEN TEK DOSYA (ayrı bir cron-*.js değil): Vercel Hobby plan deployment
+// başına en fazla 12 Serverless Function'a izin veriyor (bu repo zaten
+// sınırda). Cron mantığını buraya taşıyarak fonksiyon sayısı artmıyor.
 //
 // KURULUM GEREKSİNİMİ: Vercel projesine Upstash (Redis) bağlanmalı
 // (Vercel Dashboard → Storage → Marketplace → Upstash → Redis → projeye bağla).
@@ -17,11 +26,8 @@
 import { Redis } from "@upstash/redis";
 import { fonVerisiCek, ŞÜPHELİ_EŞİK } from "./_lib/fonFetch.js";
 
-// Artan tekrar deneme sayısı/beklemeler fonksiyonun toplam süresini uzatabilir
-// (kademeli isteklerle 21 kategori + pagination). Fonoloji'nin kesin "dakikada 30
-// istek" sınırına uymak için ~34 istek toplamda ~75-80sn sürüyor — Vercel'in
-// varsayılan 10sn zaman aşımına takılmamak için süreyi uzatıyoruz.
-export const config = { maxDuration: 120 };
+// Bir parça normal koşulda ~20-45sn sürüyor; yine de pay bırakıyoruz.
+export const config = { maxDuration: 60 };
 
 // Vercel'in enjekte ettiği env var adı entegrasyon şekline göre değişebiliyor,
 // ikisini de kontrol ediyoruz.
@@ -32,9 +38,26 @@ const kv = new Redis({
 const KV_ANAHTAR = "tefas:katilim-fonlari";
 const BAYATLIK_SINIRI_SAAT = 20;
 
+// Yeni parçanın fonlarını mevcut kayıtla birleştirir: aynı `kod`a sahip fon
+// varsa taze veriyle DEĞİŞTİRİLİR, yoksa eklenir. Diğer parçalardan gelen
+// (bu çağrıda dokunulmayan) fonlar olduğu gibi korunur.
+function birlestir(eskiData, yeniData) {
+  const map = new Map();
+  for (const f of (eskiData || [])) map.set(f.kod, f);
+  for (const f of yeniData) map.set(f.kod, f);
+  return [...map.values()];
+}
+
+function kategoriDagilimHesapla(data) {
+  const d = {};
+  for (const f of data) {
+    const k = f.kategori || "Bilinmiyor";
+    d[k] = (d[k] || 0) + 1;
+  }
+  return d;
+}
+
 async function cronYaz(req, res) {
-  // Güvenlik: sadece Vercel'in kendi cron sistemi (ya da CRON_SECRET biliniyorsa
-  // elle test) bu yazma işlemini tetikleyebilsin.
   const cronSecret = process.env.CRON_SECRET;
   const gelenAuth = req.headers.authorization;
   const vercelCronMu = req.headers["x-vercel-cron"] === "1";
@@ -42,20 +65,43 @@ async function cronYaz(req, res) {
     return res.status(401).json({ success: false, error: "Yetkisiz" });
   }
 
+  const parcaNo = req.query?.parca ? parseInt(req.query.parca, 10) : null;
+
   try {
-    const yeni = await fonVerisiCek();
+    const yeni = await fonVerisiCek(parcaNo);
     const eski = await kv.get(KV_ANAHTAR).catch(() => null);
 
-    // Yeni sonuç eskisinden belirgin şekilde daha azsa (bozuk/eksik), üzerine yazma.
-    const yaz = !eski || yeni.count >= ŞÜPHELİ_EŞİK || yeni.count >= (eski.count || 0);
-    if (yaz) await kv.set(KV_ANAHTAR, yeni);
+    let sonucData, sonucSayim;
+    if (yeni.eksikGorunuyor && eski?.data?.length) {
+      // Bu parça bozuk geldi (kategorilerin yarısından fazlası hata verdi) —
+      // eski veriyi bu parça için EZME, olduğu gibi bırak.
+      sonucData = eski.data;
+      sonucSayim = eski.data.length;
+    } else if (parcaNo) {
+      sonucData = birlestir(eski?.data, yeni.data);
+      sonucSayim = sonucData.length;
+    } else {
+      // parça belirtilmeden (tam mod) çağrıldıysa eskisi gibi komple değiştir.
+      sonucData = yeni.data;
+      sonucSayim = yeni.data.length;
+    }
+
+    const kaydedilecek = {
+      success: true,
+      count: sonucSayim,
+      guncelleme: new Date().toISOString(),
+      kategori_dagilim: kategoriDagilimHesapla(sonucData),
+      data: sonucData,
+    };
+    await kv.set(KV_ANAHTAR, kaydedilecek);
 
     return res.status(200).json({
       success: true,
       mod: "cron-yazma",
-      yazildi: yaz,
-      yeniSayim: yeni.count,
-      eskiSayim: eski?.count ?? null,
+      parca: parcaNo,
+      buParcaninGetirdigi: yeni.count,
+      toplamSayim: sonucSayim,
+      eskiToplamSayim: eski?.data?.length ?? null,
       eksikGorunuyor: yeni.eksikGorunuyor,
       kategoriTeshis: yeni.kategoriTeshis,
     });
@@ -69,14 +115,22 @@ async function herkesOku(req, res) {
     let kayit = await kv.get(KV_ANAHTAR).catch(() => null);
     const bayatMi = !kayit || (Date.now() - new Date(kayit.guncelleme).getTime()) > BAYATLIK_SINIRI_SAAT*3600*1000;
 
-    if (bayatMi) {
+    if (bayatMi && !kayit) {
+      // KV tamamen boş (ilk kurulum) — bir kerelik hızlı bootstrap dene.
+      // NOT: parça vermeden çağırıyoruz, bu yüzden ~75-90sn sürebilir; sadece
+      // "hiç veri yok"tan "en azından bir şey var"a geçmek için, tek seferlik.
       try {
         const taze = await fonVerisiCek();
-        if (taze.count >= ŞÜPHELİ_EŞİK) {
-          await kv.set(KV_ANAHTAR, taze).catch(() => {});
-          kayit = taze;
-        } else if (!kayit && taze.count > 0) {
-          kayit = taze; // hiç veri yoktan iyidir, ama KV'ye YAZMA
+        if (taze.count > 0) {
+          const paket = {
+            success: true,
+            count: taze.count,
+            guncelleme: taze.guncelleme,
+            kategori_dagilim: taze.kategori_dagilim,
+            data: taze.data,
+          };
+          if (taze.count >= ŞÜPHELİ_EŞİK) await kv.set(KV_ANAHTAR, paket).catch(() => {});
+          kayit = paket;
         }
       } catch (e) { /* elimizde ne varsa onu döneceğiz */ }
     }
@@ -85,7 +139,7 @@ async function herkesOku(req, res) {
       res.setHeader("Cache-Control", "s-maxage=30, stale-while-revalidate=30");
       return res.status(200).json({
         success: false,
-        error: "Veri henüz mevcut değil. Vercel KV bağlantısını ve cron'un en az bir kez çalıştığını kontrol edin.",
+        error: "Veri henüz mevcut değil. Cron parçalarının (?cron=1&parca=1/2/3) en az bir kez çalıştığını kontrol edin.",
         count: 0,
         data: [],
       });
