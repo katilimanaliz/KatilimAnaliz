@@ -41,7 +41,7 @@ function fetchZamanAsimli(url, opts, msTimeout) {
   const zamanlayici = setTimeout(() => controller.abort(), msTimeout);
   return fetch(url, { ...opts, signal: controller.signal }).finally(() => clearTimeout(zamanlayici));
 }
-async function fetchTekrarli(url, opts, deneme = 3, msTimeout = 6000) {
+async function fetchTekrarli(url, opts, deneme = 4, msTimeout = 8000) {
   for (let i = 0; i < deneme; i++) {
     try {
       const r = await fetchZamanAsimli(url, opts, msTimeout);
@@ -49,7 +49,7 @@ async function fetchTekrarli(url, opts, deneme = 3, msTimeout = 6000) {
       throw new Error(`HTTP ${r.status}`);
     } catch (e) {
       if (i === deneme - 1) return null;
-      await new Promise(res => setTimeout(res, 400 * (i + 1)));
+      await new Promise(res => setTimeout(res, 600 * Math.pow(2, i))); // 600ms, 1200ms, 2400ms
     }
   }
   return null;
@@ -130,7 +130,7 @@ async function fonVerisiCek() {
   const vakifRes = await Promise.all(
     VAKIF_KODLARI.map((kod, i) =>
       bekle(i * 80).then(() =>
-        fetchTekrarli(`https://fonoloji.com/v1/funds/${kod}`, { headers }, 2)
+        fetchTekrarli(`https://fonoloji.com/v1/funds/${kod}`, { headers }, 3)
           .then(r => r ? r.json() : null).catch(() => null)
       )
     )
@@ -148,14 +148,17 @@ async function fonVerisiCek() {
   }
 
   const kategoriPromises = KATEGORILER.map(async ({kat, tumunu}, i) => {
-    await bekle(VAKIF_KODLARI.length * 80 + i * 90); // Vakıf istekleri bitsin, sonra kademeli başla
+    await bekle(VAKIF_KODLARI.length * 80 + i * 150); // Vakıf istekleri bitsin, sonra kademeli başla
     const sonuclar = [];
     let offset = 0;
     let herhangiIstekBasarisiz = false;
     const encKat = encodeURIComponent(kat);
+    let sayfaNo = 0;
     while (true) {
+      if (sayfaNo > 0) await bekle(200); // aynı kategorinin sayfaları arasında da bekle
+      sayfaNo++;
       const url = `https://fonoloji.com/v1/funds?category=${encKat}&limit=${PAGE_SIZE}&offset=${offset}`;
-      const res = await fetchTekrarli(url, { headers }, 2);
+      const res = await fetchTekrarli(url, { headers }, 3);
       if (!res) { herhangiIstekBasarisiz = true; break; }
       const d = await res.json().catch(() => null);
       if (!d) { herhangiIstekBasarisiz = true; break; }
