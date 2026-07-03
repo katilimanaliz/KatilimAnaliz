@@ -1,14 +1,26 @@
+// Katılım Endeksi (XK100) etiketi için kullanılan liste. ÖNEMLİ KURAL:
+// konvansiyonel (faizli) bankalar, konvansiyonel sigorta şirketleri ve alkol
+// üretimi gibi yasak sektörler, TANIM GEREĞİ hiçbir katılım/faizsiz endekste
+// yer alamaz — bu, İslami finans taramasının en temel/tartışmasız kuralıdır.
+// Önceki listede bu kural yanlışlıkla ihlal edilmiş: Halkbank, Akbank, Garanti,
+// VakıfBank, İşbank, Yapı Kredi, TSKB (hepsi faizli banka), Anadolu Sigorta ve
+// Türkiye Sigorta (konvansiyonel/faizli sigorta), Anadolu Efes (bira/alkol
+// üretimi) sehven eklenmişti — çıkarıldı. Albaraka Türk (ALBRK) gerçek bir
+// katılım bankası olduğu için doğru şekilde listede kalıyor.
+// NOT: Bu yine de elle tutulan/tahmini bir liste — resmi XK100 bileşen listesini
+// gerçek zamanlı veren ücretsiz bir API yok (bkz. hisse-proxy.js'deki genel not).
+// Üç ayda bir gerçek endeks bileşenleriyle karşılaştırılıp güncellenmelidir.
 const XK100_KODLARI = new Set([
   "ASELS","TUPRS","BIMAS","EREGL","KTLEV","GUBRF","MAGEN","ISDMR","ENJSA",
-  "SASA","KCHOL","TOASO","FROTO","TTRAK","TSKB","YKBNK","SAHOL","SISE",
-  "AKBNK","GARAN","ISCTR","VAKBN","HALKB","ALARK","AEFES","ARCLK","THYAO",
+  "SASA","KCHOL","TOASO","FROTO","TTRAK","SAHOL","SISE",
+  "ALARK","ARCLK","THYAO",
   "PGSUS","TCELL","TAVHL","PETKM","BRISA","CCOLA","DOHOL","EKGYO","ENKAI",
-  "GESAN","SARKY","SELEC","MGROS","OTKAR","RYSAS","TKFEN","TKNSA","TURSG",
+  "GESAN","SARKY","SELEC","MGROS","OTKAR","RYSAS","TKFEN","TKNSA",
   "ULKER","YEOTK","ZOREN","AGHOL","AKSA","ATATP","BSOKE","CEMTS","DAPGM",
   "DARDL","DCTTR","FORMT","GENIL","GENTS","GRSEL","IDGYO","KBORU","OBAMS",
   "PAGYO","PNLSN","POLHO","RGYAS","RNPOL","SANEL","SURGY","TARKM","TUREX",
   "TUKAS","ULAS","VRGYO","BIENY","CIMSA","DENGE","HEKTS","IHLGM","KRDMD",
-  "ASUZU","ALBRK","ANSGR","CLEBI",
+  "ASUZU","ALBRK","CLEBI",
 ]);
 
 // ─── STATİK ŞİRKET İSİM HARİTASI ────────────────────────────────────────────
