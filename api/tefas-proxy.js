@@ -12,9 +12,15 @@
 // süredir çalışmamış — ör. KV henüz bağlanmamış), bir kerelik canlı çekim yapılır
 // ve sonucu KV'ye de yazar; sonraki istekler yine KV'den hızlıca okur.
 
-import { kv } from "@vercel/kv";
+import { Redis } from "@upstash/redis";
 import { fonVerisiCek } from "./_lib/fonFetch.js";
 
+// Bkz. cron-tefas-guncelle.js'deki not: Vercel'in enjekte ettiği env var adı
+// entegrasyon şekline göre değişebiliyor, ikisini de kontrol ediyoruz.
+const kv = new Redis({
+  url: process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL,
+  token: process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN,
+});
 const KV_ANAHTAR = "tefas:katilim-fonlari";
 const BAYATLIK_SINIRI_SAAT = 20; // bu kadar saattir güncellenmediyse "bootstrap" say
 
