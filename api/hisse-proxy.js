@@ -95,7 +95,21 @@ async function sirketIsimleriniGetir() {
   }
 }
 
+// ─── CORS: sadece kendi domain(ler)imize izin ver ───────────────────────────
+function originIzinliMi(origin) {
+  if (!origin) return false;
+  if (/^https:\/\/katilim-analiz(-[a-z0-9-]+)?\.vercel\.app$/i.test(origin)) return true;
+  if (/^https?:\/\/localhost(:\d+)?$/i.test(origin)) return true;
+  return false;
+}
+function corsAyarla(req, res) {
+  const origin = req.headers.origin;
+  res.setHeader("Access-Control-Allow-Origin", originIzinliMi(origin) ? origin : "https://katilim-analiz.vercel.app");
+  res.setHeader("Vary", "Origin");
+}
+
 export default async function handler(req, res) {
+  corsAyarla(req, res);
   try {
     const debug = req.query.debug === "1";
 
@@ -169,7 +183,6 @@ export default async function handler(req, res) {
       .sort((a,b) => (b.piyasaDegeri||0) - (a.piyasaDegeri||0));
 
     res.setHeader("Cache-Control", "s-maxage=600, stale-while-revalidate=120");
-    res.setHeader("Access-Control-Allow-Origin", "*");
     res.status(200).json({
       success: true,
       count: hisseler.length,
