@@ -1,71 +1,89 @@
 // api/tefas-proxy.js
-// PUBLIC endpoint — kullanıcı isteklerinin hepsi buraya gelir.
-// Normal akışta Fonoloji'ye HİÇ canlı istek atmaz: veri, api/cron-tefas-guncelle.js
-// tarafından günde 3 kez (08:00/09:00/10:00 TR) Vercel KV'ye yazılır, burası
-// sadece KV'yi okur. Bu sayede:
-//  - Gün içinde binlerce kullanıcı isteği tek bir hızlı KV okumasına gider
-//  - Herkes aynı, tutarlı veriyi görür (önceki "bazı kullanıcıda eksik geliyor"
-//    sorununun kök nedeni, her edge node'un kendi ayrı cache'i olmasıydı)
-//  - Fonoloji'ye giden istek sayısı günde ~birkaç düzine ile sınırlı kalır
+// TEK fonksiyon, İKİ rol:
+//  1) Normal kullanıcı isteği (GET, header/param yok) → KV'den okur, hızlı yanıt verir
+//  2) Vercel Cron tetiklemesi (x-vercel-cron header'ı ya da ?cron=1) → Fonoloji'den
+//     taze veri çekip KV'ye YAZAR
 //
-// GÜVENLİK AĞI: KV boşsa (ilk kurulum) ya da anormal derecede bayatsa (cron uzun
-// süredir çalışmamış — ör. KV henüz bağlanmamış), bir kerelik canlı çekim yapılır
-// ve sonucu KV'ye de yazar; sonraki istekler yine KV'den hızlıca okur.
+// NEDEN TEK DOSYA: Vercel Hobby plan deployment başına en fazla 12 Serverless
+// Function'a izin veriyor (bu repo zaten sınırda — daha önce fred-proxy.js bu
+// yüzden kaldırılmıştı). Ayrı bir cron-tefas-guncelle.js dosyası eklemek 13.
+// fonksiyona çıkarıp build'i kırdı. Cron mantığını buraya taşıyarak fonksiyon
+// sayısı ARTMIYOR.
+//
+// KURULUM GEREKSİNİMİ: Vercel projesine Upstash (Redis) bağlanmalı
+// (Vercel Dashboard → Storage → Marketplace → Upstash → Redis → projeye bağla).
+// Paket: `npm install @upstash/redis`
 
 import { Redis } from "@upstash/redis";
 import { fonVerisiCek, ŞÜPHELİ_EŞİK } from "./_lib/fonFetch.js";
 
-// Bkz. cron-tefas-guncelle.js'deki not: Vercel'in enjekte ettiği env var adı
-// entegrasyon şekline göre değişebiliyor, ikisini de kontrol ediyoruz.
+// Vercel'in enjekte ettiği env var adı entegrasyon şekline göre değişebiliyor,
+// ikisini de kontrol ediyoruz.
 const kv = new Redis({
   url: process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL,
   token: process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN,
 });
 const KV_ANAHTAR = "tefas:katilim-fonlari";
-const BAYATLIK_SINIRI_SAAT = 20; // bu kadar saattir güncellenmediyse "bootstrap" say
+const BAYATLIK_SINIRI_SAAT = 20;
 
-export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
+async function cronYaz(req, res) {
+  // Güvenlik: sadece Vercel'in kendi cron sistemi (ya da CRON_SECRET biliniyorsa
+  // elle test) bu yazma işlemini tetikleyebilsin.
+  const cronSecret = process.env.CRON_SECRET;
+  const gelenAuth = req.headers.authorization;
+  const vercelCronMu = req.headers["x-vercel-cron"] === "1";
+  if (cronSecret && !vercelCronMu && gelenAuth !== `Bearer ${cronSecret}`) {
+    return res.status(401).json({ success: false, error: "Yetkisiz" });
+  }
 
   try {
-    let kayit = await kv.get(KV_ANAHTAR).catch(() => null);
+    const yeni = await fonVerisiCek();
+    const eski = await kv.get(KV_ANAHTAR).catch(() => null);
 
+    // Yeni sonuç eskisinden belirgin şekilde daha azsa (bozuk/eksik), üzerine yazma.
+    const yaz = !eski || yeni.count >= ŞÜPHELİ_EŞİK || yeni.count >= (eski.count || 0);
+    if (yaz) await kv.set(KV_ANAHTAR, yeni);
+
+    return res.status(200).json({
+      success: true,
+      mod: "cron-yazma",
+      yazildi: yaz,
+      yeniSayim: yeni.count,
+      eskiSayim: eski?.count ?? null,
+      eksikGorunuyor: yeni.eksikGorunuyor,
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+}
+
+async function herkesOku(req, res) {
+  try {
+    let kayit = await kv.get(KV_ANAHTAR).catch(() => null);
     const bayatMi = !kayit || (Date.now() - new Date(kayit.guncelleme).getTime()) > BAYATLIK_SINIRI_SAAT*3600*1000;
 
     if (bayatMi) {
-      // KV boş/çok bayat — muhtemelen ilk kurulum ya da cron bir süredir çalışmadı.
       try {
         const taze = await fonVerisiCek();
-        // ÖNEMLİ: bozuk/eksik bir sonucu (ör. rate-limit yüzünden sadece 3 fon)
-        // KV'ye yazıp saatlerce orada kilitlememek için burada da ŞÜPHELİ_EŞİK
-        // kontrolü yapılıyor — önceki sürümde bu kontrol sadece cron job'da vardı,
-        // bootstrap yolunda eksikti ve tam da bu yüzden "count:3" KV'ye yazılmıştı.
         if (taze.count >= ŞÜPHELİ_EŞİK) {
           await kv.set(KV_ANAHTAR, taze).catch(() => {});
           kayit = taze;
         } else if (!kayit && taze.count > 0) {
-          // Elimizde hiç veri yoksa (ilk kurulum), en azından şüpheli de olsa
-          // bir şey göster (boş ekrandan iyidir) ama KV'ye YAZMA — cron bir
-          // sonraki denemesinde düzgün veriyle üzerine yazsın.
-          kayit = taze;
+          kayit = taze; // hiç veri yoktan iyidir, ama KV'ye YAZMA
         }
-      } catch (e) {
-        // Canlı çekim de başarısız — elimizde ne varsa (bayat da olsa) onu döneceğiz.
-      }
+      } catch (e) { /* elimizde ne varsa onu döneceğiz */ }
     }
 
     if (!kayit) {
       res.setHeader("Cache-Control", "s-maxage=30, stale-while-revalidate=30");
       return res.status(200).json({
         success: false,
-        error: "Veri henüz mevcut değil (KV boş ve canlı çekim de başarısız oldu). Vercel KV'nin projeye bağlı olduğunu ve cron job'ın en az bir kez çalıştığını kontrol edin.",
+        error: "Veri henüz mevcut değil. Vercel KV bağlantısını ve cron'un en az bir kez çalıştığını kontrol edin.",
         count: 0,
         data: [],
       });
     }
 
-    // KV okuması ucuz olduğu için CDN cache kısa tutulabilir — asıl "günde birkaç
-    // kez tazelenme" garantisi cron+KV'den geliyor, bu sadece ek bir tampon.
     res.setHeader("Cache-Control", "s-maxage=1800, stale-while-revalidate=900");
     return res.status(200).json({
       success: true,
@@ -75,8 +93,15 @@ export default async function handler(req, res) {
       kategori_dagilim: kayit.kategori_dagilim,
       data: kayit.data,
     });
-
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message, count: 0, data: [] });
   }
+}
+
+export default async function handler(req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+
+  const cronIstegi = req.headers["x-vercel-cron"] === "1" || req.query?.cron === "1";
+  if (cronIstegi) return cronYaz(req, res);
+  return herkesOku(req, res);
 }
