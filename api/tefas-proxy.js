@@ -13,7 +13,7 @@
 // ve sonucu KV'ye de yazar; sonraki istekler yine KV'den hızlıca okur.
 
 import { Redis } from "@upstash/redis";
-import { fonVerisiCek } from "./_lib/fonFetch.js";
+import { fonVerisiCek, ŞÜPHELİ_EŞİK } from "./_lib/fonFetch.js";
 
 // Bkz. cron-tefas-guncelle.js'deki not: Vercel'in enjekte ettiği env var adı
 // entegrasyon şekline göre değişebiliyor, ikisini de kontrol ediyoruz.
@@ -36,8 +36,17 @@ export default async function handler(req, res) {
       // KV boş/çok bayat — muhtemelen ilk kurulum ya da cron bir süredir çalışmadı.
       try {
         const taze = await fonVerisiCek();
-        if (taze.count > 0) {
+        // ÖNEMLİ: bozuk/eksik bir sonucu (ör. rate-limit yüzünden sadece 3 fon)
+        // KV'ye yazıp saatlerce orada kilitlememek için burada da ŞÜPHELİ_EŞİK
+        // kontrolü yapılıyor — önceki sürümde bu kontrol sadece cron job'da vardı,
+        // bootstrap yolunda eksikti ve tam da bu yüzden "count:3" KV'ye yazılmıştı.
+        if (taze.count >= ŞÜPHELİ_EŞİK) {
           await kv.set(KV_ANAHTAR, taze).catch(() => {});
+          kayit = taze;
+        } else if (!kayit && taze.count > 0) {
+          // Elimizde hiç veri yoksa (ilk kurulum), en azından şüpheli de olsa
+          // bir şey göster (boş ekrandan iyidir) ama KV'ye YAZMA — cron bir
+          // sonraki denemesinde düzgün veriyle üzerine yazsın.
           kayit = taze;
         }
       } catch (e) {
