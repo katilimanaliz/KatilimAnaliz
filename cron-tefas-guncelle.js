@@ -16,14 +16,22 @@
 // eksikse 10:00'da düzelmiş olma ihtimali yüksek. Her çalışma, önceki KV içeriğini
 // SADECE yeni veri daha "iyi" (daha fazla fon) ise günceller.
 //
-// KURULUM GEREKSİNİMİ: Vercel projesine bir KV veritabanı bağlanmalı
-// (Vercel Dashboard → Storage → Create Database → KV → projeye bağla).
-// Bağlanınca KV_REST_API_URL / KV_REST_API_TOKEN ortam değişkenleri otomatik eklenir.
-// Paket: `npm install @vercel/kv`
+// KURULUM GEREKSİNİMİ: Vercel projesine Upstash (Redis) bağlanmalı
+// (Vercel Dashboard → Storage → Marketplace → Upstash → Redis oluştur → projeye bağla).
+// Bağlanınca UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN ortam değişkenleri
+// otomatik eklenir. (Not: Vercel KV kaldırıldı, yerine Upstash geçti.)
+// Paket: `npm install @upstash/redis`
 
-import { kv } from "@vercel/kv";
+import { Redis } from "@upstash/redis";
 import { fonVerisiCek, ŞÜPHELİ_EŞİK } from "./_lib/fonFetch.js";
 
+// Vercel'in Upstash entegrasyonu, bağlantı şekline göre ortam değişkenlerini
+// ya UPSTASH_REDIS_REST_* ya da (eski @vercel/kv uyumluluğu için) KV_REST_API_*
+// adıyla enjekte edebiliyor — hangisi geldiyse onu kullan.
+const kv = new Redis({
+  url: process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL,
+  token: process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN,
+});
 const KV_ANAHTAR = "tefas:katilim-fonlari";
 
 export default async function handler(req, res) {
