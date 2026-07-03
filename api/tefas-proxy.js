@@ -26,8 +26,11 @@
 import { Redis } from "@upstash/redis";
 import { fonVerisiCek, ŞÜPHELİ_EŞİK } from "./_lib/fonFetch.js";
 
-// Bir parça normal koşulda ~20-45sn sürüyor; yine de pay bırakıyoruz.
-export const config = { maxDuration: 60 };
+// Fluid Compute etkin (doğrulandı) — Hobby planda bu sayede gerçek üst sınır
+// 300sn'ye çıkıyor. Önceki maxDuration:60 ayarı, tek bir parça için bile
+// (16-20 istek × 2.25sn hız sınırlayıcı + ağ gecikmeleri + olası tekrar
+// denemeler) yetersiz kaldı ve 504 (FUNCTION_INVOCATION_TIMEOUT) alındı.
+export const config = { maxDuration: 280 };
 
 // Vercel'in enjekte ettiği env var adı entegrasyon şekline göre değişebiliyor,
 // ikisini de kontrol ediyoruz.
