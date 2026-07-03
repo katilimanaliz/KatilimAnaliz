@@ -1,11 +1,15 @@
 {
   "crons": [
     {
-      "path": "/api/tefas-proxy",
-      "schedule": "30 5 * * 1-5"
+      "path": "/api/cron-tefas-guncelle",
+      "schedule": "0 5 * * 1-5"
     },
     {
-      "path": "/api/tefas-proxy",
+      "path": "/api/cron-tefas-guncelle",
+      "schedule": "0 6 * * 1-5"
+    },
+    {
+      "path": "/api/cron-tefas-guncelle",
       "schedule": "0 7 * * 1-5"
     }
   ]
