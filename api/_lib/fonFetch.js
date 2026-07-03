@@ -148,20 +148,23 @@ function mapFon(f, vakif, takasAraligi) {
 }
 
 const KATEGORILER = [
+  // Parça 1 — "Katılım" (~5 sayfa, ağır) + hafif olanlar
   {kat: "Katılım",                        tumunu: true},
   {kat: "Altın Katılım Fonu",             tumunu: true},
   {kat: "OKS Katılım Standart Fon",       tumunu: true},
-  {kat: "Katılım Değişken Fon",           tumunu: true},
   {kat: "Katılım Katkı Fonu",             tumunu: true},
   {kat: "Katılım Fonu",                   tumunu: true},
   {kat: "Katılım Standart Fon",           tumunu: true},
   {kat: "Başlangıç Katılım Fonu",         tumunu: true},
+  // Parça 2 — "Katılım Değişken Fon" (~5 sayfa, ağır) + hafif olanlar
+  {kat: "Katılım Değişken Fon",           tumunu: true},
   {kat: "Katılım Hisse Senedi Fonu",      tumunu: true},
   {kat: "Kira Sertifikası Katılım Fonu",  tumunu: true},
   {kat: "Hisse Senedi Şemsiye Fonu",      tumunu: false},
   {kat: "Para Piyasası Şemsiye Fonu",     tumunu: false},
   {kat: "Değişken Şemsiye Fonu",          tumunu: false},
   {kat: "Karma Şemsiye Fonu",             tumunu: false},
+  // Parça 3 — tamamı hafif
   {kat: "Fon Sepeti Şemsiye Fonu",        tumunu: false},
   {kat: "Altın Şemsiye Fonu",             tumunu: false},
   {kat: "Kıymetli Madenler Şemsiye Fonu", tumunu: false},
@@ -173,40 +176,57 @@ const KATEGORILER = [
 
 const VAKIF_KODLARI = ["VPA","VLT","VHS","VKK","VKV"];
 const PAGE_SIZE = 100;
-const ŞÜPHELİ_EŞİK = 100; // normal günde 150+ fon beklenir
+const ŞÜPHELİ_EŞİK = 100; // normal günde 150+ fon beklenir (TÜM parçalar birleştiğinde)
 
-// Fonoloji'den tüm katılım fonlarını çeker. Sonuç şüpheli derecede azsa
-// (kategori sorgularının çoğu başarısız olmuş olabilir) `eksikGorunuyor:true`
-// ile birlikte döner — çağıran taraf (cron ya da fallback) buna göre karar verir.
-async function fonVerisiCek() {
+// ── Parça (batch) bölüştürme ──────────────────────────────────────────────
+// KESİN TEŞHİS: Fonoloji dakikada en fazla 30 istek kabul ediyor. Toplam ~34
+// isteği (5 Vakıf + kategori sayfaları) tek çağrıda, kurala uyacak şekilde
+// yavaşlatınca süre ~75-90sn'ye çıkıyor — bu, Vercel'in fonksiyon zaman aşımı
+// sınırına (plana göre değişir, garanti değil) takılma riski taşıyor.
+// Çözüm: 21 kategoriyi 3 PARÇAya bölüp, günde zaten var olan 3 cron saatine
+// (08:00/09:00/10:00) birer parça dağıtıyoruz. Her çağrı sadece ~7 kategori
+// işler (~20-25sn sürer, güvenli), ve önceki parçalardan gelen fonları SİLMEZ
+// — sadece kendi getirdiği fonları üstüne yazar (tefas-proxy.js'deki birleştirme
+// mantığına bkz). Sabah 10'a gelindiğinde 3 parça birikip tam liste oluşur.
+const PARCALAR = [
+  KATEGORILER.slice(0, 7),
+  KATEGORILER.slice(7, 14),
+  KATEGORILER.slice(14, 21),
+];
+
+// Fonoloji'den katılım fonlarını çeker. `parcaNo` verilirse (1/2/3) SADECE o
+// parçadaki kategorileri işler (Vakıf kodları sadece 1. parçada çekilir).
+// `parcaNo` verilmezse TÜMÜNÜ işler (uzun sürer — sadece elle/test amaçlı kullan).
+async function fonVerisiCek(parcaNo = null) {
   const API_KEY = process.env.FONOLOJI_KEY;
   if (!API_KEY) throw new Error("FONOLOJI_KEY tanımlı değil");
   const headers = { "X-API-Key": API_KEY, "Accept": "application/json" };
   const takasAraligi = sonTakasGunuAralik();
 
-  // Artık manuel gecikme hesaplamaya gerek yok — fetchTekrarli/fetchTeshisli
-  // içindeki global sıra (siraliBekle) tüm istekleri (Vakıf + kategori sayfaları
-  // fark etmeksizin) otomatik olarak dakikada ~27 istekle sınırlıyor. Hepsini
-  // aynı anda "başlatmak" güvenli — gerçek gönderim zaten sıraya giriyor.
-  const vakifRes = await Promise.all(
-    VAKIF_KODLARI.map(kod =>
-      fetchTekrarli(`https://fonoloji.com/v1/funds/${kod}`, { headers }, 2)
-        .then(r => r ? r.json() : null).catch(() => null)
-    )
-  );
+  const isleneckKategoriler = parcaNo ? PARCALAR[parcaNo - 1] : KATEGORILER;
+  const vakifIsle = !parcaNo || parcaNo === 1; // Vakıf kodları sadece 1. parçada
 
   const gorulmuKodlar = new Set();
   let katilimFonlar = [];
-  for (const d of vakifRes) {
-    if (!d) continue;
-    const f = d.fund ?? d;
-    const kod = f.code || "";
-    if (!kod || gorulmuKodlar.has(kod)) continue;
-    gorulmuKodlar.add(kod);
-    katilimFonlar.push(mapFon(f, true, takasAraligi));
+
+  if (vakifIsle) {
+    const vakifRes = await Promise.all(
+      VAKIF_KODLARI.map(kod =>
+        fetchTekrarli(`https://fonoloji.com/v1/funds/${kod}`, { headers }, 2)
+          .then(r => r ? r.json() : null).catch(() => null)
+      )
+    );
+    for (const d of vakifRes) {
+      if (!d) continue;
+      const f = d.fund ?? d;
+      const kod = f.code || "";
+      if (!kod || gorulmuKodlar.has(kod)) continue;
+      gorulmuKodlar.add(kod);
+      katilimFonlar.push(mapFon(f, true, takasAraligi));
+    }
   }
 
-  const kategoriPromises = KATEGORILER.map(async ({kat, tumunu}) => {
+  const kategoriPromises = isleneckKategoriler.map(async ({kat, tumunu}) => {
     const sonuclar = [];
     let offset = 0;
     let herhangiIstekBasarisiz = false;
@@ -259,10 +279,21 @@ async function fonVerisiCek() {
     kategoriSayac[k] = (kategoriSayac[k] || 0) + 1;
   }
 
+  // "Eksik görünüyor" tanımı parça moduna göre değişir:
+  //  - Tam mod (parcaNo yok): toplam fon sayısı 100'ün altındaysa şüpheli.
+  //  - Parça modu: bu parçadaki kategorilerin YARISINDAN FAZLASI ağ hatası
+  //    verdiyse şüpheli (mutlak sayı değil, oran — bir parça zaten az kategori
+  //    işlediği için düşük mutlak sayı normaldir).
+  const hataliKategoriSayisi = Object.values(kategoriTeshis).filter(k => k.agHatasi).length;
+  const eksikGorunuyor = parcaNo
+    ? hataliKategoriSayisi > isleneckKategoriler.length / 2
+    : katilimFonlar.length < ŞÜPHELİ_EŞİK;
+
   return {
     success: true,
+    parca: parcaNo,
     count: katilimFonlar.length,
-    eksikGorunuyor: katilimFonlar.length < ŞÜPHELİ_EŞİK,
+    eksikGorunuyor,
     guncelleme: new Date().toISOString(),
     kategori_dagilim: kategoriSayac,
     kategoriTeshis, // her kategori için {hamAdet, agHatasi} — hangi kategori sorunlu, kesin teşhis
@@ -270,4 +301,4 @@ async function fonVerisiCek() {
   };
 }
 
-export { fonVerisiCek, ŞÜPHELİ_EŞİK };
+export { fonVerisiCek, ŞÜPHELİ_EŞİK, PARCALAR };
