@@ -2,8 +2,25 @@
 // Yahoo Finance üzerinden 30 günlük geçmiş fiyat verisi (Kur Grafik Modalı için)
 // Standart semboller: USDTRY=X, EURTRY=X, BTC-USD vb.
 // Özel mod: sembol=GRAM_ALTIN veya GRAM_GUMUS -> ons/USD × USD/TRY çarpılarak TL/gram hesaplanır
+
+// ─── CORS: sadece kendi domain(ler)imize izin ver ───────────────────────────
+// Önceden "*" idi — herkes bu API'yi kendi sitesinden ücretsiz kullanabiliyordu ve
+// Vercel kotamızı tüketebilirdi. Artık yalnızca prod domain, kendi Vercel preview
+// deploy'larımız (katilim-analiz-*.vercel.app) ve yerel geliştirme (localhost) kabul edilir.
+function originIzinliMi(origin) {
+  if (!origin) return false;
+  if (/^https:\/\/katilim-analiz(-[a-z0-9-]+)?\.vercel\.app$/i.test(origin)) return true;
+  if (/^https?:\/\/localhost(:\d+)?$/i.test(origin)) return true;
+  return false;
+}
+function corsAyarla(req, res) {
+  const origin = req.headers.origin;
+  res.setHeader("Access-Control-Allow-Origin", originIzinliMi(origin) ? origin : "https://katilim-analiz.vercel.app");
+  res.setHeader("Vary", "Origin");
+}
+
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  corsAyarla(req, res);
   res.setHeader("Cache-Control", "s-maxage=900, stale-while-revalidate=300");
 
   const { sembol } = req.query;
