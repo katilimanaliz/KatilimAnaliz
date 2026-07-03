@@ -41,29 +41,73 @@ function fetchZamanAsimli(url, opts, msTimeout) {
   const zamanlayici = setTimeout(() => controller.abort(), msTimeout);
   return fetch(url, { ...opts, signal: controller.signal }).finally(() => clearTimeout(zamanlayici));
 }
-async function fetchTekrarli(url, opts, deneme = 4, msTimeout = 8000) {
+
+// ── Global hız sınırlayıcı ───────────────────────────────────────────────────
+// KESİN TEŞHİS (Fonoloji'nin kendi hata mesajından): "Dakikada 30 istek sınırı
+// aşıldı" — sabit, belgelenmiş bir kural. Önceki kademeli-gecikme denemeleri
+// (kategori başına 90-150ms) bunu YETERİNCE yavaşlatmıyordu çünkü sadece
+// kategoriler arası değil, TÜM isteklerin (5 Vakıf + çok sayfalı kategoriler)
+// TOPLAMI dakikada 30'u aşıyordu. Artık TEK bir ortak kuyruk var: hangi istek
+// olursa olsun (Vakıf kodu ya da kategori sayfası fark etmez), art arda iki
+// istek arasında en az MIN_ARALIK_MS geçmeden gönderilmiyor. 27 istek/dakika
+// hedefleniyor (30 sınırının altında güvenli pay).
+const MIN_ARALIK_MS = 2250; // 60000/2250 ≈ 26.7 istek/dakika
+let sonIstekZamaniMs = 0;
+let kuyrukKilidi = Promise.resolve();
+function siraliBekle() {
+  const bu = kuyrukKilidi.then(async () => {
+    const simdi = Date.now();
+    const gerekliBekleme = Math.max(0, sonIstekZamaniMs + MIN_ARALIK_MS - simdi);
+    if (gerekliBekleme > 0) await new Promise(r => setTimeout(r, gerekliBekleme));
+    sonIstekZamaniMs = Date.now();
+  });
+  kuyrukKilidi = bu.catch(() => {});
+  return bu;
+}
+
+async function fetchTekrarli(url, opts, deneme = 2, msTimeout = 8000) {
   for (let i = 0; i < deneme; i++) {
+    await siraliBekle();
     try {
       const r = await fetchZamanAsimli(url, opts, msTimeout);
       if (r.ok) return r;
+      if (r.status === 429) {
+        const bekleSn = await retryAfterOku(r);
+        if (i < deneme - 1) await new Promise(res => setTimeout(res, bekleSn * 1000));
+        continue;
+      }
       throw new Error(`HTTP ${r.status}`);
     } catch (e) {
       if (i === deneme - 1) return null;
-      await new Promise(res => setTimeout(res, 600 * Math.pow(2, i))); // 600ms, 1200ms, 2400ms
     }
   }
   return null;
 }
 
+async function retryAfterOku(r) {
+  try {
+    const j = await r.clone().json();
+    if (j?.retryAfterSec) return Math.min(j.retryAfterSec + 1, 65);
+  } catch {}
+  return 60;
+}
+
 // Teşhis amaçlı: fetchTekrarli gibi ama başarısızlıkta SESSİZCE null dönmek yerine
 // gerçek HTTP durum kodunu / hata mesajını da bildiriyor. "kategoriTeshis"teki
 // agHatasi:true'nun ARDINDAKİ gerçek sebebi (400/404/429/500/timeout) görmek için.
-async function fetchTeshisli(url, opts, deneme = 4, msTimeout = 8000) {
+async function fetchTeshisli(url, opts, deneme = 2, msTimeout = 8000) {
   let sonHata = null;
   for (let i = 0; i < deneme; i++) {
+    await siraliBekle();
     try {
       const r = await fetchZamanAsimli(url, opts, msTimeout);
       if (r.ok) return { res: r, hata: null };
+      if (r.status === 429) {
+        const bekleSn = await retryAfterOku(r);
+        sonHata = `HTTP 429 — rate limit, ${bekleSn}sn beklendi`;
+        if (i < deneme - 1) { await new Promise(res => setTimeout(res, bekleSn * 1000)); continue; }
+        return { res: null, hata: sonHata };
+      }
       let govde = "";
       try { govde = (await r.clone().text()).slice(0, 200); } catch {}
       sonHata = `HTTP ${r.status}${govde ? " — " + govde : ""}`;
@@ -72,7 +116,6 @@ async function fetchTeshisli(url, opts, deneme = 4, msTimeout = 8000) {
       sonHata = e.name === "AbortError" ? "Zaman aşımı" : String(e.message || e);
       if (i === deneme - 1) return { res: null, hata: sonHata };
     }
-    await new Promise(res => setTimeout(res, 600 * Math.pow(2, i)));
   }
   return { res: null, hata: sonHata };
 }
@@ -141,20 +184,14 @@ async function fonVerisiCek() {
   const headers = { "X-API-Key": API_KEY, "Accept": "application/json" };
   const takasAraligi = sonTakasGunuAralik();
 
-  // ── Kademeli istek gönderimi ─────────────────────────────────────────────
-  // ÖNCEKİ HATA: 5 (Vakıf) + 21 (kategori) = 26 istek hepsi Promise.all ile AYNI
-  // ANDA gönderiliyordu. Bu, Fonoloji'nin oran sınırına (rate limit) takılıp
-  // kategori sorgularının TAMAMININ sessizce boş dönmesine yol açtı (canlıda
-  // sadece 3 fon geldi, 21 kategoriden hiçbiri veri getirmedi). Artık istekler
-  // küçük bir gecikmeyle (index × 120ms) kademeli gönderiliyor.
-  const bekle = (ms) => new Promise(r => setTimeout(r, ms));
-
+  // Artık manuel gecikme hesaplamaya gerek yok — fetchTekrarli/fetchTeshisli
+  // içindeki global sıra (siraliBekle) tüm istekleri (Vakıf + kategori sayfaları
+  // fark etmeksizin) otomatik olarak dakikada ~27 istekle sınırlıyor. Hepsini
+  // aynı anda "başlatmak" güvenli — gerçek gönderim zaten sıraya giriyor.
   const vakifRes = await Promise.all(
-    VAKIF_KODLARI.map((kod, i) =>
-      bekle(i * 80).then(() =>
-        fetchTekrarli(`https://fonoloji.com/v1/funds/${kod}`, { headers }, 3)
-          .then(r => r ? r.json() : null).catch(() => null)
-      )
+    VAKIF_KODLARI.map(kod =>
+      fetchTekrarli(`https://fonoloji.com/v1/funds/${kod}`, { headers }, 2)
+        .then(r => r ? r.json() : null).catch(() => null)
     )
   );
 
@@ -169,19 +206,15 @@ async function fonVerisiCek() {
     katilimFonlar.push(mapFon(f, true, takasAraligi));
   }
 
-  const kategoriPromises = KATEGORILER.map(async ({kat, tumunu}, i) => {
-    await bekle(VAKIF_KODLARI.length * 80 + i * 150); // Vakıf istekleri bitsin, sonra kademeli başla
+  const kategoriPromises = KATEGORILER.map(async ({kat, tumunu}) => {
     const sonuclar = [];
     let offset = 0;
     let herhangiIstekBasarisiz = false;
     let sonHata = null;
     const encKat = encodeURIComponent(kat);
-    let sayfaNo = 0;
     while (true) {
-      if (sayfaNo > 0) await bekle(200); // aynı kategorinin sayfaları arasında da bekle
-      sayfaNo++;
       const url = `https://fonoloji.com/v1/funds?category=${encKat}&limit=${PAGE_SIZE}&offset=${offset}`;
-      const { res, hata } = await fetchTeshisli(url, { headers }, 4);
+      const { res, hata } = await fetchTeshisli(url, { headers }, 2);
       if (!res) { herhangiIstekBasarisiz = true; sonHata = hata; break; }
       const d = await res.json().catch(() => null);
       if (!d) { herhangiIstekBasarisiz = true; sonHata = "JSON parse hatası"; break; }
