@@ -51,6 +51,7 @@ async function cronYaz(req, res) {
       yeniSayim: yeni.count,
       eskiSayim: eski?.count ?? null,
       eksikGorunuyor: yeni.eksikGorunuyor,
+      kategoriTeshis: yeni.kategoriTeshis,
     });
   } catch (e) {
     return res.status(500).json({ success: false, error: e.message });
