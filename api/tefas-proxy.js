@@ -18,9 +18,10 @@ import { Redis } from "@upstash/redis";
 import { fonVerisiCek, ŞÜPHELİ_EŞİK } from "./_lib/fonFetch.js";
 
 // Artan tekrar deneme sayısı/beklemeler fonksiyonun toplam süresini uzatabilir
-// (kademeli isteklerle 21 kategori + pagination). Vercel'in varsayılan 10sn
-// zaman aşımına takılmamak için süreyi uzatıyoruz (Hobby planda da desteklenir).
-export const config = { maxDuration: 60 };
+// (kademeli isteklerle 21 kategori + pagination). Fonoloji'nin kesin "dakikada 30
+// istek" sınırına uymak için ~34 istek toplamda ~75-80sn sürüyor — Vercel'in
+// varsayılan 10sn zaman aşımına takılmamak için süreyi uzatıyoruz.
+export const config = { maxDuration: 120 };
 
 // Vercel'in enjekte ettiği env var adı entegrasyon şekline göre değişebiliyor,
 // ikisini de kontrol ediyoruz.
