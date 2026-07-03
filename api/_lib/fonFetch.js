@@ -72,9 +72,16 @@ async function fetchTekrarli(url, opts, deneme = 2, msTimeout = 8000) {
       const r = await fetchZamanAsimli(url, opts, msTimeout);
       if (r.ok) return r;
       if (r.status === 429) {
-        const bekleSn = await retryAfterOku(r);
-        if (i < deneme - 1) await new Promise(res => setTimeout(res, bekleSn * 1000));
-        continue;
+        // ARTIK UZUN BEKLEMİYORUZ: önceki sürüm Fonoloji'nin bildirdiği
+        // retryAfterSec'i (53-65sn) HER başarısız istek için ayrı ayrı
+        // bekliyordu. Bu, art arda birkaç istek 429 alırsa tek bir çağrının
+        // dakikalarca (hatta hiç bitmeyecekmiş gibi) asılı kalmasına yol
+        // açtı — çünkü bizim iç sayacımız (sonIstekZamaniMs) sadece BU
+        // invocation'a özel, Fonoloji'nin hesap bazlı gerçek kotasından
+        // habersiz. Artık 429 gelirse HEMEN vazgeçiyoruz (hızlı başarısız);
+        // paylaşılan sıraya biraz ekstra boşluk ekleyip devam ediyoruz.
+        sonIstekZamaniMs += 3000;
+        return null;
       }
       throw new Error(`HTTP ${r.status}`);
     } catch (e) {
@@ -82,14 +89,6 @@ async function fetchTekrarli(url, opts, deneme = 2, msTimeout = 8000) {
     }
   }
   return null;
-}
-
-async function retryAfterOku(r) {
-  try {
-    const j = await r.clone().json();
-    if (j?.retryAfterSec) return Math.min(j.retryAfterSec + 1, 65);
-  } catch {}
-  return 60;
 }
 
 // Teşhis amaçlı: fetchTekrarli gibi ama başarısızlıkta SESSİZCE null dönmek yerine
@@ -103,10 +102,9 @@ async function fetchTeshisli(url, opts, deneme = 2, msTimeout = 8000) {
       const r = await fetchZamanAsimli(url, opts, msTimeout);
       if (r.ok) return { res: r, hata: null };
       if (r.status === 429) {
-        const bekleSn = await retryAfterOku(r);
-        sonHata = `HTTP 429 — rate limit, ${bekleSn}sn beklendi`;
-        if (i < deneme - 1) { await new Promise(res => setTimeout(res, bekleSn * 1000)); continue; }
-        return { res: null, hata: sonHata };
+        // Bkz. fetchTekrarli'deki not — uzun beklemek yerine hızlı vazgeçiyoruz.
+        sonIstekZamaniMs += 3000;
+        return { res: null, hata: "HTTP 429 — dakikalık istek sınırı (hemen vazgeçildi, uzun beklenmedi)" };
       }
       let govde = "";
       try { govde = (await r.clone().text()).slice(0, 200); } catch {}
