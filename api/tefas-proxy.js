@@ -154,12 +154,35 @@ export default async function handler(req, res) {
       kategoriSayac[k] = (kategoriSayac[k] || 0) + 1;
     }
 
+    // ── Cache güvenliği ──────────────────────────────────────────────────────
+    // ÖNCEKİ HATA: s-maxage=82800 (23 saat). Sabah erken saatte (Fonoloji/TEFAS
+    // günlük veriyi henüz güncellemeden önce) gelen ilk istek eksik/bayat bir
+    // yanıt alırsa, bu CDN'de neredeyse tüm gün boyunca kilitleniyordu.
+    // İki önlem:
+    //  1) Cache süresi 23 saatten makul bir değere indirildi (3 saat + 30 dk SWR)
+    //     — piyasa-haberleri.js'deki gibi, günde birkaç kez kendini tazeler.
+    //  2) Beklenenden ÇOK AZ fon dönerse (ör. Fonoloji o an henüz güncellememiş,
+    //     kategori sorgularının çoğu boş dönmüş olabilir), bu şüpheli/eksik
+    //     yanıt UZUN SÜRE CACHE'LENMEZ — kısa (60sn) cache ile hemen yeniden
+    //     denenmesi sağlanır. "Normal" bir günde en az 100+ fon beklenir.
+    const ŞÜPHELİ_EŞİK = 100;
+    const eksikGorunuyor = katilimFonlar.length < ŞÜPHELİ_EŞİK;
     const noCache = req.query?.refresh === "1";
-    res.setHeader("Cache-Control", noCache ? "no-store" : "s-maxage=82800, stale-while-revalidate=3600");
+
+    let cacheHeader;
+    if (noCache) {
+      cacheHeader = "no-store";
+    } else if (eksikGorunuyor) {
+      cacheHeader = "s-maxage=60, stale-while-revalidate=30"; // hemen yeniden dene
+    } else {
+      cacheHeader = "s-maxage=10800, stale-while-revalidate=1800"; // 3 saat
+    }
+    res.setHeader("Cache-Control", cacheHeader);
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.status(200).json({
       success: true,
       count: katilimFonlar.length,
+      eksikOlabilir: eksikGorunuyor, // frontend isterse "veriler güncelleniyor" notu gösterebilir
       guncelleme: new Date().toISOString(),
       kategori_dagilim: kategoriSayac,
       data: katilimFonlar,
