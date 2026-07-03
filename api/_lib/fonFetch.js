@@ -151,13 +151,14 @@ async function fonVerisiCek() {
     await bekle(VAKIF_KODLARI.length * 80 + i * 90); // Vakıf istekleri bitsin, sonra kademeli başla
     const sonuclar = [];
     let offset = 0;
+    let herhangiIstekBasarisiz = false;
     const encKat = encodeURIComponent(kat);
     while (true) {
       const url = `https://fonoloji.com/v1/funds?category=${encKat}&limit=${PAGE_SIZE}&offset=${offset}`;
       const res = await fetchTekrarli(url, { headers }, 2);
-      if (!res) break;
+      if (!res) { herhangiIstekBasarisiz = true; break; }
       const d = await res.json().catch(() => null);
-      if (!d) break;
+      if (!d) { herhangiIstekBasarisiz = true; break; }
       const items = d.items ?? d.funds ?? d.data ?? (Array.isArray(d) ? d : []);
       if (!items.length) break;
       for (const f of items) {
@@ -171,12 +172,19 @@ async function fonVerisiCek() {
       if (items.length < PAGE_SIZE) break;
       offset += PAGE_SIZE;
     }
-    return sonuclar;
+    return { kat, sonuclar, herhangiIstekBasarisiz };
   });
 
   const tumKategoriSonuclari = await Promise.all(kategoriPromises);
-  for (const items of tumKategoriSonuclari) {
-    for (const f of items) {
+  // Teşhis: hangi kategori kaç ham fon getirdi, hangisi ağ hatasıyla tamamen boş kaldı.
+  // Sayı düşük çıktığında ("gelmeyen fonlar var") bu, hangi kategorinin sorunlu
+  // olduğunu tek tek göstererek kör tahmin yerine kesin teşhis sağlar.
+  const kategoriTeshis = {};
+  for (const {kat, sonuclar, herhangiIstekBasarisiz} of tumKategoriSonuclari) {
+    kategoriTeshis[kat] = { hamAdet: sonuclar.length, agHatasi: herhangiIstekBasarisiz };
+  }
+  for (const {sonuclar} of tumKategoriSonuclari) {
+    for (const f of sonuclar) {
       const kod = f.code || "";
       if (!kod || gorulmuKodlar.has(kod)) continue;
       const mapped = mapFon(f, false, takasAraligi);
@@ -198,6 +206,7 @@ async function fonVerisiCek() {
     eksikGorunuyor: katilimFonlar.length < ŞÜPHELİ_EŞİK,
     guncelleme: new Date().toISOString(),
     kategori_dagilim: kategoriSayac,
+    kategoriTeshis, // her kategori için {hamAdet, agHatasi} — hangi kategori sorunlu, kesin teşhis
     data: katilimFonlar,
   };
 }
