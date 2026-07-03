@@ -55,6 +55,28 @@ async function fetchTekrarli(url, opts, deneme = 4, msTimeout = 8000) {
   return null;
 }
 
+// Teşhis amaçlı: fetchTekrarli gibi ama başarısızlıkta SESSİZCE null dönmek yerine
+// gerçek HTTP durum kodunu / hata mesajını da bildiriyor. "kategoriTeshis"teki
+// agHatasi:true'nun ARDINDAKİ gerçek sebebi (400/404/429/500/timeout) görmek için.
+async function fetchTeshisli(url, opts, deneme = 4, msTimeout = 8000) {
+  let sonHata = null;
+  for (let i = 0; i < deneme; i++) {
+    try {
+      const r = await fetchZamanAsimli(url, opts, msTimeout);
+      if (r.ok) return { res: r, hata: null };
+      let govde = "";
+      try { govde = (await r.clone().text()).slice(0, 200); } catch {}
+      sonHata = `HTTP ${r.status}${govde ? " — " + govde : ""}`;
+      if (i === deneme - 1) return { res: null, hata: sonHata };
+    } catch (e) {
+      sonHata = e.name === "AbortError" ? "Zaman aşımı" : String(e.message || e);
+      if (i === deneme - 1) return { res: null, hata: sonHata };
+    }
+    await new Promise(res => setTimeout(res, 600 * Math.pow(2, i)));
+  }
+  return { res: null, hata: sonHata };
+}
+
 function mapFon(f, vakif, takasAraligi) {
   let yonetici = (f.management_company || "").trim();
   if (!yonetici || vakif) yonetici = "Vakıf Katılım Portföy Yönetimi A.Ş.";
@@ -152,16 +174,17 @@ async function fonVerisiCek() {
     const sonuclar = [];
     let offset = 0;
     let herhangiIstekBasarisiz = false;
+    let sonHata = null;
     const encKat = encodeURIComponent(kat);
     let sayfaNo = 0;
     while (true) {
       if (sayfaNo > 0) await bekle(200); // aynı kategorinin sayfaları arasında da bekle
       sayfaNo++;
       const url = `https://fonoloji.com/v1/funds?category=${encKat}&limit=${PAGE_SIZE}&offset=${offset}`;
-      const res = await fetchTekrarli(url, { headers }, 3);
-      if (!res) { herhangiIstekBasarisiz = true; break; }
+      const { res, hata } = await fetchTeshisli(url, { headers }, 4);
+      if (!res) { herhangiIstekBasarisiz = true; sonHata = hata; break; }
       const d = await res.json().catch(() => null);
-      if (!d) { herhangiIstekBasarisiz = true; break; }
+      if (!d) { herhangiIstekBasarisiz = true; sonHata = "JSON parse hatası"; break; }
       const items = d.items ?? d.funds ?? d.data ?? (Array.isArray(d) ? d : []);
       if (!items.length) break;
       for (const f of items) {
@@ -175,7 +198,7 @@ async function fonVerisiCek() {
       if (items.length < PAGE_SIZE) break;
       offset += PAGE_SIZE;
     }
-    return { kat, sonuclar, herhangiIstekBasarisiz };
+    return { kat, sonuclar, herhangiIstekBasarisiz, sonHata };
   });
 
   const tumKategoriSonuclari = await Promise.all(kategoriPromises);
@@ -183,8 +206,8 @@ async function fonVerisiCek() {
   // Sayı düşük çıktığında ("gelmeyen fonlar var") bu, hangi kategorinin sorunlu
   // olduğunu tek tek göstererek kör tahmin yerine kesin teşhis sağlar.
   const kategoriTeshis = {};
-  for (const {kat, sonuclar, herhangiIstekBasarisiz} of tumKategoriSonuclari) {
-    kategoriTeshis[kat] = { hamAdet: sonuclar.length, agHatasi: herhangiIstekBasarisiz };
+  for (const {kat, sonuclar, herhangiIstekBasarisiz, sonHata} of tumKategoriSonuclari) {
+    kategoriTeshis[kat] = { hamAdet: sonuclar.length, agHatasi: herhangiIstekBasarisiz, hata: sonHata };
   }
   for (const {sonuclar} of tumKategoriSonuclari) {
     for (const f of sonuclar) {
