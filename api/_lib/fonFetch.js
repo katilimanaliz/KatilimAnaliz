@@ -119,10 +119,20 @@ async function fonVerisiCek() {
   const headers = { "X-API-Key": API_KEY, "Accept": "application/json" };
   const takasAraligi = sonTakasGunuAralik();
 
+  // ── Kademeli istek gönderimi ─────────────────────────────────────────────
+  // ÖNCEKİ HATA: 5 (Vakıf) + 21 (kategori) = 26 istek hepsi Promise.all ile AYNI
+  // ANDA gönderiliyordu. Bu, Fonoloji'nin oran sınırına (rate limit) takılıp
+  // kategori sorgularının TAMAMININ sessizce boş dönmesine yol açtı (canlıda
+  // sadece 3 fon geldi, 21 kategoriden hiçbiri veri getirmedi). Artık istekler
+  // küçük bir gecikmeyle (index × 120ms) kademeli gönderiliyor.
+  const bekle = (ms) => new Promise(r => setTimeout(r, ms));
+
   const vakifRes = await Promise.all(
-    VAKIF_KODLARI.map(kod =>
-      fetchTekrarli(`https://fonoloji.com/v1/funds/${kod}`, { headers }, 2)
-        .then(r => r ? r.json() : null).catch(() => null)
+    VAKIF_KODLARI.map((kod, i) =>
+      bekle(i * 80).then(() =>
+        fetchTekrarli(`https://fonoloji.com/v1/funds/${kod}`, { headers }, 2)
+          .then(r => r ? r.json() : null).catch(() => null)
+      )
     )
   );
 
@@ -137,7 +147,8 @@ async function fonVerisiCek() {
     katilimFonlar.push(mapFon(f, true, takasAraligi));
   }
 
-  const kategoriPromises = KATEGORILER.map(async ({kat, tumunu}) => {
+  const kategoriPromises = KATEGORILER.map(async ({kat, tumunu}, i) => {
+    await bekle(VAKIF_KODLARI.length * 80 + i * 90); // Vakıf istekleri bitsin, sonra kademeli başla
     const sonuclar = [];
     let offset = 0;
     const encKat = encodeURIComponent(kat);
@@ -192,4 +203,3 @@ async function fonVerisiCek() {
 }
 
 export { fonVerisiCek, ŞÜPHELİ_EŞİK };
-
