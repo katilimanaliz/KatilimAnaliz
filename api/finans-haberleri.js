@@ -1,21 +1,15 @@
 // api/finans-haberleri.js
-// Kaynaklar: Bloomberg HT + CNBC-e + Sözcü Ekonomi RSS feed'leri (üçü de resmi, ücretsiz, key gerektirmez)
-// NOT: Bloomberg HT'nin RSS'i zaman zaman uzun süre yenilenmiyor. Sözcü Ekonomi test
-// edildiğinde dakikalar içinde güncelleniyordu — en taze kaynak. Tek kaynağa bağımlı
-// kalmamak için üç kaynak da çekilip birleştiriliyor.
-//
-// REDIS/KV DÜZELTMESİ (2026-07): Önceki "let cache = {data,ts}" bellek-içi değişkeni
-// evds-proxy.js'de bulduğumuz AYNI hataya sahipti — serverless'ta her istekte aynı
-// "sıcak" fonksiyon örneğinin kullanılacağı garanti değil, bu yüzden her kullanıcı
-// farklı zamanlarda ayrı RSS çekimlerine neden olabiliyordu. Artık Upstash Redis
-// kullanılıyor — TÜM kullanıcılar gerçekten aynı, kalıcı önbelleklenmiş haberi görür.
+// Kaynaklar: Bloomberg HT + CNBC-e + Sözcü Ekonomi RSS feed'leri
+// REDIS/KV + KİLİT KORUMASI (2026-07) — bkz. kripto.js'deki aynı not.
 import { Redis } from "@upstash/redis";
+import { kilitliGetir } from "./_lib/kilitliOnbellek.js";
+
 const redis = new Redis({
   url: process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL,
   token: process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN,
 });
 const KV_ANAHTAR = "finans-haberleri:v1";
-const KV_TTL_SANIYE = 15 * 60; // 15 dakika
+const KV_TTL_SANIYE = 15 * 60;
 
 const KAYNAKLAR = [
   { ad: "Bloomberg HT", url: "https://www.bloomberght.com/rss" },
@@ -106,41 +100,36 @@ function corsAyarla(req, res) {
   res.setHeader("Vary", "Origin");
 }
 
+async function taze() {
+  const sonuclar = await Promise.all(KAYNAKLAR.map(kaynaktanCek));
+  const hepsi = tekillestir(
+    sonuclar.flat().sort((a, b) => new Date(b.tarih).getTime() - new Date(a.tarih).getTime())
+  ).slice(0, 40);
+
+  if (hepsi.length === 0) throw new Error("Hiçbir kaynaktan haber alınamadı");
+
+  const basariliKaynaklar = KAYNAKLAR
+    .map((k, i) => (sonuclar[i].length > 0 ? k.ad : null))
+    .filter(Boolean);
+
+  return {
+    success: true,
+    count: hepsi.length,
+    guncelleme: new Date().toISOString(),
+    kaynak: basariliKaynaklar.join(" + ") || "Bilinmiyor",
+    data: hepsi,
+  };
+}
+
 export default async function handler(req, res) {
   corsAyarla(req, res);
   res.setHeader("Cache-Control", "s-maxage=900, stale-while-revalidate=300");
 
   const debug = req.query.debug === "1";
 
-  if (!debug) {
-    try {
-      const onbellek = await redis.get(KV_ANAHTAR);
-      if (onbellek) return res.status(200).json({ ...onbellek, cached: true });
-    } catch {}
-  }
-
   try {
-    const sonuclar = await Promise.all(KAYNAKLAR.map(kaynaktanCek));
-    const hepsi = tekillestir(
-      sonuclar.flat().sort((a, b) => new Date(b.tarih).getTime() - new Date(a.tarih).getTime())
-    ).slice(0, 40);
-
-    if (hepsi.length === 0) throw new Error("Hiçbir kaynaktan haber alınamadı");
-
-    const basariliKaynaklar = KAYNAKLAR
-      .map((k, i) => (sonuclar[i].length > 0 ? k.ad : null))
-      .filter(Boolean);
-
-    const yanit = {
-      success: true,
-      count: hepsi.length,
-      guncelleme: new Date().toISOString(),
-      kaynak: basariliKaynaklar.join(" + ") || "Bilinmiyor",
-      data: hepsi,
-    };
-    try { await redis.set(KV_ANAHTAR, yanit, { ex: KV_TTL_SANIYE }); } catch {}
-    return res.status(200).json(yanit);
-
+    const { veri, cached } = await kilitliGetir(redis, KV_ANAHTAR, KV_TTL_SANIYE, taze, { debug });
+    return res.status(200).json({ ...veri, cached });
   } catch (e) {
     try {
       const eskiOnbellek = await redis.get(KV_ANAHTAR);
