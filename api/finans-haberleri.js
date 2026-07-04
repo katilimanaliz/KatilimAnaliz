@@ -1,12 +1,21 @@
 // api/finans-haberleri.js
 // Kaynaklar: Bloomberg HT + CNBC-e + Sözcü Ekonomi RSS feed'leri (üçü de resmi, ücretsiz, key gerektirmez)
-// NOT: Bloomberg HT'nin RSS'i zaman zaman uzun süre yenilenmiyor (tespit edildi: 1 Temmuz
-// 18:47'den itibaren donmuş kaldı; CNBC-e de benzer şekilde saatlerce güncellenmeyebiliyor).
-// Sözcü Ekonomi test edildiğinde dakikalar içinde güncelleniyordu — en taze kaynak. Tek
-// kaynağa bağımlı kalmamak için üç kaynak da çekilip birleştiriliyor; hangi kaynak daha
-// güncelse haberler ondan öne çıkıyor. Biri/ikisi erişilemez olursa kalanla devam edilir.
-const CACHE_TTL = 15 * 60 * 1000; // 15 dakika
-let cache = { data: null, ts: 0 };
+// NOT: Bloomberg HT'nin RSS'i zaman zaman uzun süre yenilenmiyor. Sözcü Ekonomi test
+// edildiğinde dakikalar içinde güncelleniyordu — en taze kaynak. Tek kaynağa bağımlı
+// kalmamak için üç kaynak da çekilip birleştiriliyor.
+//
+// REDIS/KV DÜZELTMESİ (2026-07): Önceki "let cache = {data,ts}" bellek-içi değişkeni
+// evds-proxy.js'de bulduğumuz AYNI hataya sahipti — serverless'ta her istekte aynı
+// "sıcak" fonksiyon örneğinin kullanılacağı garanti değil, bu yüzden her kullanıcı
+// farklı zamanlarda ayrı RSS çekimlerine neden olabiliyordu. Artık Upstash Redis
+// kullanılıyor — TÜM kullanıcılar gerçekten aynı, kalıcı önbelleklenmiş haberi görür.
+import { Redis } from "@upstash/redis";
+const redis = new Redis({
+  url: process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL,
+  token: process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN,
+});
+const KV_ANAHTAR = "finans-haberleri:v1";
+const KV_TTL_SANIYE = 15 * 60; // 15 dakika
 
 const KAYNAKLAR = [
   { ad: "Bloomberg HT", url: "https://www.bloomberght.com/rss" },
@@ -14,8 +23,6 @@ const KAYNAKLAR = [
   { ad: "Sözcü Ekonomi", url: "https://www.sozcu.com.tr/feeds-rss-category-ekonomi" },
 ];
 
-// RSS başlık/özetleri genelde HTML entity-encode edilmiş geliyor (&#039; &quot; &amp; vb.)
-// — bunları çözmezsek ekranda "&#039;Avrupa..." gibi ham kod görünür.
 function htmlEntityCoz(metin) {
   if (!metin) return metin;
   const NAMED = { amp:"&", lt:"<", gt:">", quot:'"', apos:"'", nbsp:" ", rsquo:"'", lsquo:"'", rdquo:'"', ldquo:'"', ndash:"–", mdash:"—", hellip:"…" };
@@ -26,7 +33,6 @@ function htmlEntityCoz(metin) {
 }
 
 function xmlEtiketAl(blok, etiket) {
-  // <etiket>içerik</etiket> veya <etiket><![CDATA[içerik]]></etiket>
   const cdataRegex = new RegExp(`<${etiket}[^>]*><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${etiket}>`, "i");
   const normalRegex = new RegExp(`<${etiket}[^>]*>([\\s\\S]*?)<\\/${etiket}>`, "i");
   const m1 = blok.match(cdataRegex);
@@ -60,7 +66,6 @@ function parseRSS(xml, kaynakAdi) {
   return items;
 }
 
-// Aynı/çok benzer başlıkları (iki kaynak da aynı haberi geçmiş olabilir) sadeleştir
 function tekillestir(items) {
   const gorulen = new Set();
   const sonuc = [];
@@ -76,7 +81,7 @@ function tekillestir(items) {
 async function kaynaktanCek(kaynak) {
   try {
     const controller = new AbortController();
-    const zamanlayici = setTimeout(() => controller.abort(), 6000); // 6 sn zaman aşımı
+    const zamanlayici = setTimeout(() => controller.abort(), 6000);
     const r = await fetch(kaynak.url, {
       headers: { "User-Agent": "Mozilla/5.0", "Accept": "application/rss+xml, application/xml, text/xml" },
       signal: controller.signal,
@@ -85,14 +90,10 @@ async function kaynaktanCek(kaynak) {
     const xml = await r.text();
     return parseRSS(xml, kaynak.ad);
   } catch (e) {
-    return []; // bu kaynak başarısız oldu, diğerleriyle devam
+    return [];
   }
 }
 
-// ─── CORS: sadece kendi domain(ler)imize izin ver ───────────────────────────
-// Önceden "*" idi — herkes bu API'yi kendi sitesinden ücretsiz kullanabiliyordu ve
-// Vercel kotamızı tüketebilirdi. Artık yalnızca prod domain, kendi Vercel preview
-// deploy'larımız (katilim-analiz-*.vercel.app) ve yerel geliştirme (localhost) kabul edilir.
 function originIzinliMi(origin) {
   if (!origin) return false;
   if (/^https:\/\/katilim-analiz(-[a-z0-9-]+)?\.vercel\.app$/i.test(origin)) return true;
@@ -109,9 +110,13 @@ export default async function handler(req, res) {
   corsAyarla(req, res);
   res.setHeader("Cache-Control", "s-maxage=900, stale-while-revalidate=300");
 
-  const now = Date.now();
-  if (cache.data && now - cache.ts < CACHE_TTL) {
-    return res.status(200).json({ ...cache.data, cached: true });
+  const debug = req.query.debug === "1";
+
+  if (!debug) {
+    try {
+      const onbellek = await redis.get(KV_ANAHTAR);
+      if (onbellek) return res.status(200).json({ ...onbellek, cached: true });
+    } catch {}
   }
 
   try {
@@ -133,11 +138,14 @@ export default async function handler(req, res) {
       kaynak: basariliKaynaklar.join(" + ") || "Bilinmiyor",
       data: hepsi,
     };
-    cache = { data: yanit, ts: now };
+    try { await redis.set(KV_ANAHTAR, yanit, { ex: KV_TTL_SANIYE }); } catch {}
     return res.status(200).json(yanit);
 
   } catch (e) {
-    if (cache.data) return res.status(200).json({ ...cache.data, cached: true, hata: e.message });
+    try {
+      const eskiOnbellek = await redis.get(KV_ANAHTAR);
+      if (eskiOnbellek) return res.status(200).json({ ...eskiOnbellek, cached: true, hata: e.message });
+    } catch {}
     return res.status(500).json({ success: false, error: e.message });
   }
 }
