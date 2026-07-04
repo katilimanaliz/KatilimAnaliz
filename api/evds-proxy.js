@@ -249,7 +249,13 @@ export default async function handler(req,res){
       teshis[ad] = { basarili: sonuc != null, httpStatus: r.status, sonDeger: sonuc, ilkSatirlar: text.slice(0,80) };
       return { son: sonuc, seri: seriDizi };
     } catch (err) {
-      teshis[ad] = { basarili: false, hata: err.message };
+      teshis[ad] = {
+        basarili: false,
+        hata: err.message,
+        hataAdi: err.name,
+        hataNeden: err.cause ? String(err.cause) : null,
+        hataKod: err.cause?.code || err.code || null,
+      };
       return { son: null, seri: [] };
     }
   }
