@@ -35,8 +35,8 @@ const redis = new Redis({
 // otomatik olarak "yok" sayılıyor, ilk istekte taze (düzeltilmiş) veri hesaplanıp
 // yeni anahtar altında cache'leniyor. İleride benzer bir hesaplama mantığı
 // değişikliği yapılırsa yine bu versiyonu artırmak gerekir.
-const KV_ANLIK_KEY = "evds:anlik:v3";
-const KV_TARIHSEL_PREFIX = "evds:tarihsel:v3:";
+const KV_ANLIK_KEY = "evds:anlik:v4";
+const KV_TARIHSEL_PREFIX = "evds:tarihsel:v4:";
 
 // Vercel'in varsayılan fonksiyon süresi (Hobby planda genelde 10sn) artık 8 dış
 // isteğe (5 EVDS + 3 FRED) yetmiyor — bu yüzden ERR_CONNECTION_CLOSED alınıyordu
@@ -169,6 +169,29 @@ function gunFarki(tarihSonStr, tarihOncekiStr) {
   if(!a||!b) return 1;
   const fark = Math.round((a - b) / (1000*60*60*24));
   return fark > 0 ? fark : 1; // negatif/0 gelirse (bozuk veri) en az 1 varsay
+}
+
+// ── TÜFE gerçek açıklanma tarihi ────────────────────────────────────────────
+// EVDS'deki TÜFE serisinin "tarih" alanı verinin REFERANS AYINI gösterir
+// (örn. "2026-6" → Haziran 2026 enflasyonu), yayımlandığı takvim gününü değil.
+// TÜİK, bir ayın enflasyon verisini BİR SONRAKİ ayın 3. günü (hafta sonuysa
+// ileri kaydırılmış) açıklar. Referans ayı, sanki verinin "01"i açıklanmış
+// gibi göstermek (önceki davranış) yanıltıcıydı — kullanıcı bunu fark etti.
+function ayinNIsGunu(yil, ay, gun){ // ay: 0-indeksli
+  let d = new Date(Date.UTC(yil, ay, gun));
+  while(d.getUTCDay()===0 || d.getUTCDay()===6){ d.setUTCDate(d.getUTCDate()+1); }
+  return d;
+}
+function tufeAcikilanmaTarihi(referansTarihStr){
+  const d = tarihParseDDMMYYYY(referansTarihStr);
+  if(!d) return referansTarihStr;
+  const yil = d.getUTCFullYear();
+  const ay = d.getUTCMonth(); // 0-indeksli referans ay
+  const acikilanma = ayinNIsGunu(yil, ay+1, 3); // referans ayından BİR SONRAKİ ayın 3. günü
+  const dd=String(acikilanma.getUTCDate()).padStart(2,"0");
+  const mm=String(acikilanma.getUTCMonth()+1).padStart(2,"0");
+  const yy=acikilanma.getUTCFullYear();
+  return `${dd}-${mm}-${yy}`;
 }
 
 async function evdsFetch(url,apiKey){
@@ -408,14 +431,15 @@ export default async function handler(req,res){
       const son=tufeDizi[tufeDizi.length-1];
       const oncekiAy=tufeDizi[tufeDizi.length-2];
       const oncekiYil=tufeDizi[tufeDizi.length-13];
-      sonuclar["TUFE_YILLIK"]={deger:((son.deger-oncekiYil.deger)/oncekiYil.deger*100),tarih:son.tarih};
-      sonuclar["TUFE_AYLIK"]={deger:((son.deger-oncekiAy.deger)/oncekiAy.deger*100),tarih:son.tarih};
+      sonuclar["TUFE_YILLIK"]={deger:((son.deger-oncekiYil.deger)/oncekiYil.deger*100),tarih:tufeAcikilanmaTarihi(son.tarih)};
+      sonuclar["TUFE_AYLIK"]={deger:((son.deger-oncekiAy.deger)/oncekiAy.deger*100),tarih:tufeAcikilanmaTarihi(son.tarih)};
 
       const yillikSeri=[], aylikSeri=[];
       for(let i=tufeDizi.length-1;i>=13;i--){
         const s=tufeDizi[i], oA=tufeDizi[i-1], oY=tufeDizi[i-13];
-        yillikSeri.unshift({tarih:s.tarih, deger:(s.deger-oY.deger)/oY.deger*100});
-        aylikSeri.unshift({tarih:s.tarih, deger:(s.deger-oA.deger)/oA.deger*100});
+        const acikilanmaTarihi = tufeAcikilanmaTarihi(s.tarih);
+        yillikSeri.unshift({tarih:acikilanmaTarihi, deger:(s.deger-oY.deger)/oY.deger*100});
+        aylikSeri.unshift({tarih:acikilanmaTarihi, deger:(s.deger-oA.deger)/oA.deger*100});
         if(yillikSeri.length>=24) break;
       }
       sonuclar["TUFE_YILLIK_SERI"]=yillikSeri;
