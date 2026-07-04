@@ -149,6 +149,12 @@ export default async function handler(req, res) {
       const tamListe = req.query.tam === "1";
       return res.status(200).json({
         midas_kayit_sayisi: midasListe.length,
+        // YENİ: Midas'ın döndürdüğü TÜM alan adlarını görmek için ham örnek —
+        // sektör bilgisi (Sector/Sektor/Industry/Group vb.) var mı yok mu bunu
+        // görmek için ekledik. "sektor" alanı hep boş geliyordu, kaynakta var mı
+        // diye bakıyoruz.
+        midas_ham_ornek: midasListe.slice(0, 3),
+        midas_alan_adlari: midasListe[0] ? Object.keys(midasListe[0]) : [],
         isim_kaynagi_kayit_sayisi: Object.keys(isimMap).length,
         isim_kaynagi_ham_toplam: isimCache.rawCount,
         isim_kaynagi_ham_ornek: tamListe ? isimCache.rawSample : isimCache.rawSample?.slice(0, 2),
