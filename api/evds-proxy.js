@@ -96,10 +96,8 @@ const POLITIKA = [
 
 const GUNLUK = [
   "TP.BISTTLREF.KAPANIS",  // TLREF endeksi (ORAN DEĞİL) — günlük değişimden oran türetilir
-  "TP.BISTTLREFK.KAPANIS", // DENEME: TLREFK (katılım bankacılığı versiyonu) — "BISTTLREFK" ticker'ından
-                            // analoji yapıldı (doviz.com/foreks/tradingview üçü de bu kodu kullanıyor),
-                            // ama EVDS'de bu tam koda kayıtlı olup olmadığı henüz DOĞRULANMADI.
-                            // ?debug=1 ile test et: "gunluk_tlref" bölümünde bu seri de gelirse doğrudur.
+  // NOT: "TP.BISTTLREFK.KAPANIS" denendi ama EVDS'de veri vermedi (kod yanlış/
+  // kayıtlı değil). TLREFK artık TLREF'ten tahmin ediliyor, bkz. aşağıdaki not.
 ];
 
 // ── FRED (ABD Merkez Bankası St. Louis) — SOFR, EURIBOR ───────────────────
@@ -311,22 +309,21 @@ export default async function handler(req,res){
       sonuclar["TP.BISTTLREF.KAPANIS_SERI"]=[];
     }
 
-    // TLREFK: aynı yöntem — DENEME, seri kodu henüz doğrulanmadı
-    const tlrefkEndeksDizi=tumDegerler(gunJson?.items||[], "TP.BISTTLREFK.KAPANIS");
-    teshis.tlrefkEndeksDizi_uzunluk = tlrefkEndeksDizi.length;
-    if(tlrefkEndeksDizi.length>=2){
-      const son=tlrefkEndeksDizi[tlrefkEndeksDizi.length-1];
-      const onceki_=tlrefkEndeksDizi[tlrefkEndeksDizi.length-2];
-      const gunlukOran=(son.deger/onceki_.deger)-1;
-      const yillikOran=gunlukOran*365*100;
-      sonuclar["TP.BISTTLREFK.KAPANIS"]={deger:yillikOran, tarih:son.tarih, endeksHam:son.deger};
-      teshis.tlrefk_hesap = {son_endeks:son.deger, onceki_endeks:onceki_.deger, gunluk_oran:gunlukOran, yillik_oran_pct:yillikOran};
-      const tlrefkSeri=[];
-      for(let i=1;i<tlrefkEndeksDizi.length;i++){
-        const g=(tlrefkEndeksDizi[i].deger/tlrefkEndeksDizi[i-1].deger)-1;
-        tlrefkSeri.push({tarih:tlrefkEndeksDizi[i].tarih, deger:g*365*100});
-      }
-      sonuclar["TP.BISTTLREFK.KAPANIS_SERI"]=tlrefkSeri.slice(-24);
+    // TLREFK: GERÇEK EVDS KODU BULUNAMADI (denenen "TP.BISTTLREFK.KAPANIS" veri
+    // vermiyor). Kullanıcının borsaistanbul.com'dan aldığı 7 günlük gerçek
+    // TLREFK verisiyle bizim hesapladığımız TLREF'i karşılaştırdık: TLREFK,
+    // TLREF'in tutarlı şekilde ~0,096 puan altında seyrediyor (standart sapma
+    // sadece 0,015 puan — çok sıkı bir ilişki). Gerçek seri bulunana kadar bu
+    // TAHMİNİ (TLREF - 0,096) kullanıyoruz; arayüzde "tahmini" olduğu belirtilmeli.
+    const TLREFK_TLREF_FARKI = 0.096;
+    if(sonuclar["TP.BISTTLREF.KAPANIS"]){
+      sonuclar["TP.BISTTLREFK.KAPANIS"] = {
+        deger: sonuclar["TP.BISTTLREF.KAPANIS"].deger - TLREFK_TLREF_FARKI,
+        tarih: sonuclar["TP.BISTTLREF.KAPANIS"].tarih,
+        tahmini: true,
+      };
+      sonuclar["TP.BISTTLREFK.KAPANIS_SERI"] = (sonuclar["TP.BISTTLREF.KAPANIS_SERI"]||[])
+        .map(n => ({ tarih: n.tarih, deger: n.deger - TLREFK_TLREF_FARKI }));
     } else {
       sonuclar["TP.BISTTLREFK.KAPANIS"]=null;
       sonuclar["TP.BISTTLREFK.KAPANIS_SERI"]=[];
