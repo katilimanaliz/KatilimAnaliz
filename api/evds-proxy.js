@@ -58,14 +58,7 @@ const HAFTALIK = [
   "TP.KTF17.TL","TP.KTF17.USD","TP.KTF17.EUR",
 ];
 
-// TCMB Brüt Rezerv (Altın+Döviz Toplamı, Milyon USD), haftalık — kullanıcı
-// tarafından EVDS'den doğrulandı. AYRI bir istekte tutuluyor çünkü alt çizgili
-// format (TP_AB_TOPLAM) ile HAFTALIK'taki noktalı formatı (TP.KTF10 vb.) AYNI
-// çoklu-seri isteğine karıştırmak EVDS'nin TÜM isteği reddetmesine yol açtı
-// (muhtemelen farklı "veri grubu"na ait seriler aynı anda istenemiyor).
-const REZERV = ["TP.AB.TOPLAM"]; // DÜZELTME: "series does not exist" hatası alınca
-                                   // TÜFE'dekiyle aynı teoriyi denedik — sorgu
-                                   // parametresi noktalı format istiyor olabilir.
+const REZERV = ["TP.AB.TOPLAM"];
 
 const AYLIK = [
   "TP_BKR_TRY_KTF10","TP_BKR_TRY_17","TP_BKR_TRY_18",
@@ -76,36 +69,18 @@ const AYLIK = [
   "TP_KKP_TRY_1","TP_KKP_USD_KTF17","TP_KKP_EUR_KTF17",
 ];
 
-// TÜFE NOTU (2026-07, GÜNCELLENDİ): Yeni baz yıllı (2025=100) seri kodu
-// kullanıcı tarafından EVDS'den doğrulanarak bulundu: TP_TUKFIY2025_GENEL.
-// Eski TP.FE.OKTG01 (2003=100) serisi Aralık 2025'te donmuştu — artık yeni
-// seriye geçildi, veri Haziran 2026'ya kadar güncel ve doğrulandı (~%32 yıllık,
-// ~%1 aylık — makul rakamlar).
 const ENFLASYON = [
-  "TP.TUKFIY2025.GENEL",  // TÜFE genel endeks (2025=100, YENİ SERİ) — DÜZELTME:
-                           // "Series does not exist" hatası alınca fark ettik,
-                           // EVDS sorgu parametresi NOKTALI format istiyor; alt
-                           // çizgili format (TP_TUKFIY2025_GENEL) sadece YANIT
-                           // alan adında görünüyor. sonDeger/tumDegerler zaten
-                           // her iki formatı da response'ta arıyor, sorun yok.
+  "TP.TUKFIY2025.GENEL",
 ];
 
 const POLITIKA = [
-  "TP.APIFON4",    // AOFM
+  "TP.APIFON4",
 ];
 
 const GUNLUK = [
-  "TP.BISTTLREF.KAPANIS",  // TLREF endeksi (ORAN DEĞİL) — günlük değişimden oran türetilir
-  // NOT: "TP.BISTTLREFK.KAPANIS" denendi ama EVDS'de veri vermedi (kod yanlış/
-  // kayıtlı değil). TLREFK artık TLREF'ten tahmin ediliyor, bkz. aşağıdaki not.
+  "TP.BISTTLREF.KAPANIS",
 ];
 
-// ── FRED (ABD Merkez Bankası St. Louis) — SOFR, EURIBOR ───────────────────
-// ÖNEMLİ (2026-07): Eski yöntem (fredgraph.csv, anahtarsız) Vercel'den atılan
-// sunucu-taraflı isteklerde sessizce asılı kalıp zaman aşımına uğruyordu
-// (muhtemelen bu "grafik indirme" endpoint'i tarayıcı-dışı erişimi engelliyor).
-// Resmi FRED REST API'sine geçildi — otomatik/programatik erişim için
-// tasarlanmış, API anahtarı gerektiriyor (ücretsiz, fredaccount.stlouisfed.org).
 const FRED_API_URL = (seri, apiKey) =>
   `https://api.stlouisfed.org/fred/series/observations?series_id=${seri}&api_key=${apiKey}&file_type=json&sort_order=desc&limit=30`;
 
@@ -158,6 +133,25 @@ function tumDegerler(items, seri) {
   }).filter(Boolean);
 }
 
+// ── Tarih ayrıştırma (DD-MM-YYYY) ve gün farkı hesaplama ────────────────────
+// TLREF endeksinden oran türetirken iki ardışık veri noktası arasındaki
+// GERÇEK takvim günü farkını bilmemiz gerekiyor (aşağıdaki TLREF DÜZELTMESİ 2
+// notuna bkz) — bu yüzden "DD-MM-YYYY" formatındaki tarihi Date nesnesine
+// çeviren küçük bir yardımcı.
+function tarihParseDDMMYYYY(s) {
+  if(!s) return null;
+  const [d,m,y] = s.split("-").map(Number);
+  if(!d||!m||!y) return null;
+  return new Date(Date.UTC(y, m-1, d));
+}
+function gunFarki(tarihSonStr, tarihOncekiStr) {
+  const a = tarihParseDDMMYYYY(tarihSonStr);
+  const b = tarihParseDDMMYYYY(tarihOncekiStr);
+  if(!a||!b) return 1;
+  const fark = Math.round((a - b) / (1000*60*60*24));
+  return fark > 0 ? fark : 1; // negatif/0 gelirse (bozuk veri) en az 1 varsay
+}
+
 async function evdsFetch(url,apiKey){
   const r=await fetchZamanli(url,{headers:{"key":apiKey,"Accept":"application/json"}},10000);
   const text=await r.text();
@@ -185,9 +179,8 @@ export default async function handler(req,res){
     try{
       const onbellek = await redis.get(kvAnahtar);
       if(onbellek) return res.status(200).json({tarihsel:{[seri]:onbellek},cached:true});
-    }catch{} // Redis'e ulaşılamazsa sessizce devam et, taze veri çekmeyi dene
+    }catch{}
 
-    // Kalabalık hücumu koruması — aynı seriye aynı anda çok sayıda istek gelirse
     try{
       const sonuc = await redis.set(kilitAnahtariSeri, "1", {nx:true, ex:20});
       kilitBizdeMiSeri = sonuc === "OK" || sonuc === true;
@@ -230,11 +223,8 @@ export default async function handler(req,res){
     try{
       const onbellek = await redis.get(KV_ANLIK_KEY);
       if(onbellek) return res.status(200).json({...onbellek,cached:true});
-    }catch{} // Redis'e ulaşılamazsa sessizce devam et, taze veri çek
+    }catch{}
 
-    // KALABALIK HÜCUMU (THUNDERING HERD) KORUMASI: önbellek boşsa, sadece BİR istek
-    // kilidi alıp taze veri çeksin — binlerce eşzamanlı kullanıcı aynı anda TCMB/FRED'e
-    // gitmesin. Kilidi alamayanlar kısa aralıklarla önbelleği tekrar dener.
     try{
       const sonuc = await redis.set(kilitAnahtari, "1", {nx:true, ex:50});
       kilitBizdeMi = sonuc === "OK" || sonuc === true;
@@ -248,7 +238,6 @@ export default async function handler(req,res){
           if(onbellek) return res.status(200).json({...onbellek,cached:true});
         }catch{}
       }
-      // Hâlâ yoksa (kilit sahibi yavaş/çökmüş) kendimiz de devam ederiz — sonsuza dek beklenmez.
     }
   }
 
@@ -299,51 +288,53 @@ export default async function handler(req,res){
       guvenliCek("rezerv", `${BASE}/series=${REZERV.join("-")}&startDate=${onceki(180)}&endDate=${tarihStr(new Date())}&type=json&frequency=3`),
     ]);
 
-    // FRED çağrıları AYRI bir aşamada — EVDS'nin 6 eşzamanlı isteğiyle aynı anda
-    // yarışıp bağlantı sıkışıklığına (contention) yol açmasın diye. Zaman aşımını
-    // uzatmak tek başına yetmemişti, bu ihtimali de eleyelim diye ayırdık.
     const [sofr,eur3m]=await Promise.all([
       guvenliCekFred("fred_sofr", "SOFR"),
-      // DÜZELTME: "EUR3MTD156N" yanlış/yok olan bir kod çıktı. Doğru kod:
-      // IR3TIB01EZM156N — OECD'nin Euro Bölgesi 3 aylık bankalar arası faiz
-      // oranı (FRED üzerinden), aylık veri. Gerçek "EURIBOR" markalı seri FRED'de
-      // yok, bu en yakın/eşdeğer resmi kaynak.
       guvenliCekFred("fred_euribor3m", "IR3TIB01EZM156N"),
     ]);
-    // NOT: EURIBOR 6M için FRED'de doğrulanmış bir seri bulunamadı (Euro Bölgesi
-    // için sadece 3 aylık tenor mevcut görünüyor) — tahminle uğraşmak yerine bu
-    // gösterge sabit/periyodik güncellenen değer olarak kalmaya devam ediyor.
 
     const sonuclar={};
     for(const s of HAFTALIK) sonuclar[s]=sonDeger(hafJson?.items||[],s);
     for(const s of AYLIK)    sonuclar[s]=sonDeger(ayJson?.items||[],s);
     for(const s of POLITIKA) sonuclar[s]=sonDeger(polJson?.items||[],s);
     for(const s of REZERV)   sonuclar[s]=sonDeger(rezervJson?.items||[],s);
-    sonuclar["FRED_SOFR"]=sofr.son; // {deger, tarih} veya null
+    sonuclar["FRED_SOFR"]=sofr.son;
     sonuclar["FRED_SOFR_SERI"]=sofr.seri;
     sonuclar["FRED_EUR3M"]=eur3m.son;
     sonuclar["FRED_EUR3M_SERI"]=eur3m.seri;
 
-    // AOFM geçmiş serisi (grafik için) — zaten oran, ek dönüşüm gerekmiyor
     sonuclar["TP.APIFON4_SERI"]=tumDegerler(polJson?.items||[], "TP.APIFON4").slice(-24);
-    // Rezerv geçmiş serisi (grafik için) — Milyon USD, ham, artık kendi ayrı isteğinden
     sonuclar["TP_AB_TOPLAM_SERI"]=tumDegerler(rezervJson?.items||[], "TP_AB_TOPLAM").slice(-24);
 
     // TLREF: endeksten oran türetimi
+    //
+    // TLREF DÜZELTMESİ 2 (2026-07-04): Önceki sürüm, iki ardışık veri noktası
+    // arasında HER ZAMAN tam 1 takvim günü olduğunu varsayıp sabit ×365 çarpanı
+    // kullanıyordu. Ama iki ardışık kayıt arasında (EVDS'nin o gün veri
+    // yayınlamamış olması, gecikme, vb. nedenlerle) 1'den FAZLA takvim günü
+    // olduğunda, o günlerin toplam getirisi yine de tek bir günmüş gibi ×365
+    // ile çarpılıyor ve sonuç N kat şişiyordu (kullanıcının bildirdiği %119,98
+        // değeri, gerçek ~%40 civarına göre yaklaşık 3 katıydı — 3 günlük bir
+    // aralığın 1 günmüş gibi hesaplandığını doğruluyor).
+    // ÇÖZÜM: ×365 yerine, iki tarih arasındaki GERÇEK gün farkını (gunFarki)
+    // hesaplayıp ×365/gunFarkı kullanıyoruz. Ardışık günlerde gunFarkı=1
+    // olduğu için sonuç önceki davranışla birebir aynı kalır; ara gün(ler)
+    // atlandığında ise artık doğru şekilde düzeltiliyor.
     const tlrefEndeksDizi=tumDegerler(gunJson?.items||[], "TP.BISTTLREF.KAPANIS");
     teshis.tlrefEndeksDizi_uzunluk = tlrefEndeksDizi.length;
     if(tlrefEndeksDizi.length>=2){
       const son=tlrefEndeksDizi[tlrefEndeksDizi.length-1];
       const onceki_=tlrefEndeksDizi[tlrefEndeksDizi.length-2];
+      const gunSayisi=gunFarki(son.tarih, onceki_.tarih);
       const gunlukOran=(son.deger/onceki_.deger)-1;
-      const yillikOran=gunlukOran*365*100;
+      const yillikOran=(gunlukOran/gunSayisi)*365*100;
       sonuclar["TP.BISTTLREF.KAPANIS"]={deger:yillikOran, tarih:son.tarih, endeksHam:son.deger};
-      teshis.tlref_hesap = {son_endeks:son.deger, onceki_endeks:onceki_.deger, gunluk_oran:gunlukOran, yillik_oran_pct:yillikOran};
-      // Geçmiş seri: her gün için endeksten türetilmiş yıllık oran
+      teshis.tlref_hesap = {son_endeks:son.deger, onceki_endeks:onceki_.deger, son_tarih:son.tarih, onceki_tarih:onceki_.tarih, gun_sayisi:gunSayisi, gunluk_oran:gunlukOran, yillik_oran_pct:yillikOran};
       const tlrefSeri=[];
       for(let i=1;i<tlrefEndeksDizi.length;i++){
+        const gS=gunFarki(tlrefEndeksDizi[i].tarih, tlrefEndeksDizi[i-1].tarih);
         const g=(tlrefEndeksDizi[i].deger/tlrefEndeksDizi[i-1].deger)-1;
-        tlrefSeri.push({tarih:tlrefEndeksDizi[i].tarih, deger:g*365*100});
+        tlrefSeri.push({tarih:tlrefEndeksDizi[i].tarih, deger:(g/gS)*365*100});
       }
       sonuclar["TP.BISTTLREF.KAPANIS_SERI"]=tlrefSeri.slice(-24);
     } else {
@@ -351,12 +342,6 @@ export default async function handler(req,res){
       sonuclar["TP.BISTTLREF.KAPANIS_SERI"]=[];
     }
 
-    // TLREFK: GERÇEK EVDS KODU BULUNAMADI (denenen "TP.BISTTLREFK.KAPANIS" veri
-    // vermiyor). Kullanıcının borsaistanbul.com'dan aldığı 7 günlük gerçek
-    // TLREFK verisiyle bizim hesapladığımız TLREF'i karşılaştırdık: TLREFK,
-    // TLREF'in tutarlı şekilde ~0,096 puan altında seyrediyor (standart sapma
-    // sadece 0,015 puan — çok sıkı bir ilişki). Gerçek seri bulunana kadar bu
-    // TAHMİNİ (TLREF - 0,096) kullanıyoruz; arayüzde "tahmini" olduğu belirtilmeli.
     const TLREFK_TLREF_FARKI = 0.096;
     if(sonuclar["TP.BISTTLREF.KAPANIS"]){
       sonuclar["TP.BISTTLREFK.KAPANIS"] = {
@@ -382,8 +367,6 @@ export default async function handler(req,res){
       sonuclar["TUFE_YILLIK"]={deger:((son.deger-oncekiYil.deger)/oncekiYil.deger*100),tarih:son.tarih};
       sonuclar["TUFE_AYLIK"]={deger:((son.deger-oncekiAy.deger)/oncekiAy.deger*100),tarih:son.tarih};
 
-      // Grafik için: TÜM aylar boyunca YoY/MoM serisi (son 24 ay ile sınırlı,
-      // grafik/tooltip performansı için yeterli).
       const yillikSeri=[], aylikSeri=[];
       for(let i=tufeDizi.length-1;i>=13;i--){
         const s=tufeDizi[i], oA=tufeDizi[i-1], oY=tufeDizi[i-13];
@@ -413,4 +396,3 @@ export default async function handler(req,res){
     return res.status(500).json({error:err.message});
   }
 }
-
