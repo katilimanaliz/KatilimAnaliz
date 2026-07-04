@@ -262,11 +262,17 @@ export default async function handler(req,res){
     // FRED çağrıları AYRI bir aşamada — EVDS'nin 6 eşzamanlı isteğiyle aynı anda
     // yarışıp bağlantı sıkışıklığına (contention) yol açmasın diye. Zaman aşımını
     // uzatmak tek başına yetmemişti, bu ihtimali de eleyelim diye ayırdık.
-    const [sofr,eur3m,eur6m]=await Promise.all([
+    const [sofr,eur3m]=await Promise.all([
       guvenliCekFred("fred_sofr", "SOFR"),
-      guvenliCekFred("fred_euribor3m", "EUR3MTD156N"),
-      guvenliCekFred("fred_euribor6m", "EUR6MTD156N"),
+      // DÜZELTME: "EUR3MTD156N" yanlış/yok olan bir kod çıktı. Doğru kod:
+      // IR3TIB01EZM156N — OECD'nin Euro Bölgesi 3 aylık bankalar arası faiz
+      // oranı (FRED üzerinden), aylık veri. Gerçek "EURIBOR" markalı seri FRED'de
+      // yok, bu en yakın/eşdeğer resmi kaynak.
+      guvenliCekFred("fred_euribor3m", "IR3TIB01EZM156N"),
     ]);
+    // NOT: EURIBOR 6M için FRED'de doğrulanmış bir seri bulunamadı (Euro Bölgesi
+    // için sadece 3 aylık tenor mevcut görünüyor) — tahminle uğraşmak yerine bu
+    // gösterge sabit/periyodik güncellenen değer olarak kalmaya devam ediyor.
 
     const sonuclar={};
     for(const s of HAFTALIK) sonuclar[s]=sonDeger(hafJson?.items||[],s);
@@ -277,8 +283,6 @@ export default async function handler(req,res){
     sonuclar["FRED_SOFR_SERI"]=sofr.seri;
     sonuclar["FRED_EUR3M"]=eur3m.son;
     sonuclar["FRED_EUR3M_SERI"]=eur3m.seri;
-    sonuclar["FRED_EUR6M"]=eur6m.son;
-    sonuclar["FRED_EUR6M_SERI"]=eur6m.seri;
 
     // AOFM geçmiş serisi (grafik için) — zaten oran, ek dönüşüm gerekmiyor
     sonuclar["TP.APIFON4_SERI"]=tumDegerler(polJson?.items||[], "TP.APIFON4").slice(-24);
