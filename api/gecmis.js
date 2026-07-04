@@ -1,20 +1,17 @@
 // api/gecmis.js
 // Yahoo Finance üzerinden 30 günlük geçmiş fiyat verisi (Kur Grafik Modalı için)
-// Standart semboller: USDTRY=X, EURTRY=X, BTC-USD vb.
-// Özel mod: sembol=GRAM_ALTIN veya GRAM_GUMUS -> ons/USD × USD/TRY çarpılarak TL/gram hesaplanır
-//
-// REDIS/KV EKLENDİ (2026-07): Önceden sadece HTTP Cache-Control header'ına (Vercel CDN)
-// güveniliyordu. Bu genelde işe yarar ama garantili değil — şimdi evds-proxy.js/tefas-proxy.js
-// ile aynı Upstash Redis'i kullanıyoruz: her sembol için TÜM kullanıcılar aynı önbelleklenmiş
-// veriyi görür, Yahoo Finance'e sembol başına en fazla 15 dakikada bir gidilir.
+// REDIS/KV + KİLİT KORUMASI (2026-07) — bkz. kripto.js'deki aynı not. Her sembol
+// kendi kilidini/önbelleğini kullanır (aynı sembole binlerce kişi aynı anda
+// bakabilir, farklı semboller birbirini beklemez).
 import { Redis } from "@upstash/redis";
+import { kilitliGetir } from "./_lib/kilitliOnbellek.js";
+
 const redis = new Redis({
   url: process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL,
   token: process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN,
 });
-const KV_TTL_SANIYE = 900; // 15 dakika — mevcut Cache-Control ile aynı süre
+const KV_TTL_SANIYE = 900; // 15 dakika
 
-// ─── CORS: sadece kendi domain(ler)imize izin ver ───────────────────────────
 function originIzinliMi(origin) {
   if (!origin) return false;
   if (/^https:\/\/katilim-analiz(-[a-z0-9-]+)?\.vercel\.app$/i.test(origin)) return true;
@@ -28,7 +25,7 @@ function corsAyarla(req, res) {
 }
 
 async function veriHesapla(sembol) {
-  const GRAM_ONS = 31.1034768; // 1 ons = 31.1034768 gram
+  const GRAM_ONS = 31.1034768;
 
   if (sembol === "GRAM_ALTIN" || sembol === "GRAM_GUMUS") {
     const onsSembol = sembol === "GRAM_ALTIN" ? "GC=F" : "SI=F";
@@ -124,18 +121,11 @@ export default async function handler(req, res) {
   }
 
   const kvAnahtar = `gecmis:v1:${sembol}`;
-
-  if (debug !== "1") {
-    try {
-      const onbellek = await redis.get(kvAnahtar);
-      if (onbellek) return res.status(200).json({ ...onbellek, cached: true });
-    } catch {} // Redis'e ulaşılamazsa sessizce taze veri çekmeye devam et
-  }
+  const debugMi = debug === "1";
 
   try {
-    const veri = await veriHesapla(sembol);
-    try { await redis.set(kvAnahtar, veri, { ex: KV_TTL_SANIYE }); } catch {}
-    res.status(200).json(veri);
+    const { veri, cached } = await kilitliGetir(redis, kvAnahtar, KV_TTL_SANIYE, () => veriHesapla(sembol), { debug: debugMi });
+    res.status(200).json({ ...veri, cached });
   } catch (e) {
     try {
       const eskiOnbellek = await redis.get(kvAnahtar);
