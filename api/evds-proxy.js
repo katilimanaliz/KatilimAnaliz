@@ -60,6 +60,36 @@ const GUNLUK = [
                             // ?debug=1 ile test et: "gunluk_tlref" bölümünde bu seri de gelirse doğrudur.
 ];
 
+// ── FRED (ABD Merkez Bankası St. Louis) — SOFR ────────────────────────────
+// Ayrı bir Vercel fonksiyonu (fred-proxy.js) yerine BU fonksiyona gömüldü —
+// Vercel Hobby plan 12 fonksiyon limitini tekrar zorlamamak için. FRED'in
+// CSV endpoint'i API anahtarı GEREKTİRMİYOR.
+const FRED_CSV_URL = (seri) => `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${seri}`;
+
+function fredCsvParseSon(csvText) {
+  const satirlar = csvText.trim().split("\n");
+  // Son satırdan geriye doğru, "." (veri yok) olmayan ilk geçerli satırı bul
+  for (let i = satirlar.length - 1; i >= 1; i--) {
+    const [tarih, deger] = satirlar[i].split(",");
+    if (deger && deger.trim() !== "." && !isNaN(parseFloat(deger))) {
+      return { deger: parseFloat(deger), tarih: tarih.trim() };
+    }
+  }
+  return null;
+}
+
+function fredCsvParseSeri(csvText, adet=24) {
+  const satirlar = csvText.trim().split("\n");
+  const sonuc = [];
+  for (let i = satirlar.length - 1; i >= 1 && sonuc.length < adet; i--) {
+    const [tarih, deger] = satirlar[i].split(",");
+    if (deger && deger.trim() !== "." && !isNaN(parseFloat(deger))) {
+      sonuc.unshift({ tarih: tarih.trim(), deger: parseFloat(deger) });
+    }
+  }
+  return sonuc;
+}
+
 function tarihStr(d) {
   return `${String(d.getDate()).padStart(2,"0")}-${String(d.getMonth()+1).padStart(2,"0")}-${d.getFullYear()}`;
 }
@@ -157,20 +187,48 @@ export default async function handler(req,res){
       return { items: [] };
     }
   }
+  async function guvenliCekFred(ad, seri) {
+    try {
+      const r = await fetch(FRED_CSV_URL(seri));
+      const text = await r.text();
+      if (r.status < 200 || r.status >= 300) throw new Error(`HTTP ${r.status}: ${text.slice(0,150)}`);
+      const sonuc = fredCsvParseSon(text);
+      const seriDizi = fredCsvParseSeri(text, 24);
+      teshis[ad] = { basarili: sonuc != null, httpStatus: r.status, sonDeger: sonuc };
+      return { son: sonuc, seri: seriDizi };
+    } catch (err) {
+      teshis[ad] = { basarili: false, hata: err.message };
+      return { son: null, seri: [] };
+    }
+  }
 
   try{
-    const [hafJson,ayJson,gunJson,enfJson,polJson]=await Promise.all([
+    const [hafJson,ayJson,gunJson,enfJson,polJson,sofr,eur3m,eur6m]=await Promise.all([
       guvenliCek("haftalik", `${BASE}/series=${HAFTALIK.join("-")}&startDate=${onceki(60)}&endDate=${tarihStr(new Date())}&type=json&frequency=8`),
       guvenliCek("aylik",    `${BASE}/series=${AYLIK.join("-")}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=9`),
       guvenliCek("gunluk_tlref", `${BASE}/series=${GUNLUK.join("-")}&startDate=${onceki(30)}&endDate=${tarihStr(new Date())}&type=json&frequency=1`),
       guvenliCek("enflasyon", `${BASE}/series=${ENFLASYON.join("-")}&startDate=${onceki(450)}&endDate=${tarihStr(new Date())}&type=json&frequency=1`),
       guvenliCek("politika_aofm", `${BASE}/series=${POLITIKA.join("-")}&startDate=${onceki(60)}&endDate=${tarihStr(new Date())}&type=json&frequency=8`),
+      guvenliCekFred("fred_sofr", "SOFR"),
+      guvenliCekFred("fred_euribor3m", "EUR3MTD156N"),
+      guvenliCekFred("fred_euribor6m", "EUR6MTD156N"),
     ]);
 
     const sonuclar={};
     for(const s of HAFTALIK) sonuclar[s]=sonDeger(hafJson?.items||[],s);
     for(const s of AYLIK)    sonuclar[s]=sonDeger(ayJson?.items||[],s);
     for(const s of POLITIKA) sonuclar[s]=sonDeger(polJson?.items||[],s);
+    sonuclar["FRED_SOFR"]=sofr.son; // {deger, tarih} veya null
+    sonuclar["FRED_SOFR_SERI"]=sofr.seri;
+    sonuclar["FRED_EUR3M"]=eur3m.son;
+    sonuclar["FRED_EUR3M_SERI"]=eur3m.seri;
+    sonuclar["FRED_EUR6M"]=eur6m.son;
+    sonuclar["FRED_EUR6M_SERI"]=eur6m.seri;
+
+    // AOFM geçmiş serisi (grafik için) — zaten oran, ek dönüşüm gerekmiyor
+    sonuclar["TP.APIFON4_SERI"]=tumDegerler(polJson?.items||[], "TP.APIFON4").slice(-24);
+    // Rezerv geçmiş serisi (grafik için) — Milyon USD, ham
+    sonuclar["TP_AB_TOPLAM_SERI"]=tumDegerler(hafJson?.items||[], "TP_AB_TOPLAM").slice(-24);
 
     // TLREF: endeksten oran türetimi
     const tlrefEndeksDizi=tumDegerler(gunJson?.items||[], "TP.BISTTLREF.KAPANIS");
@@ -182,8 +240,16 @@ export default async function handler(req,res){
       const yillikOran=gunlukOran*365*100;
       sonuclar["TP.BISTTLREF.KAPANIS"]={deger:yillikOran, tarih:son.tarih, endeksHam:son.deger};
       teshis.tlref_hesap = {son_endeks:son.deger, onceki_endeks:onceki_.deger, gunluk_oran:gunlukOran, yillik_oran_pct:yillikOran};
+      // Geçmiş seri: her gün için endeksten türetilmiş yıllık oran
+      const tlrefSeri=[];
+      for(let i=1;i<tlrefEndeksDizi.length;i++){
+        const g=(tlrefEndeksDizi[i].deger/tlrefEndeksDizi[i-1].deger)-1;
+        tlrefSeri.push({tarih:tlrefEndeksDizi[i].tarih, deger:g*365*100});
+      }
+      sonuclar["TP.BISTTLREF.KAPANIS_SERI"]=tlrefSeri.slice(-24);
     } else {
       sonuclar["TP.BISTTLREF.KAPANIS"]=null;
+      sonuclar["TP.BISTTLREF.KAPANIS_SERI"]=[];
     }
 
     // TLREFK: aynı yöntem — DENEME, seri kodu henüz doğrulanmadı
@@ -196,8 +262,15 @@ export default async function handler(req,res){
       const yillikOran=gunlukOran*365*100;
       sonuclar["TP.BISTTLREFK.KAPANIS"]={deger:yillikOran, tarih:son.tarih, endeksHam:son.deger};
       teshis.tlrefk_hesap = {son_endeks:son.deger, onceki_endeks:onceki_.deger, gunluk_oran:gunlukOran, yillik_oran_pct:yillikOran};
+      const tlrefkSeri=[];
+      for(let i=1;i<tlrefkEndeksDizi.length;i++){
+        const g=(tlrefkEndeksDizi[i].deger/tlrefkEndeksDizi[i-1].deger)-1;
+        tlrefkSeri.push({tarih:tlrefkEndeksDizi[i].tarih, deger:g*365*100});
+      }
+      sonuclar["TP.BISTTLREFK.KAPANIS_SERI"]=tlrefkSeri.slice(-24);
     } else {
       sonuclar["TP.BISTTLREFK.KAPANIS"]=null;
+      sonuclar["TP.BISTTLREFK.KAPANIS_SERI"]=[];
     }
 
     const enfItems=enfJson?.items||[];
@@ -210,9 +283,23 @@ export default async function handler(req,res){
       const oncekiYil=tufeDizi[tufeDizi.length-13];
       sonuclar["TUFE_YILLIK"]={deger:((son.deger-oncekiYil.deger)/oncekiYil.deger*100),tarih:son.tarih};
       sonuclar["TUFE_AYLIK"]={deger:((son.deger-oncekiAy.deger)/oncekiAy.deger*100),tarih:son.tarih};
+
+      // Grafik için: TÜM aylar boyunca YoY/MoM serisi (son 24 ay ile sınırlı,
+      // grafik/tooltip performansı için yeterli).
+      const yillikSeri=[], aylikSeri=[];
+      for(let i=tufeDizi.length-1;i>=13;i--){
+        const s=tufeDizi[i], oA=tufeDizi[i-1], oY=tufeDizi[i-13];
+        yillikSeri.unshift({tarih:s.tarih, deger:(s.deger-oY.deger)/oY.deger*100});
+        aylikSeri.unshift({tarih:s.tarih, deger:(s.deger-oA.deger)/oA.deger*100});
+        if(yillikSeri.length>=24) break;
+      }
+      sonuclar["TUFE_YILLIK_SERI"]=yillikSeri;
+      sonuclar["TUFE_AYLIK_SERI"]=aylikSeri;
     } else {
       sonuclar["TUFE_YILLIK"]=null;
       sonuclar["TUFE_AYLIK"]=null;
+      sonuclar["TUFE_YILLIK_SERI"]=[];
+      sonuclar["TUFE_AYLIK_SERI"]=[];
     }
 
     const yanit={tarih:tarihStr(new Date()),seriler:sonuclar, _teshis: teshis};
