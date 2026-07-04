@@ -102,34 +102,21 @@ const GUNLUK = [
                             // ?debug=1 ile test et: "gunluk_tlref" bölümünde bu seri de gelirse doğrudur.
 ];
 
-// ── FRED (ABD Merkez Bankası St. Louis) — SOFR ────────────────────────────
-// Ayrı bir Vercel fonksiyonu (fred-proxy.js) yerine BU fonksiyona gömüldü —
-// Vercel Hobby plan 12 fonksiyon limitini tekrar zorlamamak için. FRED'in
-// CSV endpoint'i API anahtarı GEREKTİRMİYOR.
-const FRED_CSV_URL = (seri) => `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${seri}`;
+// ── FRED (ABD Merkez Bankası St. Louis) — SOFR, EURIBOR ───────────────────
+// ÖNEMLİ (2026-07): Eski yöntem (fredgraph.csv, anahtarsız) Vercel'den atılan
+// sunucu-taraflı isteklerde sessizce asılı kalıp zaman aşımına uğruyordu
+// (muhtemelen bu "grafik indirme" endpoint'i tarayıcı-dışı erişimi engelliyor).
+// Resmi FRED REST API'sine geçildi — otomatik/programatik erişim için
+// tasarlanmış, API anahtarı gerektiriyor (ücretsiz, fredaccount.stlouisfed.org).
+const FRED_API_URL = (seri, apiKey) =>
+  `https://api.stlouisfed.org/fred/series/observations?series_id=${seri}&api_key=${apiKey}&file_type=json&sort_order=desc&limit=30`;
 
-function fredCsvParseSon(csvText) {
-  const satirlar = csvText.trim().split("\n");
-  // Son satırdan geriye doğru, "." (veri yok) olmayan ilk geçerli satırı bul
-  for (let i = satirlar.length - 1; i >= 1; i--) {
-    const [tarih, deger] = satirlar[i].split(",");
-    if (deger && deger.trim() !== "." && !isNaN(parseFloat(deger))) {
-      return { deger: parseFloat(deger), tarih: tarih.trim() };
-    }
-  }
-  return null;
-}
-
-function fredCsvParseSeri(csvText, adet=24) {
-  const satirlar = csvText.trim().split("\n");
-  const sonuc = [];
-  for (let i = satirlar.length - 1; i >= 1 && sonuc.length < adet; i--) {
-    const [tarih, deger] = satirlar[i].split(",");
-    if (deger && deger.trim() !== "." && !isNaN(parseFloat(deger))) {
-      sonuc.unshift({ tarih: tarih.trim(), deger: parseFloat(deger) });
-    }
-  }
-  return sonuc;
+function fredJsonParse(json) {
+  const obs = (json?.observations || []).filter(o => o.value !== "." && !isNaN(parseFloat(o.value)));
+  if (obs.length === 0) return { son: null, seri: [] };
+  const son = { deger: parseFloat(obs[0].value), tarih: obs[0].date };
+  const seri = obs.slice(0, 24).reverse().map(o => ({ tarih: o.date, deger: parseFloat(o.value) }));
+  return { son, seri };
 }
 
 function tarihStr(d) {
@@ -238,22 +225,24 @@ export default async function handler(req,res){
     }
   }
   async function guvenliCekFred(ad, seri) {
+    const fredKey = process.env.FRED_API_KEY;
+    if (!fredKey) {
+      teshis[ad] = { basarili: false, hata: "FRED_API_KEY ortam değişkeni tanımlı değil" };
+      return { son: null, seri: [] };
+    }
     try {
-      const r = await fetchZamanli(FRED_CSV_URL(seri), {
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; KatilimAnaliz/1.0)" }
-      }, 20000);
+      const r = await fetchZamanli(FRED_API_URL(seri, fredKey), {}, 15000);
       const text = await r.text();
-      if (r.status < 200 || r.status >= 300) throw new Error(`HTTP ${r.status}: ${text.slice(0,150)}`);
-      const sonuc = fredCsvParseSon(text);
-      const seriDizi = fredCsvParseSeri(text, 24);
-      teshis[ad] = { basarili: sonuc != null, httpStatus: r.status, sonDeger: sonuc, ilkSatirlar: text.slice(0,80) };
-      return { son: sonuc, seri: seriDizi };
+      if (r.status < 200 || r.status >= 300) throw new Error(`HTTP ${r.status}: ${text.slice(0,200)}`);
+      const json = JSON.parse(text);
+      const { son, seri: seriDizi } = fredJsonParse(json);
+      teshis[ad] = { basarili: son != null, httpStatus: r.status, sonDeger: son };
+      return { son, seri: seriDizi };
     } catch (err) {
       teshis[ad] = {
         basarili: false,
         hata: err.message,
         hataAdi: err.name,
-        hataNeden: err.cause ? String(err.cause) : null,
         hataKod: err.cause?.code || err.code || null,
       };
       return { son: null, seri: [] };
