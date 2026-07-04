@@ -308,32 +308,55 @@ export default async function handler(req,res){
 
     // TLREF: endeksten oran türetimi
     //
-    // TLREF DÜZELTMESİ 2 (2026-07-04): Önceki sürüm, iki ardışık veri noktası
-    // arasında HER ZAMAN tam 1 takvim günü olduğunu varsayıp sabit ×365 çarpanı
-    // kullanıyordu. Ama iki ardışık kayıt arasında (EVDS'nin o gün veri
-    // yayınlamamış olması, gecikme, vb. nedenlerle) 1'den FAZLA takvim günü
-    // olduğunda, o günlerin toplam getirisi yine de tek bir günmüş gibi ×365
-    // ile çarpılıyor ve sonuç N kat şişiyordu (kullanıcının bildirdiği %119,98
-        // değeri, gerçek ~%40 civarına göre yaklaşık 3 katıydı — 3 günlük bir
-    // aralığın 1 günmüş gibi hesaplandığını doğruluyor).
-    // ÇÖZÜM: ×365 yerine, iki tarih arasındaki GERÇEK gün farkını (gunFarki)
-    // hesaplayıp ×365/gunFarkı kullanıyoruz. Ardışık günlerde gunFarkı=1
-    // olduğu için sonuç önceki davranışla birebir aynı kalır; ara gün(ler)
-    // atlandığında ise artık doğru şekilde düzeltiliyor.
+    // TLREF DÜZELTMESİ 3 (2026-07-04, kullanıcı gerçek veriyle doğruladı):
+    // Önceki sürüm (DÜZELTME 2) ardışık İKİ günü kıyaslayıp aradaki takvim
+    // gün farkına bölüyordu — bu, "EVDS bazı günler veri atlar" varsayımına
+    // dayanıyordu. Ama gerçek veride (_teshis.tlref_hesap ile doğrulandı)
+    // ardışık günler arasında takvim farkı zaten hep 1 çıkıyor; sorun ORADA
+    // değil. Gerçek sorun HAFTALIK VE SİSTEMATİK: TP.BISTTLREF.KAPANIS
+    // endeksi her CUMA günü ~3 katı büyüyor (hafta sonunu içerecek şekilde
+    // "ileri tarihli" kapanış gibi davranıyor), her PAZARTESİ ise ~1/3 oranda
+    // büyüyor (Cuma'nın zaten içerdiği birikimin bir kalıntısı gibi). Salı-
+    // Çarşamba-Perşembe günleri doğru (~%40, TCMB politika faizine yakın)
+    // değeri veriyor. Yani ARDIŞIK gün karşılaştırması hangi gün olursa olsun
+    // yanlış: Cuma'da 3 katı şişiyor, Pazartesi'de 1/3'e düşüyor.
+    //
+    // ÇÖZÜM: Ardışık günü değil, YAKLAŞIK 1 HAFTA (>=6 takvim günü) önceki
+    // veri noktasını kıyaslıyoruz. Böylece her zaman AYNI gün türü ile AYNI
+    // gün türü kıyaslanmış olur (örn. Cuma'nın "ileri tarihli" kapanışı bir
+    // önceki Cuma'nın da aynı şekilde "ileri tarihli" kapanışıyla), bu da
+    // haftalık tekrar eden sistematik sapmayı iptal eder. Gerçek gün farkı
+    // ne olursa olsun (6, 7, 8... — resmi tatil varsa daha uzun olabilir)
+    // doğru şekilde ×365/gunFarkı ile yıllıklandırılıyor, sonuç kesin.
+    const HAFTA_MIN_GUN = 6; // en az bu kadar gün önceki noktayı ara (tam hafta hedefleniyor)
+    function haftaOncesiIndexBul(dizi, i){
+      for(let j=i-1;j>=0;j--){
+        if(gunFarki(dizi[i].tarih, dizi[j].tarih) >= HAFTA_MIN_GUN) return j;
+      }
+      return null; // yeterince geçmiş veri yoksa
+    }
     const tlrefEndeksDizi=tumDegerler(gunJson?.items||[], "TP.BISTTLREF.KAPANIS");
     teshis.tlrefEndeksDizi_uzunluk = tlrefEndeksDizi.length;
-    if(tlrefEndeksDizi.length>=2){
-      const son=tlrefEndeksDizi[tlrefEndeksDizi.length-1];
-      const onceki_=tlrefEndeksDizi[tlrefEndeksDizi.length-2];
+    const sonIdx = tlrefEndeksDizi.length-1;
+    const oncekiIdx = sonIdx>=0 ? haftaOncesiIndexBul(tlrefEndeksDizi, sonIdx) : null;
+    if(sonIdx>=0 && oncekiIdx!=null){
+      const son=tlrefEndeksDizi[sonIdx];
+      const onceki_=tlrefEndeksDizi[oncekiIdx];
       const gunSayisi=gunFarki(son.tarih, onceki_.tarih);
-      const gunlukOran=(son.deger/onceki_.deger)-1;
-      const yillikOran=(gunlukOran/gunSayisi)*365*100;
+      const haftalikOran=(son.deger/onceki_.deger)-1;
+      const yillikOran=(haftalikOran/gunSayisi)*365*100;
       sonuclar["TP.BISTTLREF.KAPANIS"]={deger:yillikOran, tarih:son.tarih, endeksHam:son.deger};
-      teshis.tlref_hesap = {son_endeks:son.deger, onceki_endeks:onceki_.deger, son_tarih:son.tarih, onceki_tarih:onceki_.tarih, gun_sayisi:gunSayisi, gunluk_oran:gunlukOran, yillik_oran_pct:yillikOran};
+      teshis.tlref_hesap = {son_endeks:son.deger, onceki_endeks:onceki_.deger, son_tarih:son.tarih, onceki_tarih:onceki_.tarih, gun_sayisi:gunSayisi, haftalik_oran:haftalikOran, yillik_oran_pct:yillikOran};
+      // Geçmiş seri: her nokta için de kendi ~1 hafta öncesiyle kıyaslıyoruz
+      // (aynı yöntem) — böylece grafikte de haftalık testere dişi deseni
+      // (Cuma zirve, Pazartesi çukur) ortadan kalkar, düz/gerçekçi bir çizgi
+      // elde edilir.
       const tlrefSeri=[];
       for(let i=1;i<tlrefEndeksDizi.length;i++){
-        const gS=gunFarki(tlrefEndeksDizi[i].tarih, tlrefEndeksDizi[i-1].tarih);
-        const g=(tlrefEndeksDizi[i].deger/tlrefEndeksDizi[i-1].deger)-1;
+        const j=haftaOncesiIndexBul(tlrefEndeksDizi, i);
+        if(j==null) continue;
+        const gS=gunFarki(tlrefEndeksDizi[i].tarih, tlrefEndeksDizi[j].tarih);
+        const g=(tlrefEndeksDizi[i].deger/tlrefEndeksDizi[j].deger)-1;
         tlrefSeri.push({tarih:tlrefEndeksDizi[i].tarih, deger:(g/gS)*365*100});
       }
       sonuclar["TP.BISTTLREF.KAPANIS_SERI"]=tlrefSeri.slice(-24);
