@@ -1,9 +1,21 @@
-// api/evds-proxy.js - FINAL v4 + TEŞHİS
-// Haftalık kredi oranları + Aylık stok + Enflasyon + TLREF + AOFM
-// TEŞHİS SÜRÜMÜ: TÜFE'nin neden gelmediğini ve TLREF'in neden saçma bir değer
-// verdiğini KESİN olarak görmek için yanıta "_teshis" alanı eklendi. Kör tahminle
-// "düzelttim" demek yerine, bu sürümü deploy edip yanıtı bir kez daha paylaş —
-// gerçek hata mesajı/ham veri örneği görününce kesin düzeltme yapılabilir.
+// api/evds-proxy.js - FINAL v5
+// Haftalık kredi oranları + Aylık stok + Enflasyon + TLREF (oran, endeksten türetilmiş) + AOFM
+//
+// TLREF DÜZELTMESİ (2026-07): TP.BISTTLREF.KAPANIS ham değeri bir ORAN (%) değil,
+// bir ENDEKS seviyesidir (örn. 6223.01) — TLREF'in her gün bileşik olarak
+// büyüttüğü bir toplam getiri endeksi. Gerçek günlük/yıllıklandırılmış TLREF
+// ORANINI elde etmek için ardışık iki günün endeks değerinden türetiyoruz:
+//   günlük_oran = (bugünkü_endeks / dünkü_endeks) - 1
+//   yıllık_oran = günlük_oran × 365 × 100
+//
+// TÜFE NOTU (2026-07): TCMB'nin kendi açıklamasına göre TÜFE'nin baz yılı 2025
+// olarak güncellendi, bu değişiklik 2026 Ocak verisinden itibaren geçerli.
+// TP.FE.OKTG01 (2003=100) serisi Aralık 2025'ten sonra hiç güncellenmemiş —
+// bu, kod tarafında bir hata değil, muhtemelen TÜİK/TCMB'nin yeni bazlı seriye
+// geçişiyle ilgili. Yeni serinin kesin EVDS kodu doğrulanamadı; TUFE_YILLIK/
+// TUFE_AYLIK bu yüzden şimdilik null dönebilir. EVDS'nin "Tüm Seriler" arama
+// arayüzünden "TÜFE 2025=100" ile doğru kodu bulup ENFLASYON dizisine
+// eklemek gerekiyor.
 
 const BASE = "https://evds3.tcmb.gov.tr/igmevdsms-dis";
 const CACHE_TTL_MS = 6 * 3600 * 1000;
@@ -30,7 +42,7 @@ const AYLIK = [
 ];
 
 const ENFLASYON = [
-  "TP.FE.OKTG01",  // TÜFE genel endeks
+  "TP.FE.OKTG01",  // TÜFE genel endeks (2003=100) — Aralık 2025'ten sonra donmuş, bkz. üstteki not
   "TP.FE.OKTG02",  // A Endeksi (mevsimlik hariç)
 ];
 
@@ -39,7 +51,7 @@ const POLITIKA = [
 ];
 
 const GUNLUK = [
-  "TP.BISTTLREF.KAPANIS", // TLREF kapanış
+  "TP.BISTTLREF.KAPANIS", // TLREF endeksi (ORAN DEĞİL) — günlük değişimden oran türetilir
 ];
 
 function tarihStr(d) {
@@ -90,7 +102,8 @@ async function evdsFetch(url,apiKey){
   let json;
   try { json = JSON.parse(text); }
   catch(e){ throw new Error(`JSON parse hatası (HTTP ${r.status}): ${text.slice(0,200)}`); }
-  return { json, httpStatus: r.status, rawPreview: text.slice(0,300) };
+  if(r.status<200||r.status>=300) throw new Error(`HTTP ${r.status}: ${text.slice(0,200)}`);
+  return { json, httpStatus: r.status };
 }
 
 export default async function handler(req,res){
@@ -126,13 +139,12 @@ export default async function handler(req,res){
   if(cacheAnlik.data&&now-cacheAnlik.ts<CACHE_TTL_MS&&debug!=="1")
     return res.status(200).json({...cacheAnlik.data,cached:true});
 
-  // Her fetch'i ayrı ayrı, hatasını YUTMADAN deniyoruz — teşhis için.
   const teshis = {};
   async function guvenliCek(ad, url) {
     try {
-      const { json, httpStatus, rawPreview } = await evdsFetch(url, apiKey);
+      const { json, httpStatus } = await evdsFetch(url, apiKey);
       const itemSayisi = (json?.items || []).length;
-      teshis[ad] = { basarili: true, httpStatus, itemSayisi, ornekSatir: json?.items?.[json.items.length-1] || null };
+      teshis[ad] = { basarili: true, httpStatus, itemSayisi };
       return json;
     } catch (err) {
       teshis[ad] = { basarili: false, hata: err.message };
@@ -152,8 +164,21 @@ export default async function handler(req,res){
     const sonuclar={};
     for(const s of HAFTALIK) sonuclar[s]=sonDeger(hafJson?.items||[],s);
     for(const s of AYLIK)    sonuclar[s]=sonDeger(ayJson?.items||[],s);
-    for(const s of GUNLUK)   sonuclar[s]=sonDeger(gunJson?.items||[],s);
     for(const s of POLITIKA) sonuclar[s]=sonDeger(polJson?.items||[],s);
+
+    // TLREF: endeksten oran türetimi
+    const tlrefEndeksDizi=tumDegerler(gunJson?.items||[], "TP.BISTTLREF.KAPANIS");
+    teshis.tlrefEndeksDizi_uzunluk = tlrefEndeksDizi.length;
+    if(tlrefEndeksDizi.length>=2){
+      const son=tlrefEndeksDizi[tlrefEndeksDizi.length-1];
+      const onceki_=tlrefEndeksDizi[tlrefEndeksDizi.length-2];
+      const gunlukOran=(son.deger/onceki_.deger)-1;
+      const yillikOran=gunlukOran*365*100;
+      sonuclar["TP.BISTTLREF.KAPANIS"]={deger:yillikOran, tarih:son.tarih, endeksHam:son.deger};
+      teshis.tlref_hesap = {son_endeks:son.deger, onceki_endeks:onceki_.deger, gunluk_oran:gunlukOran, yillik_oran_pct:yillikOran};
+    } else {
+      sonuclar["TP.BISTTLREF.KAPANIS"]=null;
+    }
 
     const enfItems=enfJson?.items||[];
     const tufeDizi=tumDegerler(enfItems,"TP.FE.OKTG01");
@@ -179,3 +204,4 @@ export default async function handler(req,res){
     return res.status(500).json({error:err.message});
   }
 }
+
