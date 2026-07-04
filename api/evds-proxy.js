@@ -8,14 +8,10 @@
 //   günlük_oran = (bugünkü_endeks / dünkü_endeks) - 1
 //   yıllık_oran = günlük_oran × 365 × 100
 //
-// TÜFE NOTU (2026-07): TCMB'nin kendi açıklamasına göre TÜFE'nin baz yılı 2025
-// olarak güncellendi, bu değişiklik 2026 Ocak verisinden itibaren geçerli.
-// TP.FE.OKTG01 (2003=100) serisi Aralık 2025'ten sonra hiç güncellenmemiş —
-// bu, kod tarafında bir hata değil, muhtemelen TÜİK/TCMB'nin yeni bazlı seriye
-// geçişiyle ilgili. Yeni serinin kesin EVDS kodu doğrulanamadı; TUFE_YILLIK/
-// TUFE_AYLIK bu yüzden şimdilik null dönebilir. EVDS'nin "Tüm Seriler" arama
-// arayüzünden "TÜFE 2025=100" ile doğru kodu bulup ENFLASYON dizisine
-// eklemek gerekiyor.
+// TÜFE NOTU (2026-07, ÇÖZÜLDÜ): TCMB'nin baz yıl güncellemesi (2025=100)
+// nedeniyle eski TP.FE.OKTG01 serisi Aralık 2025'te donmuştu. Doğru yeni seri
+// kodu (TP_TUKFIY2025_GENEL) EVDS üzerinden bulunup doğrulandı, Haziran 2026'ya
+// kadar güncel veri veriyor. ENFLASYON dizisi buna göre güncellendi.
 
 const BASE = "https://evds3.tcmb.gov.tr/igmevdsms-dis";
 const CACHE_TTL_MS = 6 * 3600 * 1000;
@@ -30,6 +26,8 @@ const HAFTALIK = [
   "TP.KTF1.USD","TP.KTF1.EUR",
   "TP.KTF1.K","TP.KTF1.K.USD","TP.KTF1.K.EUR",
   "TP.KTF17.TL","TP.KTF17.USD","TP.KTF17.EUR",
+  "TP_AB_TOPLAM", // TCMB Brüt Rezerv (Altın+Döviz Toplamı, Milyon USD) — kullanıcı tarafından
+                   // EVDS'den doğrulandı (haftalık, ~140-220 milyar $ aralığı, gerçek rakamlarla uyumlu)
 ];
 
 const AYLIK = [
@@ -41,9 +39,13 @@ const AYLIK = [
   "TP_KKP_TRY_1","TP_KKP_USD_KTF17","TP_KKP_EUR_KTF17",
 ];
 
+// TÜFE NOTU (2026-07, GÜNCELLENDİ): Yeni baz yıllı (2025=100) seri kodu
+// kullanıcı tarafından EVDS'den doğrulanarak bulundu: TP_TUKFIY2025_GENEL.
+// Eski TP.FE.OKTG01 (2003=100) serisi Aralık 2025'te donmuştu — artık yeni
+// seriye geçildi, veri Haziran 2026'ya kadar güncel ve doğrulandı (~%32 yıllık,
+// ~%1 aylık — makul rakamlar).
 const ENFLASYON = [
-  "TP.FE.OKTG01",  // TÜFE genel endeks (2003=100) — Aralık 2025'ten sonra donmuş, bkz. üstteki not
-  "TP.FE.OKTG02",  // A Endeksi (mevsimlik hariç)
+  "TP_TUKFIY2025_GENEL",  // TÜFE genel endeks (2025=100, YENİ SERİ)
 ];
 
 const POLITIKA = [
@@ -51,7 +53,11 @@ const POLITIKA = [
 ];
 
 const GUNLUK = [
-  "TP.BISTTLREF.KAPANIS", // TLREF endeksi (ORAN DEĞİL) — günlük değişimden oran türetilir
+  "TP.BISTTLREF.KAPANIS",  // TLREF endeksi (ORAN DEĞİL) — günlük değişimden oran türetilir
+  "TP.BISTTLREFK.KAPANIS", // DENEME: TLREFK (katılım bankacılığı versiyonu) — "BISTTLREFK" ticker'ından
+                            // analoji yapıldı (doviz.com/foreks/tradingview üçü de bu kodu kullanıyor),
+                            // ama EVDS'de bu tam koda kayıtlı olup olmadığı henüz DOĞRULANMADI.
+                            // ?debug=1 ile test et: "gunluk_tlref" bölümünde bu seri de gelirse doğrudur.
 ];
 
 function tarihStr(d) {
@@ -180,8 +186,22 @@ export default async function handler(req,res){
       sonuclar["TP.BISTTLREF.KAPANIS"]=null;
     }
 
+    // TLREFK: aynı yöntem — DENEME, seri kodu henüz doğrulanmadı
+    const tlrefkEndeksDizi=tumDegerler(gunJson?.items||[], "TP.BISTTLREFK.KAPANIS");
+    teshis.tlrefkEndeksDizi_uzunluk = tlrefkEndeksDizi.length;
+    if(tlrefkEndeksDizi.length>=2){
+      const son=tlrefkEndeksDizi[tlrefkEndeksDizi.length-1];
+      const onceki_=tlrefkEndeksDizi[tlrefkEndeksDizi.length-2];
+      const gunlukOran=(son.deger/onceki_.deger)-1;
+      const yillikOran=gunlukOran*365*100;
+      sonuclar["TP.BISTTLREFK.KAPANIS"]={deger:yillikOran, tarih:son.tarih, endeksHam:son.deger};
+      teshis.tlrefk_hesap = {son_endeks:son.deger, onceki_endeks:onceki_.deger, gunluk_oran:gunlukOran, yillik_oran_pct:yillikOran};
+    } else {
+      sonuclar["TP.BISTTLREFK.KAPANIS"]=null;
+    }
+
     const enfItems=enfJson?.items||[];
-    const tufeDizi=tumDegerler(enfItems,"TP.FE.OKTG01");
+    const tufeDizi=tumDegerler(enfItems,"TP_TUKFIY2025_GENEL");
     teshis.tufeDizi_uzunluk = tufeDizi.length;
     teshis.tufeDizi_son3 = tufeDizi.slice(-3);
     if(tufeDizi.length>=13){
