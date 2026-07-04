@@ -27,8 +27,16 @@ const redis = new Redis({
   url: process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL,
   token: process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN,
 });
-const KV_ANLIK_KEY = "evds:anlik:v1";
-const KV_TARIHSEL_PREFIX = "evds:tarihsel:v1:";
+// NOT (2026-07-04): v1 → v2 sürüm değişikliği BİLEREK yapıldı. TLREF hesaplama
+// mantığı düzeltildi (DÜZELTME 3, aşağıda) ama eski v1 anahtarı altında Redis'te
+// 6 saatlik TTL ile ESKİ (hatalı) hesaplanmış değer önbellekte duruyordu — kod
+// deploy edilse bile önbellek kontrolü hesaplamadan ÖNCE çalıştığı için kullanıcı
+// hâlâ eski %119,98 değerini görüyordu. Anahtar versiyonunu artırarak eski cache
+// otomatik olarak "yok" sayılıyor, ilk istekte taze (düzeltilmiş) veri hesaplanıp
+// yeni anahtar altında cache'leniyor. İleride benzer bir hesaplama mantığı
+// değişikliği yapılırsa yine bu versiyonu artırmak gerekir.
+const KV_ANLIK_KEY = "evds:anlik:v3";
+const KV_TARIHSEL_PREFIX = "evds:tarihsel:v3:";
 
 // Vercel'in varsayılan fonksiyon süresi (Hobby planda genelde 10sn) artık 8 dış
 // isteğe (5 EVDS + 3 FRED) yetmiyor — bu yüzden ERR_CONNECTION_CLOSED alınıyordu
@@ -100,8 +108,19 @@ function onceki(gun) { const d=new Date(); d.setDate(d.getDate()-gun); return ta
 function normalizeTarih(t) {
   if(!t) return null;
   const s=String(t);
-  if(/^\d{4}-\d{2}-\d{2}$/.test(s)){const[y,m,d]=s.split("-");return `${d}-${m}-${y}`;}
-  if(/^\d{4}-\d{2}$/.test(s)){const[y,m]=s.split("-");return `01-${m}-${y}`;}
+  if(/^\d{4}-\d{1,2}-\d{1,2}$/.test(s)){
+    const[y,m,d]=s.split("-");
+    return `${d.padStart(2,"0")}-${m.padStart(2,"0")}-${y}`;
+  }
+  // DÜZELTME: eski regex "\d{2}" (tam 2 haneli ay) istiyordu — "2025-10" gibi
+  // ayları yakalayıp DD-MM-YYYY'ye çeviriyordu ama "2026-6" gibi TEK haneli
+  // ayları HİÇ yakalamıyordu, bu yüzden bazı aylar ham "YYYY-M" formatında
+  // kalıp diğerleriyle (DD-MM-YYYY) karışık görünüyordu. Artık "\d{1,2}" ile
+  // her iki durumu da yakalayıp aynı formata (sıfır dolgulu) çeviriyoruz.
+  if(/^\d{4}-\d{1,2}$/.test(s)){
+    const[y,m]=s.split("-");
+    return `01-${m.padStart(2,"0")}-${y}`;
+  }
   if(/^\d{4}$/.test(s)) return null;
   return s;
 }
@@ -308,56 +327,58 @@ export default async function handler(req,res){
 
     // TLREF: endeksten oran türetimi
     //
-    // TLREF DÜZELTMESİ 3 (2026-07-04, kullanıcı gerçek veriyle doğruladı):
-    // Önceki sürüm (DÜZELTME 2) ardışık İKİ günü kıyaslayıp aradaki takvim
-    // gün farkına bölüyordu — bu, "EVDS bazı günler veri atlar" varsayımına
-    // dayanıyordu. Ama gerçek veride (_teshis.tlref_hesap ile doğrulandı)
-    // ardışık günler arasında takvim farkı zaten hep 1 çıkıyor; sorun ORADA
-    // değil. Gerçek sorun HAFTALIK VE SİSTEMATİK: TP.BISTTLREF.KAPANIS
-    // endeksi her CUMA günü ~3 katı büyüyor (hafta sonunu içerecek şekilde
-    // "ileri tarihli" kapanış gibi davranıyor), her PAZARTESİ ise ~1/3 oranda
-    // büyüyor (Cuma'nın zaten içerdiği birikimin bir kalıntısı gibi). Salı-
-    // Çarşamba-Perşembe günleri doğru (~%40, TCMB politika faizine yakın)
-    // değeri veriyor. Yani ARDIŞIK gün karşılaştırması hangi gün olursa olsun
-    // yanlış: Cuma'da 3 katı şişiyor, Pazartesi'de 1/3'e düşüyor.
+    // TLREF DÜZELTMESİ 4 (2026-07-05, kullanıcı gerçek veriyle doğruladı):
+    // DÜZELTME 3, iki veri noktasını (bugün ve ~1 hafta önce) kıyaslayarak
+    // Cuma/Pazartesi sapmasını gidermişti — ama bu kez ayrı bir haftalık
+    // örüntü ortaya çıktı: HER PERŞEMBE günü hesaplanan oran ~%26'ya düşüyordu
+    // (diğer günler doğru ~%40 civarındaydı). Yani veri kaynağında, hangi
+    // gün çiftini seçersen seç, en az bir gün için sonucu bozan tekrarlayan
+    // bir haftalık sapma var. İKİ NOKTAYA dayanan HERHANGİ bir kıyaslama
+    // yöntemi bu tuzağa düşmeye devam edecekti.
     //
-    // ÇÖZÜM: Ardışık günü değil, YAKLAŞIK 1 HAFTA (>=6 takvim günü) önceki
-    // veri noktasını kıyaslıyoruz. Böylece her zaman AYNI gün türü ile AYNI
-    // gün türü kıyaslanmış olur (örn. Cuma'nın "ileri tarihli" kapanışı bir
-    // önceki Cuma'nın da aynı şekilde "ileri tarihli" kapanışıyla), bu da
-    // haftalık tekrar eden sistematik sapmayı iptal eder. Gerçek gün farkı
-    // ne olursa olsun (6, 7, 8... — resmi tatil varsa daha uzun olabilir)
-    // doğru şekilde ×365/gunFarkı ile yıllıklandırılıyor, sonuç kesin.
-    const HAFTA_MIN_GUN = 6; // en az bu kadar gün önceki noktayı ara (tam hafta hedefleniyor)
-    function haftaOncesiIndexBul(dizi, i){
-      for(let j=i-1;j>=0;j--){
-        if(gunFarki(dizi[i].tarih, dizi[j].tarih) >= HAFTA_MIN_GUN) return j;
+    // ÇÖZÜM: Artık iki nokta değil, ~3 haftalık bir PENCEREDEKİ TÜM noktalara
+    // en küçük kareler (linear regresyon) uygulayıp eğimi (günlük logaritmik
+    // büyüme oranı) hesaplıyoruz. Bu yöntem, hangi güne denk gelirse gelsin
+    // aynı sonucu verir çünkü tek bir gün çiftine değil, pencuredeki TÜM
+    // noktalara dayanır — bu da tekrarlayan haftalık sapmayı (hangi gün
+    // kaynaklı olursa olsun) büyük ölçüde ortalayarak etkisiz kılar.
+    function regresyonYillikOran(dizi, sonIndex, pencereGun){
+      const sonTarih = tarihParseDDMMYYYY(dizi[sonIndex]?.tarih);
+      if(!sonTarih) return null;
+      const sonTarihMs = sonTarih.getTime();
+      const noktalar=[];
+      for(let k=sonIndex;k>=0;k--){
+        const d = tarihParseDDMMYYYY(dizi[k].tarih);
+        if(!d) continue;
+        const farkGun = (sonTarihMs - d.getTime())/86400000;
+        if(farkGun > pencereGun) break;
+        noktalar.push({x:d.getTime()/86400000, y:Math.log(dizi[k].deger)});
       }
-      return null; // yeterince geçmiş veri yoksa
+      if(noktalar.length<3) return null; // güvenilir bir eğim için en az 3 nokta gerekli
+      const n=noktalar.length;
+      const xOrt=noktalar.reduce((a,p)=>a+p.x,0)/n;
+      const yOrt=noktalar.reduce((a,p)=>a+p.y,0)/n;
+      let pay=0, payda=0;
+      for(const p of noktalar){ pay+=(p.x-xOrt)*(p.y-yOrt); payda+=(p.x-xOrt)*(p.x-xOrt); }
+      if(payda===0) return null;
+      const gunlukLogGetiri = pay/payda;
+      return gunlukLogGetiri*365*100;
     }
+    const TLREF_PENCERE_GUN = 21; // ~3 hafta — haftalık örüntüyü ortalamaya yetecek genişlikte
     const tlrefEndeksDizi=tumDegerler(gunJson?.items||[], "TP.BISTTLREF.KAPANIS");
     teshis.tlrefEndeksDizi_uzunluk = tlrefEndeksDizi.length;
     const sonIdx = tlrefEndeksDizi.length-1;
-    const oncekiIdx = sonIdx>=0 ? haftaOncesiIndexBul(tlrefEndeksDizi, sonIdx) : null;
-    if(sonIdx>=0 && oncekiIdx!=null){
+    const sonYillikOran = sonIdx>=0 ? regresyonYillikOran(tlrefEndeksDizi, sonIdx, TLREF_PENCERE_GUN) : null;
+    if(sonIdx>=0 && sonYillikOran!=null){
       const son=tlrefEndeksDizi[sonIdx];
-      const onceki_=tlrefEndeksDizi[oncekiIdx];
-      const gunSayisi=gunFarki(son.tarih, onceki_.tarih);
-      const haftalikOran=(son.deger/onceki_.deger)-1;
-      const yillikOran=(haftalikOran/gunSayisi)*365*100;
-      sonuclar["TP.BISTTLREF.KAPANIS"]={deger:yillikOran, tarih:son.tarih, endeksHam:son.deger};
-      teshis.tlref_hesap = {son_endeks:son.deger, onceki_endeks:onceki_.deger, son_tarih:son.tarih, onceki_tarih:onceki_.tarih, gun_sayisi:gunSayisi, haftalik_oran:haftalikOran, yillik_oran_pct:yillikOran};
-      // Geçmiş seri: her nokta için de kendi ~1 hafta öncesiyle kıyaslıyoruz
-      // (aynı yöntem) — böylece grafikte de haftalık testere dişi deseni
-      // (Cuma zirve, Pazartesi çukur) ortadan kalkar, düz/gerçekçi bir çizgi
-      // elde edilir.
+      sonuclar["TP.BISTTLREF.KAPANIS"]={deger:sonYillikOran, tarih:son.tarih, endeksHam:son.deger};
+      teshis.tlref_hesap = {yontem:"regresyon", pencere_gun:TLREF_PENCERE_GUN, son_endeks:son.deger, son_tarih:son.tarih, yillik_oran_pct:sonYillikOran};
+      // Geçmiş seri: her nokta kendi ~3 haftalık trailing penceresiyle hesaplanıyor
       const tlrefSeri=[];
-      for(let i=1;i<tlrefEndeksDizi.length;i++){
-        const j=haftaOncesiIndexBul(tlrefEndeksDizi, i);
-        if(j==null) continue;
-        const gS=gunFarki(tlrefEndeksDizi[i].tarih, tlrefEndeksDizi[j].tarih);
-        const g=(tlrefEndeksDizi[i].deger/tlrefEndeksDizi[j].deger)-1;
-        tlrefSeri.push({tarih:tlrefEndeksDizi[i].tarih, deger:(g/gS)*365*100});
+      for(let i=0;i<tlrefEndeksDizi.length;i++){
+        const oran=regresyonYillikOran(tlrefEndeksDizi, i, TLREF_PENCERE_GUN);
+        if(oran==null) continue;
+        tlrefSeri.push({tarih:tlrefEndeksDizi[i].tarih, deger:oran});
       }
       sonuclar["TP.BISTTLREF.KAPANIS_SERI"]=tlrefSeri.slice(-24);
     } else {
