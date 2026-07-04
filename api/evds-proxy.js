@@ -15,6 +15,21 @@
 
 const BASE = "https://evds3.tcmb.gov.tr/igmevdsms-dis";
 
+// ── KALICI ÖNBELLEK (Vercel KV / Upstash Redis) ────────────────────────────
+// ÖNEMLİ: "let cacheAnlik = {...}" gibi bellek-içi (in-memory) değişkenler
+// serverless ortamda GÜVENİLİR DEĞİL — Vercel her istekte aynı "sıcak" fonksiyon
+// örneğini kullanacağını garanti etmez, sık sık sıfırlanıp her kullanıcı için
+// ayrı ayrı TCMB/FRED'e sorgu atabilir. Bu yüzden tefas-proxy'de kurduğumuz aynı
+// Upstash Redis'i burada da kullanıyoruz — TÜM kullanıcılar gerçekten aynı,
+// kalıcı önbelleklenmiş veriyi görsün.
+import { Redis } from "@upstash/redis";
+const redis = new Redis({
+  url: process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL,
+  token: process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN,
+});
+const KV_ANLIK_KEY = "evds:anlik:v1";
+const KV_TARIHSEL_PREFIX = "evds:tarihsel:v1:";
+
 // Vercel'in varsayılan fonksiyon süresi (Hobby planda genelde 10sn) artık 8 dış
 // isteğe (5 EVDS + 3 FRED) yetmiyor — bu yüzden ERR_CONNECTION_CLOSED alınıyordu
 // (fonksiyon yanıt vermeden aniden kesiliyordu). Süreyi uzatıyoruz.
@@ -31,9 +46,7 @@ async function fetchZamanli(url, opsiyonlar={}, msTimeout=8000){
     clearTimeout(timer);
   }
 }
-const CACHE_TTL_MS = 6 * 3600 * 1000;
-let cacheAnlik = { data: null, ts: 0 };
-let cacheTarihsel = {};
+const CACHE_TTL_SANIYE = 6 * 3600; // 6 saat, Redis TTL saniye cinsinden ister
 
 const HAFTALIK = [
   "TP.KTF10","TP.KTF11","TP.KTF12",
@@ -43,9 +56,14 @@ const HAFTALIK = [
   "TP.KTF1.USD","TP.KTF1.EUR",
   "TP.KTF1.K","TP.KTF1.K.USD","TP.KTF1.K.EUR",
   "TP.KTF17.TL","TP.KTF17.USD","TP.KTF17.EUR",
-  "TP_AB_TOPLAM", // TCMB Brüt Rezerv (Altın+Döviz Toplamı, Milyon USD) — kullanıcı tarafından
-                   // EVDS'den doğrulandı (haftalık, ~140-220 milyar $ aralığı, gerçek rakamlarla uyumlu)
 ];
+
+// TCMB Brüt Rezerv (Altın+Döviz Toplamı, Milyon USD), haftalık — kullanıcı
+// tarafından EVDS'den doğrulandı. AYRI bir istekte tutuluyor çünkü alt çizgili
+// format (TP_AB_TOPLAM) ile HAFTALIK'taki noktalı formatı (TP.KTF10 vb.) AYNI
+// çoklu-seri isteğine karıştırmak EVDS'nin TÜM isteği reddetmesine yol açtı
+// (muhtemelen farklı "veri grubu"na ait seriler aynı anda istenemiyor).
+const REZERV = ["TP_AB_TOPLAM"];
 
 const AYLIK = [
   "TP_BKR_TRY_KTF10","TP_BKR_TRY_17","TP_BKR_TRY_18",
@@ -169,9 +187,11 @@ export default async function handler(req,res){
   const now=Date.now();
 
   if(grafik==="1"&&seri){
-    const c=cacheTarihsel[seri];
-    if(c&&now-c.ts<CACHE_TTL_MS)
-      return res.status(200).json({tarihsel:{[seri]:c.data},cached:true});
+    const kvAnahtar = KV_TARIHSEL_PREFIX+seri;
+    try{
+      const onbellek = await redis.get(kvAnahtar);
+      if(onbellek) return res.status(200).json({tarihsel:{[seri]:onbellek},cached:true});
+    }catch{} // Redis'e ulaşılamazsa sessizce devam et, taze veri çekmeyi dene
     try{
       const isGunluk=seri.includes("TLREF")||seri.includes("BISTTL");
       const isHaftalik=seri.includes(".")&&!isGunluk&&!seri.startsWith("TP.FE");
@@ -180,17 +200,23 @@ export default async function handler(req,res){
       const url=`${BASE}/series=${seri}&startDate=${onceki(period)}&endDate=${tarihStr(new Date())}&type=json&frequency=${freq}`;
       const {json}=await evdsFetch(url,apiKey);
       const degerler=tumDegerler(json?.items||[],seri);
-      cacheTarihsel[seri]={data:degerler,ts:now};
+      try{ await redis.set(kvAnahtar, degerler, {ex: CACHE_TTL_SANIYE}); }catch{}
       return res.status(200).json({tarihsel:{[seri]:degerler}});
     }catch(err){
-      const c2=cacheTarihsel[seri];
-      if(c2) return res.status(200).json({tarihsel:{[seri]:c2.data},cached:true});
+      try{
+        const eskiOnbellek = await redis.get(kvAnahtar);
+        if(eskiOnbellek) return res.status(200).json({tarihsel:{[seri]:eskiOnbellek},cached:true});
+      }catch{}
       return res.status(500).json({error:err.message});
     }
   }
 
-  if(cacheAnlik.data&&now-cacheAnlik.ts<CACHE_TTL_MS&&debug!=="1")
-    return res.status(200).json({...cacheAnlik.data,cached:true});
+  if(debug!=="1"){
+    try{
+      const onbellek = await redis.get(KV_ANLIK_KEY);
+      if(onbellek) return res.status(200).json({...onbellek,cached:true});
+    }catch{} // Redis'e ulaşılamazsa sessizce devam et, taze veri çek
+  }
 
   const teshis = {};
   async function guvenliCek(ad, url) {
@@ -206,12 +232,14 @@ export default async function handler(req,res){
   }
   async function guvenliCekFred(ad, seri) {
     try {
-      const r = await fetchZamanli(FRED_CSV_URL(seri), {}, 8000);
+      const r = await fetchZamanli(FRED_CSV_URL(seri), {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; KatilimAnaliz/1.0)" }
+      }, 12000);
       const text = await r.text();
       if (r.status < 200 || r.status >= 300) throw new Error(`HTTP ${r.status}: ${text.slice(0,150)}`);
       const sonuc = fredCsvParseSon(text);
       const seriDizi = fredCsvParseSeri(text, 24);
-      teshis[ad] = { basarili: sonuc != null, httpStatus: r.status, sonDeger: sonuc };
+      teshis[ad] = { basarili: sonuc != null, httpStatus: r.status, sonDeger: sonuc, ilkSatirlar: text.slice(0,80) };
       return { son: sonuc, seri: seriDizi };
     } catch (err) {
       teshis[ad] = { basarili: false, hata: err.message };
@@ -220,12 +248,13 @@ export default async function handler(req,res){
   }
 
   try{
-    const [hafJson,ayJson,gunJson,enfJson,polJson,sofr,eur3m,eur6m]=await Promise.all([
+    const [hafJson,ayJson,gunJson,enfJson,polJson,rezervJson,sofr,eur3m,eur6m]=await Promise.all([
       guvenliCek("haftalik", `${BASE}/series=${HAFTALIK.join("-")}&startDate=${onceki(60)}&endDate=${tarihStr(new Date())}&type=json&frequency=8`),
       guvenliCek("aylik",    `${BASE}/series=${AYLIK.join("-")}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=9`),
       guvenliCek("gunluk_tlref", `${BASE}/series=${GUNLUK.join("-")}&startDate=${onceki(30)}&endDate=${tarihStr(new Date())}&type=json&frequency=1`),
-      guvenliCek("enflasyon", `${BASE}/series=${ENFLASYON.join("-")}&startDate=${onceki(450)}&endDate=${tarihStr(new Date())}&type=json&frequency=1`),
+      guvenliCek("enflasyon", `${BASE}/series=${ENFLASYON.join("-")}&startDate=${onceki(730)}&endDate=${tarihStr(new Date())}&type=json&frequency=9`),
       guvenliCek("politika_aofm", `${BASE}/series=${POLITIKA.join("-")}&startDate=${onceki(60)}&endDate=${tarihStr(new Date())}&type=json&frequency=8`),
+      guvenliCek("rezerv", `${BASE}/series=${REZERV.join("-")}&startDate=${onceki(180)}&endDate=${tarihStr(new Date())}&type=json&frequency=8`),
       guvenliCekFred("fred_sofr", "SOFR"),
       guvenliCekFred("fred_euribor3m", "EUR3MTD156N"),
       guvenliCekFred("fred_euribor6m", "EUR6MTD156N"),
@@ -235,6 +264,7 @@ export default async function handler(req,res){
     for(const s of HAFTALIK) sonuclar[s]=sonDeger(hafJson?.items||[],s);
     for(const s of AYLIK)    sonuclar[s]=sonDeger(ayJson?.items||[],s);
     for(const s of POLITIKA) sonuclar[s]=sonDeger(polJson?.items||[],s);
+    for(const s of REZERV)   sonuclar[s]=sonDeger(rezervJson?.items||[],s);
     sonuclar["FRED_SOFR"]=sofr.son; // {deger, tarih} veya null
     sonuclar["FRED_SOFR_SERI"]=sofr.seri;
     sonuclar["FRED_EUR3M"]=eur3m.son;
@@ -244,8 +274,8 @@ export default async function handler(req,res){
 
     // AOFM geçmiş serisi (grafik için) — zaten oran, ek dönüşüm gerekmiyor
     sonuclar["TP.APIFON4_SERI"]=tumDegerler(polJson?.items||[], "TP.APIFON4").slice(-24);
-    // Rezerv geçmiş serisi (grafik için) — Milyon USD, ham
-    sonuclar["TP_AB_TOPLAM_SERI"]=tumDegerler(hafJson?.items||[], "TP_AB_TOPLAM").slice(-24);
+    // Rezerv geçmiş serisi (grafik için) — Milyon USD, ham, artık kendi ayrı isteğinden
+    sonuclar["TP_AB_TOPLAM_SERI"]=tumDegerler(rezervJson?.items||[], "TP_AB_TOPLAM").slice(-24);
 
     // TLREF: endeksten oran türetimi
     const tlrefEndeksDizi=tumDegerler(gunJson?.items||[], "TP.BISTTLREF.KAPANIS");
@@ -320,11 +350,13 @@ export default async function handler(req,res){
     }
 
     const yanit={tarih:tarihStr(new Date()),seriler:sonuclar, _teshis: teshis};
-    cacheAnlik={data:yanit,ts:now};
+    try{ await redis.set(KV_ANLIK_KEY, yanit, {ex: CACHE_TTL_SANIYE}); }catch{}
     return res.status(200).json(yanit);
   }catch(err){
-    if(cacheAnlik.data)
-      return res.status(200).json({...cacheAnlik.data,cached:true,hata:err.message});
+    try{
+      const eskiOnbellek = await redis.get(KV_ANLIK_KEY);
+      if(eskiOnbellek) return res.status(200).json({...eskiOnbellek,cached:true,hata:err.message});
+    }catch{}
     return res.status(500).json({error:err.message});
   }
 }
