@@ -14,6 +14,23 @@
 // kadar güncel veri veriyor. ENFLASYON dizisi buna göre güncellendi.
 
 const BASE = "https://evds3.tcmb.gov.tr/igmevdsms-dis";
+
+// Vercel'in varsayılan fonksiyon süresi (Hobby planda genelde 10sn) artık 8 dış
+// isteğe (5 EVDS + 3 FRED) yetmiyor — bu yüzden ERR_CONNECTION_CLOSED alınıyordu
+// (fonksiyon yanıt vermeden aniden kesiliyordu). Süreyi uzatıyoruz.
+export const config = { maxDuration: 60 };
+
+// Her dış isteğe ayrı bir zaman sınırı — tek bir yavaş/asılı kalan istek tüm
+// fonksiyonu bloke etmesin diye.
+async function fetchZamanli(url, opsiyonlar={}, msTimeout=8000){
+  const controller = new AbortController();
+  const timer = setTimeout(()=>controller.abort(), msTimeout);
+  try {
+    return await fetch(url, { ...opsiyonlar, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
 const CACHE_TTL_MS = 6 * 3600 * 1000;
 let cacheAnlik = { data: null, ts: 0 };
 let cacheTarihsel = {};
@@ -132,7 +149,7 @@ function tumDegerler(items, seri) {
 }
 
 async function evdsFetch(url,apiKey){
-  const r=await fetch(url,{headers:{"key":apiKey,"Accept":"application/json"}});
+  const r=await fetchZamanli(url,{headers:{"key":apiKey,"Accept":"application/json"}},10000);
   const text=await r.text();
   if(text.trim().startsWith("<")) throw new Error(`HTML döndü (HTTP ${r.status}) — ilk 200 karakter: ${text.slice(0,200)}`);
   let json;
@@ -189,7 +206,7 @@ export default async function handler(req,res){
   }
   async function guvenliCekFred(ad, seri) {
     try {
-      const r = await fetch(FRED_CSV_URL(seri));
+      const r = await fetchZamanli(FRED_CSV_URL(seri), {}, 8000);
       const text = await r.text();
       if (r.status < 200 || r.status >= 300) throw new Error(`HTTP ${r.status}: ${text.slice(0,150)}`);
       const sonuc = fredCsvParseSon(text);
