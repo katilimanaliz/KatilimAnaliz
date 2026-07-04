@@ -202,7 +202,7 @@ export default async function handler(req,res){
     try{
       const isGunluk=seri.includes("TLREF")||seri.includes("BISTTL");
       const isHaftalik=seri.includes(".")&&!isGunluk&&!seri.startsWith("TP.FE");
-      const freq=isGunluk?"1":isHaftalik?"8":"9";
+      const freq=isGunluk?"1":isHaftalik?"3":"5";
       const period=isGunluk?90:isHaftalik?200:400;
       const url=`${BASE}/series=${seri}&startDate=${onceki(period)}&endDate=${tarihStr(new Date())}&type=json&frequency=${freq}`;
       const {json}=await evdsFetch(url,apiKey);
@@ -255,13 +255,19 @@ export default async function handler(req,res){
   }
 
   try{
-    const [hafJson,ayJson,gunJson,enfJson,polJson,rezervJson,sofr,eur3m,eur6m]=await Promise.all([
-      guvenliCek("haftalik", `${BASE}/series=${HAFTALIK.join("-")}&startDate=${onceki(60)}&endDate=${tarihStr(new Date())}&type=json&frequency=8`),
-      guvenliCek("aylik",    `${BASE}/series=${AYLIK.join("-")}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=9`),
+    const [hafJson,ayJson,gunJson,enfJson,polJson,rezervJson]=await Promise.all([
+      guvenliCek("haftalik", `${BASE}/series=${HAFTALIK.join("-")}&startDate=${onceki(60)}&endDate=${tarihStr(new Date())}&type=json&frequency=3`),
+      guvenliCek("aylik",    `${BASE}/series=${AYLIK.join("-")}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
       guvenliCek("gunluk_tlref", `${BASE}/series=${GUNLUK.join("-")}&startDate=${onceki(30)}&endDate=${tarihStr(new Date())}&type=json&frequency=1`),
-      guvenliCek("enflasyon", `${BASE}/series=${ENFLASYON.join("-")}&startDate=${onceki(730)}&endDate=${tarihStr(new Date())}&type=json&frequency=9`),
-      guvenliCek("politika_aofm", `${BASE}/series=${POLITIKA.join("-")}&startDate=${onceki(60)}&endDate=${tarihStr(new Date())}&type=json&frequency=8`),
-      guvenliCek("rezerv", `${BASE}/series=${REZERV.join("-")}&startDate=${onceki(180)}&endDate=${tarihStr(new Date())}&type=json&frequency=8`),
+      guvenliCek("enflasyon", `${BASE}/series=${ENFLASYON.join("-")}&startDate=${onceki(730)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
+      guvenliCek("politika_aofm", `${BASE}/series=${POLITIKA.join("-")}&startDate=${onceki(60)}&endDate=${tarihStr(new Date())}&type=json&frequency=1`),
+      guvenliCek("rezerv", `${BASE}/series=${REZERV.join("-")}&startDate=${onceki(180)}&endDate=${tarihStr(new Date())}&type=json&frequency=3`),
+    ]);
+
+    // FRED çağrıları AYRI bir aşamada — EVDS'nin 6 eşzamanlı isteğiyle aynı anda
+    // yarışıp bağlantı sıkışıklığına (contention) yol açmasın diye. Zaman aşımını
+    // uzatmak tek başına yetmemişti, bu ihtimali de eleyelim diye ayırdık.
+    const [sofr,eur3m,eur6m]=await Promise.all([
       guvenliCekFred("fred_sofr", "SOFR"),
       guvenliCekFred("fred_euribor3m", "EUR3MTD156N"),
       guvenliCekFred("fred_euribor6m", "EUR6MTD156N"),
