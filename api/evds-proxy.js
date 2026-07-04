@@ -63,7 +63,9 @@ const HAFTALIK = [
 // format (TP_AB_TOPLAM) ile HAFTALIK'taki noktalı formatı (TP.KTF10 vb.) AYNI
 // çoklu-seri isteğine karıştırmak EVDS'nin TÜM isteği reddetmesine yol açtı
 // (muhtemelen farklı "veri grubu"na ait seriler aynı anda istenemiyor).
-const REZERV = ["TP_AB_TOPLAM"];
+const REZERV = ["TP.AB.TOPLAM"]; // DÜZELTME: "series does not exist" hatası alınca
+                                   // TÜFE'dekiyle aynı teoriyi denedik — sorgu
+                                   // parametresi noktalı format istiyor olabilir.
 
 const AYLIK = [
   "TP_BKR_TRY_KTF10","TP_BKR_TRY_17","TP_BKR_TRY_18",
@@ -80,7 +82,12 @@ const AYLIK = [
 // seriye geçildi, veri Haziran 2026'ya kadar güncel ve doğrulandı (~%32 yıllık,
 // ~%1 aylık — makul rakamlar).
 const ENFLASYON = [
-  "TP_TUKFIY2025_GENEL",  // TÜFE genel endeks (2025=100, YENİ SERİ)
+  "TP.TUKFIY2025.GENEL",  // TÜFE genel endeks (2025=100, YENİ SERİ) — DÜZELTME:
+                           // "Series does not exist" hatası alınca fark ettik,
+                           // EVDS sorgu parametresi NOKTALI format istiyor; alt
+                           // çizgili format (TP_TUKFIY2025_GENEL) sadece YANIT
+                           // alan adında görünüyor. sonDeger/tumDegerler zaten
+                           // her iki formatı da response'ta arıyor, sorun yok.
 ];
 
 const POLITIKA = [
@@ -234,7 +241,7 @@ export default async function handler(req,res){
     try {
       const r = await fetchZamanli(FRED_CSV_URL(seri), {
         headers: { "User-Agent": "Mozilla/5.0 (compatible; KatilimAnaliz/1.0)" }
-      }, 12000);
+      }, 20000);
       const text = await r.text();
       if (r.status < 200 || r.status >= 300) throw new Error(`HTTP ${r.status}: ${text.slice(0,150)}`);
       const sonuc = fredCsvParseSon(text);
