@@ -1,5 +1,5 @@
 // api/finans-haberleri.js
-// Kaynaklar: Bloomberg HT + CNBC-e + Sözcü Ekonomi RSS feed'leri
+// Kaynaklar: Bloomberg HT + CNBC-e RSS feed'leri (Sözcü Ekonomi 2026-07'de kaldırıldı — bkz. v3 notu)
 // REDIS/KV + KİLİT KORUMASI (2026-07) — bkz. kripto.js'deki aynı not.
 import { Redis } from "@upstash/redis";
 import { kilitliGetir } from "./_lib/kilitliOnbellek.js";
@@ -8,13 +8,20 @@ const redis = new Redis({
   url: process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL,
   token: process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN,
 });
-const KV_ANAHTAR = "finans-haberleri:v1";
+// NOT (2026-07-05): v1 → v2 → v3 sürüm geçmişi:
+//  v2: TARİH PARSE DÜZELTMESİ eklendi (aşağıda) — Sözcü kaynağının entity-encode
+//      edilmiş pubDate'i parseRSS()'i çökertip o kaynağın TÜM haberlerini
+//      sessizce siliyordu.
+//  v3: Sözcü Ekonomi kaynak listesinden tamamen çıkarıldı (yalnızca Bloomberg
+//      HT + CNBC-e kullanılıyor). Kaynak seti değiştiği için eski cache'in
+//      (Sözcü içeren/içermeyen) taşınmadan taze hesaplanması adına versiyon
+//      tekrar artırıldı.
+const KV_ANAHTAR = "finans-haberleri:v3";
 const KV_TTL_SANIYE = 15 * 60;
 
 const KAYNAKLAR = [
   { ad: "Bloomberg HT", url: "https://www.bloomberght.com/rss" },
   { ad: "CNBC-e",       url: "https://www.cnbce.com/rss" },
-  { ad: "Sözcü Ekonomi", url: "https://www.sozcu.com.tr/feeds-rss-category-ekonomi" },
 ];
 
 function htmlEntityCoz(metin) {
@@ -24,6 +31,30 @@ function htmlEntityCoz(metin) {
     .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
     .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(parseInt(dec, 10)))
     .replace(/&([a-zA-Z]+);/g, (m, ad) => (NAMED[ad] !== undefined ? NAMED[ad] : m));
+}
+
+// ── TARİH PARSE DÜZELTMESİ (2026-07-05) ─────────────────────────────────────
+// Kök neden (o zamanki kaynak listesinde Sözcü de vardı): Sözcü'nün RSS'i
+// <pubDate> içinde "+0300" yerine HTML/XML numerik karakter referansı
+// kullanıyordu: "Sun, 05 Jul 2026 05:30:13 &#x2B;0300". Eski kod xmlEtiketAl()
+// ile bu metni ÇÖZÜMLEMEDEN (yalnızca <tag> temizleyerek) doğrudan
+// `new Date(tarihStr).toISOString()`'e veriyordu. "&#x2B;0300" geçerli bir
+// saat dilimi değil → new Date(...) "Invalid Date" döner → .toISOString()
+// RangeError FIRLATIR. Bu hata parseRSS() içinde YAKALANMADIĞI için
+// kaynaktanCek() dışına taşıyor, oradaki try/catch tüm kaynağı (o kaynağın
+// TÜM haberlerini) sessizce [] olarak yutuyordu.
+//
+// Sözcü artık kaynak listesinde değil (bkz. KAYNAKLAR), ama bu savunma kodu
+// bilerek KORUNUYOR: Bloomberg HT veya CNBC-e ileride benzer bir entity/format
+// tuhaflığı gönderirse, TEK bir bozuk tarih yine o kaynağın TÜM haberlerini
+// silmesin diye. Düzeltme: (1) tarih metnini önce htmlEntityCoz ile çöz,
+// (2) Invalid Date durumunda throw etmek yerine null döndür — haberin tarihi
+// null kalır (sıralamada en sona düşer), ama liste düşmez.
+function guvenliTarihISO(tarihStr) {
+  if (!tarihStr) return null;
+  const cozulmus = htmlEntityCoz(tarihStr);
+  const d = new Date(cozulmus);
+  return isNaN(d.getTime()) ? null : d.toISOString();
 }
 
 function xmlEtiketAl(blok, etiket) {
@@ -49,8 +80,8 @@ function parseRSS(xml, kaynakAdi) {
     if (baslik) {
       items.push({
         baslik: htmlEntityCoz(baslik),
-        link,
-        tarih: tarihStr ? new Date(tarihStr).toISOString() : null,
+        link: htmlEntityCoz(link),
+        tarih: guvenliTarihISO(tarihStr),
         ozet: aciklama ? htmlEntityCoz(aciklama.slice(0, 200)) : "",
         kategori: kategori || null,
         kaynak: kaynakAdi,
