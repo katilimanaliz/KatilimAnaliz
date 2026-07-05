@@ -19,15 +19,12 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'messages dizisi gerekli' });
     }
 
-    // Anthropic mesaj formatını Gemini formatına çevir
+    // Anthropic formatını Gemini formatına çevir
     const contents = messages.map((m) => ({
       role: m.role === 'assistant' ? 'model' : 'user',
       parts: [
         {
-          text:
-            typeof m.content === 'string'
-              ? m.content
-              : m.content?.[0]?.text || ''
+          text: typeof m.content === 'string' ? m.content : m.content?.[0]?.text || ''
         }
       ]
     }));
@@ -68,17 +65,28 @@ export default async function handler(req, res) {
         .filter(Boolean)
         .join('\n') || '';
 
-    // KALKAN: Eğer model sadece akıl yürüttüyse ve text alanı boş kaldıysa hata fırlatma, arayüzü besle!
+    // Boş kalma durumunda yedek metin
     if (!text && data?.candidates?.[0]?.finishReason === 'STOP') {
-      text = "Merhaba! Size nasıl yardımcı olabilirim?";
+      text = "İsteğinizi aldım. Size nasıl yardımcı olabilirim?";
     }
 
     if (!text) {
       return res.status(500).json({ error: 'Gemini boş yanıt döndürdü' });
     }
 
-    // Orijinal Anthropic / KatilimAnaliz şablonunun tam olarak beklediği format
-    return res.status(200).json({ content: [{ type: 'text', text }], text });
+    // Arayüzdeki Anthropic SDK'sının hata fırlatmadan okuyabileceği BİREBİR Claude yanıt yapısı
+    return res.status(200).json({
+      id: `msg_gemini_${Date.now()}`,
+      type: "message",
+      role: "assistant",
+      model: "claude-3-5-sonnet-20241022", // SDK doğrulaması için taklit edilen model adı
+      content: [{ type: 'text', text: text }],
+      text: text, // Alternatif düz okumalar için yedek
+      stop_reason: "end_turn",
+      stop_sequence: null,
+      usage: { input_tokens: 0, output_tokens: 0 }
+    });
+
   } catch (e) {
     return res.status(500).json({ error: 'Sunucu hatası: ' + e.message });
   }
