@@ -8,7 +8,6 @@ export default async function handler(req, res) {
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    console.error("HATA: Vercel üzerinde GEMINI_API_KEY bulunamadı!");
     return res.status(500).json({ error: 'GEMINI_API_KEY eksik.' });
   }
 
@@ -22,12 +21,13 @@ export default async function handler(req, res) {
 
     const body = {
       contents,
-      generationConfig: { maxOutputTokens: 2048, temperature: 0.7 }
+      generationConfig: { maxOutputTokens: 1024, temperature: 0.7 }
     };
     if (system) body.systemInstruction = { parts: [{ text: system }] };
 
+    // Akıl yürütme döngüsüne girip arayüzü kilitlemeyen stabil modele istek atıyoruz
     const r = await fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
@@ -41,26 +41,13 @@ export default async function handler(req, res) {
       return res.status(r.status).json({ error: data?.error?.message || 'Gemini API hatası' });
     }
 
-    const part = data?.candidates?.[0]?.content?.parts?.[0];
-    
-    // Modelin hem normal ürettiği metni hem de akıl yürütme (thought/reasoning) metnini kontrol ediyoruz
-    let text = "";
-    if (part) {
-      if (part.text) {
-        text = part.text;
-      } else if (part.thought || part.reasoning) {
-        text = part.thought || part.reasoning;
-      } else if (typeof part === 'object') {
-        // Eğer veri beklenmedik başka bir nesne içindeyse düz metne dönüştür
-        text = part.text || JSON.stringify(part);
-      }
-    }
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
     if (!text) {
-      console.error("HATA: Metin hala ayrıştırılamadı!", JSON.stringify(data));
-      return res.status(500).json({ error: 'Gemini yanıtı ayrıştırılamadı.' });
+      return res.status(500).json({ error: 'Gemini boş yanıt döndürdü.' });
     }
 
+    // Arayüzün (Claude/Anthropic veya özel şablon) bekleyebileceği tüm kombinasyonlar
     return res.status(200).json({ 
       content: [{ type: 'text', text: text }], 
       text: text, 
@@ -69,7 +56,6 @@ export default async function handler(req, res) {
       result: text
     });
   } catch (e) {
-    console.error("Sunucu İçi Yakalanan Hata:", e.message);
     return res.status(500).json({ error: 'Sunucu hatası: ' + e.message });
   }
 }
