@@ -25,9 +25,9 @@ export default async function handler(req, res) {
     };
     if (system) body.systemInstruction = { parts: [{ text: system }] };
 
-    // Akıl yürütme döngüsüne girip arayüzü kilitlemeyen stabil modele istek atıyoruz
+    // Kotaya takılmayan, ücretsiz tier'da en yüksek limitli modele çekiyoruz
     const r = await fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
@@ -47,7 +47,6 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Gemini boş yanıt döndürdü.' });
     }
 
-    // Arayüzün (Claude/Anthropic veya özel şablon) bekleyebileceği tüm kombinasyonlar
     return res.status(200).json({ 
       content: [{ type: 'text', text: text }], 
       text: text, 
