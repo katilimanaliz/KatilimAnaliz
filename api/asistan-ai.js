@@ -25,9 +25,9 @@ export default async function handler(req, res) {
     };
     if (system) body.systemInstruction = { parts: [{ text: system }] };
 
-    // Kotaya takılmayan, ücretsiz tier'da en yüksek limitli modele çekiyoruz
+    // Kararlı 'v1' endpoint'ini kullanarak 1.5-flash modelini çağırıyoruz
     const r = await fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent',
+      'https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
