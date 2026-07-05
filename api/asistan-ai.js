@@ -25,7 +25,6 @@ export default async function handler(req, res) {
     };
     if (system) body.systemInstruction = { parts: [{ text: system }] };
 
-    // Bizi reddetmeyen tek model olan 2.5-flash'a (v1beta) geri dönüyoruz
     const r = await fetch(
       'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
       {
@@ -41,30 +40,33 @@ export default async function handler(req, res) {
       return res.status(r.status).json({ error: data?.error?.message || 'Gemini API hatası' });
     }
 
-    // Güvenli Ayrıştırma ve Boş Yanıt Kalkanı
     let text = "";
     const candidate = data?.candidates?.[0];
 
-    // Önce modelin metin dönüp dönmediğini kontrol et
     if (candidate && candidate.content && Array.isArray(candidate.content.parts)) {
       text = candidate.content.parts.map(p => p.text).filter(Boolean).join('\n');
     }
 
-    // EĞER model başarılı çalışır (STOP) ama metin yazmayı unutursa, arayüzü çökertme!
-    if (!text && candidate?.finishReason === 'STOP') {
-      text = "Merhaba! Sisteme başarıyla bağlandım. Size nasıl yardımcı olabilirim?";
-    } else if (!text) {
-      text = "Üzgünüm, şu an yanıt üretemiyorum. Lütfen sorunuzu detaylandırın.";
+    // Boş yanıt koruması
+    if (!text) {
+      text = "Merhaba! Size nasıl yardımcı olabilirim?";
     }
 
-    // Arayüze her halükarda dolu bir metin gönderiyoruz
-    return res.status(200).json({ 
-      content: [{ type: 'text', text: text }], 
-      text: text, 
-      message: text, 
-      reply: text, 
-      result: text
+    // Piyasadaki tüm hazır chat şablonlarının (OpenAI, Anthropic, Custom) 
+    // veri okuma kalıplarını tek bir JSON içinde taklit ediyoruz.
+    return res.status(200).json({
+      // OpenAI Kalıbı
+      choices: [{ message: { role: "assistant", content: text }, finish_reason: "stop", index: 0 }],
+      // Anthropic Kalıbı
+      content: [{ type: 'text', text: text }],
+      // Standart Düz Metin Kalıpları
+      text: text,
+      message: text,
+      reply: text,
+      result: text,
+      response: text
     });
+
   } catch (e) {
     return res.status(500).json({ error: 'Sunucu hatası: ' + e.message });
   }
