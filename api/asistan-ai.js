@@ -73,8 +73,15 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Gemini boş yanıt döndürdü' });
     }
 
-    // Anthropic ile aynı yanıt şekli: frontend data.content[0].text okuyorsa değişiklik gerekmez
-    return res.status(200).json({ content: [{ type: 'text', text }], text });
+    // Frontend şablonunun (HTML/React vb.) veriyi hangi isimle okuyacağını riske atmamak için
+    // popüler tüm nesne yapılarını (text, message, reply, content vb.) tek seferde dönüyoruz.
+    return res.status(200).json({ 
+      content: [{ type: 'text', text: text }], 
+      text: text,
+      message: text,
+      reply: text,
+      result: text
+    });
   } catch (e) {
     return res.status(500).json({ error: 'Sunucu hatası: ' + e.message });
   }
