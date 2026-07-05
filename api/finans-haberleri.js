@@ -1,5 +1,5 @@
 // api/finans-haberleri.js
-// Kaynaklar: Bloomberg HT + CNBC-e RSS feed'leri (Sözcü Ekonomi 2026-07'de kaldırıldı — bkz. v3 notu)
+// Kaynaklar: yalnızca CNBC-e RSS feed'i (Sözcü Ekonomi ve Bloomberg HT 2026-07'de kaldırıldı — bkz. v3/v4 notları)
 // REDIS/KV + KİLİT KORUMASI (2026-07) — bkz. kripto.js'deki aynı not.
 import { Redis } from "@upstash/redis";
 import { kilitliGetir } from "./_lib/kilitliOnbellek.js";
@@ -8,20 +8,23 @@ const redis = new Redis({
   url: process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL,
   token: process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN,
 });
-// NOT (2026-07-05): v1 → v2 → v3 sürüm geçmişi:
+// NOT (2026-07-05): v1 → v2 → v3 → v4 sürüm geçmişi:
 //  v2: TARİH PARSE DÜZELTMESİ eklendi (aşağıda) — Sözcü kaynağının entity-encode
 //      edilmiş pubDate'i parseRSS()'i çökertip o kaynağın TÜM haberlerini
 //      sessizce siliyordu.
 //  v3: Sözcü Ekonomi kaynak listesinden tamamen çıkarıldı (yalnızca Bloomberg
-//      HT + CNBC-e kullanılıyor). Kaynak seti değiştiği için eski cache'in
-//      (Sözcü içeren/içermeyen) taşınmadan taze hesaplanması adına versiyon
-//      tekrar artırıldı.
-const KV_ANAHTAR = "finans-haberleri:v3";
+//      HT + CNBC-e kullanılıyor).
+//  v4: Bloomberg HT de kaldırıldı — kendi RSS'i kaynağın sunucusunda donmuş
+//      durumda (lastBuildDate günlerdir ilerlemiyor, en yeni madde ~3 gün
+//      öncesine sabit kalmış). Bizim koddan bağımsız, kaynağın kendi tarafında
+//      bir sorun; düzeltilebilecek bir şey olmadığı için tamamen çıkarıldı.
+//      Artık yalnızca CNBC-e kullanılıyor. Kaynak seti her değiştiğinde eski
+//      cache'in taşınmadan taze hesaplanması için versiyon artırılıyor.
+const KV_ANAHTAR = "finans-haberleri:v4";
 const KV_TTL_SANIYE = 15 * 60;
 
 const KAYNAKLAR = [
-  { ad: "Bloomberg HT", url: "https://www.bloomberght.com/rss" },
-  { ad: "CNBC-e",       url: "https://www.cnbce.com/rss" },
+  { ad: "CNBC-e", url: "https://www.cnbce.com/rss" },
 ];
 
 function htmlEntityCoz(metin) {
@@ -45,7 +48,7 @@ function htmlEntityCoz(metin) {
 // TÜM haberlerini) sessizce [] olarak yutuyordu.
 //
 // Sözcü artık kaynak listesinde değil (bkz. KAYNAKLAR), ama bu savunma kodu
-// bilerek KORUNUYOR: Bloomberg HT veya CNBC-e ileride benzer bir entity/format
+// bilerek KORUNUYOR: CNBC-e ileride benzer bir entity/format
 // tuhaflığı gönderirse, TEK bir bozuk tarih yine o kaynağın TÜM haberlerini
 // silmesin diye. Düzeltme: (1) tarih metnini önce htmlEntityCoz ile çöz,
 // (2) Invalid Date durumunda throw etmek yerine null döndür — haberin tarihi
@@ -154,9 +157,22 @@ async function taze() {
 
 export default async function handler(req, res) {
   corsAyarla(req, res);
-  res.setHeader("Cache-Control", "s-maxage=900, stale-while-revalidate=300");
-
   const debug = req.query.debug === "1";
+
+  // ── CDN/EDGE CACHE DÜZELTMESİ (2026-07-05) ────────────────────────────────
+  // Kök neden: kilitliGetir()'in kendi debug=1 baypası (bkz. _lib/kilitliOnbellek.js)
+  // DOĞRU çalışıyor — Redis'i atlayıp taze() her seferinde gerçekten çalışıyor.
+  // Ama bu Cache-Control başlığı debug'dan BAĞIMSIZ olarak HER istekte
+  // "s-maxage=900" set ediliyordu — bu, Vercel'in Edge/CDN ağına "bu URL'i
+  // 15 dk önbellekle" talimatı verir. Sonuç: aynı "?debug=1" URL'ine ikinci
+  // istek geldiğinde Vercel fonksiyonu HİÇ ÇALIŞTIRMADAN ilk seferki yanıtı
+  // kenar ağından tekrar sunuyordu — Redis'e, dolayısıyla taze()'e hiç
+  // uğramadan. (Kanıt: iki ayrı testte "guncelleme" alanı milisaniyesine
+  // kadar birebirdi — gerçekten yeniden hesaplansaydı bu imkansızdı.)
+  // Düzeltme: debug=1 iken CDN/tarayıcı önbelleğini de "no-store" ile
+  // tamamen kapatıyoruz; yalnızca normal (debug'sız) istekler 15 dk
+  // CDN'de önbelleklenmeye devam ediyor.
+  res.setHeader("Cache-Control", debug ? "no-store" : "s-maxage=900, stale-while-revalidate=300");
 
   try {
     const { veri, cached } = await kilitliGetir(redis, KV_ANAHTAR, KV_TTL_SANIYE, taze, { debug });
