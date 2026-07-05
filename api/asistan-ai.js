@@ -22,7 +22,7 @@ export default async function handler(req, res) {
 
     const body = {
       contents,
-      generationConfig: { maxOutputTokens: 1024, temperature: 0.7 }
+      generationConfig: { maxOutputTokens: 2048, temperature: 0.7 }
     };
     if (system) body.systemInstruction = { parts: [{ text: system }] };
 
@@ -37,24 +37,36 @@ export default async function handler(req, res) {
 
     const data = await r.json();
 
-    // HATA AYIKLAMA (DEBUG) LOGLARI: Vercel panelinde ne döndüğünü görmek için
-    console.log("Gemini API Durum Kodu:", r.status);
-    console.log("Gemini'den Dönen Ham Veri:", JSON.stringify(data));
-
     if (!r.ok) {
       return res.status(r.status).json({ error: data?.error?.message || 'Gemini API hatası' });
     }
 
-    const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text).filter(Boolean).join('\n') || '';
+    const part = data?.candidates?.[0]?.content?.parts?.[0];
+    
+    // Modelin hem normal ürettiği metni hem de akıl yürütme (thought/reasoning) metnini kontrol ediyoruz
+    let text = "";
+    if (part) {
+      if (part.text) {
+        text = part.text;
+      } else if (part.thought || part.reasoning) {
+        text = part.thought || part.reasoning;
+      } else if (typeof part === 'object') {
+        // Eğer veri beklenmedik başka bir nesne içindeyse düz metne dönüştür
+        text = part.text || JSON.stringify(part);
+      }
+    }
 
     if (!text) {
-      console.error("HATA: Gemini başarılı kod döndü ama içi boş!", JSON.stringify(data));
-      return res.status(200).json({ text: "Üzgünüm, şu an yanıt üretemiyorum.", message: "Üzgünüm, şu an yanıt üretemiyorum." });
+      console.error("HATA: Metin hala ayrıştırılamadı!", JSON.stringify(data));
+      return res.status(500).json({ error: 'Gemini yanıtı ayrıştırılamadı.' });
     }
 
     return res.status(200).json({ 
       content: [{ type: 'text', text: text }], 
-      text: text, message: text, reply: text, result: text
+      text: text, 
+      message: text, 
+      reply: text, 
+      result: text
     });
   } catch (e) {
     console.error("Sunucu İçi Yakalanan Hata:", e.message);
