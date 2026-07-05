@@ -1,4 +1,4 @@
-// api/asistan.js — Google Gemini sürümü (Claude yerine)
+// api/asistan-ai.js
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -8,81 +8,56 @@ export default async function handler(req, res) {
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({
-      error: 'GEMINI_API_KEY eksik — Vercel ortam değişkenlerine ekleyin.'
-    });
+    console.error("HATA: Vercel üzerinde GEMINI_API_KEY bulunamadı!");
+    return res.status(500).json({ error: 'GEMINI_API_KEY eksik.' });
   }
 
   try {
     const { messages, system } = req.body || {};
-    if (!Array.isArray(messages) || messages.length === 0) {
-      return res.status(400).json({ error: 'messages dizisi gerekli' });
-    }
-
-    // Anthropic mesaj formatını Gemini formatına çevir
+    
     const contents = messages.map((m) => ({
       role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [
-        {
-          text:
-            typeof m.content === 'string'
-              ? m.content
-              : m.content?.[0]?.text || ''
-        }
-      ]
+      parts: [{ text: typeof m.content === 'string' ? m.content : m.content?.[0]?.text || '' }]
     }));
 
     const body = {
       contents,
       generationConfig: { maxOutputTokens: 1024, temperature: 0.7 }
     };
-    if (system) {
-      body.systemInstruction = { parts: [{ text: system }] };
-    }
+    if (system) body.systemInstruction = { parts: [{ text: system }] };
 
     const r = await fetch(
       'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': apiKey
-        },
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
         body: JSON.stringify(body)
       }
     );
 
     const data = await r.json();
 
+    // HATA AYIKLAMA (DEBUG) LOGLARI: Vercel panelinde ne döndüğünü görmek için
+    console.log("Gemini API Durum Kodu:", r.status);
+    console.log("Gemini'den Dönen Ham Veri:", JSON.stringify(data));
+
     if (!r.ok) {
-      const msg = data?.error?.message || 'Gemini API hatası';
-      // Kota aşımı için anlaşılır mesaj
-      if (r.status === 429) {
-        return res.status(429).json({ error: 'Gemini kota limiti aşıldı, biraz sonra tekrar deneyin.' });
-      }
-      return res.status(r.status).json({ error: msg });
+      return res.status(r.status).json({ error: data?.error?.message || 'Gemini API hatası' });
     }
 
-    const text =
-      data?.candidates?.[0]?.content?.parts
-        ?.map((p) => p.text)
-        .filter(Boolean)
-        .join('\n') || '';
+    const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text).filter(Boolean).join('\n') || '';
 
     if (!text) {
-      return res.status(500).json({ error: 'Gemini boş yanıt döndürdü' });
+      console.error("HATA: Gemini başarılı kod döndü ama içi boş!", JSON.stringify(data));
+      return res.status(200).json({ text: "Üzgünüm, şu an yanıt üretemiyorum.", message: "Üzgünüm, şu an yanıt üretemiyorum." });
     }
 
-    // Frontend şablonunun (HTML/React vb.) veriyi hangi isimle okuyacağını riske atmamak için
-    // popüler tüm nesne yapılarını (text, message, reply, content vb.) tek seferde dönüyoruz.
     return res.status(200).json({ 
       content: [{ type: 'text', text: text }], 
-      text: text,
-      message: text,
-      reply: text,
-      result: text
+      text: text, message: text, reply: text, result: text
     });
   } catch (e) {
+    console.error("Sunucu İçi Yakalanan Hata:", e.message);
     return res.status(500).json({ error: 'Sunucu hatası: ' + e.message });
   }
 }
