@@ -1,5 +1,6 @@
 // api/finans-haberleri.js
-// Kaynaklar: yalnızca CNBC-e RSS feed'i (Sözcü Ekonomi ve Bloomberg HT 2026-07'de kaldırıldı — bkz. v3/v4 notları)
+// Kaynaklar: CNBC-e + Investing.com Türkiye "Ekonomi Haberleri" RSS feed'leri
+// (Sözcü Ekonomi ve Bloomberg HT 2026-07'de kaldırıldı — bkz. v3/v4 notları)
 // REDIS/KV + KİLİT KORUMASI (2026-07) — bkz. kripto.js'deki aynı not.
 import { Redis } from "@upstash/redis";
 import { kilitliGetir } from "./_lib/kilitliOnbellek.js";
@@ -8,7 +9,7 @@ const redis = new Redis({
   url: process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL,
   token: process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN,
 });
-// NOT (2026-07-05): v1 → v2 → v3 → v4 sürüm geçmişi:
+// NOT (2026-07-05): v1 → v2 → v3 → v4 → v5 sürüm geçmişi:
 //  v2: TARİH PARSE DÜZELTMESİ eklendi (aşağıda) — Sözcü kaynağının entity-encode
 //      edilmiş pubDate'i parseRSS()'i çökertip o kaynağın TÜM haberlerini
 //      sessizce siliyordu.
@@ -18,13 +19,24 @@ const redis = new Redis({
 //      durumda (lastBuildDate günlerdir ilerlemiyor, en yeni madde ~3 gün
 //      öncesine sabit kalmış). Bizim koddan bağımsız, kaynağın kendi tarafında
 //      bir sorun; düzeltilebilecek bir şey olmadığı için tamamen çıkarıldı.
-//      Artık yalnızca CNBC-e kullanılıyor. Kaynak seti her değiştiğinde eski
-//      cache'in taşınmadan taze hesaplanması için versiyon artırılıyor.
-const KV_ANAHTAR = "finans-haberleri:v4";
+//  v5: Investing.com Türkiye "Ekonomi Haberleri" (news_14) eklendi — CNBC-e
+//      gece/hafta sonu sessiz kaldığı saatlerde boşluğu dolduruyor (test
+//      sırasında gece 01:59'da bile taze haber verdiği doğrulandı). NOT: Bu
+//      kaynağın pubDate'i standart RSS formatında DEĞİL ("YYYY-MM-DD HH:MM:SS",
+//      saat dilimi belirtilmemiş). new Date(...) bunu UTC olarak yorumluyor;
+//      gerçekte Türkiye saati (UTC+3) ise sıralama/"X saat önce" etiketinde
+//      ~3 saatlik bir sapma olabilir — kritik değil ama bilinen bir sınırlama.
+//      Diğer investing.com alt-feed'leri (BİST Haberleri, Borsa Haberleri, Son
+//      Finans Haberleri) test edildi: ya donuk (haftalar/aylar eski) ya da
+//      kırık (404) çıktığı için EKLENMEDİ.
+//      Kaynak seti her değiştiğinde eski cache'in taşınmadan taze hesaplanması
+//      için versiyon artırılıyor.
+const KV_ANAHTAR = "finans-haberleri:v5";
 const KV_TTL_SANIYE = 15 * 60;
 
 const KAYNAKLAR = [
   { ad: "CNBC-e", url: "https://www.cnbce.com/rss" },
+  { ad: "Investing.com", url: "https://tr.investing.com/rss/news_14.rss" },
 ];
 
 function htmlEntityCoz(metin) {
