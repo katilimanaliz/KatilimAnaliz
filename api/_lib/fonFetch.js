@@ -1,8 +1,8 @@
 // api/_lib/fonFetch.js
 // Fonoloji'den katılım fonlarını çekip normalize eden ORTAK mantık.
-// Hem cron job'ı (api/cron-fon-guncelle.js) hem de public endpoint'in
-// bootstrap/fallback yolu (api/fon-getiri.js) bunu kullanır — tek kaynak,
-// iki yerde ayrı ayrı bakım gerektirmez.
+// Hem cron job'ı (api/tefas-proxy.js) hem de public endpoint'in
+// bootstrap/fallback yolu bunu kullanır — tek kaynak, iki yerde ayrı ayrı
+// bakım gerektirmez.
 // NOT: Dosya adı "_lib" ile başladığı için Vercel bunu bir API route olarak
 // görmez, sadece import edilebilir bir modüldür.
 
@@ -146,7 +146,6 @@ function mapFon(f, vakif, takasAraligi) {
 }
 
 const KATEGORILER = [
-  // Parça 1 — "Katılım" (~5 sayfa, ağır) + hafif olanlar
   {kat: "Katılım",                        tumunu: true},
   {kat: "Altın Katılım Fonu",             tumunu: true},
   {kat: "OKS Katılım Standart Fon",       tumunu: true},
@@ -154,7 +153,6 @@ const KATEGORILER = [
   {kat: "Katılım Fonu",                   tumunu: true},
   {kat: "Katılım Standart Fon",           tumunu: true},
   {kat: "Başlangıç Katılım Fonu",         tumunu: true},
-  // Parça 2 — "Katılım Değişken Fon" (~5 sayfa, ağır) + hafif olanlar
   {kat: "Katılım Değişken Fon",           tumunu: true},
   {kat: "Katılım Hisse Senedi Fonu",      tumunu: true},
   {kat: "Kira Sertifikası Katılım Fonu",  tumunu: true},
@@ -162,7 +160,6 @@ const KATEGORILER = [
   {kat: "Para Piyasası Şemsiye Fonu",     tumunu: false},
   {kat: "Değişken Şemsiye Fonu",          tumunu: false},
   {kat: "Karma Şemsiye Fonu",             tumunu: false},
-  // Parça 3 — tamamı hafif
   {kat: "Fon Sepeti Şemsiye Fonu",        tumunu: false},
   {kat: "Altın Şemsiye Fonu",             tumunu: false},
   {kat: "Kıymetli Madenler Şemsiye Fonu", tumunu: false},
@@ -176,23 +173,74 @@ const VAKIF_KODLARI = ["VPA","VLT","VHS","VKK","VKV"];
 const PAGE_SIZE = 100;
 const ŞÜPHELİ_EŞİK = 100; // normal günde 150+ fon beklenir (TÜM parçalar birleştiğinde)
 
-// ── Parça (batch) bölüştürme ──────────────────────────────────────────────
-// KESİN TEŞHİS: Fonoloji dakikada en fazla 30 istek kabul ediyor. Toplam ~34
-// isteği (5 Vakıf + kategori sayfaları) tek çağrıda, kurala uyacak şekilde
-// yavaşlatınca süre ~75-90sn'ye çıkıyor — bu, Vercel'in fonksiyon zaman aşımı
-// sınırına (plana göre değişir, garanti değil) takılma riski taşıyor.
-// Çözüm: 21 kategoriyi 3 PARÇAya bölüp, günde zaten var olan 3 cron saatine
-// (08:00/09:00/10:00) birer parça dağıtıyoruz. Her çağrı sadece ~7 kategori
-// işler (~20-25sn sürer, güvenli), ve önceki parçalardan gelen fonları SİLMEZ
-// — sadece kendi getirdiği fonları üstüne yazar (tefas-proxy.js'deki birleştirme
-// mantığına bkz). Sabah 10'a gelindiğinde 3 parça birikip tam liste oluşur.
+// ── Parça (batch) bölüştürme — DÜZELTME 2 (2026-07) ─────────────────────────
+// KÖK NEDEN (gerçek log'la doğrulandı): Eski 3-parça bölüşümünde Parça 1
+// içinde HEM 5 Vakıf fonu HEM "Katılım" kategorisi (kendi başına ~5 sayfa,
+// "ağır" diye zaten yorumla işaretliydi) HEM 6 kategori daha vardı. Bunların
+// toplamı — özellikle "Katılım" kategorisinin gerçekte tahmin edilenden çok
+// daha fazla sayfa çekmesi ve/veya 429'lar yüzünden tekrar denemelerin
+// eklenmesiyle — 280 saniyelik fonksiyon süresini AŞTI ve Vercel Runtime
+// Timeout ile öldürüldü (log: "Task timed out after 280 seconds"). Fonksiyon
+// hiçbir zaman kv.set()'e ulaşamadığı için veri günlerce güncellenmeden kaldı.
+//
+// ÇÖZÜM: 3 parça yerine 8 DAHA KÜÇÜK parçaya bölündü. En kritik değişiklik:
+// bilinen İKİ "ağır" kategori ("Katılım" ve "Katılım Değişken Fon") artık
+// KENDİ BAŞLARINA, tek başına bir parça olarak çalışıyor — başka hiçbir
+// kategoriyle aynı çağrıda yarışmıyorlar, tüm 280sn'lik bütçeyi tek başlarına
+// kullanabiliyorlar. Vakıf fonları (hızlı, 5 istek) en hafif parçaya (1) taşındı.
+// vercel.json'da buna karşılık gelen 8 ayrı cron saati (05:00-12:00 UTC,
+// hafta içi) tanımlandı — Vercel Hobby planı HER cron girdisinin kendi
+// başına günde bir kez çalışmasına izin verdiği için (toplam sayı değil,
+// her girdinin kendi sıklığı sınırlanıyor) bu sorun teşkil etmiyor.
 const PARCALAR = [
-  KATEGORILER.slice(0, 7),
-  KATEGORILER.slice(7, 14),
-  KATEGORILER.slice(14, 21),
+  // Parça 1: Vakıf fonları (5 istek, hızlı) + en hafif 2 kategori
+  [
+    {kat: "Altın Katılım Fonu",             tumunu: true},
+    {kat: "OKS Katılım Standart Fon",       tumunu: true},
+  ],
+  // Parça 2: "Katılım" — TEK BAŞINA (bilinen en ağır kategori, ~5+ sayfa)
+  [
+    {kat: "Katılım",                        tumunu: true},
+  ],
+  // Parça 3: "Katılım Değişken Fon" — TEK BAŞINA (bilinen ikinci ağır kategori)
+  [
+    {kat: "Katılım Değişken Fon",           tumunu: true},
+  ],
+  // Parça 4
+  [
+    {kat: "Katılım Katkı Fonu",             tumunu: true},
+    {kat: "Katılım Fonu",                   tumunu: true},
+    {kat: "Katılım Standart Fon",           tumunu: true},
+  ],
+  // Parça 5
+  [
+    {kat: "Başlangıç Katılım Fonu",         tumunu: true},
+    {kat: "Katılım Hisse Senedi Fonu",      tumunu: true},
+    {kat: "Kira Sertifikası Katılım Fonu",  tumunu: true},
+  ],
+  // Parça 6
+  [
+    {kat: "Hisse Senedi Şemsiye Fonu",      tumunu: false},
+    {kat: "Para Piyasası Şemsiye Fonu",     tumunu: false},
+    {kat: "Değişken Şemsiye Fonu",          tumunu: false},
+    {kat: "Karma Şemsiye Fonu",             tumunu: false},
+  ],
+  // Parça 7
+  [
+    {kat: "Fon Sepeti Şemsiye Fonu",        tumunu: false},
+    {kat: "Altın Şemsiye Fonu",             tumunu: false},
+    {kat: "Kıymetli Madenler Şemsiye Fonu", tumunu: false},
+    {kat: "Endeks Şemsiye Fonu",            tumunu: false},
+  ],
+  // Parça 8
+  [
+    {kat: "Serbest Şemsiye Fonu",           tumunu: false},
+    {kat: "Altın Fonu",                     tumunu: false},
+    {kat: "Kıymetli Madenler",              tumunu: false},
+  ],
 ];
 
-// Fonoloji'den katılım fonlarını çeker. `parcaNo` verilirse (1/2/3) SADECE o
+// Fonoloji'den katılım fonlarını çeker. `parcaNo` verilirse (1-8) SADECE o
 // parçadaki kategorileri işler (Vakıf kodları sadece 1. parçada çekilir).
 // `parcaNo` verilmezse TÜMÜNÜ işler (uzun sürer — sadece elle/test amaçlı kullan).
 async function fonVerisiCek(parcaNo = null) {
@@ -281,7 +329,8 @@ async function fonVerisiCek(parcaNo = null) {
   //  - Tam mod (parcaNo yok): toplam fon sayısı 100'ün altındaysa şüpheli.
   //  - Parça modu: bu parçadaki kategorilerin YARISINDAN FAZLASI ağ hatası
   //    verdiyse şüpheli (mutlak sayı değil, oran — bir parça zaten az kategori
-  //    işlediği için düşük mutlak sayı normaldir).
+  //    işlediği için düşük mutlak sayı normaldir). Tek kategorili parçalarda
+  //    (2 ve 3) bu, o TEK kategori hata verirse şüpheli sayılır demektir.
   const hataliKategoriSayisi = Object.values(kategoriTeshis).filter(k => k.agHatasi).length;
   const eksikGorunuyor = parcaNo
     ? hataliKategoriSayisi > isleneckKategoriler.length / 2
