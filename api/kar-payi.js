@@ -23,8 +23,8 @@ const KV_ANAHTAR = "karpayi:oranlar:v1";
 // Sıra, uygulamadaki "Katılım Bankaları" listesiyle aynı (alfabetik) —
 // tutarlılık için. Yeni banka eklenirse burada da eklenmeli.
 const BANKALAR = [
-  "Adil Katılım", "Albaraka Türk", "Dünya Katılım", "Emlak Katılım",
-  "Hayat Finans", "İktisat Katılım", "Kuveyt Türk", "T.O.M. Katılım",
+  "Albaraka Türk", "Dünya Katılım", "Emlak Katılım",
+  "Hayat Finans", "Kuveyt Türk", "T.O.M. Katılım",
   "Türkiye Finans", "Vakıf Katılım", "Ziraat Katılım",
 ];
 
