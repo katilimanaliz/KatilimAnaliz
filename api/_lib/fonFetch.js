@@ -6,6 +6,17 @@
 // NOT: Dosya adı "_lib" ile başladığı için Vercel bunu bir API route olarak
 // görmez, sadece import edilebilir bir modüldür.
 
+import { Redis } from "@upstash/redis";
+
+// Hız sınırlayıcı için ayrı bir Redis istemcisi — tefas-proxy.js'deki KV
+// istemcisiyle aynı Upstash veritabanına bağlanır (aynı env var'lar), ama
+// bağımsız bir bağlantı nesnesidir (Upstash REST tabanlı olduğu için bunun
+// bir maliyeti/havuzlama sorunu yok).
+const hizRedis = new Redis({
+  url: process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL,
+  token: process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN,
+});
+
 const TATILLER_2026 = new Set([
   "2026-01-01","2026-04-02","2026-04-03","2026-04-04","2026-04-05",
   "2026-06-05","2026-06-06","2026-06-07","2026-06-08",
@@ -42,27 +53,88 @@ function fetchZamanAsimli(url, opts, msTimeout) {
   return fetch(url, { ...opts, signal: controller.signal }).finally(() => clearTimeout(zamanlayici));
 }
 
-// ── Global hız sınırlayıcı ───────────────────────────────────────────────────
-// KESİN TEŞHİS (Fonoloji'nin kendi hata mesajından): "Dakikada 30 istek sınırı
-// aşıldı" — sabit, belgelenmiş bir kural. Önceki kademeli-gecikme denemeleri
-// (kategori başına 90-150ms) bunu YETERİNCE yavaşlatmıyordu çünkü sadece
-// kategoriler arası değil, TÜM isteklerin (5 Vakıf + çok sayfalı kategoriler)
-// TOPLAMI dakikada 30'u aşıyordu. Artık TEK bir ortak kuyruk var: hangi istek
-// olursa olsun (Vakıf kodu ya da kategori sayfası fark etmez), art arda iki
-// istek arasında en az MIN_ARALIK_MS geçmeden gönderilmiyor. 27 istek/dakika
-// hedefleniyor (30 sınırının altında güvenli pay).
-const MIN_ARALIK_MS = 2250; // 60000/2250 ≈ 26.7 istek/dakika
-let sonIstekZamaniMs = 0;
-let kuyrukKilidi = Promise.resolve();
-function siraliBekle() {
-  const bu = kuyrukKilidi.then(async () => {
-    const simdi = Date.now();
-    const gerekliBekleme = Math.max(0, sonIstekZamaniMs + MIN_ARALIK_MS - simdi);
-    if (gerekliBekleme > 0) await new Promise(r => setTimeout(r, gerekliBekleme));
-    sonIstekZamaniMs = Date.now();
-  });
-  kuyrukKilidi = bu.catch(() => {});
-  return bu;
+// ── Global hız sınırlayıcı — DÜZELTME (2026-07): Redis tabanlı, GERÇEKTEN
+// paylaşılan sıra ──────────────────────────────────────────────────────────
+// KÖK NEDEN (gerçek log'la doğrulandı — "Katılım Değişken Fon" tek başına
+// izole edilmiş bir parça olduğu hâlde yine 280sn'de zaman aşımına uğradı):
+// eski MIN_ARALIK_MS/sonIstekZamaniMs/kuyrukKilidi mekanizması sadece BELLEKTE
+// tutuluyordu — yani sadece TEK bir fonksiyon çalıştırması (invocation)
+// içinde geçerliydi. Aynı anda birden fazla çalıştırma olduğunda (örn. cron
+// tetiklemesiyle aynı sırada manuel "Run" testi, ya da Vercel'in aynı anda
+// birden fazla instance başlatması), her biri kendi başına "dakikada 27
+// istek hakkım var" sanıp gönderiyordu — Fonoloji'nin sunucusunda GERÇEKTE
+// bunların TOPLAMI dakikada 30'u kolayca aşıyordu. Sonuç: art arda 429'lar,
+// her 429 sonrası yeniden deneme, bu da toplam süreyi 280sn sınırına kadar
+// şişiriyordu.
+//
+// ÇÖZÜM: "Bir sonraki uygun istek zamanı" artık Redis'te TEK bir anahtarda
+// tutuluyor ve bir Lua script ile ATOMİK olarak okunup güncelleniyor (EVAL,
+// Redis'te tek seferde, bölünmeden çalışır — aynı anda 100 çağrı gelse bile
+// hepsi FARKLI, çakışmayan zaman dilimleri alır). Böylece kaç eşzamanlı
+// fonksiyon çalıştırması olursa olsun (cron + manuel test bir arada dahi),
+// Fonoloji'ye giden istekler gerçekten TEK bir ortak sıradan geçiyor.
+const MIN_ARALIK_MS = 2250; // 60000/2250 ≈ 26.7 istek/dakika (30 sınırının altında güvenli pay)
+const HIZ_SINIRLAYICI_ANAHTAR = "tefas:hiz-sinirlayici:sonraki-uygun-slot-ms";
+
+// Redis'e ulaşılamazsa (nadir bir durum) diye yerel bir yedek — bu durumda en
+// azından BU tek invocation içinde sıralama korunur (eski davranışa düşer).
+let sonIstekZamaniMsYerel = 0;
+
+const SIRA_REZERVASYON_LUA = `
+local key = KEYS[1]
+local now = tonumber(ARGV[1])
+local minGap = tonumber(ARGV[2])
+local last = tonumber(redis.call('GET', key) or "0")
+local nextSlot = now
+if (last + minGap) > nextSlot then
+  nextSlot = last + minGap
+end
+redis.call('SET', key, tostring(nextSlot), 'PX', 120000)
+return tostring(nextSlot)
+`;
+
+async function siraliBekle() {
+  const simdi = Date.now();
+  let uygunSlot;
+  try {
+    const sonuc = await hizRedis.eval(
+      SIRA_REZERVASYON_LUA,
+      [HIZ_SINIRLAYICI_ANAHTAR],
+      [String(simdi), String(MIN_ARALIK_MS)]
+    );
+    uygunSlot = Number(sonuc);
+    if (!Number.isFinite(uygunSlot)) throw new Error("Lua script geçersiz değer döndürdü");
+  } catch (e) {
+    // Redis/eval başarısız olursa yerel yedek mekanizmaya düş.
+    uygunSlot = Math.max(simdi, sonIstekZamaniMsYerel + MIN_ARALIK_MS);
+  }
+  sonIstekZamaniMsYerel = uygunSlot;
+  const bekleme = Math.max(0, uygunSlot - Date.now());
+  if (bekleme > 0) await new Promise(r => setTimeout(r, bekleme));
+}
+
+// 429 alındığında paylaşılan sırayı (Redis'teki ortak anahtarı) ekstraMs kadar
+// ileri iter — böylece bu invocation'da değil, TÜM eşzamanlı çalıştırmalarda
+// bir sonraki istek daha geç gönderilir. Eskiden bu sadece yerel bir değişkeni
+// güncelliyordu (sonIstekZamaniMs += 3000), bu yüzden başka bir eşzamanlı
+// invocation bundan habersiz kalıp hemen yeni istek gönderebiliyordu.
+async function ekstraGecikmeEkle(ekstraMs) {
+  try {
+    await hizRedis.eval(
+      `
+      local key = KEYS[1]
+      local ekstra = tonumber(ARGV[1])
+      local last = tonumber(redis.call('GET', key) or "0")
+      local yeni = last + ekstra
+      redis.call('SET', key, tostring(yeni), 'PX', 120000)
+      return tostring(yeni)
+      `,
+      [HIZ_SINIRLAYICI_ANAHTAR],
+      [String(ekstraMs)]
+    );
+  } catch (e) {
+    sonIstekZamaniMsYerel += ekstraMs;
+  }
 }
 
 async function fetchTekrarli(url, opts, deneme = 2, msTimeout = 8000) {
@@ -80,7 +152,7 @@ async function fetchTekrarli(url, opts, deneme = 2, msTimeout = 8000) {
         // invocation'a özel, Fonoloji'nin hesap bazlı gerçek kotasından
         // habersiz. Artık 429 gelirse HEMEN vazgeçiyoruz (hızlı başarısız);
         // paylaşılan sıraya biraz ekstra boşluk ekleyip devam ediyoruz.
-        sonIstekZamaniMs += 3000;
+        await ekstraGecikmeEkle(3000);
         return null;
       }
       throw new Error(`HTTP ${r.status}`);
@@ -103,7 +175,7 @@ async function fetchTeshisli(url, opts, deneme = 2, msTimeout = 8000) {
       if (r.ok) return { res: r, hata: null };
       if (r.status === 429) {
         // Bkz. fetchTekrarli'deki not — uzun beklemek yerine hızlı vazgeçiyoruz.
-        sonIstekZamaniMs += 3000;
+        await ekstraGecikmeEkle(3000);
         return { res: null, hata: "HTTP 429 — dakikalık istek sınırı (hemen vazgeçildi, uzun beklenmedi)" };
       }
       let govde = "";
