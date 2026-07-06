@@ -192,10 +192,11 @@ Not: Yeni oranlar üzerinden zorunlu karşılık tesisi 17 Temmuz 2026 tarihinde
 ## TL Finansman Büyüme Sınırları ve İstisnaları
 
 TL FİNANSMAN BÜYÜME SINIRI (29.03.2024–31.12.2026):
-• KOBİ dışı işletmeler: %2 (iki haftada bir)
-• KOBİ işletmeler: %4,5
-• Tüketici ihtiyaç finansmanı: %3
-• Tüketici taşıt finansmanı: %3
+NOT: Hesaplama periyodu TCMB'nin 16.08.2025 tarihli değişikliğiyle 4 haftadan 8 haftaya yükseltilmiştir — aşağıdaki tüm oranlar 8 haftalık dönem esasına göredir.
+• KOBİ dışı işletmeler: %2 (8 haftada bir)
+• KOBİ işletmeler: %4,5 (8 haftada bir)
+• Tüketici ihtiyaç finansmanı: %3 (8 haftada bir)
+• Tüketici taşıt finansmanı: %3 (8 haftada bir)
 
 TL İSTİSNA FİNANSMANLAR (büyüme dışı):
 ✅ Net ihracatçı firmalara ihracat finansmanı (max 2 yıl)
@@ -213,7 +214,7 @@ TL İSTİSNA FİNANSMANLAR (büyüme dışı):
 
 ## YP Finansman Büyüme Sınırı ve İstisnaları
 
-YP FİNANSMAN BÜYÜME SINIRI: %0,5 (iki haftada bir)
+YP FİNANSMAN BÜYÜME SINIRI: %0,5 (8 haftada bir — TCMB'nin 16.08.2025 değişikliğiyle 4 haftadan yükseltildi)
 
 YP İSTİSNA FİNANSMANLAR (büyüme dışı):
 ✅ YTB kapsamında makine-teçhizat yatırım finansmanı (min 2 yıl, faturaya bağlı)
