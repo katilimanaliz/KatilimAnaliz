@@ -108,6 +108,17 @@ Bu belgeler, birebir kapsadıkları konularda (ücret/komisyon tavanları, ZK es
 
 ⸻
 
+Güncel Piyasa Haberleri ve Kur Kullanımı
+
+Bu promptun altına, her mesajla birlikte "GÜNCEL PİYASA HABERLERİ VE KURLAR" başlığıyla uygulamanın kendi ekranlarından (Son Haberler / Piyasa) çekilen canlı veri ekleniyorsa, bunu kullan. Kullanıcı "güncel piyasa haberleri nedir", "güncel konular ne", "uygulamamızdaki piyasa haberleri nedir", "güncel kur ne", "dolar kaç" gibi bir şey sorduğunda:
+
+- Bu bölümdeki haberleri/kurları doğrudan özetleyerek cevap ver — "bu konuda bilgim yok" DEME, bu veri sana zaten sağlanıyor.
+- Haberlerden bahsederken kaynağını ve "X saat/dakika önce" bilgisini de belirt.
+- Daha fazla haber/detay için kullanıcıyı uygulamanın "Piyasa" sekmesindeki "Son Haberler" / "Piyasa Haberleri" ekranına yönlendirebilirsin (orada tam liste var, sana sadece en yeni birkaçı gönderiliyor).
+- Bu bölüm hiç gelmemişse (boşsa) ancak o zaman "şu an canlı veriye ulaşamıyorum, Piyasa sekmesinden bakabilirsiniz" gibi dürüst bir cevap ver.
+
+⸻
+
 Akıllı Anlama
 
 Kullanıcı yazım hatası yapabilir, eksik yazabilir, bankacılık terimlerini yanlış yazabilir. "karpayi", "kar pay", "karpayı", "karpayi oranı" gibi hepsinin aynı şey ("kâr payı") olduğunu anla.
@@ -572,7 +583,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ success: false, error: "GEMINI_API_KEY eksik — Vercel ortam değişkenlerine ekleyin." });
   }
 
-  const { messages, takvimOzet } = req.body || {};
+  const { messages, takvimOzet, piyasaOzeti } = req.body || {};
   if (!Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ success: false, error: "messages dizisi boş olamaz" });
   }
@@ -588,6 +599,7 @@ export default async function handler(req, res) {
     SISTEM_PROMPTU,
     "\n\n---\n\n## YÜKLENEN BELGELER (Ticari Müşteri Ürün/Hizmet Ücretleri Tebliği + Zorunlu Karşılıklar Uygulama Talimatı — özet)\n\n" + PDF_BELGELER,
     takvimOzet ? "\n\n---\n\n## GÜNCEL FİNANSAL TAKVİM (uygulamadan canlı veri, sorulursa kullan)\n\n" + takvimOzet : "",
+    piyasaOzeti ? "\n\n---\n\n## GÜNCEL PİYASA HABERLERİ VE KURLAR (uygulamanın kendi ekranlarından canlı veri — \"güncel haberler ne\", \"piyasa haberleri nedir\", \"güncel kur ne\" gibi sorularda BUNU kullan, \"bilgim yok\" deme)\n\n" + piyasaOzeti : "",
   ].join("");
 
   const body = {
