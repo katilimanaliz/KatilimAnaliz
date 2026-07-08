@@ -30,7 +30,14 @@
 const { Redis } = require("@upstash/redis");
 const { admin } = require("./_lib/firebaseAdmin");
 
-const redis = Redis.fromEnv();
+// NOT: Vercel KV entegrasyonu, Upstash'in standart isimlendirmesi olan
+// UPSTASH_REDIS_REST_URL/TOKEN yerine KV_REST_API_URL/KV_REST_API_TOKEN
+// isimlerini kullanıyor — bu yüzden Redis.fromEnv() yerine bunları
+// açıkça veriyoruz.
+const redis = new Redis({
+  url: process.env.KV_REST_API_URL,
+  token: process.env.KV_REST_API_TOKEN,
+});
 
 async function tokenKaydet(req, res) {
   const { token, platform } = req.body || {};
@@ -110,6 +117,17 @@ async function bildirimGonder(req, res) {
 }
 
 module.exports = async (req, res) => {
+  // CORS: Capacitor/WebView tabanlı istekler önce bir OPTIONS (preflight)
+  // isteği gönderir. Bunu yanıtlamazsak gerçek POST isteği hiç gitmez.
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-admin-key");
+
+  if (req.method === "OPTIONS") {
+    res.status(204).end();
+    return;
+  }
+
   if (req.method !== "POST") {
     res.status(405).json({ hata: "Sadece POST kabul edilir" });
     return;
