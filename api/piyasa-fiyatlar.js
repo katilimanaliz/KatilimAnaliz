@@ -6,6 +6,12 @@
 // hangi alanı bekliyorsa (XAU_TRY_gram, btc_usd, brent_usd, USD_TRY vb.) aynen
 // dönüyor. Kullanım: /api/piyasa-fiyatlar?tip=altin | kripto | petrol | kur
 //
+// GÜNCELLEME (2026-07): altin.js önceden gold-api.com kullanıyordu; ücretsiz
+// plan istek limitine ulaşıldığı için kaynak Yahoo Finance'e (GC=F altın,
+// SI=F gümüş futures) çevrildi — kur.js zaten aynı kaynağı kullanıyordu,
+// tutarlılık sağlandı. Döndürülen alanlar (XAU_USD, XAG_USD, USD_TRY,
+// XAU_TRY_gram, XAG_TRY_gram) değişmedi.
+//
 // TEK DAVRANIŞ DEĞİŞİKLİĞİ: kur.js önceden Redis dağıtık kilidi (kilitliGetir)
 // KULLANMIYORDU, sadece CDN Cache-Control'e güveniyordu — bu, önbellek süresi
 // dolduğunda 5 dış API'ye (Frankfurter, open.er-api, Yahoo Finance x2, CoinGecko)
@@ -21,7 +27,7 @@ const redis = new Redis({
   token: process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN,
 });
 
-// ─── ALTIN (Kaynak: gold-api.com) ──────────────────────────────────────────
+// ─── ALTIN (Kaynak: Yahoo Finance GC=F / SI=F) ─────────────────────────────
 async function altinTaze() {
   const GRAM_ONS = 31.1035;
 
@@ -32,8 +38,8 @@ async function altinTaze() {
   if (!isFinite(USD_TRY) || USD_TRY <= 0) throw new Error("USD/TRY kuru geçersiz döndü");
 
   const [altinRes, gumusRes] = await Promise.all([
-    fetch("https://api.gold-api.com/price/XAU"),
-    fetch("https://api.gold-api.com/price/XAG"),
+    fetch("https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1d&range=1d", { headers: { "User-Agent": "Mozilla/5.0" } }),
+    fetch("https://query1.finance.yahoo.com/v8/finance/chart/SI=F?interval=1d&range=1d", { headers: { "User-Agent": "Mozilla/5.0" } }),
   ]);
   if (!altinRes.ok) throw new Error(`Altın fiyatı alınamadı (HTTP ${altinRes.status})`);
   if (!gumusRes.ok) throw new Error(`Gümüş fiyatı alınamadı (HTTP ${gumusRes.status})`);
@@ -41,8 +47,8 @@ async function altinTaze() {
   const altin = await altinRes.json();
   const gumus = await gumusRes.json();
 
-  const XAU_USD = Number(altin?.price);
-  const XAG_USD = Number(gumus?.price);
+  const XAU_USD = Number(altin?.chart?.result?.[0]?.meta?.regularMarketPrice);
+  const XAG_USD = Number(gumus?.chart?.result?.[0]?.meta?.regularMarketPrice);
   if (!isFinite(XAU_USD) || XAU_USD <= 0) throw new Error("Altın fiyatı geçersiz veri döndürdü: " + JSON.stringify(altin));
   if (!isFinite(XAG_USD) || XAG_USD <= 0) throw new Error("Gümüş fiyatı geçersiz veri döndürdü: " + JSON.stringify(gumus));
   if (XAG_USD >= XAU_USD) throw new Error(`Gümüş/Altın oranı anormal (XAG=${XAG_USD}, XAU=${XAU_USD}) — kaynak veri şüpheli`);
