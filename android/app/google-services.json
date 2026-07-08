@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "98018570739",
+    "project_id": "katilim-plus",
+    "storage_bucket": "katilim-plus.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:98018570739:android:803fc32a64b4c748d3a286",
+        "android_client_info": {
+          "package_name": "com.katilimplus.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBsm-nxk-Y1Qy-ByYVBn8TTxAW8FQIP2r4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
