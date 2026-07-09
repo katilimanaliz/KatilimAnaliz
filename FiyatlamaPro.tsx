@@ -4891,6 +4891,19 @@ function Ayarlar({settings,onSave}){
       </div>
       {ayarBildirimAcik&&<BildirimModal onClose={()=>setAyarBildirimAcik(false)}/>}
 
+      {/* Katılım Blog — SEO/içerik stratejisinin uygulama içi karşılığı; blog
+          yazılarındaki hesaplayıcı linkleri app'e döndüğü gibi, buradan da
+          bloga gidilebiliyor (çift yönlü bağlantı). Sistem tarayıcısında açılır. */}
+      <div onClick={()=>window.open("https://www.katilimplus.com/blog/","_blank")} style={{
+        display:"flex",alignItems:"center",gap:12,marginTop:8,cursor:"pointer",
+        background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.07)",
+        borderRadius:12,padding:"13px 14px",
+      }}>
+        <span style={{width:24,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:18}}>📝</span>
+        <span style={{flex:1,fontSize:14,fontWeight:600,color:"#E8F0FA"}}>Katılım Blog</span>
+        <span style={{color:"rgba(255,255,255,0.3)",fontSize:18,flexShrink:0}}>›</span>
+      </div>
+
     </div>
   );
 }
@@ -12181,6 +12194,15 @@ function App(){
   // tercih: sekme kapanınca temizlenir, yani uygulamayı "yeni açan" kullanıcı
   // yine ana menüden başlar; sadece yenileme aynı ekranda kalır.
   const [screen,setScreen]=useState(()=>{
+    try{
+      // Blog/harici bağlantılardan derin link desteği: ?ekran=karPayiOranlari gibi
+      // bir URL parametresi varsa ve MENU'de gerçekten tanımlıysa, sessionStorage'daki
+      // kayıttan ÖNCE bunu kullan — kullanıcı bir blog yazısından "hesapla" linkine
+      // tıkladığında doğrudan ilgili ekranda açılsın diye (SEO/içerik pazarlaması
+      // stratejisinin parçası, bkz. /blog/ altındaki statik yazılar).
+      const urlParam=new URLSearchParams(window.location.search).get("ekran");
+      if(urlParam && (MENU as any)[urlParam]) return urlParam;
+    }catch{}
     try{
       const kayit=sessionStorage.getItem("kp_screen");
       // Kaydedilen ekran hâlâ MENU'de tanımlıysa kullan — bir güncellemede ekran
