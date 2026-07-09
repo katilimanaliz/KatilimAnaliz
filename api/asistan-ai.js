@@ -633,31 +633,62 @@ export default async function handler(req, res) {
     generationConfig: { maxOutputTokens: 2000, temperature: 0.7 },
   };
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 55000);
+  const GEMINI_URL =
+    // NOT: gemini-2.5-flash Haziran 2026'da Google tarafından kapatıldı
+    // ("no longer available" hatası). gemini-3.5-flash Mayıs 2026'da çıktı
+    // ve açıklanmış bir kapatma tarihi yok — Google ileride bunu da emekliye
+    // ayırırsa aynı satırı yeni model adıyla güncellemek yeterli.
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent";
 
-  try {
-    const r = await fetch(
-      // NOT: gemini-2.5-flash Haziran 2026'da Google tarafından kapatıldı
-      // ("no longer available" hatası). gemini-3.5-flash Mayıs 2026'da çıktı
-      // ve açıklanmış bir kapatma tarihi yok — Google ileride bunu da emekliye
-      // ayırırsa aynı satırı yeni model adıyla güncellemek yeterli.
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent",
-      {
+  // Yeni çıkan modellerde ("gemini-3.5-flash" gibi) geçici kapasite
+  // sıkışıklığı ("high demand"/503) sık görülebiliyor — kalıcı bir hata
+  // değil, birkaç saniye içinde kendiliğinden düzeliyor. Bu yüzden burada
+  // KISA aralıklarla 2 kez otomatik yeniden deniyoruz; kullanıcı tekrar
+  // yazmak zorunda kalmasın. 429 (kota) için yeniden denemiyoruz — o kalıcı.
+  const gecici_mi = (r, data) => {
+    if (r.status === 503) return true;
+    const msg = (data?.error?.message || "").toLowerCase();
+    return msg.includes("high demand") || msg.includes("overloaded") || msg.includes("unavailable");
+  };
+
+  let r, data;
+  const MAKS_DENEME = 3;
+  for (let deneme = 1; deneme <= MAKS_DENEME; deneme++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 55000);
+    try {
+      r = await fetch(GEMINI_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
         body: JSON.stringify(body),
         signal: controller.signal,
+      });
+      clearTimeout(timer);
+      data = await r.json().catch(() => null);
+
+      if (r.ok) break; // başarılı, döngüden çık
+      if (!gecici_mi(r, data) || deneme === MAKS_DENEME) break; // kalıcı hata ya da son deneme
+      await new Promise((res2) => setTimeout(res2, 1200 * deneme)); // 1.2s, 2.4s bekleyip tekrar dene
+    } catch (e) {
+      clearTimeout(timer);
+      if (e.name === "AbortError") {
+        return res.status(500).json({ success: false, error: "İstek zaman aşımına uğradı (55sn)" });
       }
-    );
-    clearTimeout(timer);
+      if (deneme === MAKS_DENEME) {
+        return res.status(500).json({ success: false, error: e.message });
+      }
+      await new Promise((res2) => setTimeout(res2, 1200 * deneme));
+    }
+  }
 
-    const data = await r.json().catch(() => null);
-
+  try {
     if (!r.ok) {
       const msg = data?.error?.message || `Gemini API hatası (HTTP ${r.status})`;
       if (r.status === 429) {
         return res.status(429).json({ success: false, error: "Gemini kota limiti aşıldı, biraz sonra tekrar deneyin." });
+      }
+      if (gecici_mi(r, data)) {
+        return res.status(503).json({ success: false, error: "Yapay zeka şu anda yoğun, birkaç saniye sonra tekrar deneyin." });
       }
       return res.status(502).json({ success: false, error: msg });
     }
@@ -674,7 +705,6 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ success: true, text });
   } catch (e) {
-    clearTimeout(timer);
     const mesaj = e.name === "AbortError" ? "İstek zaman aşımına uğradı (55sn)" : e.message;
     return res.status(500).json({ success: false, error: mesaj });
   }
