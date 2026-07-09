@@ -48,8 +48,12 @@ const redis = new Redis({
 // (13 ay yerine 12 ay geri kıyaslama) düzeltmesi eski cache'i geçersiz kılmak
 // için yapıldı; aksi halde kod deploy edilse bile kullanıcı 6 saat boyunca
 // hâlâ hatalı önbelleklenmiş TUFE_YILLIK_SERI'yi görmeye devam ederdi.
-const KV_ANLIK_KEY = "evds:anlik:v6";
-const KV_TARIHSEL_PREFIX = "evds:tarihsel:v6:";
+// NOT (2026-07-09): v6 → v7 sürüm değişikliği — ABD tahvil faizleri (DGS2/5/10),
+// FED (DFF) ve ECB (ECBDFR) FRED serileri eklendiği için yapıldı. Versiyon
+// artırılmazsa eski v6 önbelleği (bu alanları içermeyen) 6 saat boyunca
+// döndürülmeye devam eder — yeni alanlar "—" görünür (tam bu hatayı yaşadık).
+const KV_ANLIK_KEY = "evds:anlik:v7";
+const KV_TARIHSEL_PREFIX = "evds:tarihsel:v7:";
 
 // Vercel'in varsayılan fonksiyon süresi (Hobby planda genelde 10sn) artık 8 dış
 // isteğe (5 EVDS + 3 FRED) yetmiyor — bu yüzden ERR_CONNECTION_CLOSED alınıyordu
