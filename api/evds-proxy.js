@@ -52,8 +52,13 @@ const redis = new Redis({
 // FED (DFF) ve ECB (ECBDFR) FRED serileri eklendiği için yapıldı. Versiyon
 // artırılmazsa eski v6 önbelleği (bu alanları içermeyen) 6 saat boyunca
 // döndürülmeye devam eder — yeni alanlar "—" görünür (tam bu hatayı yaşadık).
-const KV_ANLIK_KEY = "evds:anlik:v7";
-const KV_TARIHSEL_PREFIX = "evds:tarihsel:v7:";
+// NOT (2026-07-09b): v7 → v8 sürüm değişikliği — SOFR 3M/6M (SOFR90DAYAVG/
+// SOFR180DAYAVG) eklendiği için yapıldı. Versiyon artırılmazsa eski önbellek
+// bu yeni alanları içermeden 6 saat daha döner (bkz. bir önceki v6→v7 dersi).
+// NOT (2026-07-09c): v8 → v9 sürüm değişikliği — FED Üst/Alt Bant (DFEDTARU/
+// DFEDTARL) eklendiği için yapıldı.
+const KV_ANLIK_KEY = "evds:anlik:v9";
+const KV_TARIHSEL_PREFIX = "evds:tarihsel:v9:";
 
 // Vercel'in varsayılan fonksiyon süresi (Hobby planda genelde 10sn) artık 8 dış
 // isteğe (5 EVDS + 3 FRED) yetmiyor — bu yüzden ERR_CONNECTION_CLOSED alınıyordu
@@ -350,7 +355,7 @@ export default async function handler(req,res){
       guvenliCek("rezerv", `${BASE}/series=${REZERV.join("-")}&startDate=${onceki(180)}&endDate=${tarihStr(new Date())}&type=json&frequency=3`),
     ]);
 
-    const [sofr,eur3m,us2y,us5y,us10y,fedFonlama,ecbMevduat]=await Promise.all([
+    const [sofr,eur3m,us2y,us5y,us10y,fedFonlama,ecbMevduat,sofr3m,sofr6m,fedUst,fedAlt]=await Promise.all([
       guvenliCekFred("fred_sofr", "SOFR"),
       guvenliCekFred("fred_euribor3m", "IR3TIB01EZM156N"),
       // ABD Hazine tahvil faizleri (2/5/10 yıl) — FRED'in günlük "Constant
@@ -358,13 +363,26 @@ export default async function handler(req,res){
       guvenliCekFred("fred_us2y", "DGS2"),
       guvenliCekFred("fred_us5y", "DGS5"),
       guvenliCekFred("fred_us10y", "DGS10"),
-      // FED — Federal Funds Effective Rate (günlük, FOMC'nin fiilen
-      // uyguladığı gecelik faiz — "hedef aralık" değil, gerçekleşen oran).
+      // FED — Federal Funds Effective Rate (günlük, FOMC'nin belirlediği HEDEF
+      // BANT içinde piyasada FİİLEN GERÇEKLEŞEN gecelik faiz — bandın kendisi
+      // değil). TCMB'deki "AOFM" ile aynı mantık: gerçekleşen oran.
       guvenliCekFred("fred_fedfunds", "DFF"),
       // ECB — Mevduat İmkanı Faizi (Deposit Facility Rate). Mart 2024'ten beri
       // ECB'nin para politikasını yönlendirdiği ASIL politika faizi budur
       // (Ana Refinansman Faizi değil) — bkz. ECB'nin kendi açıklaması.
       guvenliCekFred("fred_ecb", "ECBDFR"),
+      // SOFR 3M/6M — NY Fed'in resmi "SOFR Averages" serileri (90/180 günlük
+      // bileşik ortalama). NOT: CME'nin piyasada asıl kullanılan "Term SOFR"u
+      // değildir (o ileriye dönük ve lisanslı/ücretli) — bu, geriye dönük
+      // gerçekleşmiş SOFR'un ortalaması. Ücretsiz ve resmi tek alternatif budur.
+      guvenliCekFred("fred_sofr3m", "SOFR90DAYAVG"),
+      guvenliCekFred("fred_sofr6m", "SOFR180DAYAVG"),
+      // FED HEDEF BANT (2026-07 eklendi) — FOMC oranı TCMB gibi tek sayı değil,
+      // bir ARALIK olarak açıklıyor (örn. %3,50-%3,75). DFF bu aralığın
+      // İÇİNDE gerçekleşen fiili orandır, aralığın kendisi değil — kullanıcı
+      // karışıklığını önlemek için üst/alt bandı ayrıca gösteriyoruz.
+      guvenliCekFred("fred_fed_ust", "DFEDTARU"),
+      guvenliCekFred("fred_fed_alt", "DFEDTARL"),
     ]);
 
     const sonuclar={};
@@ -386,6 +404,14 @@ export default async function handler(req,res){
     sonuclar["FRED_FEDFUNDS_SERI"]=fedFonlama.seri;
     sonuclar["FRED_ECB"]=ecbMevduat.son;
     sonuclar["FRED_ECB_SERI"]=ecbMevduat.seri;
+    sonuclar["FRED_SOFR3M"]=sofr3m.son;
+    sonuclar["FRED_SOFR3M_SERI"]=sofr3m.seri;
+    sonuclar["FRED_SOFR6M"]=sofr6m.son;
+    sonuclar["FRED_SOFR6M_SERI"]=sofr6m.seri;
+    sonuclar["FRED_FED_UST"]=fedUst.son;
+    sonuclar["FRED_FED_UST_SERI"]=fedUst.seri;
+    sonuclar["FRED_FED_ALT"]=fedAlt.son;
+    sonuclar["FRED_FED_ALT_SERI"]=fedAlt.seri;
 
     sonuclar["TP.APIFON4_SERI"]=tumDegerler(polJson?.items||[], "TP.APIFON4").slice(-24);
     sonuclar["TP_AB_TOPLAM_SERI"]=tumDegerler(rezervJson?.items||[], "TP_AB_TOPLAM").slice(-24);
