@@ -97,6 +97,7 @@ const ICON_MAP: Record<string, any> = {
   haftalikOzet: Newspaper,
   katilimBankalari: Landmark,
   sozluk: BookOpen,
+  katilimBlog: Newspaper,
   asistan: Bot,
   ayarlar: Settings,
   profil: User,
@@ -13436,8 +13437,9 @@ function App(){
               {key:"vadeTakibi", icon:"⏰", label:"Vade Takip & Hatırlatma Ajandam", desc:"Finansman ve ödeme vadelerini takip et, hatırlatma al", renk:"#4ADE80", bg:"rgba(74,222,128,0.15)"},
               {key:"katilimBankalari", icon:"🏛️", label:"Katılım Bankaları", desc:"Türkiye'deki katılım bankaları, kuruluş tarihleri ve bilgileri", renk:"#5B9BD8", bg:"rgba(91,155,216,0.15)"},
               {key:"sozluk",     icon:"📖", label:"Katılım Bankacılığı Sözlüğü",     desc:"Terim ve tanımları hızlıca ara", renk:"#60A5FA", bg:"rgba(96,165,250,0.15)"},
+              {key:"katilimBlog", icon:"📝", label:"Katılım Blog", desc:"Kâr payı, murabaha, TLREF ve daha fazlası — anlaşılır rehberler", renk:"#2CCB9A", bg:"rgba(44,203,154,0.15)", harici:true},
             ].map(c=>(
-              <div className="press-card" key={c.key} onClick={()=>nav(c.key)} style={{
+              <div className="press-card" key={c.key} onClick={()=>c.harici?window.open("https://www.katilimplus.com/blog/","_blank"):nav(c.key)} style={{
                 display:"flex",alignItems:"center",gap:14,
                 background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.08)",
                 borderRadius:14,padding:"14px 16px",marginBottom:10,cursor:"pointer",
