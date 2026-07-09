@@ -1,7 +1,7 @@
 // api/_lib/firebaseAdmin.js
 //
 // Firebase Admin SDK'yı sadece FCM (bildirim gönderme) için başlatıyoruz.
-// Token depolama Redis'te (Upstash) yapılıyor, Firestore kullanılmıyor.
+// Token depolama Redis'te (Vercel KV / Upstash) yapılıyor, Firestore kullanılmıyor.
 // _lib klasöründeki dosyalar Vercel tarafından fonksiyon olarak sayılmaz.
 //
 // GEREKLİ VERCEL ENVIRONMENT VARIABLES:
@@ -9,7 +9,7 @@
 //   FIREBASE_CLIENT_EMAIL
 //   FIREBASE_PRIVATE_KEY
 
-const admin = require("firebase-admin");
+import admin from "firebase-admin";
 
 if (!admin.apps.length) {
   admin.initializeApp({
@@ -21,4 +21,4 @@ if (!admin.apps.length) {
   });
 }
 
-module.exports = { admin };
+export { admin };
