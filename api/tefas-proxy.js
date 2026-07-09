@@ -33,6 +33,25 @@
 // Kilit mantığı artık _lib/kilitliOnbellek.js'deki ORTAK modülde — evds-proxy.js
 // (ve ileride eklenecek başka proxy'ler) ile aynı, tek yerden bakımı yapılan
 // kilit deseni kullanılıyor.
+//
+// BOOTSTRAP DÜZELTMESİ (2026-07, v2): Fonoloji API kullanım panelinde Vakıf
+// fonu endpoint'lerinin (VPA/VLT/VHS/VKK) ay içinde ~170'er kez çağrıldığı
+// görüldü — bu, günde 1 kez çalışması gereken cron'un ÇOK üzerinde. KÖK NEDEN:
+// eski bootstrap mantığı, tam çekim SONUCU 100 fondan azsa (280sn zaman aşımı
+// veya 429'lar yüzünden yarım kalırsa) KV'ye HİÇ YAZMIYORDU. Bu durumda
+// `kayit` sonsuza dek null kalıyor, bu da HER TEK kullanıcı isteğinin (sayfa
+// her yenilendiğinde, her yeni ziyaretçide) aynı ağır tam-çekimi baştan
+// tekrar tetiklemesine yol açıyordu — kendi kendini besleyen bir döngü.
+// İKİ DÜZELTME yapıldı:
+//   1) Kısmi/düşük sonuç gelse bile artık KV'ye YAZILIYOR (eksik:true
+//      işaretiyle) — böylece bir sonraki istek sıfırdan başlamak yerine
+//      mevcut (eksik de olsa) veriyi kullanır; cron parçaları zamanla
+//      birlestir() ile eksikleri tamamlar.
+//   2) Bootstrap denemesi başına kısa bir SOĞUMA SÜRESİ (10 dakika) eklendi:
+//      bir deneme (başarılı/başarısız fark etmez) yapıldıktan sonra, aynı 10
+//      dakika içinde gelen diğer istekler YENİ bir tam-çekim tetiklemez,
+//      sadece "veri henüz yok" der. Böylece art arda gelen çok sayıda soğuk
+//      istek, art arda çok sayıda ağır Fonoloji çekimine dönüşemez.
 export const config = { maxDuration: 280 };
 
 import { Redis } from "@upstash/redis";
@@ -51,6 +70,10 @@ const BAYATLIK_SINIRI_SAAT = 20;
 // Hem cron yazması hem bootstrap okuması AYNI anahtarı kullanır; böylece
 // ikisi de birbirini dışlar, ayrı ayrı kilit anahtarları tutmaya gerek kalmaz.
 const KILIT_ANAHTARI = `lock:${KV_ANAHTAR}`;
+
+// Bootstrap soğuma anahtarı — bkz. dosya başındaki "BOOTSTRAP DÜZELTMESİ" notu.
+const BOOTSTRAP_SOGUMA_ANAHTAR = "tefas:bootstrap-son-deneme";
+const BOOTSTRAP_SOGUMA_SANIYE = 600; // 10 dakika
 
 // Yeni parçanın fonlarını mevcut kayıtla birleştirir: aynı `kod`a sahip fon
 // varsa taze veriyle DEĞİŞTİRİLİR, yoksa eklenir. Diğer parçalardan gelen
@@ -81,11 +104,6 @@ async function cronYaz(req, res) {
 
   const parcaNo = req.query?.parca ? parseInt(req.query.parca, 10) : null;
 
-  // KİLİT: oku-değiştir-yaz kritik bölgesini korur. maxDuration (280sn) içinde
-  // birkaç kez deniyoruz — kilit sahibi genelde birkaç dakikada biter, o yüzden
-  // makul aralıklarla birkaç deneme yeterli. Alınamazsa 409 döneriz; Vercel Cron
-  // zaten bir sonraki saatte tekrar deneyecektir, veriyi kaybetmek yerine bu
-  // çağrıyı atlamak daha güvenli.
   let basarili, sonuc;
   try {
     ({ basarili, sonuc } = await kilitliCalistir(
@@ -98,15 +116,12 @@ async function cronYaz(req, res) {
 
       let sonucData, sonucSayim;
       if (yeni.eksikGorunuyor && eski?.data?.length) {
-        // Bu parça bozuk geldi (kategorilerin yarısından fazlası hata verdi) —
-        // eski veriyi bu parça için EZME, olduğu gibi bırak.
         sonucData = eski.data;
         sonucSayim = eski.data.length;
       } else if (parcaNo) {
         sonucData = birlestir(eski?.data, yeni.data);
         sonucSayim = sonucData.length;
       } else {
-        // parça belirtilmeden (tam mod) çağrıldıysa eskisi gibi komple değiştir.
         sonucData = yeni.data;
         sonucSayim = yeni.data.length;
       }
@@ -116,6 +131,9 @@ async function cronYaz(req, res) {
         count: sonucSayim,
         guncelleme: new Date().toISOString(),
         kategori_dagilim: kategoriDagilimHesapla(sonucData),
+        // Cron zaten gerçek veri yazdığı için "eksik" bayrağını temizliyoruz —
+        // bootstrap'tan kalma eksik işareti kalıcı olmasın.
+        eksik: false,
         data: sonucData,
       };
       await kv.set(KV_ANAHTAR, kaydedilecek);
@@ -151,58 +169,69 @@ async function herkesOku(req, res) {
     const bayatMi = !kayit || (Date.now() - new Date(kayit.guncelleme).getTime()) > BAYATLIK_SINIRI_SAAT*3600*1000;
 
     if (bayatMi && !kayit) {
-      // KV tamamen boş (ilk kurulum) — bir kerelik hızlı bootstrap dene.
-      // NOT: parça vermeden çağırıyoruz, bu yüzden ~75-90sn sürebilir; sadece
-      // "hiç veri yok"tan "en azından bir şey var"a geçmek için, tek seferlik.
-      //
-      // KALABALIK HÜCUMU KORUMASI: KV boşken aynı anda gelen birden fazla ilk
-      // istek hepsi paralel fonVerisiCek() tetiklemesin diye, aynı kilit
-      // anahtarıyla (cronYaz'daki ile ortak — bkz. dosya başındaki not) sadece
-      // BİR istek bootstrap yapar; diğerleri kısa aralıklarla önbelleği tekrar
-      // dener. `denemeSayisi:1` veriyoruz çünkü burada kilit alamayınca beklemek
-      // istemediğimiz şey zaten aşağıdaki manuel tekrar-deneme döngüsü.
-      const { basarili, sonuc } = await kilitliCalistir(
-        kv,
-        KILIT_ANAHTARI,
-        /* ttlSaniye */ 90,
-        async () => {
-          const taze = await fonVerisiCek();
-          if (taze.count > 0) {
-            const paket = {
-              success: true,
-              count: taze.count,
-              guncelleme: taze.guncelleme,
-              kategori_dagilim: taze.kategori_dagilim,
-              data: taze.data,
-            };
-            if (taze.count >= ŞÜPHELİ_EŞİK) await kv.set(KV_ANAHTAR, paket).catch(() => {});
-            return paket;
-          }
-          return null;
-        },
-        { denemeSayisi: 1 }
-      ).catch(() => ({ basarili: false, sonuc: null })); // elimizde ne varsa onu döneceğiz
-
-      if (basarili) {
-        if (sonuc) kayit = sonuc;
-      } else {
-        for (let i = 0; i < 6; i++) {
-          await new Promise(r => setTimeout(r, 400));
-          try {
-            const tazeKayit = await kv.get(KV_ANAHTAR).catch(() => null);
-            if (tazeKayit) { kayit = tazeKayit; break; }
-          } catch {}
-        }
-        // Hâlâ yoksa (kilit sahibi yavaş/çökmüş) elimizdeki (boş) durumla devam
-        // ederiz — sonsuza dek beklenmez, aşağıdaki "veri yok" yanıtı döner.
+      // SOĞUMA KONTROLÜ (bkz. dosya başındaki "BOOTSTRAP DÜZELTMESİ" notu):
+      // Son 10 dakika içinde bir bootstrap denemesi zaten yapıldıysa (başarılı
+      // olsun olmasın), YENİ bir tam-çekim tetiklemiyoruz. `nx:true` sayesinde
+      // bu SET işlemi atomik: aynı anda gelen birden fazla istekten sadece
+      // biri "true" (yani "ben denerim") sonucu alır.
+      let denemeBendeMi = false;
+      try {
+        const sonuc = await kv.set(BOOTSTRAP_SOGUMA_ANAHTAR, "1", { nx: true, ex: BOOTSTRAP_SOGUMA_SANIYE });
+        denemeBendeMi = sonuc === "OK" || sonuc === true;
+      } catch {
+        denemeBendeMi = false;
       }
+
+      if (denemeBendeMi) {
+        const { basarili, sonuc } = await kilitliCalistir(
+          kv,
+          KILIT_ANAHTARI,
+          /* ttlSaniye */ 90,
+          async () => {
+            const taze = await fonVerisiCek();
+            if (taze.count > 0) {
+              const paket = {
+                success: true,
+                count: taze.count,
+                guncelleme: taze.guncelleme,
+                kategori_dagilim: taze.kategori_dagilim,
+                // DÜZELTME: kısmi sonuç bile olsa artık KV'ye YAZILIYOR (eski
+                // davranış: sadece count>=ŞÜPHELİ_EŞİK ise yazılıyordu — düşük
+                // sonuçlar hiç yazılmadığı için `kayit` sonsuza dek null kalıp
+                // her istekte yeniden tam-çekim tetikleniyordu).
+                eksik: taze.count < ŞÜPHELİ_EŞİK,
+                data: taze.data,
+              };
+              await kv.set(KV_ANAHTAR, paket).catch(() => {});
+              return paket;
+            }
+            return null;
+          },
+          { denemeSayisi: 1 }
+        ).catch(() => ({ basarili: false, sonuc: null }));
+
+        if (basarili) {
+          if (sonuc) kayit = sonuc;
+        } else {
+          for (let i = 0; i < 6; i++) {
+            await new Promise(r => setTimeout(r, 400));
+            try {
+              const tazeKayit = await kv.get(KV_ANAHTAR).catch(() => null);
+              if (tazeKayit) { kayit = tazeKayit; break; }
+            } catch {}
+          }
+        }
+      }
+      // denemeBendeMi false ise (soğuma süresi içindeyiz) — hiçbir ek Fonoloji
+      // isteği ATMADAN aşağıdaki "veri yok" yanıtına düşüyoruz. Cron parçaları
+      // zaten günde 8 kez çalışıp KV'yi dolduracak.
     }
 
     if (!kayit) {
       res.setHeader("Cache-Control", "s-maxage=30, stale-while-revalidate=30");
       return res.status(200).json({
         success: false,
-        error: "Veri henüz mevcut değil. Cron parçalarının (?cron=1&parca=1/2/3) en az bir kez çalıştığını kontrol edin.",
+        error: "Veri henüz mevcut değil. Cron parçalarının (?cron=1&parca=1..8) en az bir kez çalıştığını kontrol edin.",
         count: 0,
         data: [],
       });
@@ -214,6 +243,7 @@ async function herkesOku(req, res) {
       count: kayit.count,
       guncelleme: kayit.guncelleme,
       kaynakBayat: bayatMi,
+      kaynakEksik: !!kayit.eksik,
       kategori_dagilim: kayit.kategori_dagilim,
       data: kayit.data,
     });
