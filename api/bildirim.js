@@ -113,7 +113,7 @@ async function bildirimGonder(req, res) {
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-admin-key");
 
   if (req.method === "OPTIONS") {
@@ -121,12 +121,34 @@ export default async function handler(req, res) {
     return;
   }
 
+  const islem = req.query?.islem;
+
+  // GEÇİCİ: Safari'den (veya herhangi bir tarayıcıdan) sadece linke dokunarak
+  // test bildirimi gönderebilmek için GET desteği. Admin key burada query
+  // param olarak (?key=...) veriliyor. Test bitince bu bloğu kaldırabilirsiniz.
+  if (req.method === "GET" && islem === "gonder-test") {
+    const gelenAnahtar = req.query?.key;
+    if (!process.env.ADMIN_GIZLI_ANAHTAR || gelenAnahtar !== process.env.ADMIN_GIZLI_ANAHTAR) {
+      res.status(401).json({ hata: "Yetkisiz istek" });
+      return;
+    }
+    req.body = {
+      baslik: req.query?.baslik || "Test",
+      govde: req.query?.govde || "Merhaba, çalışıyor!",
+    };
+    try {
+      await bildirimGonder(req, res);
+    } catch (e) {
+      console.error("bildirim.js (GET test) hatası:", e);
+      res.status(500).json({ hata: "Sunucu hatası oluştu", detay: String(e) });
+    }
+    return;
+  }
+
   if (req.method !== "POST") {
     res.status(405).json({ hata: "Sadece POST kabul edilir" });
     return;
   }
-
-  const islem = req.query?.islem;
 
   try {
     if (islem === "kaydet") {
