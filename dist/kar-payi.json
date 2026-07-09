@@ -1,14 +1,14 @@
 {
   "guncelleme": "2026-07-06",
   "bankalar": [
-    {"ad": "Albaraka Türk", "tl": null, "usd": null, "eur": null, "altin": null},
-    {"ad": "Dünya Katılım", "tl": null, "usd": null, "eur": null, "altin": null},
-    {"ad": "Emlak Katılım", "tl": null, "usd": null, "eur": null, "altin": null},
-    {"ad": "Hayat Finans", "tl": null, "usd": null, "eur": null, "altin": null},
-    {"ad": "Kuveyt Türk", "tl": null, "usd": null, "eur": null, "altin": null},
-    {"ad": "T.O.M. Katılım", "tl": null, "usd": null, "eur": null, "altin": null},
-    {"ad": "Türkiye Finans", "tl": null, "usd": null, "eur": null, "altin": null},
-    {"ad": "Vakıf Katılım", "tl": null, "usd": null, "eur": null, "altin": null},
-    {"ad": "Ziraat Katılım", "tl": null, "usd": null, "eur": null, "altin": null}
+    {"ad": "Albaraka Türk", "tl": 31.35, "usd": 0.93, "eur": 0.60, "altin": null},
+    {"ad": "Dünya Katılım", "tl": 33.30, "usd": 1.80, "eur": 1.71, "altin": 1.67},
+    {"ad": "Emlak Katılım", "tl": 33.18, "usd": 0.70, "eur": 0.55, "altin": 0.10},
+    {"ad": "Hayat Finans", "tl": 38.21, "usd": 2.37, "eur": 2.09, "altin": null},
+    {"ad": "Kuveyt Türk", "tl": 33.22, "usd": 1.16, "eur": 0.85, "altin": 0.14},
+    {"ad": "T.O.M. Katılım", "tl": 41.62, "usd": 4.00, "eur": 1.74, "altin": null},
+    {"ad": "Türkiye Finans", "tl": 28.03, "usd": 0.61, "eur": 0.43, "altin": 0.04},
+    {"ad": "Vakıf Katılım", "tl": 32.32, "usd": 1.25, "eur": 0.85, "altin": null},
+    {"ad": "Ziraat Katılım", "tl": 28.02, "usd": 0.80, "eur": 0.50, "altin": null}
   ]
 }
