@@ -5194,9 +5194,11 @@ function asistanTakvimOzeti():string{
 async function asistanPiyasaOzeti():Promise<string>{
   const satirlar:string[]=[];
   try{
-    const [haberD,kurD]=await Promise.all([
+    const [haberD,kurD,bist100D,xk100D]=await Promise.all([
       fetch(`${API_BASE}/api/finans-haberleri`).then(r=>r.ok?r.json():null).catch(()=>null),
       fetch(`${API_BASE}/api/piyasa-fiyatlar?tip=kur`).then(r=>r.ok?r.json():null).catch(()=>null),
+      fetch(`${API_BASE}/api/gecmis?sembol=${encodeURIComponent("XU100.IS")}`).then(r=>r.ok?r.json():null).catch(()=>null),
+      fetch(`${API_BASE}/api/gecmis?sembol=${encodeURIComponent("XK100.IS")}`).then(r=>r.ok?r.json():null).catch(()=>null),
     ]);
 
     if(haberD?.success && Array.isArray(haberD.data) && haberD.data.length>0){
@@ -5206,6 +5208,26 @@ async function asistanPiyasaOzeti():Promise<string>{
         const zamanEtiket=farkDk<60?`${farkDk} dk önce`:farkDk<1440?`${Math.round(farkDk/60)} sa önce`:new Date(h.tarih).toLocaleDateString("tr-TR");
         satirlar.push(`${i+1}. ${h.baslik} (${h.kaynak||"?"}, ${zamanEtiket})`);
       });
+    }
+
+    // BIST 100 / Katılım Endeksi (XK100) — "Hisse Senetleri Veri İzleme" ekranıyla
+    // aynı /api/gecmis kaynağından. Asistan bu değeri artık DOĞRUDAN verebiliyor,
+    // "ilgili ekrana gidebiliriz" diye yönlendirmek yerine.
+    const endeksSatiriUret=(d:any, ad:string)=>{
+      const noktalar=d?.noktalar||[];
+      const fiyatlar=noktalar.map((n:any)=>n.fiyat).filter((f:any)=>typeof f==="number");
+      const guncel=d?.guncelFiyat??fiyatlar[fiyatlar.length-1];
+      const onceki=d?.oncekiKapanis??fiyatlar[fiyatlar.length-2];
+      if(guncel==null) return null;
+      const degisim=onceki?((guncel-onceki)/onceki*100):null;
+      return `- ${ad}: ${guncel.toLocaleString("tr-TR",{maximumFractionDigits:2})}${degisim!=null?` (günlük ${degisim>=0?"+":""}${degisim.toFixed(2)}%)`:""}`;
+    };
+    const bist100Satiri=endeksSatiriUret(bist100D,"BIST 100");
+    const xk100Satiri=endeksSatiriUret(xk100D,"Katılım Endeksi (XK100)");
+    if(bist100Satiri||xk100Satiri){
+      satirlar.push("\nGÜNCEL BORSA ENDEKSLERİ (uygulamanın kendi \"BİST Hisse Veri İzleme\" ekranındaki canlı veriden):");
+      if(bist100Satiri) satirlar.push(bist100Satiri);
+      if(xk100Satiri) satirlar.push(xk100Satiri);
     }
 
     if(kurD){
@@ -5220,6 +5242,40 @@ async function asistanPiyasaOzeti():Promise<string>{
     }
   }catch(e){}
   return satirlar.join("\n");
+}
+
+// Kullanıcının sorusu + asistan yanıtındaki anahtar kelimelere göre "ilgili
+// ekrana git" butonunun hedefini belirler. Modelin kendisine güvenmek yerine
+// (LLM çıktısı deterministik değildir) frontend'de basit ama güvenilir bir
+// anahtar kelime eşleşmesi kullanıyoruz — böylece buton her zaman GERÇEK ve
+// GEÇERLİ bir ekrana gider.
+function asistanIlgiliEkran(soru:string, cevap:string):{ekran:string,label:string}|null{
+  const metin=`${soru} ${cevap}`.toLocaleLowerCase("tr-TR");
+  const eslesmeler:[RegExp,string,string][]=[
+    [/bist\s*100|bist100|xu100|hisse senedi|hisse fiyat/,"bistHisseTarayici","📊 BİST Hisse Veri İzleme"],
+    [/katılım endeksi|xk100/,"bistHisseTarayici","📊 BİST Hisse Veri İzleme"],
+    [/dolar|usd|euro|eur\b|sterlin|gbp|döviz|kur\b|parite/,"piyasaMenu","💱 Piyasa & Kurlar"],
+    [/altın|gümüş|ons\b/,"piyasaMenu","🥇 Piyasa & Kurlar"],
+    [/haber|gündem/,"piyasaHaberleri","📰 Piyasa Haberleri"],
+    [/katılım fonu|fon getiri|yatırım fonu/,"fonGetiriIzleme","📈 Yatırım Fonları Getiri İzleme"],
+    [/kâr payı oran|kar payi oran|banka.*oran.*kıyasla|hangi banka.*yüksek/,"karPayiOranlari","🏦 Kâr Payı Oranları"],
+    [/getiri karşılaştırma|dönemsel getiri/,"getiriKarsilastirma","📊 Getiri Karşılaştırma"],
+    [/haftalık.*özet|haftalık.*piyasa/,"haftalikOzet","📰 Haftalık Piyasa Özeti"],
+    [/spot finansman/,"spotFinansman","⚡ Spot Finansman Hesaplama"],
+    [/pos komisyon|pos kârlılık/,"posHesaplama","💳 POS Komisyon Hesaplama"],
+    [/leasing|finansal kiralama/,"leasing","🔑 Finansal Kiralama Hesaplama"],
+    [/teminat mektubu/,"tmKomisyon","📄 Teminat Mektubu Komisyon Hesaplama"],
+    [/akreditif/,"akreditifKomisyon","🌐 Akreditif Komisyon Hesaplama"],
+    [/söik|reeskont/,"soikReeskont","🚢 SÖİK ve Reeskont Finansmanı Hesaplama"],
+    [/taksitli ticari/,"taksitliTicari","🏗️ Taksitli Ticari Finansman Hesaplama"],
+    [/konut finansman/,"konutFinansman","🏠 Konut Finansmanı Hesaplama"],
+    [/taşıt finansman/,"tasitFinansman","🚗 Taşıt Finansmanı Hesaplama"],
+    [/zorunlu karşılık|zk\b/,"hesaplaMenu","🧮 Hesaplama Araçları"],
+  ];
+  for(const [regex,ekran,label] of eslesmeler){
+    if(regex.test(metin)) return {ekran,label};
+  }
+  return null;
 }
 
 function Asistan({nav, settings}:{nav:any, settings?:any}){
@@ -5310,7 +5366,8 @@ function Asistan({nav, settings}:{nav:any, settings?:any}){
         setAsistanHata(hataMsg);
         setMsgs(p=>[...p,{role:"assistant",text:`⚠️ Yanıt alınamadı: ${hataMsg}`,ekler:[]}]);
       } else {
-        setMsgs(p=>[...p,{role:"assistant",text:d.text,ekler:[]}]);
+        const ilgiliEkran=asistanIlgiliEkran(q,d.text);
+        setMsgs(p=>[...p,{role:"assistant",text:d.text,ekler:[],ilgiliEkran}]);
       }
     }catch(e:any){
       setAsistanHata(e?.message||"Bağlantı hatası");
@@ -5423,6 +5480,16 @@ function Asistan({nav, settings}:{nav:any, settings?:any}){
                       )}
                     </div>
                   ))}
+                  {m.role==="assistant"&&m.ilgiliEkran&&(
+                    <button onClick={()=>nav(m.ilgiliEkran.ekran)} style={{
+                      marginTop:6,width:"100%",padding:"9px 14px",borderRadius:12,
+                      border:"1.5px solid #3B82F6",background:"rgba(59,130,246,0.12)",
+                      color:"#7DB2FF",fontWeight:700,fontSize:13,cursor:"pointer",
+                      textAlign:"left",display:"flex",alignItems:"center",gap:8,
+                    }}>
+                      {m.ilgiliEkran.label} → Ekrana Git
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -7755,13 +7822,20 @@ function GetiriKarsilastirma(){
 
   const aktifAralik=GK_ARALIKLAR.find(a=>a.key===aralik);
   const barlar=useMemo(()=>{
-    const liste:{ad:string,getiri:number,silinebilir?:string}[]=[];
+    const liste:{ad:string,getiri:number|null,kisaAd?:string,silinebilir?:string}[]=[];
     (veri?.getiriler||[]).forEach((g:any)=>{
       if(g.getiri!=null) liste.push({ad:g.ad,getiri:g.getiri});
     });
     const fonAlan=aktifAralik?.fon;
     if(fonAlan && fonOrt[fonAlan]!=null){
-      liste.push({ad:"Para Piyasası Fonları (Ort.)",getiri:Math.round(fonOrt[fonAlan]*100)/100});
+      // kisaAd: grafikteki eğik etikette tam ad ilk sıradayken sola taşıp
+      // kesiliyordu — grafikte kısa ad, alttaki listede tam ad kullanılır.
+      liste.push({ad:"Para Piyasası Fonları (Ort.)",kisaAd:"Para P. Fonları",getiri:Math.round(fonOrt[fonAlan]*100)/100});
+    } else if(!fonAlan){
+      // 6 Ay: veri kaynağında (TEFAS) 6 aylık alan yok — satır tamamen
+      // kaybolmasın, listede "—" olarak görünsün ki kullanıcı bunun bir hata
+      // değil veri sınırlaması olduğunu anlasın. Grafikte bar çizilmez.
+      liste.push({ad:"Para Piyasası Fonları (Ort.)",kisaAd:"Para P. Fonları",getiri:null});
     }
     // Kullanıcının eklediği Yahoo enstrümanları (API yanıtındaki ekstraGetiriler)
     (veri?.ekstraGetiriler||[]).forEach((g:any)=>{
@@ -7776,15 +7850,21 @@ function GetiriKarsilastirma(){
         if(typeof v==="number"&&isFinite(v)) liste.push({ad:e.kod,getiri:Math.round(v*100)/100,silinebilir:e.etiket});
       });
     }
-    return liste.sort((a,b)=>b.getiri-a.getiri);
+    return liste.sort((a,b)=>{
+      if(a.getiri==null&&b.getiri==null) return 0;
+      if(a.getiri==null) return 1;
+      if(b.getiri==null) return -1;
+      return b.getiri-a.getiri;
+    });
   },[veri,fonOrt,fonListe,ekstraListe,aralik]);
 
   const fmtYzd=(v:number)=>`${v.toFixed(2).replace(".",",")} %`;
 
   // Grafik geometrisi — negatif getirileri de destekler (sıfır çizgisi)
   const H=210, ETIKET_H=64, BAR_W=52, GAP=18;
-  const maxV=Math.max(0,...barlar.map(b=>b.getiri));
-  const minV=Math.min(0,...barlar.map(b=>b.getiri));
+  const grafikBarlar=barlar.filter(b=>b.getiri!=null) as {ad:string,getiri:number,kisaAd?:string,silinebilir?:string}[];
+  const maxV=Math.max(0,...grafikBarlar.map(b=>b.getiri));
+  const minV=Math.min(0,...grafikBarlar.map(b=>b.getiri));
   const aralikV=(maxV-minV)||1;
   const sifirY=(maxV/aralikV)*H; // sıfır çizgisinin üstten uzaklığı
 
@@ -7889,7 +7969,7 @@ function GetiriKarsilastirma(){
             <p style={{margin:"0 0 14px 12px",fontSize:14,fontWeight:800,color:"#F1F5F9"}}>Getiri Karşılaştırma <span style={{fontSize:11,fontWeight:600,color:"rgba(255,255,255,0.4)"}}>· {aktifAralik?.label}</span></p>
             <div className="piyasa-scroll" style={{overflowX:"auto"}}>
               <div style={{display:"flex",alignItems:"flex-start",gap:GAP,padding:"0 12px",minWidth:barlar.length*(BAR_W+GAP)}}>
-                {barlar.map((b,i)=>{
+                {grafikBarlar.map((b,i)=>{
                   const yukseklik=Math.max(3,(Math.abs(b.getiri)/aralikV)*H);
                   const pozitif=b.getiri>=0;
                   return(
@@ -7922,7 +8002,7 @@ function GetiriKarsilastirma(){
                           position:"absolute",top:10,left:"50%",
                           transform:"rotate(-32deg) translateX(-60%)",transformOrigin:"left top",
                           fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.75)",whiteSpace:"nowrap",
-                        }}>{b.ad}</span>
+                        }}>{b.kisaAd||b.ad}</span>
                       </div>
                     </div>
                   );
@@ -7937,7 +8017,7 @@ function GetiriKarsilastirma(){
               <div key={b.ad} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:i<barlar.length-1?"1px solid rgba(255,255,255,0.06)":"none"}}>
                 <span style={{width:20,fontSize:11,fontWeight:800,color:"rgba(255,255,255,0.35)",flexShrink:0}}>{i+1}</span>
                 <span style={{flex:1,fontSize:13,fontWeight:700,color:"#E8F0FA",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{b.ad}</span>
-                <span style={{fontSize:13,fontWeight:800,fontFamily:"monospace",color:b.getiri>=0?"#4ADE80":"#F87171",flexShrink:0}}>{b.getiri>=0?"+":""}{fmtYzd(b.getiri)}</span>
+                <span style={{fontSize:13,fontWeight:800,fontFamily:"monospace",color:b.getiri==null?"rgba(255,255,255,0.3)":b.getiri>=0?"#4ADE80":"#F87171",flexShrink:0}}>{b.getiri==null?"—":`${b.getiri>=0?"+":""}${fmtYzd(b.getiri)}`}</span>
               </div>
             ))}
           </div>
