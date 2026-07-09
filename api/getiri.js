@@ -37,9 +37,19 @@ async function yahooGetiri(sembol, range, p1, p2) {
     ? `period1=${p1}&period2=${p2}&interval=1d`
     : `range=${range}&interval=1d`;
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sembol)}?${q}`;
-  const r = await fetch(url, {
-    headers: { "User-Agent": "Mozilla/5.0 (compatible; KatilimPlus/1.0)" },
-  });
+  const ac = new AbortController();
+  const zamanAsimi = setTimeout(() => ac.abort(), 6000); // tek istek 6sn'yi geçerse iptal — toplu bekleme kilitlenmesin
+  let r;
+  try {
+    r = await fetch(url, {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; KatilimPlus/1.0)" },
+      signal: ac.signal,
+    });
+  } catch {
+    clearTimeout(zamanAsimi);
+    return null;
+  }
+  clearTimeout(zamanAsimi);
   if (!r.ok) return null;
   const j = await r.json();
   const sonuc = j?.chart?.result?.[0];
@@ -149,7 +159,9 @@ function isoHafta(d = new Date()) {
 // Para piyasası katılım fonlarının haftalık ortalaması (kendi tefas-proxy'mizden)
 async function fonHaftalikOrt(host) {
   try {
-    const r = await fetch(`https://${host}/api/tefas-proxy`);
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), 6000);
+    const r = await fetch(`https://${host}/api/tefas-proxy`, { signal: ac.signal }).finally(() => clearTimeout(t));
     if (!r.ok) return null;
     const j = await r.json();
     const fonlar = (j?.data || []).filter((f) => {
@@ -167,7 +179,9 @@ async function fonHaftalikOrt(host) {
 // Haftanın öne çıkan haber başlıkları (kendi finans-haberleri endpoint'imizden)
 async function haftaninHaberleri(host) {
   try {
-    const r = await fetch(`https://${host}/api/finans-haberleri`);
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), 6000);
+    const r = await fetch(`https://${host}/api/finans-haberleri`, { signal: ac.signal }).finally(() => clearTimeout(t));
     if (!r.ok) return [];
     const j = await r.json();
     const liste = j?.success && Array.isArray(j.data) ? j.data : [];
@@ -182,6 +196,11 @@ async function haftaninHaberleri(host) {
 
 const ARSIV_ANAHTAR = "haftalikOzetArsiv";
 const ARSIV_BOYU = 4; // her zaman son 4 hafta tutulur
+
+// Bu endpoint 9 paralel Yahoo isteği + fon/haber isteklerini birlikte
+// çalıştırır; Vercel planı izin veriyorsa süre sınırını uzatır (Hobby
+// planda üst sınır 10sn'de sabit kalır, bu satır zararsızdır).
+export const config = { maxDuration: 30 };
 
 async function haftalikOzet(req, res) {
   // Yazma yapan işlem — CDN'de kısa cache yeterli
@@ -217,9 +236,17 @@ async function haftalikOzet(req, res) {
   let guncel = arsiv.find((k) => k && k.hafta === hafta && k.v === 2 && Array.isArray(k.satirlar) && k.satirlar.length > 0);
 
   if (!guncel) {
-    const { getiriler, donem } = await hesaplaGetiriler(null, [], p1, p2, true); // genis: Brent, EUR/USD, S&P 500 dahil
-    const fonHafta = await fonHaftalikOrt(req.headers.host);
-    const haberler = await haftaninHaberleri(req.headers.host);
+    // Üç ayrı veri kaynağı (Yahoo, kendi tefas-proxy, kendi finans-haberleri)
+    // önceden SIRAYLA bekleniyordu — toplam süre Vercel'in fonksiyon zaman
+    // aşımına (hobby planda ~10sn) yaklaşıp isteği kesebiliyordu. Artık
+    // paralel çalıştırılıyor; haber/fon kaynaklarından biri yavaş/hatalı
+    // olsa bile (kendi içlerinde try/catch ile null/[] döner) ana veri
+    // etkilenmez.
+    const [{ getiriler, donem }, fonHafta, haberler] = await Promise.all([
+      hesaplaGetiriler(null, [], p1, p2, true), // genis: Brent, EUR/USD, S&P 500 dahil
+      fonHaftalikOrt(req.headers.host),
+      haftaninHaberleri(req.headers.host),
+    ]);
     guncel = {
       v: 2,
       hafta,
@@ -242,7 +269,7 @@ async function haftalikOzet(req, res) {
   const gecmis = arsiv
     .filter((k) => k && k.hafta !== hafta)
     .sort((a, b) => String(b.hafta).localeCompare(String(a.hafta)));
-öp
+
   res.status(200).json({ basarili: true, guncel, arsiv: gecmis });
 }
 
