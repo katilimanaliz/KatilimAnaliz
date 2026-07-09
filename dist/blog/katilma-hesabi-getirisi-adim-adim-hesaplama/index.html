@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Katılma Hesabı Getirisi Nasıl Hesaplanır? (Adım Adım Örnek) | Katılım Plus</title>
+<meta name="description" content="Katılım bankası kâr payı hesaplaması adım adım: brüt kâr payı, stopaj kesintisi ve net tutar formülleri, 100.000 TL örneğiyle.">
+<link rel="canonical" href="https://www.katilimplus.com/blog/katilma-hesabi-getirisi-adim-adim-hesaplama/">
+<meta property="og:title" content="Katılma Hesabı Getirisi Nasıl Hesaplanır? (Adım Adım Örnek)">
+<meta property="og:description" content="Katılım bankası kâr payı hesaplaması adım adım: brüt kâr payı, stopaj kesintisi ve net tutar formülleri, 100.000 TL örneğiyle.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://www.katilimplus.com/blog/katilma-hesabi-getirisi-adim-adim-hesaplama/">
+<meta name="robots" content="index, follow">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": 'Katılma Hesabı Getirisi Nasıl Hesaplanır? (Adım Adım Örnek)',
+  "description": 'Katılım bankası kâr payı hesaplaması adım adım: brüt kâr payı, stopaj kesintisi ve net tutar formülleri, 100.000 TL örneğiyle.',
+  "author": {"@type": "Organization", "name": "Katılım Plus"},
+  "publisher": {"@type": "Organization", "name": "Katılım Plus"},
+  "datePublished": "2026-07-10",
+  "dateModified": "2026-07-10",
+  "mainEntityOfPage": "https://www.katilimplus.com/blog/katilma-hesabi-getirisi-adim-adim-hesaplama/"
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {"@type": "Question", "name": 'Gösterge kâr payı oranı ile gerçekte alacağım tutar aynı mı olur?', "acceptedAnswer": {"@type": "Answer", "text": 'Genellikle birbirine yakın olur ama birebir aynı olması garanti edilmez. Gösterge oran, geçmiş dönemde fiilen dağıtılmış kârı yansıtır; nihai sonuç, vadeniz dolduğunda havuzda oluşan gerçek net kâra bağlıdır.'}},
+    {"@type": "Question", "name": 'Farklı katılım hesabı tekliflerini karşılaştırırken neye bakmalıyım?', "acceptedAnswer": {"@type": "Answer", "text": 'Sadece brüt (gösterge) orana değil, vadeye göre değişen stopaj kesintisi sonrası net getiriye bakmalısınız — çünkü brüt oranı yüksek görünen bir teklif, stopaj sonrası net olarak daha düşük çıkabilir.'}}
+  ]
+}
+</script>
+<style>
+  :root{--yesil:#1B9E7A;--yesil2:#2CCB9A;--lacivert:#0F1923;--metin:#1a2430;--sub:#5b6b7a;--border:#e5e9ee;}
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:#fafbfc;color:var(--metin);line-height:1.7;}
+  header{background:var(--lacivert);padding:24px 20px;text-align:center;}
+  header a{color:#fff;text-decoration:none;font-size:20px;font-weight:800;}
+  header a span{background:linear-gradient(90deg,var(--yesil),var(--yesil2));-webkit-background-clip:text;background-clip:text;color:transparent;}
+  main{max-width:680px;margin:0 auto;padding:36px 20px 60px;}
+  .breadcrumb{font-size:12px;color:var(--sub);margin-bottom:16px;}
+  .breadcrumb a{color:var(--sub);}
+  h1{font-size:26px;line-height:1.3;margin:0 0 8px;}
+  .meta{font-size:12.5px;color:var(--sub);margin-bottom:28px;}
+  h2{font-size:19px;margin:32px 0 10px;}
+  h3{font-size:16px;margin:24px 0 8px;}
+  p{font-size:15.5px;margin:0 0 16px;}
+  ul{padding-left:20px;}
+  li{font-size:15.5px;margin-bottom:8px;}
+  ol{padding-left:20px;}
+  .ornek{background:#f4f7f9;border-left:3px solid var(--yesil);border-radius:8px;padding:16px 18px;margin:20px 0;font-size:14.5px;}
+  .ornek strong{color:var(--yesil);}
+  .uyari{background:#fff8ec;border-left:3px solid #d99a2b;border-radius:8px;padding:14px 18px;margin:20px 0;font-size:13.5px;color:#7a5a12;}
+  table{width:100%;border-collapse:collapse;margin:20px 0;font-size:14px;}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--border);}
+  th{color:var(--sub);font-weight:700;font-size:12px;text-transform:uppercase;}
+  td:first-child{font-weight:600;color:var(--yesil);white-space:nowrap;}
+  .cta{background:linear-gradient(135deg,var(--yesil),var(--yesil2));border-radius:16px;padding:24px;text-align:center;margin:36px 0;}
+  .cta p{color:rgba(255,255,255,0.9);margin:0 0 14px;font-size:14.5px;}
+  .cta a{display:inline-block;background:#fff;color:var(--yesil);font-weight:800;text-decoration:none;padding:12px 26px;border-radius:12px;font-size:14.5px;}
+  footer{text-align:center;padding:24px 20px;color:var(--sub);font-size:12px;border-top:1px solid var(--border);margin-top:20px;}
+  footer a{color:var(--yesil);}
+
+</style>
+</head>
+<body>
+<header><a href="https://www.katilimplus.com/">Katılım <span>Plus</span></a></header>
+<main>
+  <p class="breadcrumb"><a href="/blog/">Katılım Blog</a> › Katılma Hesabı Getirisi Nasıl Hesaplanır? (Adım Adım Örnek)</p>
+  <h1>Katılma Hesabı Getirisi Nasıl Hesaplanır? (Adım Adım Örnek)</h1>
+  <p class="meta">Güncelleme: Temmuz 2026 · Okuma süresi: 6 dakika</p>
+
+  <p>Katılım bankalarının web sitelerindeki "kâr payı hesaplama" araçları genellikle geçmiş dönem verilerine dayanır ve size sadece bir "gösterge" verir. Ama siz paranızı yatırdığınızda elinize <strong>brüt</strong> ve <strong>net</strong> olarak tam olarak ne geçeceğini bilmek istersiniz. Bu yazıda, 100.000 TL'lik 32 günlük bir örnek üzerinden, formülleri adım adım açıyoruz.</p>
+
+  <h2>Adım 1: Brüt Kâr Payını Hesaplayın</h2>
+  <div class="ornek">
+    Brüt Kâr Payı = Anapara × (Yıllık Gösterge Oranı ÷ 365) × Vade Gün Sayısı<br><br>
+    Örnek: 100.000 TL anapara, %38 yıllıklandırılmış gösterge oranı, 32 gün vade:<br>
+    Brüt Kâr Payı = 100.000 × (0,38 ÷ 365) × 32 = <strong>3.331,51 TL</strong>
+  </div>
+  <p>Bu formül, kâr payının vade boyunca <strong>günlük olarak</strong> işlediği varsayımına dayanır — gerçek hesaplamada banka, kendi günlük nema katsayısını kullanır; bu katsayı, o dönem havuzda oluşan fiili kâra göre hafifçe farklılık gösterebilir.</p>
+
+  <h2>Adım 2: Stopaj Kesintisini Uygulayın</h2>
+  <p>Brüt kâr payından, hesabın vadesine göre değişen oranda stopaj (gelir vergisi) kesilir. Kısa vadeli hesaplarda stopaj oranı görece yüksek, uzun vadeli (1 yıl üstü) hesaplarda düşüktür.</p>
+  <div class="ornek">
+    Net Kâr Payı = Brüt Kâr Payı × (1 − Stopaj Oranı)<br><br>
+    Örnek: 32 günlük vadeye uygulanan stopaj oranı %15 ise:<br>
+    Net Kâr Payı = 3.331,51 × (1 − 0,15) = <strong>2.831,78 TL</strong>
+  </div>
+
+  <h2>Adım 3: Toplam Bakiyenizi Bulun</h2>
+  <div class="ornek">
+    Vade Sonu Toplam Bakiye = Anapara + Net Kâr Payı<br><br>
+    Vade Sonu Bakiye = 100.000 + 2.831,78 = <strong>102.831,78 TL</strong>
+  </div>
+
+  <h2>Neden "Gösterge Oran" ile Gerçek Sonuç Farklı Olabilir?</h2>
+  <p>Bankaların ilan ettiği kâr payı oranı, geçmiş dönemde fiilen dağıtılmış kârı yansıtan bir <strong>gösterge</strong>dir — geleceğe dönük bir taahhüt değildir. Vadeniz dolduğunda, o dönem havuzda oluşan gerçek net kâra göre nihai oran hafifçe farklı çıkabilir (genellikle gösterge orana yakın olur, ama birebir aynı olması garanti edilmez).</p>
+
+  <h2>Farklı Vade ve Tutarları Nasıl Karşılaştırırsınız?</h2>
+  <p>Farklı bankaların veya farklı vade seçeneklerinin karşılaştırmasını yaparken, her zaman <strong>net</strong> getiriye (stopaj sonrası) bakmanız gerekir — çünkü stopaj oranı vadeye göre değiştiği için, brüt oranı yüksek görünen bir teklif net olarak daha düşük çıkabilir.</p>
+
+  <div class="cta">
+    <p>Kendi anaparanız, vadeniz ve güncel gösterge oranlarla net kâr payınızı saniyeler içinde hesaplayın.</p>
+    <a href="https://www.katilimplus.com/?ekran=vadeliKatilim">Katılım Hesabı Getiri Hesaplayıcısını Aç →</a>
+  </div>
+
+  <p>Katılım bankacılığıyla ilgili diğer merak edilen konuları <a href="/blog/">Katılım Blog</a>'da bulabilirsiniz.</p>
+
+</main>
+<footer>
+  © 2026 Katılım Plus · <a href="https://www.katilimplus.com/">Uygulamaya git</a> · <a href="/blog/">Tüm yazılar</a>
+</footer>
+</body>
+</html>
