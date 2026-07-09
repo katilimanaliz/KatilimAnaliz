@@ -15,6 +15,7 @@
 // dosyaya (örn. gecmis.js içine ?islem= parametresiyle) birleştirilebilir.
 
 const ARALIK_MAP = {
+  "1hafta": "5d", // Yahoo'da 1 hafta = son 5 işlem günü
   "1ay":  "1mo",
   "3ay":  "3mo",
   "6ay":  "6mo",
@@ -51,7 +52,7 @@ export default async function handler(req, res) {
   const aralik = String(req.query?.aralik || "1ay");
   const range = ARALIK_MAP[aralik];
   if (!range) {
-    res.status(400).json({ basarili: false, hata: "Geçersiz aralık. 1ay|3ay|6ay|1yil|ybb" });
+    res.status(400).json({ basarili: false, hata: "Geçersiz aralık. 1hafta|1ay|3ay|6ay|1yil|ybb" });
     return;
   }
 
