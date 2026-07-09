@@ -1,4 +1,4 @@
-// api/evds-proxy.js - FINAL v6
+// api/evds-proxy.js - FINAL v7
 // Haftalık kredi oranları + Aylık stok + Enflasyon + TLREF (oran, endeksten türetilmiş) + AOFM
 //
 // TLREF DÜZELTMESİ (2026-07): TP.BISTTLREF.KAPANIS ham değeri bir ORAN (%) değil,
@@ -10,6 +10,15 @@
 // nedeniyle eski TP.FE.OKTG01 serisi Aralık 2025'te donmuştu. Doğru yeni seri
 // kodu (TP_TUKFIY2025_GENEL) EVDS üzerinden bulunup doğrulandı, Haziran 2026'ya
 // kadar güncel veri veriyor. ENFLASYON dizisi buna göre güncellendi.
+//
+// TÜFE SERİ DÜZELTMESİ (2026-07, v7): Ana kart (anlık TUFE_YILLIK) değeri ile
+// detay tablosundaki (TUFE_YILLIK_SERI) en son satır birbirinden farklı
+// görünüyordu (örn. %32,11 vs %33,92). Kök neden: YoY (yıllık değişim) hesabı
+// "12 ay önceki" veriyle kıyaslanmalıyken, seri döngüsü yanlışlıkla "13 ay
+// önceki" veriyle kıyaslıyordu (index i-13, doğrusu i-12). Ana karttaki tekil
+// hesap zaten doğruydu (tufeDizi.length-13, ki bu length-1'den 12 geridir);
+// sadece seri döngüsündeki indeks kayması düzeltildi — artık ikisi birebir
+// aynı ayı, aynı yöntemle hesaplayıp aynı sonucu veriyor.
 
 const BASE = "https://evds3.tcmb.gov.tr/igmevdsms-dis";
 
@@ -35,8 +44,12 @@ const redis = new Redis({
 // değişikliği yapılırsa yine bu versiyonu artırmak gerekir.
 // NOT (2026-07-05): v4 → v5 sürüm değişikliği — DÜZELTME 5 ile TLREF hesaplama
 // yöntemi (regresyon → medyan + tam formül) değiştiği için tekrar artırıldı.
-const KV_ANLIK_KEY = "evds:anlik:v5";
-const KV_TARIHSEL_PREFIX = "evds:tarihsel:v5:";
+// NOT (2026-07): v5 → v6 sürüm değişikliği — TÜFE serisindeki off-by-one
+// (13 ay yerine 12 ay geri kıyaslama) düzeltmesi eski cache'i geçersiz kılmak
+// için yapıldı; aksi halde kod deploy edilse bile kullanıcı 6 saat boyunca
+// hâlâ hatalı önbelleklenmiş TUFE_YILLIK_SERI'yi görmeye devam ederdi.
+const KV_ANLIK_KEY = "evds:anlik:v6";
+const KV_TARIHSEL_PREFIX = "evds:tarihsel:v6:";
 
 // Vercel'in varsayılan fonksiyon süresi (Hobby planda genelde 10sn) artık 8 dış
 // isteğe (5 EVDS + 3 FRED) yetmiyor — bu yüzden ERR_CONNECTION_CLOSED alınıyordu
@@ -112,11 +125,6 @@ function normalizeTarih(t) {
     const[y,m,d]=s.split("-");
     return `${d.padStart(2,"0")}-${m.padStart(2,"0")}-${y}`;
   }
-  // DÜZELTME: eski regex "\d{2}" (tam 2 haneli ay) istiyordu — "2025-10" gibi
-  // ayları yakalayıp DD-MM-YYYY'ye çeviriyordu ama "2026-6" gibi TEK haneli
-  // ayları HİÇ yakalamıyordu, bu yüzden bazı aylar ham "YYYY-M" formatında
-  // kalıp diğerleriyle (DD-MM-YYYY) karışık görünüyordu. Artık "\d{1,2}" ile
-  // her iki durumu da yakalayıp aynı formata (sıfır dolgulu) çeviriyoruz.
   if(/^\d{4}-\d{1,2}$/.test(s)){
     const[y,m]=s.split("-");
     return `01-${m.padStart(2,"0")}-${y}`;
@@ -152,10 +160,6 @@ function tumDegerler(items, seri) {
   }).filter(Boolean);
 }
 
-// ── Tarih ayrıştırma (DD-MM-YYYY) ve gün farkı hesaplama ────────────────────
-// TLREF endeksinden oran türetirken iki ardışık veri noktası arasındaki
-// GERÇEK takvim günü farkını bilmemiz gerekiyor — bu yüzden "DD-MM-YYYY"
-// formatındaki tarihi Date nesnesine çeviren küçük bir yardımcı.
 function tarihParseDDMMYYYY(s) {
   if(!s) return null;
   const [d,m,y] = s.split("-").map(Number);
@@ -167,16 +171,10 @@ function gunFarki(tarihSonStr, tarihOncekiStr) {
   const b = tarihParseDDMMYYYY(tarihOncekiStr);
   if(!a||!b) return 1;
   const fark = Math.round((a - b) / (1000*60*60*24));
-  return fark > 0 ? fark : 1; // negatif/0 gelirse (bozuk veri) en az 1 varsay
+  return fark > 0 ? fark : 1;
 }
 
-// ── TÜFE gerçek açıklanma tarihi ────────────────────────────────────────────
-// EVDS'deki TÜFE serisinin "tarih" alanı verinin REFERANS AYINI gösterir
-// (örn. "2026-6" → Haziran 2026 enflasyonu), yayımlandığı takvim gününü değil.
-// TÜİK, bir ayın enflasyon verisini BİR SONRAKİ ayın 3. günü (hafta sonuysa
-// ileri kaydırılmış) açıklar. Referans ayı, sanki verinin "01"i açıklanmış
-// gibi göstermek (önceki davranış) yanıltıcıydı — kullanıcı bunu fark etti.
-function ayinNIsGunu(yil, ay, gun){ // ay: 0-indeksli
+function ayinNIsGunu(yil, ay, gun){
   let d = new Date(Date.UTC(yil, ay, gun));
   while(d.getUTCDay()===0 || d.getUTCDay()===6){ d.setUTCDate(d.getUTCDate()+1); }
   return d;
@@ -185,44 +183,14 @@ function tufeAcikilanmaTarihi(referansTarihStr){
   const d = tarihParseDDMMYYYY(referansTarihStr);
   if(!d) return referansTarihStr;
   const yil = d.getUTCFullYear();
-  const ay = d.getUTCMonth(); // 0-indeksli referans ay
-  const acikilanma = ayinNIsGunu(yil, ay+1, 3); // referans ayından BİR SONRAKİ ayın 3. günü
+  const ay = d.getUTCMonth();
+  const acikilanma = ayinNIsGunu(yil, ay+1, 3);
   const dd=String(acikilanma.getUTCDate()).padStart(2,"0");
   const mm=String(acikilanma.getUTCMonth()+1).padStart(2,"0");
   const yy=acikilanma.getUTCFullYear();
   return `${dd}-${mm}-${yy}`;
 }
 
-// ── TLREF: endeksten oran türetimi — DÜZELTME 5 (2026-07) ──────────────────
-// Önceki sürüm (DÜZELTME 4), iki noktaya dayanan kıyaslamaların Cuma/Pazartesi
-// sapmasına düşmesi üzerine ~3 haftalık bir pencerede log-endeks üzerinden
-// EN KÜÇÜK KARELER (regresyon) eğimi hesaplıyordu. Bu, farklı bir haftalık
-// örüntüyü ortaya çıkardı: HER PERŞEMBE hesaplanan oran ~%26'ya düşüyordu
-// (diğer günler doğru ~%40 civarındaydı). Regresyon, pencere içindeki TÜM
-// noktalardan etkilendiği için, periyodik/tekrarlayan tek bir bozuk nokta
-// eğimi fark edilir ölçüde kaydırabiliyordu — üstelik pencere kaydıkça hangi
-// Perşembe'nin dahil/hariç olduğu değiştiği için sonuç gün gün oynuyordu.
-//
-// Bu sürüm iki değişiklik yapıyor:
-//  1) Yaklaşık (log-regresyon) yerine BIST'in KENDİ endeks tanımından türeyen
-//     TAM formülü kullanıyoruz: Endeks_t = Endeks_(t-1) × (1 + TLREF_t × g_t/365)
-//     => TLREF_t = ((Endeks_t/Endeks_(t-1)) - 1) × (365/g_t) × 100
-//     g_t = iki gözlem arasındaki GERÇEK takvim günü farkı (yukarıdaki
-//     gunFarki() burada nihayet kullanılıyor) — Cuma/tatil için ayrı özel
-//     durum kodlamaya gerek yok, doğru g_t otomatik olarak bunu çözüyor.
-//  2) Pencere içindeki noktaların ORTALAMASI/EĞİMİ yerine MEDYANINI alıyoruz.
-//     Medyan, regresyona göre tekil/periyodik anomalilere çok daha dayanıklı:
-//     9 noktalık bir pencerede tek bir aşırı-uç değer (26 vs ~40) sıralamanın
-//     kenarına düşer, ortadaki medyanı neredeyse hiç etkilemez — regresyon
-//     eğimi ise HER noktadan etkilendiği için bozuk noktadan kaçamaz.
-//
-// NOT: Bu düzeltme matematiksel olarak daha doğru ve tekil anomalilere karşı
-// daha dayanıklı olsa da, Perşembe anomalisinin KÖK NEDENİ (EVDS'in kendi
-// verisinde mi, "items" dizisinin sıralamasında mı) doğrulanmadı. ?debug=1 ile
-// birkaç gün (bir Perşembe dahil) _teshis.tlref_hesap.son_9_gunluk_oran
-// çıktısı izlenip Borsa İstanbul'un resmi TLREF sayfasıyla karşılaştırılması
-// önerilir. Anomali orada da tek bir güne (belirgin dış-değer olarak) işaret
-// ediyorsa, o günü pencereden tamamen filtrelemek gerekebilir.
 function gunlukTlrefOranlari(dizi){
   const oranlar=[];
   for(let i=1;i<dizi.length;i++){
@@ -240,7 +208,7 @@ function medyanTlrefOrani(gunlukOranlar, sonIndex, pencereNokta=9){
   const orta = Math.floor(dilim.length/2);
   return dilim.length%2 ? dilim[orta] : (dilim[orta-1]+dilim[orta])/2;
 }
-const TLREF_PENCERE_NOKTA = 9; // ~2 hafta iş günü — periyodik anomaliyi medyanla eleyecek genişlikte
+const TLREF_PENCERE_NOKTA = 9;
 
 async function evdsFetch(url,apiKey){
   const r=await fetchZamanli(url,{headers:{"key":apiKey,"Accept":"application/json"}},10000);
@@ -396,7 +364,6 @@ export default async function handler(req,res){
     sonuclar["TP.APIFON4_SERI"]=tumDegerler(polJson?.items||[], "TP.APIFON4").slice(-24);
     sonuclar["TP_AB_TOPLAM_SERI"]=tumDegerler(rezervJson?.items||[], "TP_AB_TOPLAM").slice(-24);
 
-    // TLREF: endeksten oran türetimi (bkz. yukarıdaki DÜZELTME 5 notu)
     const tlrefEndeksDizi=tumDegerler(gunJson?.items||[], "TP.BISTTLREF.KAPANIS");
     teshis.tlrefEndeksDizi_uzunluk = tlrefEndeksDizi.length;
     const gunlukOranlarDizi = gunlukTlrefOranlari(tlrefEndeksDizi);
@@ -413,7 +380,6 @@ export default async function handler(req,res){
         yillik_oran_pct:sonYillikOran,
         son_9_gunluk_oran:gunlukOranlarDizi.slice(-9),
       };
-      // Geçmiş seri: her nokta kendi ~9 noktalık trailing penceresiyle hesaplanıyor
       const tlrefSeri=[];
       for(let i=0;i<gunlukOranlarDizi.length;i++){
         const oran=medyanTlrefOrani(gunlukOranlarDizi, i, TLREF_PENCERE_NOKTA);
@@ -447,13 +413,16 @@ export default async function handler(req,res){
     if(tufeDizi.length>=13){
       const son=tufeDizi[tufeDizi.length-1];
       const oncekiAy=tufeDizi[tufeDizi.length-2];
-      const oncekiYil=tufeDizi[tufeDizi.length-13];
+      const oncekiYil=tufeDizi[tufeDizi.length-13]; // 12 ay önce (length-1 - 12)
       sonuclar["TUFE_YILLIK"]={deger:((son.deger-oncekiYil.deger)/oncekiYil.deger*100),tarih:tufeAcikilanmaTarihi(son.tarih)};
       sonuclar["TUFE_AYLIK"]={deger:((son.deger-oncekiAy.deger)/oncekiAy.deger*100),tarih:tufeAcikilanmaTarihi(son.tarih)};
 
+      // DÜZELTME (2026-07, v7): oY indeksi "i-13" idi (13 ay önce), doğrusu
+      // "i-12" (12 ay önce) — artık ana karttaki hesapla birebir aynı ayı,
+      // aynı yöntemle kıyaslıyor. Döngü koşulu da i>=12'ye çekildi.
       const yillikSeri=[], aylikSeri=[];
-      for(let i=tufeDizi.length-1;i>=13;i--){
-        const s=tufeDizi[i], oA=tufeDizi[i-1], oY=tufeDizi[i-13];
+      for(let i=tufeDizi.length-1;i>=12;i--){
+        const s=tufeDizi[i], oA=tufeDizi[i-1], oY=tufeDizi[i-12];
         const acikilanmaTarihi = tufeAcikilanmaTarihi(s.tarih);
         yillikSeri.unshift({tarih:acikilanmaTarihi, deger:(s.deger-oY.deger)/oY.deger*100});
         aylikSeri.unshift({tarih:acikilanmaTarihi, deger:(s.deger-oA.deger)/oA.deger*100});
