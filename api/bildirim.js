@@ -130,24 +130,16 @@ export default async function handler(req, res) {
     const gelenAnahtar = req.query?.key;
     const beklenen = process.env.ADMIN_GIZLI_ANAHTAR;
 
-    // GEÇİCİ TEŞHİS — test bitince bu bloğu silin
-    if (req.query?.debug === "1") {
-      res.status(200).json({
-        beklenenVarMi: !!beklenen,
-        beklenenUzunluk: beklenen ? beklenen.length : 0,
-        gelenUzunluk: gelenAnahtar ? gelenAnahtar.length : 0,
-        birebirEsit: gelenAnahtar === beklenen,
-        beklenenIlkSon: beklenen ? `${beklenen[0]}...${beklenen[beklenen.length - 1]}` : null,
-        gelenIlkSon: gelenAnahtar ? `${gelenAnahtar[0]}...${gelenAnahtar[gelenAnahtar.length - 1]}` : null,
-      });
-      return;
-    }
-    // GEÇİCİ TEŞHİS SONU
-
-    if (!process.env.ADMIN_GIZLI_ANAHTAR || gelenAnahtar !== process.env.ADMIN_GIZLI_ANAHTAR) {
+    if (!beklenen || gelenAnahtar !== beklenen) {
       res.status(401).json({ hata: "Yetkisiz istek" });
       return;
     }
+
+    // bildirimGonder fonksiyonu yetki kontrolünü x-admin-key header'ından
+    // yapıyor; GET isteğinde bu header gelmediği için burada manuel set
+    // ediyoruz (aksi halde ikinci kontrolde tekrar 401 dönerdi).
+    req.headers["x-admin-key"] = gelenAnahtar;
+
     req.body = {
       baslik: req.query?.baslik || "Test",
       govde: req.query?.govde || "Merhaba, çalışıyor!",
