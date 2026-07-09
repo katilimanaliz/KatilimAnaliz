@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "capawesome:build": "if [ \"$CI_PLATFORM\" = \"ios\" ] || [ \"$CI_PLATFORM\" = \"android\" ]; then npx trapeze run capawesome.yml -y --$CI_PLATFORM; fi && npm run build"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.1",
@@ -23,6 +24,7 @@
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@trapezedev/configure": "^7.1.4",
     "@vitejs/plugin-react": "^4.4.0",
     "vite": "^5.0.0"
   }

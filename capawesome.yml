@@ -1,0 +1,22 @@
+# capawesome.yml
+#
+# Capawesome Cloud'un CI_BUILD_NUMBER değişkenini (her build'de otomatik
+# artan sayı) native projelere işler:
+#   - iOS: Xcode projesindeki build number (CFBundleVersion)
+#   - Android: versionCode
+#
+# Bu dosya repo KÖKÜNDE durmalı. Capawesome Cloud, build sırasında Trapeze
+# aracılığıyla bu dosyayı okuyup ilgili native proje dosyalarını (Info.plist,
+# build.gradle) otomatik günceller — Xcode'da elle değiştirmenize gerek kalmaz.
+#
+# Kaynak: https://capawesome.io/cloud/native-builds/guides/auto-incrementing-build-numbers/
+
+vars:
+  CI_BUILD_NUMBER:
+    default: 1
+
+platforms:
+  android:
+    versionCode: $CI_BUILD_NUMBER
+  ios:
+    buildNumber: $CI_BUILD_NUMBER
