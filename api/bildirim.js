@@ -72,4 +72,72 @@ async function bildirimGonder(req, res) {
   const GRUP_BOYU = 500;
   let gonderilenToplam = 0;
   let gecersizTokenlar = [];
-  let hataDetaylari = []; // GEÇİ
+
+  for (let i = 0; i < tokenlar.length; i += GRUP_BOYU) {
+    const grup = tokenlar.slice(i, i + GRUP_BOYU);
+
+    const mesaj = {
+      notification: { title: baslik, body: govde },
+      data: veri || {},
+      tokens: grup,
+    };
+
+    const sonuc = await admin.messaging().sendEachForMulticast(mesaj);
+    gonderilenToplam += sonuc.successCount;
+
+    sonuc.responses.forEach((r, idx) => {
+      if (!r.success) {
+        const kod = r.error?.code || "";
+        if (
+          kod.includes("registration-token-not-registered") ||
+          kod.includes("invalid-argument")
+        ) {
+          gecersizTokenlar.push(grup[idx]);
+        }
+      }
+    });
+  }
+
+  if (gecersizTokenlar.length > 0) {
+    await redis.srem("pushTokens", ...gecersizTokenlar);
+    await redis.hdel("pushTokenPlatform", ...gecersizTokenlar);
+  }
+
+  res.status(200).json({
+    basarili: true,
+    hedefTokenSayisi: tokenlar.length,
+    basariylaGonderilen: gonderilenToplam,
+    temizlenenGecersizToken: gecersizTokenlar.length,
+  });
+}
+
+export default async function handler(req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-admin-key");
+
+  if (req.method === "OPTIONS") {
+    res.status(204).end();
+    return;
+  }
+
+  if (req.method !== "POST") {
+    res.status(405).json({ hata: "Sadece POST kabul edilir" });
+    return;
+  }
+
+  const islem = req.query?.islem;
+
+  try {
+    if (islem === "kaydet") {
+      await tokenKaydet(req, res);
+    } else if (islem === "gonder") {
+      await bildirimGonder(req, res);
+    } else {
+      res.status(400).json({ hata: "Geçersiz 'islem'. 'kaydet' veya 'gonder' olmalı." });
+    }
+  } catch (e) {
+    console.error("bildirim.js hatası:", e);
+    res.status(500).json({ hata: "Sunucu hatası oluştu", detay: String(e) });
+  }
+}
