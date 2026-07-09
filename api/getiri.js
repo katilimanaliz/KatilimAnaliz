@@ -31,8 +31,12 @@ const ARALIK_MAP = {
   "ybb":  "ytd",
 };
 
-async function yahooGetiri(sembol, range) {
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sembol)}?range=${range}&interval=1d`;
+async function yahooGetiri(sembol, range, p1, p2) {
+  // p1/p2 (unix sn) verilirse sabit tarih penceresi, verilmezse range kullanılır
+  const q = p1 && p2
+    ? `period1=${p1}&period2=${p2}&interval=1d`
+    : `range=${range}&interval=1d`;
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sembol)}?${q}`;
   const r = await fetch(url, {
     headers: { "User-Agent": "Mozilla/5.0 (compatible; KatilimPlus/1.0)" },
   });
@@ -65,16 +69,16 @@ async function yahooGetiri(sembol, range) {
 
 const yzd = (v) => (v == null ? null : Math.round(v * 10000) / 100);
 
-// Ana enstrüman setini verilen aralık için hesaplar
-async function hesaplaGetiriler(range, ekstraSemboller = []) {
+// Ana enstrüman setini verilen aralık (veya sabit p1/p2 penceresi) için hesaplar
+async function hesaplaGetiriler(range, ekstraSemboller = [], p1, p2) {
   const [usd, eur, onsAltin, onsGumus, xu100, xk100, ...ekstraSonuclar] = await Promise.all([
-    yahooGetiri("USDTRY=X", range),
-    yahooGetiri("EURTRY=X", range),
-    yahooGetiri("GC=F", range),
-    yahooGetiri("SI=F", range),
-    yahooGetiri("XU100.IS", range),
-    yahooGetiri("XK100.IS", range),
-    ...ekstraSemboller.map((s) => yahooGetiri(s, range)),
+    yahooGetiri("USDTRY=X", range, p1, p2),
+    yahooGetiri("EURTRY=X", range, p1, p2),
+    yahooGetiri("GC=F", range, p1, p2),
+    yahooGetiri("SI=F", range, p1, p2),
+    yahooGetiri("XU100.IS", range, p1, p2),
+    yahooGetiri("XK100.IS", range, p1, p2),
+    ...ekstraSemboller.map((s) => yahooGetiri(s, range, p1, p2)),
   ]);
 
   const gramAltin =
@@ -155,19 +159,24 @@ async function haftalikOzet(req, res) {
   // Yazma yapan işlem — CDN'de kısa cache yeterli
   res.setHeader("Cache-Control", "s-maxage=600, stale-while-revalidate=1200");
 
-  const { getiriler, donem } = await hesaplaGetiriler("5d");
-  const fonHafta = await fonHaftalikOrt(req.headers.host);
-  const hafta = isoHafta();
+  // ── Hedef hafta: HER ZAMAN son TAMAMLANMIŞ Pazartesi–Cuma haftası ──
+  // Kural (Türkiye saatiyle): hafta içi (Pzt–Cum) bir ÖNCEKİ haftanın
+  // Pzt–Cum'u gösterilir; Cumartesi'den itibaren yeni biten hafta gösterilir.
+  // Örn: 9 Temmuz Perşembe → 29 Haz–3 Tem; 11 Temmuz Cumartesi → 6–10 Tem.
+  const trSimdi = new Date(Date.now() + 3 * 3600 * 1000); // UTC+3
+  const gun = trSimdi.getUTCDay(); // 0=Paz ... 6=Cmt
+  let pazartesiyeGeri;
+  if (gun === 6) pazartesiyeGeri = 5;        // Cumartesi → bu haftanın Pzt'si
+  else if (gun === 0) pazartesiyeGeri = 6;   // Pazar → bu haftanın Pzt'si
+  else pazartesiyeGeri = (gun - 1) + 7;      // Pzt–Cum → önceki haftanın Pzt'si
+  const pzt = new Date(Date.UTC(trSimdi.getUTCFullYear(), trSimdi.getUTCMonth(), trSimdi.getUTCDate() - pazartesiyeGeri));
+  const p1 = Math.floor(pzt.getTime() / 1000);            // Pazartesi 00:00 UTC
+  const p2 = p1 + 5 * 86400 + 43200;                      // Cumartesi 12:00 UTC (Cuma kapanışı dahil)
+  const hafta = isoHafta(pzt);
 
-  const guncel = {
-    hafta,
-    donem,
-    satirlar: getiriler.filter((g) => g.getiri != null),
-    fonHafta,
-    guncellemeTs: Date.now(),
-  };
-
-  // Arşivi oku, bu haftayı güncelle/ekle, son 4 haftayı tut
+  // Arşivi oku — hedef hafta zaten kayıtlıysa OLDUĞU GİBİ kullan.
+  // (Tamamlanmış haftanın fiyatları değişmez; yeniden hesaplamak hem gereksiz
+  // hem de fon ortalamasını sonraki haftanın verisiyle bozabilir.)
   let arsiv = [];
   try {
     const ham = await redis.get(ARSIV_ANAHTAR);
@@ -175,18 +184,31 @@ async function haftalikOzet(req, res) {
     else if (typeof ham === "string") arsiv = JSON.parse(ham) || [];
   } catch {}
 
-  const digerHaftalar = arsiv.filter((k) => k && k.hafta !== hafta);
-  // Sadece geçerli veri geldiyse kaydet — Yahoo hata verdiğinde arşive boş
-  // hafta yazıp mevcut kaydın üzerine binmeyelim
-  if (guncel.satirlar.length > 0) {
-    const yeni = [...digerHaftalar, guncel]
-      .sort((a, b) => String(a.hafta).localeCompare(String(b.hafta)))
-      .slice(-ARSIV_BOYU); // en eski hafta otomatik düşer
-    try { await redis.set(ARSIV_ANAHTAR, JSON.stringify(yeni)); } catch {}
-    arsiv = yeni;
+  let guncel = arsiv.find((k) => k && k.hafta === hafta && Array.isArray(k.satirlar) && k.satirlar.length > 0);
+
+  if (!guncel) {
+    const { getiriler, donem } = await hesaplaGetiriler(null, [], p1, p2);
+    const fonHafta = await fonHaftalikOrt(req.headers.host);
+    guncel = {
+      hafta,
+      donem,
+      satirlar: getiriler.filter((g) => g.getiri != null),
+      fonHafta,
+      guncellemeTs: Date.now(),
+    };
+    // Sadece geçerli veri geldiyse arşive yaz
+    if (guncel.satirlar.length > 0) {
+      const yeni = [...arsiv.filter((k) => k && k.hafta !== hafta), guncel]
+        .sort((a, b) => String(a.hafta).localeCompare(String(b.hafta)))
+        .slice(-ARSIV_BOYU); // en eski hafta otomatik düşer (her zaman son 4)
+      try { await redis.set(ARSIV_ANAHTAR, JSON.stringify(yeni)); } catch {}
+      arsiv = yeni;
+    }
   }
 
-  const gecmis = arsiv.filter((k) => k.hafta !== hafta).sort((a, b) => String(b.hafta).localeCompare(String(a.hafta)));
+  const gecmis = arsiv
+    .filter((k) => k && k.hafta !== hafta)
+    .sort((a, b) => String(b.hafta).localeCompare(String(a.hafta)));
 
   res.status(200).json({ basarili: true, guncel, arsiv: gecmis });
 }
