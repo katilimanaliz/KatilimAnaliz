@@ -346,9 +346,14 @@ export default async function handler(req,res){
       guvenliCek("rezerv", `${BASE}/series=${REZERV.join("-")}&startDate=${onceki(180)}&endDate=${tarihStr(new Date())}&type=json&frequency=3`),
     ]);
 
-    const [sofr,eur3m]=await Promise.all([
+    const [sofr,eur3m,us2y,us5y,us10y]=await Promise.all([
       guvenliCekFred("fred_sofr", "SOFR"),
       guvenliCekFred("fred_euribor3m", "IR3TIB01EZM156N"),
+      // ABD Hazine tahvil faizleri (2/5/10 yıl) — FRED'in günlük "Constant
+      // Maturity" serileri, en güvenilir ve güncel kaynak (bkz. DGS2/DGS5/DGS10).
+      guvenliCekFred("fred_us2y", "DGS2"),
+      guvenliCekFred("fred_us5y", "DGS5"),
+      guvenliCekFred("fred_us10y", "DGS10"),
     ]);
 
     const sonuclar={};
@@ -360,6 +365,12 @@ export default async function handler(req,res){
     sonuclar["FRED_SOFR_SERI"]=sofr.seri;
     sonuclar["FRED_EUR3M"]=eur3m.son;
     sonuclar["FRED_EUR3M_SERI"]=eur3m.seri;
+    sonuclar["FRED_US2Y"]=us2y.son;
+    sonuclar["FRED_US2Y_SERI"]=us2y.seri;
+    sonuclar["FRED_US5Y"]=us5y.son;
+    sonuclar["FRED_US5Y_SERI"]=us5y.seri;
+    sonuclar["FRED_US10Y"]=us10y.son;
+    sonuclar["FRED_US10Y_SERI"]=us10y.seri;
 
     sonuclar["TP.APIFON4_SERI"]=tumDegerler(polJson?.items||[], "TP.APIFON4").slice(-24);
     sonuclar["TP_AB_TOPLAM_SERI"]=tumDegerler(rezervJson?.items||[], "TP_AB_TOPLAM").slice(-24);
