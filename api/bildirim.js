@@ -128,6 +128,22 @@ export default async function handler(req, res) {
   // param olarak (?key=...) veriliyor. Test bitince bu bloğu kaldırabilirsiniz.
   if (req.method === "GET" && islem === "gonder-test") {
     const gelenAnahtar = req.query?.key;
+    const beklenen = process.env.ADMIN_GIZLI_ANAHTAR;
+
+    // GEÇİCİ TEŞHİS — test bitince bu bloğu silin
+    if (req.query?.debug === "1") {
+      res.status(200).json({
+        beklenenVarMi: !!beklenen,
+        beklenenUzunluk: beklenen ? beklenen.length : 0,
+        gelenUzunluk: gelenAnahtar ? gelenAnahtar.length : 0,
+        birebirEsit: gelenAnahtar === beklenen,
+        beklenenIlkSon: beklenen ? `${beklenen[0]}...${beklenen[beklenen.length - 1]}` : null,
+        gelenIlkSon: gelenAnahtar ? `${gelenAnahtar[0]}...${gelenAnahtar[gelenAnahtar.length - 1]}` : null,
+      });
+      return;
+    }
+    // GEÇİCİ TEŞHİS SONU
+
     if (!process.env.ADMIN_GIZLI_ANAHTAR || gelenAnahtar !== process.env.ADMIN_GIZLI_ANAHTAR) {
       res.status(401).json({ hata: "Yetkisiz istek" });
       return;
