@@ -7,28 +7,23 @@
 //
 // ── 1) Token kaydetme (uygulamadan çağrılır, herkes çağırabilir) ──
 //
-// FiyatlamaPro.tsx içindeki "registration" listener'ını şöyle güncelleyin:
+// FiyatlamaPro.tsx içindeki "registration" listener'ı:
 //
-//   PushNotifications.addListener("registration", (token) => {
-//     fetch(`${API_BASE}/api/bildirim?islem=kaydet`, {
-//       method: "POST",
-//       headers: { "Content-Type": "application/json" },
-//       body: JSON.stringify({
-//         token: token.value,
-//         platform: (window as any).Capacitor?.getPlatform?.() ?? "unknown",
-//       }),
-//     }).catch((e) => console.error("Token kaydedilemedi:", e));
+//   fetch(`${API_BASE}/api/bildirim?islem=kaydet`, {
+//     method: "POST",
+//     headers: { "Content-Type": "application/json" },
+//     body: JSON.stringify({ token: token.value, platform: ... }),
 //   });
 //
 // ── 2) Bildirim gönderme (sadece admin, x-admin-key gerekli) ──
 //
-//   curl -X POST "https://katilimplus.com/api/bildirim?islem=gonder" \
+//   curl -X POST "https://www.katilimplus.com/api/bildirim?islem=gonder" \
 //     -H "Content-Type: application/json" \
 //     -H "x-admin-key: GIZLI_ANAHTARINIZ" \
 //     -d '{"baslik":"Yeni Kur!", "govde":"USD/TRY güncellendi."}'
 
-const { Redis } = require("@upstash/redis");
-const { admin } = require("./_lib/firebaseAdmin");
+import { Redis } from "@upstash/redis";
+import { admin } from "./_lib/firebaseAdmin.js";
 
 // NOT: Vercel KV entegrasyonu, Upstash'in standart isimlendirmesi olan
 // UPSTASH_REDIS_REST_URL/TOKEN yerine KV_REST_API_URL/KV_REST_API_TOKEN
@@ -116,9 +111,7 @@ async function bildirimGonder(req, res) {
   });
 }
 
-module.exports = async (req, res) => {
-  // CORS: Capacitor/WebView tabanlı istekler önce bir OPTIONS (preflight)
-  // isteği gönderir. Bunu yanıtlamazsak gerçek POST isteği hiç gitmez.
+export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-admin-key");
@@ -145,6 +138,6 @@ module.exports = async (req, res) => {
     }
   } catch (e) {
     console.error("bildirim.js hatası:", e);
-    res.status(500).json({ hata: "Sunucu hatası oluştu" });
+    res.status(500).json({ hata: "Sunucu hatası oluştu", detay: String(e) });
   }
-};
+}
