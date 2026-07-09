@@ -346,7 +346,7 @@ export default async function handler(req,res){
       guvenliCek("rezerv", `${BASE}/series=${REZERV.join("-")}&startDate=${onceki(180)}&endDate=${tarihStr(new Date())}&type=json&frequency=3`),
     ]);
 
-    const [sofr,eur3m,us2y,us5y,us10y]=await Promise.all([
+    const [sofr,eur3m,us2y,us5y,us10y,fedFonlama,ecbMevduat]=await Promise.all([
       guvenliCekFred("fred_sofr", "SOFR"),
       guvenliCekFred("fred_euribor3m", "IR3TIB01EZM156N"),
       // ABD Hazine tahvil faizleri (2/5/10 yıl) — FRED'in günlük "Constant
@@ -354,6 +354,13 @@ export default async function handler(req,res){
       guvenliCekFred("fred_us2y", "DGS2"),
       guvenliCekFred("fred_us5y", "DGS5"),
       guvenliCekFred("fred_us10y", "DGS10"),
+      // FED — Federal Funds Effective Rate (günlük, FOMC'nin fiilen
+      // uyguladığı gecelik faiz — "hedef aralık" değil, gerçekleşen oran).
+      guvenliCekFred("fred_fedfunds", "DFF"),
+      // ECB — Mevduat İmkanı Faizi (Deposit Facility Rate). Mart 2024'ten beri
+      // ECB'nin para politikasını yönlendirdiği ASIL politika faizi budur
+      // (Ana Refinansman Faizi değil) — bkz. ECB'nin kendi açıklaması.
+      guvenliCekFred("fred_ecb", "ECBDFR"),
     ]);
 
     const sonuclar={};
@@ -371,6 +378,10 @@ export default async function handler(req,res){
     sonuclar["FRED_US5Y_SERI"]=us5y.seri;
     sonuclar["FRED_US10Y"]=us10y.son;
     sonuclar["FRED_US10Y_SERI"]=us10y.seri;
+    sonuclar["FRED_FEDFUNDS"]=fedFonlama.son;
+    sonuclar["FRED_FEDFUNDS_SERI"]=fedFonlama.seri;
+    sonuclar["FRED_ECB"]=ecbMevduat.son;
+    sonuclar["FRED_ECB_SERI"]=ecbMevduat.seri;
 
     sonuclar["TP.APIFON4_SERI"]=tumDegerler(polJson?.items||[], "TP.APIFON4").slice(-24);
     sonuclar["TP_AB_TOPLAM_SERI"]=tumDegerler(rezervJson?.items||[], "TP_AB_TOPLAM").slice(-24);
