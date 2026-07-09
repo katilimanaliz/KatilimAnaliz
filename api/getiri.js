@@ -69,15 +69,19 @@ async function yahooGetiri(sembol, range, p1, p2) {
 
 const yzd = (v) => (v == null ? null : Math.round(v * 10000) / 100);
 
-// Ana enstrüman setini verilen aralık (veya sabit p1/p2 penceresi) için hesaplar
-async function hesaplaGetiriler(range, ekstraSemboller = [], p1, p2) {
-  const [usd, eur, onsAltin, onsGumus, xu100, xk100, ...ekstraSonuclar] = await Promise.all([
+// Ana enstrüman setini verilen aralık (veya sabit p1/p2 penceresi) için hesaplar.
+// genis=true → haftalık özet için ek küresel enstrümanlar da dahil edilir.
+async function hesaplaGetiriler(range, ekstraSemboller = [], p1, p2, genis = false) {
+  const [usd, eur, onsAltin, onsGumus, xu100, xk100, brent, eurusd, sp500, ...ekstraSonuclar] = await Promise.all([
     yahooGetiri("USDTRY=X", range, p1, p2),
     yahooGetiri("EURTRY=X", range, p1, p2),
     yahooGetiri("GC=F", range, p1, p2),
     yahooGetiri("SI=F", range, p1, p2),
     yahooGetiri("XU100.IS", range, p1, p2),
     yahooGetiri("XK100.IS", range, p1, p2),
+    genis ? yahooGetiri("BZ=F", range, p1, p2) : Promise.resolve(null),
+    genis ? yahooGetiri("EURUSD=X", range, p1, p2) : Promise.resolve(null),
+    genis ? yahooGetiri("^GSPC", range, p1, p2) : Promise.resolve(null),
     ...ekstraSemboller.map((s) => yahooGetiri(s, range, p1, p2)),
   ]);
 
@@ -106,6 +110,14 @@ async function hesaplaGetiriler(range, ekstraSemboller = [], p1, p2) {
     { kod: "XU100",      ad: "BIST 100",         getiri: yzd(xu100?.getiri),    ilk: xu100?.ilk ?? null,    son: xu100?.son ?? null },
     { kod: "XK100",      ad: "Katılım Endeksi",  getiri: yzd(xk100?.getiri),    ilk: xk100?.ilk ?? null,    son: xk100?.son ?? null },
   ];
+
+  if (genis) {
+    getiriler.push(
+      { kod: "BRENT",  ad: "Brent Petrol ($)",  getiri: yzd(brent?.getiri),  ilk: brent?.ilk ?? null,  son: brent?.son ?? null },
+      { kod: "EURUSD", ad: "EUR/USD",           getiri: yzd(eurusd?.getiri), ilk: eurusd?.ilk ?? null, son: eurusd?.son ?? null },
+      { kod: "SP500",  ad: "S&P 500",           getiri: yzd(sp500?.getiri),  ilk: sp500?.ilk ?? null,  son: sp500?.son ?? null },
+    );
+  }
 
   const ekstraGetiriler = ekstraSemboller.map((sembol, i) => ({
     sembol,
@@ -152,6 +164,22 @@ async function fonHaftalikOrt(host) {
   }
 }
 
+// Haftanın öne çıkan haber başlıkları (kendi finans-haberleri endpoint'imizden)
+async function haftaninHaberleri(host) {
+  try {
+    const r = await fetch(`https://${host}/api/finans-haberleri`);
+    if (!r.ok) return [];
+    const j = await r.json();
+    const liste = j?.success && Array.isArray(j.data) ? j.data : [];
+    return liste.slice(0, 5).map((h) => ({
+      baslik: String(h?.baslik || "").slice(0, 200),
+      kaynak: h?.kaynak ? String(h.kaynak).slice(0, 60) : null,
+    })).filter((h) => h.baslik);
+  } catch {
+    return [];
+  }
+}
+
 const ARSIV_ANAHTAR = "haftalikOzetArsiv";
 const ARSIV_BOYU = 4; // her zaman son 4 hafta tutulur
 
@@ -184,16 +212,21 @@ async function haftalikOzet(req, res) {
     else if (typeof ham === "string") arsiv = JSON.parse(ham) || [];
   } catch {}
 
-  let guncel = arsiv.find((k) => k && k.hafta === hafta && Array.isArray(k.satirlar) && k.satirlar.length > 0);
+  // v:2 → Brent/EURUSD/S&P500 ve haber başlıklarını içeren yeni format.
+  // Eski formatlı kayıt bulunursa bir kez yeniden hesaplanıp yükseltilir.
+  let guncel = arsiv.find((k) => k && k.hafta === hafta && k.v === 2 && Array.isArray(k.satirlar) && k.satirlar.length > 0);
 
   if (!guncel) {
-    const { getiriler, donem } = await hesaplaGetiriler(null, [], p1, p2);
+    const { getiriler, donem } = await hesaplaGetiriler(null, [], p1, p2, true); // genis: Brent, EUR/USD, S&P 500 dahil
     const fonHafta = await fonHaftalikOrt(req.headers.host);
+    const haberler = await haftaninHaberleri(req.headers.host);
     guncel = {
+      v: 2,
       hafta,
       donem,
       satirlar: getiriler.filter((g) => g.getiri != null),
       fonHafta,
+      haberler,
       guncellemeTs: Date.now(),
     };
     // Sadece geçerli veri geldiyse arşive yaz
@@ -209,7 +242,7 @@ async function haftalikOzet(req, res) {
   const gecmis = arsiv
     .filter((k) => k && k.hafta !== hafta)
     .sort((a, b) => String(b.hafta).localeCompare(String(a.hafta)));
-
+öp
   res.status(200).json({ basarili: true, guncel, arsiv: gecmis });
 }
 
