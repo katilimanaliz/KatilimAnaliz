@@ -115,7 +115,176 @@ function Icon({k, size=22, color="#8FA8D8", strokeWidth=2, style}:{k:string, siz
 // gerekirken) ve tarayıcı desteği (lang="tr" ile bile) tutarsız. JS'in yerleşik
 // toLocaleUpperCase('tr-TR')'ı ICU tabanlı ve güvenilir — bunu tercih ediyoruz.
 // TÜM "KÜÇÜK HARFLE YAZILIP CSS İLE BÜYÜTÜLEN" başlıklar bunun yerine bunu kullanmalı.
-const TR = (s: any): string => s == null ? "" : String(s).toLocaleUpperCase("tr-TR");
+
+// ── DİL DESTEĞİ (TR/EN) ──
+// Dil localStorage "kp_dil" anahtarında tutulur; değişince uygulama yeniden
+// yüklenir (sessionStorage kp_screen sayesinde aynı ekranda kalınır).
+// Çeviri sözlük tabanlıdır: Türkçe metin anahtardır, İngilizcesi sözlükte
+// yoksa Türkçesi gösterilir (güvenli geri düşüş). Böylece sözlük zamanla
+// ekran ekran genişletilebilir.
+let DIL: "tr" | "en" = (() => { try { return localStorage.getItem("kp_dil") === "en" ? "en" : "tr"; } catch (e) { return "tr"; } })();
+// Dili sayfa yenilemeden değiştirir: kaydeder, modül değişkenini günceller ve
+// App'in dinlediği "kp-dil" olayını yayınlayarak tüm arayüzü yeniden çizdirir.
+// (location.reload() Claude artifact önizlemesinde çalışmadığı için kullanılmıyor.)
+const dilDegistir = (d: "tr" | "en") => {
+  try { localStorage.setItem("kp_dil", d); } catch (e) {}
+  DIL = d;
+  try { window.dispatchEvent(new Event("kp-dil")); } catch (e) {}
+};
+const EN_SOZLUK: Record<string, string> = {
+  // ── Alt bar / yan menü / genel gezinme ──
+  "Ana Sayfa": "Home",
+  "Hesapla": "Calculate",
+  "Piyasa": "Markets",
+  "Araçlar": "Tools",
+  "Asistan": "Assistant",
+  "Profil": "Profile",
+  "Ayarlar": "Settings",
+  "HIZLI ERİŞİM": "QUICK ACCESS",
+  "Katılım Finansının Akıllı Asistanı": "Smart Assistant of Participation Finance",
+  "Finans Sözlüğü": "Finance Glossary",
+  // ── Ekran başlıkları (MENU) ──
+  "Hesaplama Araçları": "Calculation Tools",
+  "Piyasa & Veriler": "Markets & Data",
+  "Togg Finansmanı Hesaplama": "Togg Financing Calculator",
+  "Arsa/İşyeri Finansmanı": "Land/Commercial Property Financing",
+  "Katılım Hesabı Getiri Hesaplama": "Participation Account Return Calculator",
+  "Getiriden Anapara Hesaplama": "Principal from Return Calculator",
+  "Günlük Hesap Oran Hesaplama": "Daily Account Rate Calculator",
+  "Sukuk Kira Sertifikası Getiri Hesaplama": "Sukuk (Lease Certificate) Return Calculator",
+  "Sukuk Kira Sertifikası Getiri": "Sukuk (Lease Certificate) Return",
+  "Basitten Bileşiğe Oran Hesaplama": "Simple to Compound Rate Calculator",
+  "Verimlilik Analizi": "Efficiency Analysis",
+  "Yatırım Fonları Getiri İzleme": "Mutual Fund Return Tracker",
+  "Kâr Payı Oranları": "Profit Share Rates",
+  "Fiyat Alarmlarım": "My Price Alerts",
+  "BİST Hisse Veri İzleme": "BIST Stock Data Tracker",
+  "Konut Finansmanı Hesaplama": "Housing Finance Calculator",
+  "Taşıt Finansmanı Hesaplama": "Vehicle Finance Calculator",
+  "Hızlı Fon Finansmanı Hesaplama": "Quick Fund Financing Calculator",
+  "Taksitten Tutar Hesaplama": "Amount from Installment Calculator",
+  "Spot Finansman Hesaplama": "Spot Financing Calculator",
+  "Taksitli Ticari Finansman Hesaplama": "Commercial Installment Finance Calculator",
+  "Finansal Kiralama Hesaplama": "Financial Leasing Calculator",
+  "POS Komisyon Hesaplama": "POS Commission Calculator",
+  "Teminat Mektubu Komisyon Hesaplama": "Letter of Guarantee Commission Calculator",
+  "Akreditif Komisyon Hesaplama": "Letter of Credit Commission Calculator",
+  "SÖİK ve Reeskont Finansmanı Hesaplama": "Pre-Export & Rediscount Financing Calculator",
+  "Katkı Payı Hesaplama": "Contribution Calculator",
+  "Esnek Ödeme Planları Hesaplama": "Flexible Payment Plans Calculator",
+  "Eşit Anapara Ödeme Planı": "Equal Principal Payment Plan",
+  "Ara Ödemeli Plan": "Interim Payment Plan",
+  "Artan Ödemeli Plan": "Increasing Payment Plan",
+  "Azalan Ödemeli Plan": "Decreasing Payment Plan",
+  "Balon Ödemeli Plan": "Balloon Payment Plan",
+  "Esnek Ödemeli Plan": "Flexible Payment Plan",
+  "Yapay Zeka Asistan": "AI Assistant",
+  "Katılım Bankacılığı Sözlüğü": "Participation Banking Glossary",
+  "Son Hesaplamalar": "Recent Calculations",
+  "Finansal Takvim": "Financial Calendar",
+  "Vade Takip & Hatırlatma Ajandam": "Maturity Tracker & Reminders",
+  "Getiri Karşılaştırma": "Return Comparison",
+  "Haftalık Piyasa Özeti": "Weekly Market Summary",
+  "Katılım Bankaları": "Participation Banks",
+  "Döviz Dönüştürücü": "Currency Converter",
+  "Forward Hesaplama": "Forward Calculator",
+  "Swap Hesaplama": "Swap Calculator",
+  "Hazine Sukuk Getiri Hesaplama": "Treasury Sukuk Return Calculator",
+  "Kur Hareketi Senaryo": "FX Scenario Analysis",
+  "Piyasa Haberleri": "Market News",
+  "Finansal Göstergeler": "Financial Indicators",
+  // ── Gruplar / kategoriler ──
+  "Katılım Hesabı": "Participation Account",
+  "Bireysel Finansman": "Retail Financing",
+  "Tüzel Finansman": "Corporate Financing",
+  "Hazine İşlemleri": "Treasury Operations",
+  "Tümü": "All",
+  "Katılım Hesabı Hesaplama": "Participation Account",
+  "Katılım Hesabı Hesaplamaları": "Participation Account Calculations",
+  // ── Ana sayfa ──
+  "Günaydın": "Good morning",
+  "Tünaydın": "Good afternoon",
+  "İyi akşamlar": "Good evening",
+  "İyi geceler": "Good night",
+  "Hoş geldin": "Welcome",
+  "Bugün ne hesaplamak istersin?": "What would you like to calculate today?",
+  "Menülerde ara…": "Search menus…",
+  "Hesaplama ara…": "Search calculators…",
+  "Sonuç bulunamadı": "No results found",
+  "Piyasa Özeti": "Market Summary",
+  "Piyasalar": "Markets",
+  "Favori Hesaplamalarım": "My Favorite Calculators",
+  "Son Haberler": "Latest News",
+  "Yaklaşan Takvim · 7 Gün": "Upcoming Calendar · 7 Days",
+  "Öne Çıkanlar": "Highlights",
+  "Temel Göstergeler": "Key Indicators",
+  "Son Kullanılanlar": "Recently Used",
+  "Aç": "Open",
+  "Hakkında": "About",
+  "İsim / rumuz gir…": "Enter name / nickname…",
+  "Sadece bu cihazda saklanır": "Stored only on this device",
+  "Favori": "Favorites",
+  "Hesaplama": "Calculations",
+  "E-Posta": "E-mail",
+  "tablo ve haftalık yorum": "table and weekly commentary",
+  // ── Araçlar menüsü açıklamaları ──
+  "Döviz, altın, gümüş, endeks getirilerini dönemsel karşılaştır": "Compare FX, gold, silver and index returns by period",
+  "Finansman ve ödeme vadelerini takip et, hatırlatma al": "Track financing and payment maturities, get reminders",
+  "Türkiye'deki katılım bankaları, kuruluş tarihleri ve bilgileri": "Participation banks in Türkiye, founding dates and details",
+  "Terim ve tanımları hızlıca ara": "Quickly search terms and definitions",
+  "Katılım Blog": "Katılım Blog",
+  "Kâr payı, murabaha, TLREF ve daha fazlası — anlaşılır rehberler": "Profit share, murabaha, TLREF and more — clear guides",
+  // ── Ortak kelimeler / TR() ile büyütülen başlıklar ──
+  "Kaydet": "Save",
+  "Hesap": "Account",
+  "Hisse": "Stock",
+  "Artan": "Gainers",
+  "Azalan": "Losers",
+  "Hacim": "Volume",
+  "Grafik": "Chart",
+  "Sembol": "Symbol",
+  "Tür": "Type",
+  "Vade": "Maturity",
+  "Son": "Last",
+  "Günlük %": "Daily %",
+  "Açıklama": "Description",
+  "Başlık *": "Title *",
+  "Brüt Getiri": "Gross Return",
+  "Net Getiri": "Net Return",
+  "Stopaj Kesintisi": "Withholding Tax",
+  "Finansman Tutarı": "Financing Amount",
+  "Kâr Oranı": "Profit Rate",
+  "KDV Oranı": "VAT Rate",
+  "Mevduat Eşlenik Oran": "Deposit Equivalent Rate",
+  "Kaç gün önce uyarı?": "Alert how many days before?",
+  "Tutar (isteğe bağlı)": "Amount (optional)",
+  "BIST 100 · CANLI": "BIST 100 · LIVE",
+  "Genel Müdürlük": "Headquarters",
+  "Merkez": "Head Office",
+  "Sermaye Yapısı": "Ownership Structure",
+  "Web Sitesi": "Website",
+  "İletişim": "Contact",
+  "🆕 Yeni Müşteri": "🆕 New Customer",
+  "👤 Mevcut Müşteri": "👤 Existing Customer",
+  "🏢 Tüzel Müşteri": "🏢 Corporate Customer",
+  "📤 Maliyet": "📤 Cost",
+  "📥 Gelirler": "📥 Income",
+  // ── Ayarlar ──
+  "Uygulama Dili": "App Language",
+  "Dil değişince uygulama yeniden yüklenir. Hesaplama araçlarının iç metinleri şimdilik Türkçedir; İngilizce kapsamı sürümlerle genişletilecektir.": "The app reloads when the language changes. Texts inside the calculators are in Turkish for now; English coverage will expand with updates.",
+  "TL Mevduat Stopaj Oranları": "TRY Deposit Withholding Rates",
+  "YP Mevduat Stopaj": "FX Deposit Withholding",
+  "Kredi Vergi Oranları": "Loan Tax Rates",
+  "ZK Oranları (Referans)": "Reserve Requirement Rates (Reference)",
+  "Yıllık Fonlama Maliyeti": "Annual Funding Cost",
+  "Hata veya Öneri Bildir": "Report a Bug or Suggestion",
+  // ── Yasal uyarı ──
+  "Bu hesaplamalar yalnızca bilgilendirme amaçlıdır; kesin teklif, resmi belge veya hukuki taahhüt niteliği taşımaz. Nihai oran ve koşullar için bankanız ile iletişime geçiniz.": "These calculations are for informational purposes only; they do not constitute a binding offer, official document or legal commitment. Please contact your bank for final rates and terms.",
+};
+// Çeviri (normal harf): İngilizce moddaysa sözlükten çevirir, yoksa aynen bırakır.
+const CV = (s: any): string => { const k = s == null ? "" : String(s); return DIL === "en" ? (EN_SOZLUK[k] ?? k) : k; };
+// TR: büyük harfe çevirerek gösterir; İngilizce modda önce çeviri uygulanır.
+const TR = (s: any): string => { const k = s == null ? "" : String(s); const c = DIL === "en" ? (EN_SOZLUK[k] ?? k) : k; return DIL === "en" ? c.toUpperCase() : c.toLocaleUpperCase("tr-TR"); };
 
 // TLREFK: EVDS'de gerçek/doğrulanmış bir kodu yok. Borsa İstanbul'un resmi
 // sitesinden alınan 7 günlük gerçek TLREFK verisiyle bizim hesapladığımız
@@ -4877,7 +5046,7 @@ function Ayarlar({settings,onSave}){
           const cleaned=Object.fromEntries(Object.entries(s).map(([k,v])=>[k,isNaN(parseFloat(String(v).replace(",","."))) ? 0 : parseFloat(String(v).replace(",","."))]));
           onSave(cleaned);
         }} style={{width:"100%",padding:"15px",borderRadius:14,border:"none",background:C.blue,color:"#fff",fontWeight:800,fontSize:16,cursor:"pointer"}}>
-        Kaydet
+        {CV("Kaydet")}
       </button>
 
       {/* Hata veya Öneri Bildir — ana sayfa üstündeki butondan buraya taşındı */}
@@ -4887,7 +5056,7 @@ function Ayarlar({settings,onSave}){
         borderRadius:12,padding:"13px 14px",
       }}>
         <span style={{width:24,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Bell size={20} color="#8FA8D8" strokeWidth={2} absoluteStrokeWidth/></span>
-        <span style={{flex:1,fontSize:14,fontWeight:600,color:"#E8F0FA"}}>Hata veya Öneri Bildir</span>
+        <span style={{flex:1,fontSize:14,fontWeight:600,color:"#E8F0FA"}}>{CV("Hata veya Öneri Bildir")}</span>
         <span style={{color:"rgba(255,255,255,0.3)",fontSize:18,flexShrink:0}}>›</span>
       </div>
       {ayarBildirimAcik&&<BildirimModal onClose={()=>setAyarBildirimAcik(false)}/>}
@@ -11846,7 +12015,7 @@ function FavoriDuzenleModal({favoriler,onToggle,onClose}:{favoriler:string[],onT
                       borderRadius:12,padding:"11px 12px",marginBottom:7,cursor:"pointer",
                     }}>
                       <span style={{width:22,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon k={it.key} size={18}/></span>
-                      <span style={{flex:1,fontSize:13,fontWeight:600,color:"#E8F0FA"}}>{it.label}</span>
+                      <span style={{flex:1,fontSize:13,fontWeight:600,color:"#E8F0FA"}}>{CV(it.label)}</span>
                       <div style={{
                         width:20,height:20,borderRadius:6,flexShrink:0,
                         background:secili?"#3B82F6":"transparent",
@@ -12217,6 +12386,15 @@ function App(){
   },[screen]);
 
   // ── Masaüstü (geniş ekran) uyumu ──
+  // ── Dil değişikliği dinleyicisi ──
+  // dilDegistir() "kp-dil" olayını yayınlar; burada bir sayaç artırılarak tüm
+  // uygulama yeniden çizilir ve CV()/TR() yeni dille metin üretir (yenileme yok).
+  const [,setDilTik]=useState(0);
+  useEffect(()=>{
+    const f=()=>setDilTik(x=>x+1);
+    window.addEventListener("kp-dil",f);
+    return ()=>window.removeEventListener("kp-dil",f);
+  },[]);
   // Web'de kolon 430px'te sabitti; artık ekran genişliğine göre kademeli
   // büyüyor. Native uygulama etkilenmez.
   const [ekranW,setEkranW]=useState(()=>{
@@ -12630,7 +12808,7 @@ function App(){
             </div>
             <div style={{display:"flex",flexDirection:"column",minWidth:0}}>
               <span style={{fontSize:16,fontWeight:800,letterSpacing:"-0.01em",color:"#EAF1FA"}}>Katılım <span style={{background:"linear-gradient(90deg,#1B9E7A,#2CCB9A)",WebkitBackgroundClip:"text",backgroundClip:"text",color:"transparent"}}>Plus</span></span>
-              <span style={{fontSize:9.5,fontWeight:500,color:"rgba(255,255,255,0.45)",marginTop:1,whiteSpace:"nowrap"}}>Katılım Finansının Akıllı Asistanı</span>
+              <span style={{fontSize:9.5,fontWeight:500,color:"rgba(255,255,255,0.45)",marginTop:1,whiteSpace:"nowrap"}}>{CV("Katılım Finansının Akıllı Asistanı")}</span>
             </div>
           </div>
           {/* Ana gezinme (alt bar sekmelerinin masaüstü karşılığı) */}
@@ -12644,14 +12822,14 @@ function App(){
                   borderLeft:aktif?"3px solid #5B9BD8":"3px solid transparent",
                 }}>
                   <AltBarIcon tip={t.tip} aktif={aktif}/>
-                  <span style={{fontSize:13.5,fontWeight:aktif?700:500,color:aktif?"#EAF1FA":"rgba(255,255,255,0.6)"}}>{t.label}</span>
+                  <span style={{fontSize:13.5,fontWeight:aktif?700:500,color:aktif?"#EAF1FA":"rgba(255,255,255,0.6)"}}>{CV(t.label)}</span>
                 </div>
               );
             })}
           </div>
           {/* Hızlı erişim */}
           <div style={{marginTop:18,paddingTop:14,borderTop:"1px solid rgba(255,255,255,0.07)"}}>
-            <div style={{fontSize:9.5,fontWeight:800,letterSpacing:1,color:"rgba(255,255,255,0.35)",padding:"0 12px 8px"}}>HIZLI ERİŞİM</div>
+            <div style={{fontSize:9.5,fontWeight:800,letterSpacing:1,color:"rgba(255,255,255,0.35)",padding:"0 12px 8px"}}>{CV("HIZLI ERİŞİM")}</div>
             {[
               {key:"getiriKarsilastirma",label:"Getiri Karşılaştırma"},
               {key:"haftalikOzet",label:"Haftalık Piyasa Özeti"},
@@ -12664,7 +12842,7 @@ function App(){
                 background:screen===m.key?"rgba(91,155,216,0.14)":"transparent",
               }}>
                 <span style={{width:20,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon k={m.key} size={15}/></span>
-                <span style={{fontSize:12.5,fontWeight:screen===m.key?700:500,color:screen===m.key?"#DCE9F7":"rgba(255,255,255,0.55)"}}>{m.label}</span>
+                <span style={{fontSize:12.5,fontWeight:screen===m.key?700:500,color:screen===m.key?"#DCE9F7":"rgba(255,255,255,0.55)"}}>{CV(m.label)}</span>
               </div>
             ))}
           </div>
@@ -12672,7 +12850,7 @@ function App(){
           <div style={{marginTop:"auto",paddingTop:12,borderTop:"1px solid rgba(255,255,255,0.07)"}}>
             <div className="kp-side-item" onClick={()=>nav("ayarlar")} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:10,background:screen==="ayarlar"?"rgba(91,155,216,0.14)":"transparent"}}>
               <span style={{width:20,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon k="ayarlar" size={15}/></span>
-              <span style={{fontSize:12.5,fontWeight:600,color:screen==="ayarlar"?"#DCE9F7":"rgba(255,255,255,0.55)"}}>Ayarlar</span>
+              <span style={{fontSize:12.5,fontWeight:600,color:screen==="ayarlar"?"#DCE9F7":"rgba(255,255,255,0.55)"}}>{CV("Ayarlar")}</span>
             </div>
             <div style={{fontSize:9.5,color:"rgba(255,255,255,0.3)",padding:"10px 12px 0",lineHeight:1.5}}>© {new Date().getFullYear()} Katılım Plus</div>
           </div>
@@ -12696,7 +12874,7 @@ function App(){
                 </div>
                 <div style={{display:"flex",flexDirection:"column",justifyContent:"center",minWidth:0}}>
                   <span style={{fontSize:17,fontWeight:800,letterSpacing:"-0.01em",color:"#EAF1FA"}}>Katılım <span style={{background:"linear-gradient(90deg,#1B9E7A,#2CCB9A)",WebkitBackgroundClip:"text",backgroundClip:"text",color:"transparent"}}>Plus</span></span>
-                  <span style={{fontSize:10.5,fontWeight:500,color:"rgba(255,255,255,0.5)",letterSpacing:"0.01em",marginTop:1}}>Katılım Finansının Akıllı Asistanı</span>
+                  <span style={{fontSize:10.5,fontWeight:500,color:"rgba(255,255,255,0.5)",letterSpacing:"0.01em",marginTop:1}}>{CV("Katılım Finansının Akıllı Asistanı")}</span>
                 </div>
               </div>
               <button onClick={()=>{setBildirimGecmisiAcik(true);bildirimOkunduIsaretle();}} style={{
@@ -12717,7 +12895,7 @@ function App(){
               <span style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.4)",textTransform:"uppercase",letterSpacing:0.8}}>{TR(selamlama)} · {kisaTarihStr}</span>
             </div>
             {(()=>{
-              const selamMetni = kullaniciAdi?`Hoş geldin ${kullaniciAdi}`:"Hoş geldin";
+              const selamMetni = kullaniciAdi?`${CV("Hoş geldin")} ${kullaniciAdi}`:CV("Hoş geldin");
               // Uzun isim/soyisim girilirse başlık 2 satıra taşıp bölünmesin diye
               // metin uzunluğuna göre yazı boyutu otomatik küçültülüyor (30px tabanlı,
               // 18px'e kadar), tek satırda kalması garanti ediliyor.
@@ -12733,7 +12911,7 @@ function App(){
                 } as any}>{selamMetni}</div>
               );
             })()}
-            <div style={{fontSize:13.5,color:"rgba(255,255,255,0.5)",marginBottom:16}}>Bugün ne hesaplamak istersin?</div>
+            <div style={{fontSize:13.5,color:"rgba(255,255,255,0.5)",marginBottom:16}}>{CV("Bugün ne hesaplamak istersin?")}</div>
 
             {/* ── ANA MENÜ ARAMA ── */}
             {(()=>{
@@ -12741,6 +12919,7 @@ function App(){
                 ?MENU_ARAMA_LIST.filter(m=>{
                     const q=menuAramaQ.toUpperCase();
                     return m.label.toUpperCase().includes(q)
+                      ||CV(m.label).toUpperCase().includes(q)
                       ||m.grup.toUpperCase().includes(q)
                       ||(m.alt&&m.alt.some((k:string)=>k.toUpperCase().includes(q)));
                   })
@@ -12754,7 +12933,7 @@ function App(){
                       onChange={e=>setMenuAramaQ(e.target.value)}
                       onFocus={()=>setMenuAramaOdakli(true)}
                       onBlur={()=>setMenuAramaOdakli(false)}
-                      placeholder="Menülerde ara…"
+                      placeholder={CV("Menülerde ara…")}
                       style={{flex:1,background:"transparent",border:"none",outline:"none",color:"#fff",fontSize:13,padding:"10px 0",WebkitAppearance:"none",WebkitTapHighlightColor:"transparent"} as any}
                     />
                     {menuAramaQ&&<span onClick={()=>setMenuAramaQ("")} style={{fontSize:16,color:"rgba(255,255,255,0.4)",cursor:"pointer",padding:"0 4px"}}>✕</span>}
@@ -12767,8 +12946,8 @@ function App(){
                           onMouseLeave={e=>(e.currentTarget.style.background="transparent")}>
                           <span style={{width:22,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon k={m.key} size={18}/></span>
                           <div style={{flex:1,minWidth:0}}>
-                            <div style={{fontSize:12,fontWeight:700,color:"#e8f0fa",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.label}</div>
-                            <div style={{fontSize:10,color:"rgba(255,255,255,0.35)",marginTop:1}}>{m.grup}</div>
+                            <div style={{fontSize:12,fontWeight:700,color:"#e8f0fa",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{CV(m.label)}</div>
+                            <div style={{fontSize:10,color:"rgba(255,255,255,0.35)",marginTop:1}}>{CV(m.grup)}</div>
                           </div>
                           <span style={{fontSize:12,color:"rgba(255,255,255,0.25)",flexShrink:0}}>›</span>
                         </div>
@@ -12777,7 +12956,7 @@ function App(){
                   )}
                   {menuAramaQ.trim().length>1&&menuSonuclar.length===0&&(
                     <div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:50,background:"#1A2633",borderRadius:12,border:"1px solid rgba(255,255,255,0.12)",marginTop:4,padding:"14px",textAlign:"center"}}>
-                      <span style={{fontSize:12,color:"rgba(255,255,255,0.35)"}}>Sonuç bulunamadı</span>
+                      <span style={{fontSize:12,color:"rgba(255,255,255,0.35)"}}>{CV("Sonuç bulunamadı")}</span>
                     </div>
                   )}
                 </div>
@@ -12857,7 +13036,7 @@ function App(){
             <span style={{
               fontSize:16,fontWeight:700,color:"#EAF1FA",letterSpacing:"-0.01em",
               overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,minWidth:0,
-            }}>{meta?.title}</span>
+            }}>{CV(meta?.title)}</span>
           </div>
         )}
       </div>
@@ -12885,7 +13064,7 @@ function App(){
               <span style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.4)",textTransform:"uppercase",letterSpacing:0.5}}>{TR("Piyasa Özeti")}</span>
               <div style={{display:"flex",alignItems:"center",gap:12}}>
                 <span onClick={()=>setPiyasaOzetiDuzenleAcik(true)} style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.4)",cursor:"pointer"}}>Düzenle</span>
-                <span onClick={()=>nav("piyasaMenu")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>Tümü ›</span>
+                <span onClick={()=>nav("piyasaMenu")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
               </div>
             </div>
             <div className="piyasa-scroll" style={{display:"flex",overflowX:"auto",gap:6,marginBottom:26,scrollSnapType:"x mandatory",WebkitOverflowScrolling:"touch",paddingBottom:2}}>
@@ -12938,7 +13117,7 @@ function App(){
             {/* Piyasalar */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
               <span style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.4)",textTransform:"uppercase",letterSpacing:0.5}}>{TR("Piyasalar")}</span>
-              <span onClick={()=>nav("piyasaMenu")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>Tümü ›</span>
+              <span onClick={()=>nav("piyasaMenu")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:26}}>
               {[
@@ -13001,7 +13180,7 @@ function App(){
             {/* Finansal Göstergeler — ana sayfa özeti (Seçenek A: ikonlu satırlar) */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:18,marginBottom:8}}>
               <span style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.4)",textTransform:"uppercase",letterSpacing:0.5}}>{TR("Finansal Göstergeler")}</span>
-              <span onClick={()=>{setPiyasaTabloFiltre("gostergeler");nav("piyasaMenu");}} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>Tümü ›</span>
+              <span onClick={()=>{setPiyasaTabloFiltre("gostergeler");nav("piyasaMenu");}} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
             </div>
             <div onClick={()=>{setPiyasaTabloFiltre("gostergeler");nav("piyasaMenu");}} style={{
               background:"linear-gradient(135deg,#16222E 0%,#131C27 100%)",borderRadius:16,
@@ -13063,7 +13242,7 @@ function App(){
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
                     {sonHaberlerGuncelleme&&<span style={{fontSize:9.5,color:"rgba(255,255,255,0.3)"}}>{sonHaberlerGuncelleme.toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"})}</span>}
                     <button onClick={()=>anaSayfaHaberGetir(true)} aria-label="Haberleri yenile" style={{background:"rgba(255,255,255,0.08)",border:"none",width:22,height:22,borderRadius:11,fontSize:12,color:"rgba(255,255,255,0.6)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"transform 0.6s",transform:sonHaberlerYenileniyor?"rotate(360deg)":"none"}}>↻</button>
-                    <span onClick={()=>nav("piyasaHaberleri")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>Tümü ›</span>
+                    <span onClick={()=>nav("piyasaHaberleri")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
                   </div>
                 </div>
                 {sonHaberlerHata&&sonHaberler.length===0&&(
@@ -13116,7 +13295,7 @@ function App(){
               <>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
                   <span style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.4)",textTransform:"uppercase",letterSpacing:0.5}}>{TR("Yaklaşan Takvim · 7 Gün")}</span>
-                  <span onClick={()=>nav("finansalTakvim")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>Tümü ›</span>
+                  <span onClick={()=>nav("finansalTakvim")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
                 </div>
                 <div style={{marginBottom:14}}>
                   {yaklasanTakvim.map((e:any,i:number)=>{
@@ -13149,7 +13328,7 @@ function App(){
             {/* Haftalık Piyasa Özeti — ana menü alt kısayolu */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
               <span style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.4)",textTransform:"uppercase",letterSpacing:0.5}}>{TR("Haftalık Piyasa Özeti")}</span>
-              <span onClick={()=>nav("haftalikOzet")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>Aç ›</span>
+              <span onClick={()=>nav("haftalikOzet")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Aç")} ›</span>
             </div>
             <div className="press-card" onClick={()=>nav("haftalikOzet")} style={{
               display:"flex",alignItems:"center",gap:14,marginBottom:14,cursor:"pointer",
@@ -13163,7 +13342,7 @@ function App(){
               </div>
               <div style={{flex:1,minWidth:0}}>
                 <p style={{margin:0,fontSize:14,fontWeight:800,color:"#fff"}}>Haftalık Piyasa Özeti</p>
-                <p style={{margin:"2px 0 0",fontSize:11,color:"rgba(255,255,255,0.45)"}}>{(()=>{const b=new Date();const g=b.getDay();const geri=g===6?5:(g===0?6:(g-1)+7);const pzt=new Date(b);pzt.setDate(b.getDate()-geri);const cum=new Date(pzt);cum.setDate(pzt.getDate()+4);const f=(d:Date)=>d.toLocaleDateString("tr-TR",{day:"numeric",month:"long"});return `${f(pzt)} – ${f(cum)} · tablo ve haftalık yorum`;})()}</p>
+                <p style={{margin:"2px 0 0",fontSize:11,color:"rgba(255,255,255,0.45)"}}>{(()=>{const b=new Date();const g=b.getDay();const geri=g===6?5:(g===0?6:(g-1)+7);const pzt=new Date(b);pzt.setDate(b.getDate()-geri);const cum=new Date(pzt);cum.setDate(pzt.getDate()+4);const f=(d:Date)=>d.toLocaleDateString("tr-TR",{day:"numeric",month:"long"});return `${f(pzt)} – ${f(cum)} · ${CV("tablo ve haftalık yorum")}`;})()}</p>
               </div>
               <span style={{color:"rgba(255,255,255,0.3)",fontSize:20,flexShrink:0}}>›</span>
             </div>
@@ -13171,7 +13350,7 @@ function App(){
             {/* Getiri Karşılaştırma — ana menü alt kısayolu */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
               <span style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.4)",textTransform:"uppercase",letterSpacing:0.5}}>{TR("Getiri Karşılaştırma")}</span>
-              <span onClick={()=>nav("getiriKarsilastirma")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>Aç ›</span>
+              <span onClick={()=>nav("getiriKarsilastirma")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Aç")} ›</span>
             </div>
             <div className="press-card" onClick={()=>nav("getiriKarsilastirma")} style={{
               display:"flex",alignItems:"center",gap:14,marginBottom:14,cursor:"pointer",
@@ -13202,7 +13381,7 @@ function App(){
           const aramaQ=hesaplaAramaQ.trim().toUpperCase();
           const filtreliListe=HESAPLA_ARAC_LISTESI.filter(it=>
             (hesaplaFiltre==="tumu"||it.kat===hesaplaFiltre)&&
-            (aramaQ===""||it.label.toUpperCase().includes(aramaQ))
+            (aramaQ===""||it.label.toUpperCase().includes(aramaQ)||CV(it.label).toUpperCase().includes(aramaQ))
           );
           return(
           <div style={{background:"#0F1923",padding:"12px 12px 0",paddingBottom:108,boxSizing:"border-box",overflowY:"auto"}}>
@@ -13214,7 +13393,7 @@ function App(){
                 onChange={e=>setHesaplaAramaQ(e.target.value)}
                 onFocus={()=>setHesaplaAramaOdakli(true)}
                 onBlur={()=>setHesaplaAramaOdakli(false)}
-                placeholder="Hesaplama ara…"
+                placeholder={CV("Hesaplama ara…")}
                 style={{flex:1,background:"transparent",border:"none",outline:"none",color:"#fff",fontSize:13,padding:"10px 0",WebkitAppearance:"none",WebkitTapHighlightColor:"transparent"} as any}
               />
               {hesaplaAramaQ&&<span onClick={()=>setHesaplaAramaQ("")} style={{fontSize:16,color:"rgba(255,255,255,0.4)",cursor:"pointer",padding:"0 4px"}}>✕</span>}
@@ -13225,7 +13404,7 @@ function App(){
               <div style={{marginBottom:14}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
                   <span style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.4)",textTransform:"uppercase",letterSpacing:0.5}}>{TR("Son Kullanılanlar")}</span>
-                  <span onClick={()=>setHesaplaFiltre("gecmis")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>Tümü ›</span>
+                  <span onClick={()=>setHesaplaFiltre("gecmis")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
                 </div>
                 <div className="piyasa-scroll" style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:2}}>
                   {Array.from(new Map(gecmis.map((g:any)=>[g.modul,g])).values()).slice(0,6).map((g:any,i:number)=>(
@@ -13253,7 +13432,7 @@ function App(){
                     background:aktif?"#3B82F6":"rgba(255,255,255,0.07)",
                     border:aktif?"1px solid #3B82F6":"1px solid rgba(255,255,255,0.1)",
                     fontSize:12,fontWeight:700,color:aktif?"#fff":"rgba(255,255,255,0.6)",
-                  }}>{k.label}</div>
+                  }}>{CV(k.label)}</div>
                 );
               })}
             </div>
@@ -13279,7 +13458,7 @@ function App(){
                     }}>
                       {renk&&<div style={{position:"absolute",top:0,left:10,right:10,height:2.5,borderRadius:"0 0 3px 3px",background:`linear-gradient(90deg,transparent,${renk},transparent)`}}/>}
                       <span style={{width:34,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon k={it.key} size={26} color="#5B9BD8"/></span>
-                      <span style={{flex:1,fontSize:14,fontWeight:600,color:"#E8F0FA"}}>{it.label}</span>
+                      <span style={{flex:1,fontSize:14,fontWeight:600,color:"#E8F0FA"}}>{CV(it.label)}</span>
                       <span style={{color:"rgba(255,255,255,0.3)",fontSize:18,flexShrink:0}}>›</span>
                     </div>
                   ))}
@@ -13331,7 +13510,7 @@ function App(){
                     background:aktif?"#3B82F6":"rgba(255,255,255,0.07)",
                     border:aktif?"1px solid #3B82F6":"1px solid rgba(255,255,255,0.1)",
                     fontSize:12,fontWeight:700,color:aktif?"#fff":"rgba(255,255,255,0.6)",
-                  }}>{k.label}</div>
+                  }}>{CV(k.label)}</div>
                 );
               })}
             </div>
@@ -13501,7 +13680,7 @@ function App(){
         {screen==="araclarMenu"&&(
           <div style={{background:"#0F1923",padding:"12px 12px 0",paddingBottom:108,boxSizing:"border-box",overflowY:"auto"}}>
             {[
-              {key:"haftalikOzet", icon:"📰", label:"Haftalık Piyasa Özeti", desc:(()=>{const b=new Date();const g=b.getDay();const geri=g===6?5:(g===0?6:(g-1)+7);const pzt=new Date(b);pzt.setDate(b.getDate()-geri);const cum=new Date(pzt);cum.setDate(pzt.getDate()+4);const f=(d:Date)=>d.toLocaleDateString("tr-TR",{day:"numeric",month:"long"});return `${f(pzt)} – ${f(cum)} · tablo ve haftalık yorum`;})(), renk:"#5B9BD8", bg:"rgba(91,155,216,0.15)"},
+              {key:"haftalikOzet", icon:"📰", label:"Haftalık Piyasa Özeti", desc:(()=>{const b=new Date();const g=b.getDay();const geri=g===6?5:(g===0?6:(g-1)+7);const pzt=new Date(b);pzt.setDate(b.getDate()-geri);const cum=new Date(pzt);cum.setDate(pzt.getDate()+4);const f=(d:Date)=>d.toLocaleDateString("tr-TR",{day:"numeric",month:"long"});return `${f(pzt)} – ${f(cum)} · ${CV("tablo ve haftalık yorum")}`;})(), renk:"#5B9BD8", bg:"rgba(91,155,216,0.15)"},
               {key:"getiriKarsilastirma", icon:"📊", label:"Getiri Karşılaştırma", desc:"Döviz, altın, gümüş, endeks getirilerini dönemsel karşılaştır", renk:"#F59E0B", bg:"rgba(245,158,11,0.15)"},
               {key:"vadeTakibi", icon:"⏰", label:"Vade Takip & Hatırlatma Ajandam", desc:"Finansman ve ödeme vadelerini takip et, hatırlatma al", renk:"#4ADE80", bg:"rgba(74,222,128,0.15)"},
               {key:"katilimBankalari", icon:"🏛️", label:"Katılım Bankaları", desc:"Türkiye'deki katılım bankaları, kuruluş tarihleri ve bilgileri", renk:"#5B9BD8", bg:"rgba(91,155,216,0.15)"},
@@ -13515,8 +13694,8 @@ function App(){
               }}>
                 <div style={{width:46,height:46,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon k={c.key} size={28} color="#5B9BD8"/></div>
                 <div style={{flex:1,minWidth:0}}>
-                  <p style={{margin:0,fontSize:14,fontWeight:800,color:"#fff"}}>{c.label}</p>
-                  <p style={{margin:"2px 0 0",fontSize:11,color:"rgba(255,255,255,0.45)"}}>{c.desc}</p>
+                  <p style={{margin:0,fontSize:14,fontWeight:800,color:"#fff"}}>{CV(c.label)}</p>
+                  <p style={{margin:"2px 0 0",fontSize:11,color:"rgba(255,255,255,0.45)"}}>{CV(c.desc)}</p>
                 </div>
                 <span style={{color:"rgba(255,255,255,0.3)",fontSize:20,flexShrink:0}}>›</span>
               </div>
@@ -13546,7 +13725,7 @@ function App(){
               <input
                 value={kullaniciAdi}
                 onChange={e=>kullaniciAdiKaydet(e.target.value)}
-                placeholder="İsim / rumuz gir…"
+                placeholder={CV("İsim / rumuz gir…")}
                 maxLength={24}
                 style={{
                   width:"100%",boxSizing:"border-box",background:"transparent",border:"none",outline:"none",
@@ -13554,19 +13733,41 @@ function App(){
                   padding:"2px 0",marginBottom:2,
                 }}
               />
-              <p style={{margin:0,fontSize:11,color:"rgba(255,255,255,0.35)"}}>Sadece bu cihazda saklanır</p>
+              <p style={{margin:0,fontSize:11,color:"rgba(255,255,255,0.35)"}}>{CV("Sadece bu cihazda saklanır")}</p>
 
               <div style={{display:"flex",marginTop:16,borderTop:"1px solid rgba(255,255,255,0.08)",paddingTop:14}}>
                 <div style={{flex:1}}>
                   <p style={{margin:0,fontSize:20,fontWeight:800,color:"#5B9BD8"}}>{favoriler.length}</p>
-                  <p style={{margin:"2px 0 0",fontSize:10.5,color:"rgba(255,255,255,0.45)"}}>Favori</p>
+                  <p style={{margin:"2px 0 0",fontSize:10.5,color:"rgba(255,255,255,0.45)"}}>{CV("Favori")}</p>
                 </div>
                 <div style={{width:1,background:"rgba(255,255,255,0.08)"}}/>
                 <div style={{flex:1}}>
                   <p style={{margin:0,fontSize:20,fontWeight:800,color:"#4ADE80"}}>{gecmis.length}</p>
-                  <p style={{margin:"2px 0 0",fontSize:10.5,color:"rgba(255,255,255,0.45)"}}>Hesaplama</p>
+                  <p style={{margin:"2px 0 0",fontSize:10.5,color:"rgba(255,255,255,0.45)"}}>{CV("Hesaplama")}</p>
                 </div>
               </div>
+            </div>
+
+            {/* ── Uygulama Dili — TR/EN. Seçim localStorage kp_dil'e yazılır ve
+                uygulama yeniden yüklenir; kp_screen sayesinde Profil'de kalınır.
+                Bayrak emojisi Windows'ta görünmediği için renkli rozet kullanılır. */}
+            <div style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.35)",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>{TR("Uygulama Dili")}</div>
+            <div style={{display:"flex",gap:8,marginBottom:14}}>
+              {[{id:"tr",ad:"Türkçe",rozet:"TR",renk:"#E30A17"},{id:"en",ad:"English",rozet:"EN",renk:"#1D4ED8"}].map(d=>{
+                const secili=DIL===d.id;
+                return(
+                  <div key={d.id} onClick={()=>{ if(secili) return; dilDegistir(d.id as any); }} style={{
+                    flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"13px 10px",
+                    borderRadius:12,cursor:"pointer",boxSizing:"border-box",
+                    border:secili?"1.5px solid #5B9BD8":"1px solid rgba(255,255,255,0.07)",
+                    background:secili?"rgba(91,155,216,0.14)":"rgba(255,255,255,0.05)",
+                  }}>
+                    <span style={{fontSize:9,fontWeight:900,color:"#fff",background:d.renk,borderRadius:5,padding:"2px 6px",letterSpacing:0.5}}>{d.rozet}</span>
+                    <span style={{fontSize:14,fontWeight:700,color:secili?"#9FC1EA":"#E8F0FA"}}>{d.ad}</span>
+                    {secili&&<span style={{fontSize:12,color:"#5B9BD8"}}>✓</span>}
+                  </div>
+                );
+              })}
             </div>
 
             {/* Hızlı erişim */}
@@ -13582,7 +13783,7 @@ function App(){
                 borderRadius:12,padding:"13px 14px",marginBottom:8,cursor:"pointer",
               }}>
                 <span style={{width:24,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><r.ikon size={20} color="#8FA8D8" strokeWidth={2} absoluteStrokeWidth/></span>
-                <span style={{flex:1,fontSize:14,fontWeight:600,color:"#E8F0FA"}}>{r.label}</span>
+                <span style={{flex:1,fontSize:14,fontWeight:600,color:"#E8F0FA"}}>{CV(r.label)}</span>
                 <span style={{color:"rgba(255,255,255,0.3)",fontSize:18,flexShrink:0}}>›</span>
               </div>
             ))}
@@ -13592,7 +13793,7 @@ function App(){
             <a href="mailto:katilimanalizz@gmail.com" style={{display:"flex",alignItems:"center",gap:12,textDecoration:"none",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:12,padding:"13px 14px",marginBottom:8}}>
               <span style={{fontSize:17,width:24,textAlign:"center",flexShrink:0}}>📧</span>
               <div style={{flex:1,minWidth:0}}>
-                <p style={{margin:0,fontSize:10,color:"rgba(255,255,255,0.4)"}}>E-Posta</p>
+                <p style={{margin:0,fontSize:10,color:"rgba(255,255,255,0.4)"}}>{CV("E-Posta")}</p>
                 <p style={{margin:0,fontSize:13,fontWeight:700,color:"#E8F0FA",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>katilimanalizz@gmail.com</p>
               </div>
             </a>
@@ -13676,7 +13877,7 @@ function App(){
               lineHeight:1.55,
               fontStyle:"italic"
             }}>
-              Bu hesaplamalar yalnızca bilgilendirme amaçlıdır; kesin teklif, resmi belge veya hukuki taahhüt niteliği taşımaz. Nihai oran ve koşullar için bankanız ile iletişime geçiniz.
+              {CV("Bu hesaplamalar yalnızca bilgilendirme amaçlıdır; kesin teklif, resmi belge veya hukuki taahhüt niteliği taşımaz. Nihai oran ve koşullar için bankanız ile iletişime geçiniz.")}
             </p>
           </div>
         )}
@@ -13712,7 +13913,7 @@ function App(){
                     padding:"2px 2px 5px",maxWidth:"100%",boxSizing:"border-box",
                   }}>
                     <AltBarIcon tip={t.tip} aktif={aktif}/>
-                    <span style={{fontSize:9.5,fontWeight:aktif?700:500,letterSpacing:0,color:aktif?"#5B9BD8":"rgba(255,255,255,0.45)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"100%",transition:"color 0.2s ease"}}>{t.label}</span>
+                    <span style={{fontSize:9.5,fontWeight:aktif?700:500,letterSpacing:0,color:aktif?"#5B9BD8":"rgba(255,255,255,0.45)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"100%",transition:"color 0.2s ease"}}>{CV(t.label)}</span>
                     <div style={{width:aktif?18:0,height:2.5,borderRadius:2,background:"#5B9BD8",marginTop:1,transition:"width 0.2s ease"}}/>
                   </div>
                 </div>
