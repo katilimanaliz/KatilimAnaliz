@@ -7,6 +7,7 @@ import {
   ArrowRightLeft, FileSpreadsheet, TrendingUp, TrendingDown, ArrowUp, ArrowDown, Activity, Droplets, ShieldCheck,
   Search, Landmark, Gem, Package, Bell, ClipboardList, FileText, Star,
   Settings, Headphones, BookOpen, Bot, User, Clock, Briefcase,
+  Bitcoin,
 } from "lucide-react";
 // NOT: @capacitor/push-notifications bilinçli olarak burada static import
 // EDİLMİYOR — modül, aşağıdaki push useEffect'i içinde dinamik import ile
@@ -34,6 +35,16 @@ function ekranZoomTersi(){
   }catch(e){ return 1; }
 }
 const API_BASE = IS_NATIVE ? "https://www.katilimplus.com" : "";
+
+// ── HAFTA SONU PİYASA KONTROLÜ ──
+// BİST ve TEFAS Cumartesi/Pazar işlem görmez; fiyatlar Cuma kapanışından
+// Pazartesi açılışına kadar değişmez. Bu yüzden hisse/fon ekranlarında hafta
+// sonu tekrar tekrar API'ye sorgu atmanın bir anlamı yok — elimizde zaten
+// Cuma kapanış verisi varsa onu kullanıp gereksiz istekten kaçınıyoruz.
+function piyasaHaftaSonuMu(): boolean {
+  const gun = new Date().getDay(); // 0=Pazar, 6=Cumartesi
+  return gun === 0 || gun === 6;
+}
 
 
 // ═══ MERKEZİ İKON EŞLEME ═══════════════════════════════════════════════════
@@ -970,14 +981,24 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi }: { setting
     // tekrar istek atmadan mevcut veriyi kullan, arka planda sessizce tazele.
     // Boş/başarısız sonuçlar asla "taze" sayılmaz — her zaman gerçek fetch denenir.
     let cacheTaze = false;
+    let cacheDoluMu = false;
     try {
       const raw = sessionStorage.getItem("kea_fonlar");
       if (raw) {
         const { data, ts } = JSON.parse(raw);
         const dolu = Array.isArray(data) && data.length > 0;
+        cacheDoluMu = dolu;
         cacheTaze = dolu && typeof ts === "number" && (Date.now() - ts) < 5 * 60 * 1000;
       }
     } catch {}
+
+    // Hafta sonu piyasalar kapalı — fon fiyatları Cuma kapanışından beri
+    // değişmedi. Elimizde (ne kadar eski olursa olsun) veri varsa tekrar
+    // sorgu atmadan onu göster; hafta içi davranış aynen korunuyor.
+    if (piyasaHaftaSonuMu() && cacheDoluMu) {
+      setYukleniyor(false);
+      return;
+    }
 
     const veriCek = async (sessiz: boolean) => {
       if (!sessiz) { setYukleniyor(true); setHata(null); }
@@ -1722,6 +1743,12 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi }: { initialTicke
     };
 
     fetchHisse();
+    // Hafta sonu piyasa kapalıyken 5 dakikada bir tekrar sorgu atmanın
+    // anlamı yok — fiyatlar Cuma kapanışından beri değişmiyor. Ekranı ilk
+    // açtığında listeyi görebilmen için TEK seferlik ilk sorgu yine atılır,
+    // sadece tekrarlayan arka plan sorgusu (interval) hafta içi için saklı
+    // tutulur.
+    if (piyasaHaftaSonuMu()) return;
     const interval = setInterval(fetchHisse, 5 * 60 * 1000); // 5 dakikada bir
     return () => clearInterval(interval);
   }, []);
@@ -1881,7 +1908,7 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi }: { initialTicke
           <div key={ad}
             onClick={()=>setEndeksFiltre(f=>f===kod?"tumu":kod)}
             style={{
-              flex:"0 0 108px",cursor:"pointer",
+              flex:"0 0 108px",minWidth:0,cursor:"pointer",
               background:aktif?"rgba(91,155,216,0.16)":C.card,
               border:`1px solid ${aktif?C.blue:C.border}`,borderRadius:14,padding:"10px 12px",
             }}>
@@ -12068,19 +12095,24 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla}:{ad:string,sembol:stri
 
   const fmtDeger=(v:number)=>new Intl.NumberFormat("tr-TR",{minimumFractionDigits:dec,maximumFractionDigits:dec}).format(v);
 
-  // Kart sağ üstüne küçük simge/bayrak — okunabilirliği artırmak için
+  // Kart sağ üstüne küçük amblem. Para birimleri ve borsa endeksleri için
+  // gerçek ülke bayrağı (kullanıcı tercihi); altın/gümüş/kripto gibi bir
+  // ülkeye bağlı olmayan varlıklarda ise finans dünyasının otantik sembolü
+  // (Au/Ag/₿/Ξ) veya nötr bir vektör ikon kullanılır — bayrak zorlaması
+  // anlam ifade etmez.
   const kucukIkon = (()=>{
     const a = ad.toUpperCase();
-    if(a.includes("USD")||a.includes("DOLAR")) return {tip:"rozet",deger:"$",bg:"#4C8A5C"};
-    if(a.includes("EUR")) return {tip:"rozet",deger:"€",bg:"#3B5BA5"};
-    if(a.includes("GBP")||a.includes("STERLİN")) return {tip:"rozet",deger:"£",bg:"#8C4A5E"};
-    if(a.includes("ALTIN")||a.includes("ALTİN")) return {tip:"rozet",deger:"Au",bg:"#D4AF37"};
-    if(a.includes("GÜMÜŞ")||a.includes("GUMUS")) return {tip:"rozet",deger:"Ag",bg:"#A8B2BD"};
-    if(a.includes("BITCOIN")||a.includes("BTC")) return {tip:"rozet",deger:"₿",bg:"#F7931A"};
-    if(a.includes("ETHEREUM")||a.includes("ETH")) return {tip:"rozet",deger:"Ξ",bg:"#627EEA"};
-    if(a.includes("BIST")) return {tip:"emoji",deger:"📊"};
-    if(a.includes("BRENT")||a.includes("PETROL")||a.includes("WTI")) return {tip:"emoji",deger:"🛢️"};
-    if(a.includes("S&P")||a.includes("NASDAQ")||a.includes("DOW")||a.includes("DAX")) return {tip:"emoji",deger:"📈"};
+    if(a.includes("USD")||a.includes("DOLAR")) return {tip:"bayrak",deger:"🇺🇸"};
+    if(a.includes("EUR")) return {tip:"bayrak",deger:"🇪🇺"};
+    if(a.includes("GBP")||a.includes("STERLİN")) return {tip:"bayrak",deger:"🇬🇧"};
+    if(a.includes("ALTIN")||a.includes("ALTİN")) return {tip:"metin",deger:"Au",bg:"#B8912E"};
+    if(a.includes("GÜMÜŞ")||a.includes("GUMUS")) return {tip:"metin",deger:"Ag",bg:"#7A8591"};
+    if(a.includes("BITCOIN")||a.includes("BTC")) return {tip:"ikon",Comp:Bitcoin,bg:"#D9820A"};
+    if(a.includes("ETHEREUM")||a.includes("ETH")) return {tip:"metin",deger:"Ξ",bg:"#4A5FC1"};
+    if(a.includes("BIST")) return {tip:"bayrak",deger:"🇹🇷"};
+    if(a.includes("BRENT")||a.includes("PETROL")||a.includes("WTI")) return {tip:"ikon",Comp:Droplets,bg:"#1E3A5F"};
+    if(a.includes("DAX")) return {tip:"bayrak",deger:"🇩🇪"};
+    if(a.includes("S&P")||a.includes("NASDAQ")||a.includes("DOW")) return {tip:"bayrak",deger:"🇺🇸"};
     return null;
   })();
 
@@ -12091,11 +12123,21 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla}:{ad:string,sembol:stri
       transition:"background-color 700ms ease, border-color 700ms ease, box-shadow 700ms ease",
       ...flashStil,
     }}>
-      {kucukIkon&&(kucukIkon.tip==="rozet"?(
-        <span style={{position:"absolute",top:7,right:8,minWidth:16,height:16,padding:kucukIkon.deger.length>1?"0 4px":0,borderRadius:8,background:kucukIkon.bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:800,color:"#fff",lineHeight:1}}>{kucukIkon.deger}</span>
-      ):(
-        <span style={{position:"absolute",top:8,right:9,fontSize:12,opacity:0.85,lineHeight:1}}>{kucukIkon.deger}</span>
-      ))}
+      {kucukIkon&&(
+        kucukIkon.tip==="bayrak" ? (
+          <span style={{position:"absolute",top:7,right:8,fontSize:15,lineHeight:1,borderRadius:3,overflow:"hidden",boxShadow:"0 1px 2px rgba(0,0,0,0.25)"}}>{kucukIkon.deger}</span>
+        ) : (
+          <span style={{
+            position:"absolute",top:7,right:7,width:19,height:19,borderRadius:"50%",
+            background:kucukIkon.bg,display:"flex",alignItems:"center",justifyContent:"center",
+            boxShadow:"0 1px 3px rgba(0,0,0,0.25)",flexShrink:0,
+          }}>
+            {kucukIkon.tip==="ikon"
+              ? <kucukIkon.Comp size={11} color="#fff" strokeWidth={2.5}/>
+              : <span style={{fontSize:kucukIkon.deger.length>1?9:11,fontWeight:800,color:"#fff",lineHeight:1}}>{kucukIkon.deger}</span>}
+          </span>
+        )
+      )}
       <p style={{margin:0,fontSize:10,fontWeight:700,color:WA(0.45),textTransform:"uppercase",letterSpacing:0.2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingRight:28}}>{TR(ad)}</p>
       {guncel!=null ? (
         <>
@@ -13219,7 +13261,7 @@ function App(){
 
         {/* ── HOME ── */}
         {screen==="home"&&(
-          <div style={{background:C.bg,padding:"10px 12px 0",paddingBottom:108,boxSizing:"border-box",display:"flex",flexDirection:"column",overflowY:"auto"}}>
+          <div style={{background:C.bg,padding:"10px 12px 0",paddingBottom:"calc(108px + env(safe-area-inset-bottom,0px))",boxSizing:"border-box",display:"flex",flexDirection:"column",overflowY:"auto"}}>
 
             {/* Piyasa Özeti */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
@@ -13231,7 +13273,7 @@ function App(){
             </div>
             <div className="piyasa-scroll" style={{display:"flex",overflowX:"auto",gap:6,marginBottom:26,scrollSnapType:"x mandatory",WebkitOverflowScrolling:"touch",paddingBottom:2}}>
               {piyasaOzetiSecim.map(sembol=>PIYASA_OZETI_KATALOG[sembol]).filter(Boolean).map((k:any)=>(
-                <div key={k.sembol} style={{flex:"0 0 108px",scrollSnapAlign:"start"}}>
+                <div key={k.sembol} style={{flex:"0 0 108px",minWidth:0,scrollSnapAlign:"start"}}>
                   <PiyasaOzetiKart ad={k.ad} sembol={k.sembol} dec={k.dec} onTikla={()=>setSeciliKur({kod:k.ad,ad:k.ad,sembol:k.sembol,birim:k.paraOnek})}/>
                 </div>
               ))}
@@ -13546,7 +13588,7 @@ function App(){
             (aramaQ===""||it.label.toUpperCase().includes(aramaQ)||CV(it.label).toUpperCase().includes(aramaQ))
           );
           return(
-          <div style={{background:C.bg,padding:"12px 12px 0",paddingBottom:108,boxSizing:"border-box",overflowY:"auto"}}>
+          <div style={{background:C.bg,padding:"12px 12px 0",paddingBottom:"calc(108px + env(safe-area-inset-bottom,0px))",boxSizing:"border-box",overflowY:"auto"}}>
             {/* Arama çubuğu */}
             <div style={{display:"flex",alignItems:"center",background:WA(0.07),borderRadius:12,border:hesaplaAramaOdakli?`1.5px solid ${C.blue}`:`1px solid ${WA(0.12)}`,padding:"0 12px",marginBottom:10,boxShadow:hesaplaAramaOdakli?`0 0 0 3px ${C.blueLight}`:"none",transition:"border-color 0.15s, box-shadow 0.15s"}}>
               <span style={{fontSize:14,color:WA(0.4),marginRight:8}}>🔍</span>
@@ -13647,7 +13689,7 @@ function App(){
             aramaQ===""||r.ad.toUpperCase().includes(aramaQ)
           );
           return(
-          <div style={{background:C.bg,padding:"12px 12px 0",paddingBottom:108,boxSizing:"border-box",overflowY:"auto"}}>
+          <div style={{background:C.bg,padding:"12px 12px 0",paddingBottom:"calc(108px + env(safe-area-inset-bottom,0px))",boxSizing:"border-box",overflowY:"auto"}}>
             {/* Arama çubuğu */}
             <div style={{display:"flex",alignItems:"center",background:WA(0.07),borderRadius:12,border:piyasaTabloAramaOdakli?`1.5px solid ${C.blue}`:`1px solid ${WA(0.12)}`,padding:"0 12px",marginBottom:10,boxShadow:piyasaTabloAramaOdakli?`0 0 0 3px ${C.blueLight}`:"none",transition:"border-color 0.15s, box-shadow 0.15s"}}>
               <span style={{fontSize:14,color:WA(0.4),marginRight:8}}>🔍</span>
@@ -13846,7 +13888,7 @@ function App(){
 
         {/* ── ARAÇLAR (alt bar sekmesi) ── */}
         {screen==="araclarMenu"&&(
-          <div style={{background:C.bg,padding:"12px 12px 0",paddingBottom:108,boxSizing:"border-box",overflowY:"auto"}}>
+          <div style={{background:C.bg,padding:"12px 12px 0",paddingBottom:"calc(108px + env(safe-area-inset-bottom,0px))",boxSizing:"border-box",overflowY:"auto"}}>
             {[
               {key:"haftalikOzet", icon:"📰", label:"Haftalık Piyasa Özeti", desc:(()=>{const b=new Date();const g=b.getDay();const geri=g===6?5:(g===0?6:(g-1)+7);const pzt=new Date(b);pzt.setDate(b.getDate()-geri);const cum=new Date(pzt);cum.setDate(pzt.getDate()+4);const f=(d:Date)=>d.toLocaleDateString("tr-TR",{day:"numeric",month:"long"});return `${f(pzt)} – ${f(cum)} · ${CV("tablo ve haftalık yorum")}`;})(), renk:C.blue, bg:"rgba(91,155,216,0.15)"},
               {key:"getiriKarsilastirma", icon:"📊", label:"Getiri Karşılaştırma", desc:"Döviz, altın, gümüş, endeks getirilerini dönemsel karşılaştır", renk:"#F59E0B", bg:"rgba(245,158,11,0.15)"},
@@ -13873,7 +13915,7 @@ function App(){
 
         {/* ── PROFİL (alt bar sekmesi) ── */}
         {screen==="profil"&&(
-          <div style={{background:C.bg,padding:"12px 12px 0",paddingBottom:108,boxSizing:"border-box",overflowY:"auto"}}>
+          <div style={{background:C.bg,padding:"12px 12px 0",paddingBottom:"calc(108px + env(safe-area-inset-bottom,0px))",boxSizing:"border-box",overflowY:"auto"}}>
 
             {/* Profil üst kısmı — avatar + isim + hızlı istatistikler (üyelik sistemi yok, cihaz bazında) */}
             <div style={{
