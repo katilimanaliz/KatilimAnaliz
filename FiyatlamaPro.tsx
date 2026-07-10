@@ -2201,7 +2201,7 @@ function KatilimEndeksiTopHareketliler({ nav, onSecim }: { nav: (sc: string) => 
   };
 
   const Panel = ({ title, icon, data, accent }: { title: string; icon: any; data: any[]; accent: string }) => (
-    <div style={{ flex: "1 1 0", minWidth: 0, boxSizing: "border-box", background: WA(0.035), borderRadius: 12, border: `1px solid ${WA(0.07)}`, padding: "8px 7px 2px" }}>
+    <div style={{ flex: "1 1 0", minWidth: 0, boxSizing: "border-box", background: (TEMA==="acik"?"#F0F4F8":WA(0.035)), borderRadius: 12, border: `1px solid ${WA(0.07)}`, padding: "8px 7px 2px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "2px 2px 6px", fontSize: 10.5, fontWeight: 700, color: accent, whiteSpace: "nowrap" }}>
         {icon}{title}
       </div>
@@ -2218,8 +2218,8 @@ function KatilimEndeksiTopHareketliler({ nav, onSecim }: { nav: (sc: string) => 
           Katılım Endeksi · Top Hareketliler
         </span>
       </div>
-      <div style={{ background: WA(0.05), border: `1px solid ${WA(0.08)}`, borderRadius: 16, padding: 10 }}>
-        <div style={{ display: "flex", background: "rgba(0,0,0,0.25)", borderRadius: 10, padding: 3, marginBottom: 10 }}>
+      <div style={{ background: (TEMA==="acik"?"#FFFFFF":WA(0.05)), border: `1px solid ${WA(0.08)}`, borderRadius: 16, padding: 10 }}>
+        <div style={{ display: "flex", background: (TEMA==="acik"?"#E4E9F0":"rgba(0,0,0,0.25)"), borderRadius: 10, padding: 3, marginBottom: 10 }}>
           {[{ key: "hisse", label: "BİST Hisse" }, { key: "fon", label: "Yatırım Fonları" }].map(t => (
             <button key={t.key} onClick={() => setSekme(t.key as any)} style={{
               flex: 1, border: "none", cursor: "pointer", padding: "7px 0", borderRadius: 8,
@@ -5705,7 +5705,7 @@ function Asistan({nav, settings}:{nav:any, settings?:any}){
               <span style={{fontSize:16,color:"#3B82F6"}}>➤</span>
             </div>
             <p style={{margin:"0 0 4px",fontSize:17,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff")}}>Merhaba 👋</p>
-            <p style={{margin:"0 0 16px",fontSize:13,color:WA(0.55)}}>Bugün ne öğrenmek istiyorsunuz?</p>
+            <p style={{margin:"0 0 16px",fontSize:13,color:(TEMA==="acik"?"#2E4256":WA(0.55))}}>Bugün ne öğrenmek istiyorsunuz?</p>
             <div style={{display:"flex",alignItems:"center",gap:6,background:WA(0.06),border:`1px solid ${WA(0.14)}`,borderRadius:18,padding:"5px 5px 5px 16px"}}>
               <input
                 value={input}
@@ -12293,7 +12293,7 @@ for(const kat of ["doviz","emtia","borsa","gostergeler","kripto"]){
 const PIYASA_OZETI_VARSAYILAN=["USDTRY=X","EURTRY=X","GBPTRY=X","GRAM_ALTIN","XU100.IS","BTC-USD","ETH-USD","GRAM_GUMUS","BZ=F","^GSPC"];
 
 // Tablo satırı: sembol solda, son fiyat + günlük % ortada, sparkline sağda
-function PiyasaSatiri({ad,sembol,paraOnek,dec,onTikla}:{ad:string,sembol:string,paraOnek?:string,dec:number,onTikla:()=>void}){
+function PiyasaSatiri({ad,sembol,paraOnek,dec,onTikla,sira}:{ad:string,sembol:string,paraOnek?:string,dec:number,onTikla:()=>void,sira?:number}){
   const CACHE_KEY = `poz_${sembol}`;
   const [veri,setVeri]=useState<any>(()=>{
     try{
@@ -12378,9 +12378,13 @@ function PiyasaSatiri({ad,sembol,paraOnek,dec,onTikla}:{ad:string,sembol:string,
 
   return(
     <div className="press-card" onClick={onTikla} style={{
-      display:"flex",alignItems:"center",gap:8,padding:"12px 4px",borderRadius:8,
-      background:(TEMA==="acik"?"#E9EEF4":"transparent"),
-      borderBottom:`1px solid ${WA(0.06)}`,cursor:"pointer",
+      display:"flex",alignItems:"center",gap:8,cursor:"pointer",
+      ...(TEMA==="acik"
+        ? {padding:"12px 12px",borderRadius:12,marginBottom:8,
+           background:((sira||0)%2===1?"#F3F6FA":"#E9EEF4"),
+           border:"1px solid rgba(22,34,46,0.08)"}
+        : {padding:"12px 4px",borderRadius:8,background:"transparent",
+           borderBottom:`1px solid ${WA(0.06)}`}),
       transition:"background-color 700ms ease",
       ...flashStil,
     }}>
@@ -13302,7 +13306,7 @@ function App(){
               <span onClick={()=>{setPiyasaTabloFiltre("gostergeler");nav("piyasaMenu");}} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
             </div>
             <div onClick={()=>{setPiyasaTabloFiltre("gostergeler");nav("piyasaMenu");}} style={{
-              background:(TEMA==="acik"?"linear-gradient(135deg,#FFFFFF 0%,#F1F5F9 100%)":"linear-gradient(135deg,#16222E 0%,#131C27 100%)"),borderRadius:16,
+              background:(TEMA==="acik"?"linear-gradient(135deg,#E9EEF4 0%,#E3E9F1 100%)":"linear-gradient(135deg,#16222E 0%,#131C27 100%)"),borderRadius:16,
               border:`1px solid ${WA(0.08)}`,position:"relative",overflow:"hidden",
               marginBottom:14,cursor:"pointer",
             }}>
@@ -13451,7 +13455,7 @@ function App(){
             </div>
             <div className="press-card" onClick={()=>nav("haftalikOzet")} style={{
               display:"flex",alignItems:"center",gap:14,marginBottom:14,cursor:"pointer",
-              background:(TEMA==="acik"?"linear-gradient(135deg,#FFFFFF 0%,#F1F5F9 100%)":"linear-gradient(135deg,#16222E 0%,#131C27 100%)"),
+              background:(TEMA==="acik"?"linear-gradient(135deg,#E9EEF4 0%,#E3E9F1 100%)":"linear-gradient(135deg,#16222E 0%,#131C27 100%)"),
               border:`1px solid ${WA(0.08)}`,borderRadius:16,padding:"14px 16px",
               position:"relative",overflow:"hidden",
             }}>
@@ -13473,7 +13477,7 @@ function App(){
             </div>
             <div className="press-card" onClick={()=>nav("getiriKarsilastirma")} style={{
               display:"flex",alignItems:"center",gap:14,marginBottom:14,cursor:"pointer",
-              background:(TEMA==="acik"?"linear-gradient(135deg,#FFFFFF 0%,#F1F5F9 100%)":"linear-gradient(135deg,#16222E 0%,#131C27 100%)"),
+              background:(TEMA==="acik"?"linear-gradient(135deg,#E9EEF4 0%,#E3E9F1 100%)":"linear-gradient(135deg,#16222E 0%,#131C27 100%)"),
               border:`1px solid ${WA(0.08)}`,borderRadius:16,padding:"14px 16px",
               position:"relative",overflow:"hidden",
             }}>
@@ -13568,7 +13572,7 @@ function App(){
               const renk=({katilim:C.blue,bireysel:C.teal,ticari:C.purple,hazine:C.orange} as Record<string,string>)[kat.id];
               return (
                 <div key={kat.id} style={{marginBottom:16}}>
-                  <div style={{fontSize:12,fontWeight:800,color:WA(0.55),textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>{TR(kat.baslik||`${kat.label} Hesaplamaları`)}</div>
+                  <div style={{fontSize:12,fontWeight:800,color:(TEMA==="acik"?"#1C3A5E":WA(0.55)),textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>{TR(kat.baslik||`${kat.label} Hesaplamaları`)}</div>
                   {items.map(it=>(
                     <div className="press-card" key={it.key} onClick={()=>nav(it.key)} style={{
                       display:"flex",alignItems:"center",gap:12,position:"relative",overflow:"hidden",
@@ -13728,11 +13732,18 @@ function App(){
               ];
               return(
                 <div>
-                  <div style={{background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,borderRadius:14,overflow:"hidden",marginTop:8}}>
+                  <div style={TEMA==="acik"
+                    ? {marginTop:8}
+                    : {background:WA(0.05),border:`1px solid ${WA(0.08)}`,borderRadius:14,overflow:"hidden",marginTop:8}}>
                     {GOSTERGELER.map((g,i)=>{
                       const tiklanabilir = g.seri && g.seri.length>0;
                       return(
-                      <div key={i} onClick={()=>tiklanabilir&&setPiyasaGostergeTablo({ad:g.seriAd,seri:g.seri,birim:g.seriBirim})} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"11px 14px",borderBottom:i<GOSTERGELER.length-1?`1px solid ${WA(0.06)}`:"none",cursor:tiklanabilir?"pointer":"default"}}>
+                      <div key={i} onClick={()=>tiklanabilir&&setPiyasaGostergeTablo({ad:g.seriAd,seri:g.seri,birim:g.seriBirim})} style={{display:"flex",justifyContent:"space-between",alignItems:"center",cursor:tiklanabilir?"pointer":"default",
+                        ...(TEMA==="acik"
+                          ? {padding:"11px 14px",borderRadius:12,marginBottom:8,
+                             background:(i%2===1?"#F3F6FA":"#E9EEF4"),
+                             border:"1px solid rgba(22,34,46,0.08)"}
+                          : {padding:"11px 14px",borderBottom:i<GOSTERGELER.length-1?`1px solid ${WA(0.06)}`:"none"})}}>
                         <div>
                           <p style={{margin:0,fontSize:12,fontWeight:600,color:C.soft}}>{g.ad}</p>
                           {g.tarih&&<p style={{margin:"1px 0 0",fontSize:9,color:WA(0.3)}}>{g.tarih}{g.canli?" · canlı":""}</p>}
@@ -13751,9 +13762,11 @@ function App(){
                       değil, doğrudan Yahoo Finance'ten canlı çekilir (PiyasaSatiri,
                       sparkline dahil) — tıklanınca aynı grafik ekranı + alarm kurma açılır. */}
                   <p style={{margin:"16px 0 6px 4px",fontSize:11,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.5}}>Piyasa Duyarlılığı</p>
-                  <div style={{background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,borderRadius:14,overflow:"hidden"}}>
-                    {(PIYASA_TABLO_VERISI["gostergeler"]||[]).map((r:any)=>(
-                      <PiyasaSatiri key={r.sembol} ad={r.ad} sembol={r.sembol} dec={r.dec} paraOnek={r.paraOnek}
+                  <div style={TEMA==="acik"
+                    ? {}
+                    : {background:WA(0.05),border:`1px solid ${WA(0.08)}`,borderRadius:14,overflow:"hidden"}}>
+                    {(PIYASA_TABLO_VERISI["gostergeler"]||[]).map((r:any,sira:number)=>(
+                      <PiyasaSatiri key={r.sembol} sira={sira} ad={r.ad} sembol={r.sembol} dec={r.dec} paraOnek={r.paraOnek}
                         onTikla={()=>setSeciliKur({kod:r.ad,ad:r.ad,sembol:r.sembol,birim:r.paraOnek||"₺"})}/>
                     ))}
                   </div>
@@ -13768,8 +13781,8 @@ function App(){
                   <span style={{width:60,textAlign:"right",fontSize:10,fontWeight:700,color:WA(0.35),textTransform:"uppercase"}}>{TR("Günlük %")}</span>
                   <span style={{width:56,textAlign:"right",fontSize:10,fontWeight:700,color:WA(0.35),textTransform:"uppercase"}}>{TR("Grafik")}</span>
                 </div>
-                {satirlar.map((r:any)=>(
-                  <PiyasaSatiri key={r.sembol} ad={r.ad} sembol={r.sembol} dec={r.dec} paraOnek={r.paraOnek}
+                {satirlar.map((r:any,sira:number)=>(
+                  <PiyasaSatiri key={r.sembol} sira={sira} ad={r.ad} sembol={r.sembol} dec={r.dec} paraOnek={r.paraOnek}
                     onTikla={()=>setSeciliKur({kod:r.ad,ad:r.ad,sembol:r.sembol,birim:r.paraOnek||"₺"})}/>
                 ))}
                 {satirlar.length===0&&(
