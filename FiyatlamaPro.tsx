@@ -12229,11 +12229,14 @@ function App(){
     return ()=>window.removeEventListener("resize",f);
   },[]);
   const genisEkran=!IS_NATIVE&&ekranW>=1024;
-  // Geniş ekranda içerik TAM genişlik kullanır: zoom ölçeği hesaba katılarak
-  // kolon, görselde ekranı tamamen dolduracak şekilde boyutlanır.
-  const icerikOlcek=!IS_NATIVE&&ekranW>=1600?1.30:(genisEkran&&ekranW>=1280?1.18:1);
-  const kolonW=IS_NATIVE?680:(genisEkran?Math.floor(ekranW/icerikOlcek):430);
-  const altBarW=IS_NATIVE?560:(genisEkran?Math.max(620,Math.min(760,Math.round(kolonW*0.55))):402);
+  // Masaüstü profesyonel görünüm: içerik artık ekranı kaplamak yerine solda
+  // sabit bir yan gezinme menüsü + ortalanmış, sabit genişlikte bir uygulama
+  // kolonu olarak sunuluyor. Alt bar masaüstünde gizlenir (yan menü onun
+  // yerine geçer). Native uygulama ve mobil web hiç etkilenmez.
+  const SIDEBAR_W=genisEkran?264:0;
+  const icerikOlcek=!IS_NATIVE&&ekranW>=1680?1.22:(genisEkran&&ekranW>=1360?1.12:1);
+  const kolonW=IS_NATIVE?680:(genisEkran?640:430);
+  const altBarW=IS_NATIVE?560:402;
   useEffect(()=>{
     if(IS_NATIVE) return;
     // Kolon dışında kalan alan: köşelere doğru koyulaşan degrade
@@ -12609,7 +12612,73 @@ function App(){
         .skeleton { background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.09) 50%, rgba(255,255,255,0.04) 75%); background-size: 200% 100%; animation: shimmer 1.4s ease-in-out infinite; border-radius: 10px; }
         @keyframes fadeInUp { from { opacity:0; transform: translateY(10px); } to { opacity:1; transform: translateY(0); } }
         .empty-anim { animation: fadeInUp 400ms ease-out; }
+        /* Masaüstü yan menü öğeleri */
+        .kp-side-item { transition: background 0.15s ease, color 0.15s ease; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+        .kp-side-item:hover { background: rgba(255,255,255,0.06) !important; }
       `}</style>
+      {/* ── MASAÜSTÜ YAN MENÜ (sadece geniş ekran web) ── */}
+      {genisEkran&&(
+        <div style={{position:"fixed",top:0,left:0,bottom:0,width:SIDEBAR_W,zIndex:80,
+          display:"flex",flexDirection:"column",boxSizing:"border-box",overflowY:"auto",
+          background:"linear-gradient(180deg,#101C29 0%,#0C1622 100%)",
+          borderRight:"1px solid rgba(255,255,255,0.07)",
+          boxShadow:"4px 0 24px rgba(0,0,0,0.35)",padding:"22px 14px 16px"}}>
+          {/* Marka */}
+          <div onClick={()=>nav("home")} style={{display:"flex",alignItems:"center",gap:11,padding:"2px 8px 18px",cursor:"pointer",borderBottom:"1px solid rgba(255,255,255,0.07)",marginBottom:14}}>
+            <div style={{width:42,height:42,borderRadius:21,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,background:"#FFFFFF",boxShadow:"0 1px 4px rgba(0,0,0,0.25)"}}>
+              <img src={KATILIM_LOGO_B64} alt="" style={{height:28,width:"auto",display:"block"}}/>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",minWidth:0}}>
+              <span style={{fontSize:16,fontWeight:800,letterSpacing:"-0.01em",color:"#EAF1FA"}}>Katılım <span style={{background:"linear-gradient(90deg,#1B9E7A,#2CCB9A)",WebkitBackgroundClip:"text",backgroundClip:"text",color:"transparent"}}>Plus</span></span>
+              <span style={{fontSize:9.5,fontWeight:500,color:"rgba(255,255,255,0.45)",marginTop:1,whiteSpace:"nowrap"}}>Katılım Finansının Akıllı Asistanı</span>
+            </div>
+          </div>
+          {/* Ana gezinme (alt bar sekmelerinin masaüstü karşılığı) */}
+          <div style={{display:"flex",flexDirection:"column",gap:3}}>
+            {ALT_BAR_SEKMELERI.map(t=>{
+              const aktif=TAB_OF_SCREEN[screen]===t.tab;
+              return(
+                <div key={t.tab} className="kp-side-item" onClick={()=>nav(t.key)} style={{
+                  display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:12,boxSizing:"border-box",
+                  background:aktif?"linear-gradient(90deg,rgba(91,155,216,0.18),rgba(91,155,216,0.05))":"transparent",
+                  borderLeft:aktif?"3px solid #5B9BD8":"3px solid transparent",
+                }}>
+                  <AltBarIcon tip={t.tip} aktif={aktif}/>
+                  <span style={{fontSize:13.5,fontWeight:aktif?700:500,color:aktif?"#EAF1FA":"rgba(255,255,255,0.6)"}}>{t.label}</span>
+                </div>
+              );
+            })}
+          </div>
+          {/* Hızlı erişim */}
+          <div style={{marginTop:18,paddingTop:14,borderTop:"1px solid rgba(255,255,255,0.07)"}}>
+            <div style={{fontSize:9.5,fontWeight:800,letterSpacing:1,color:"rgba(255,255,255,0.35)",padding:"0 12px 8px"}}>HIZLI ERİŞİM</div>
+            {[
+              {key:"getiriKarsilastirma",label:"Getiri Karşılaştırma"},
+              {key:"haftalikOzet",label:"Haftalık Piyasa Özeti"},
+              {key:"finansalTakvim",label:"Finansal Takvim"},
+              {key:"fiyatAlarmlarim",label:"Fiyat Alarmlarım"},
+              {key:"sozluk",label:"Finans Sözlüğü"},
+            ].map(m=>(
+              <div key={m.key} className="kp-side-item" onClick={()=>nav(m.key)} style={{
+                display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:10,
+                background:screen===m.key?"rgba(91,155,216,0.14)":"transparent",
+              }}>
+                <span style={{width:20,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon k={m.key} size={15}/></span>
+                <span style={{fontSize:12.5,fontWeight:screen===m.key?700:500,color:screen===m.key?"#DCE9F7":"rgba(255,255,255,0.55)"}}>{m.label}</span>
+              </div>
+            ))}
+          </div>
+          {/* Alt kısım: ayarlar + telif */}
+          <div style={{marginTop:"auto",paddingTop:12,borderTop:"1px solid rgba(255,255,255,0.07)"}}>
+            <div className="kp-side-item" onClick={()=>nav("ayarlar")} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:10,background:screen==="ayarlar"?"rgba(91,155,216,0.14)":"transparent"}}>
+              <span style={{width:20,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon k="ayarlar" size={15}/></span>
+              <span style={{fontSize:12.5,fontWeight:600,color:screen==="ayarlar"?"#DCE9F7":"rgba(255,255,255,0.55)"}}>Ayarlar</span>
+            </div>
+            <div style={{fontSize:9.5,color:"rgba(255,255,255,0.3)",padding:"10px 12px 0",lineHeight:1.5}}>© {new Date().getFullYear()} Katılım Plus</div>
+          </div>
+        </div>
+      )}
+    <div style={{paddingLeft:SIDEBAR_W}}>
     <div style={{fontFamily:"-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif",background:"#0F1923",minHeight:"100dvh",maxWidth:kolonW,margin:"0 auto",
       ...(genisEkran?{borderLeft:"1px solid rgba(255,255,255,0.06)",borderRight:"1px solid rgba(255,255,255,0.06)",boxShadow:"0 0 80px rgba(0,0,0,0.5)"}:{}),
       ...(icerikOlcek!==1?{zoom:icerikOlcek}:{})} as any}>
@@ -12798,11 +12867,11 @@ function App(){
       {piyasaOzetiDuzenleAcik&&<PiyasaOzetiDuzenleModal secili={piyasaOzetiSecim} onToggle={piyasaOzetiToggle} onClose={()=>setPiyasaOzetiDuzenleAcik(false)}/>}
       {secilikur&&<KurGrafikModal kur={secilikur} onClose={()=>setSeciliKur(null)}/>}
       {gostergeTablo&&<GostergeTabloModal ad={gostergeTablo.ad} seri={gostergeTablo.seri||[]} birim={gostergeTablo.birim} onClose={()=>setGostergeTablo(null)}/>}
-      {gostergeUyari&&<div style={{position:"fixed",top:64,left:"50%",transform:"translateX(-50%)",background:"#1C3A5E",color:"#fff",borderRadius:20,padding:"10px 20px",fontSize:13,fontWeight:600,zIndex:700,boxShadow:"0 4px 14px rgba(0,0,0,0.35)"}}>{gostergeUyari}</div>}
+      {gostergeUyari&&<div style={{position:"fixed",top:64,left:`calc(50% + ${SIDEBAR_W/2}px)`,transform:"translateX(-50%)",background:"#1C3A5E",color:"#fff",borderRadius:20,padding:"10px 20px",fontSize:13,fontWeight:600,zIndex:700,boxShadow:"0 4px 14px rgba(0,0,0,0.35)"}}>{gostergeUyari}</div>}
       {hakkindaAcik&&<HakkindaModal onClose={()=>setHakkindaAcik(false)}/>}
       {kurulumKilavuzuAcik&&<KurulumKilavuzuModal onClose={()=>setKurulumKilavuzuAcik(false)}/>}
       {favoriDuzenleAcik&&<FavoriDuzenleModal favoriler={favoriler} onToggle={(key)=>setFavoriler(f=>f.includes(key)?f.filter(k=>k!==key):[...f,key])} onClose={()=>setFavoriDuzenleAcik(false)}/>}
-      {saved&&<div style={{position:"fixed",top:64,left:"50%",transform:"translateX(-50%)",background:"#1C3A5E",color:"#fff",borderRadius:20,padding:"10px 20px",fontSize:14,fontWeight:600,zIndex:100}}>✓ Ayarlar kaydedildi</div>}
+      {saved&&<div style={{position:"fixed",top:64,left:`calc(50% + ${SIDEBAR_W/2}px)`,transform:"translateX(-50%)",background:"#1C3A5E",color:"#fff",borderRadius:20,padding:"10px 20px",fontSize:14,fontWeight:600,zIndex:100}}>✓ Ayarlar kaydedildi</div>}
 
       <div style={{paddingTop:0}}>
       <KategoriRenkContext.Provider value={EKRAN_KATEGORI[screen]||null}>
@@ -13615,8 +13684,9 @@ function App(){
       </div>
       </div>{/* /screen-anim */}
 
-      {/* ── ALT BAR (BOTTOM TAB NAVIGATION) — Yüzen (floating) tasarım ── */}
-      {["home","hesaplaMenu","piyasaMenu","araclarMenu","asistan","profil"].includes(screen)&&(
+      {/* ── ALT BAR (BOTTOM TAB NAVIGATION) — Yüzen (floating) tasarım ──
+          Masaüstünde (geniş ekran) gizlenir; gezinme soldaki yan menüden yapılır. */}
+      {!genisEkran&&["home","hesaplaMenu","piyasaMenu","araclarMenu","asistan","profil"].includes(screen)&&(
         <div style={{
           position:"fixed",left:0,right:0,bottom:0,zIndex:90,
           display:"flex",justifyContent:"center",
@@ -13652,6 +13722,7 @@ function App(){
         </div>
       )}
     </div>
+    </div>{/* /yan menü sarmalayıcı */}
     </>
   );
 }
