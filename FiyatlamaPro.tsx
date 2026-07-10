@@ -14123,7 +14123,7 @@ function App(){
         <div style={{
           position:"fixed",left:0,right:0,bottom:0,zIndex:90,
           display:"flex",justifyContent:"center",
-          padding:"0 14px",paddingBottom:"calc(14px + env(safe-area-inset-bottom,0px))",
+          padding:"0 14px",paddingBottom:"calc(4px + env(safe-area-inset-bottom,0px))",
           pointerEvents:"none",
         }}>
           <div style={{
