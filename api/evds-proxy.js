@@ -236,6 +236,51 @@ export default async function handler(req,res){
   const apiKey=process.env.EVDS_KEY;
   if(!apiKey) return res.status(500).json({error:"EVDS_KEY eksik"});
 
+  // ── KATALOG KESFI (yardimci): /api/evds-proxy?katalog=1[&filtre=IHALE,HAZINE]
+  // EVDS veri gruplarini ve seri kodlarini listeler (2Y/5Y tahvil ihale faiz
+  // serilerini bulmak icin eklendi). Anahtar sunucuda kalir, disari sizmez.
+  if(req.query.katalog==="1"){
+    try{
+      const filtreParam = String(req.query.filtre||"IHALE,HAZINE,DIBS,BORCLANMA");
+      const N = function(s){ return String(s==null?"":s).toLocaleUpperCase("tr-TR")
+        .split("\u0130").join("I").split("\u015E").join("S")
+        .split("\u00C7").join("C").split("\u00D6").join("O")
+        .split("\u00DC").join("U").split("\u011E").join("G"); };
+      const filtreler = filtreParam.split(",").map(function(s){return N(s.trim());}).filter(Boolean);
+      const kataloglar = ["https://evds2.tcmb.gov.tr/service/evds", BASE];
+      let gruplar=null, kullanilan=null;
+      for(const kb of kataloglar){
+        try{
+          const r = await fetchZamanli(kb+"/datagroups/mode=0&code=0&type=json",{headers:{"key":apiKey,"Accept":"application/json"}},10000);
+          const t = await r.text();
+          if(t.trim().startsWith("[")){ gruplar=JSON.parse(t); kullanilan=kb; break; }
+        }catch(e){}
+      }
+      if(!gruplar) return res.status(502).json({error:"datagroups alinamadi"});
+      const ilgili = gruplar.filter(function(g){
+        const ad=N(g.DATAGROUP_ADI||g.DATAGROUP_NAME);
+        return filtreler.some(function(f){return ad.indexOf(f)>=0;});
+      }).slice(0,40);
+      const sonuc=[];
+      for(const g of ilgili){
+        const kod=g.DATAGROUP_KODU||g.DATAGROUP_CODE;
+        let seriler=[];
+        try{
+          const r2=await fetchZamanli(kullanilan+"/serieList/type=json&code="+kod,{headers:{"key":apiKey,"Accept":"application/json"}},10000);
+          const t2=await r2.text();
+          if(t2.trim().startsWith("[")){
+            seriler=JSON.parse(t2).map(function(s){return {kod:s.SERIE_CODE, ad:s.SERIE_NAME};});
+          }
+        }catch(e){}
+        sonuc.push({grupKodu:kod, grupAdi:g.DATAGROUP_ADI||g.DATAGROUP_NAME, seriler:seriler});
+      }
+      return res.status(200).json({kaynak:kullanilan, grupSayisi:sonuc.length, gruplar:sonuc});
+    }catch(err){
+      return res.status(500).json({error:err.message});
+    }
+  }
+
+
   const {grafik,seri,debug}=req.query;
   const now=Date.now();
 
