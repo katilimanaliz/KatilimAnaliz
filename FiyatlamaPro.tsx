@@ -194,9 +194,20 @@ const dilDegistir = (d: "tr" | "en") => {
 // kez seçilir ve binlerce inline stil bu sabiti kullanır (canlı takas mümkün
 // değil). kp_screen sessionStorage'da olduğu için yenileme sonrası aynı
 // ekranda (Profil) kalınır — dil değişimindeki kullanıcı deneyimiyle aynı.
+// ÖNEMLİ: adres çubuğunda "?ekran=X" varsa (blog'dan derin bağlantıyla
+// gelindiyse) bu, açılışta sessionStorage kaydından ÖNCELİKLİ okunuyor —
+// reload sırasında hâlâ orada duran eski parametre kullanıcıyı o an
+// bulunduğu ekrandan koparıp X'e atardı. Reload'tan önce bu parametreyi
+// URL'den temizliyoruz ki tema değişimi her zaman mevcut ekranda kalsın.
 const temaDegistir = (t: "koyu" | "acik") => {
   try { localStorage.setItem("kp_tema", t); } catch (e) {}
-  try { location.reload(); } catch (e) {}
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("ekran");
+    window.location.href = url.toString();
+  } catch (e) {
+    try { location.reload(); } catch (e2) {}
+  }
 };
 const EN_SOZLUK: Record<string, string> = {
   // ── Alt bar / yan menü / genel gezinme ──
