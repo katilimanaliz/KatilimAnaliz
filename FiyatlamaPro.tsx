@@ -1820,25 +1820,25 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi }: { initialTicke
 
         <div style={{display:"flex"}}>
           <div style={{flex:1}}>
-            <div style={{fontSize:9,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.5,marginBottom:3}}>{TR("Hisse")}</div>
+            <div style={{fontSize:9,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5,marginBottom:3}}>{TR("Hisse")}</div>
             <div style={{fontSize:14.5,fontWeight:800,fontFamily:"monospace",color:(TEMA==="acik"?C.label:"#fff"),whiteSpace:"nowrap"}}>{hisseIstatistik.toplam}</div>
           </div>
           <div style={{flex:1}}>
-            <div style={{fontSize:9,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.5,marginBottom:3}}>{TR("Artan")}</div>
+            <div style={{fontSize:9,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5,marginBottom:3}}>{TR("Artan")}</div>
             <div style={{fontSize:14.5,fontWeight:800,fontFamily:"monospace",color:C.green,whiteSpace:"nowrap"}}>
               {hisseIstatistik.artan}
               {hisseIstatistik.toplam>0&&<span style={{fontSize:10,fontWeight:700,color:WA(0.35),marginLeft:3}}>%{Math.round(hisseIstatistik.artan/hisseIstatistik.toplam*100)}</span>}
             </div>
           </div>
           <div style={{flex:1}}>
-            <div style={{fontSize:9,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.5,marginBottom:3}}>{TR("Azalan")}</div>
+            <div style={{fontSize:9,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5,marginBottom:3}}>{TR("Azalan")}</div>
             <div style={{fontSize:14.5,fontWeight:800,fontFamily:"monospace",color:C.red,whiteSpace:"nowrap"}}>
               {hisseIstatistik.azalan}
               {hisseIstatistik.toplam>0&&<span style={{fontSize:10,fontWeight:700,color:WA(0.35),marginLeft:3}}>%{Math.round(hisseIstatistik.azalan/hisseIstatistik.toplam*100)}</span>}
             </div>
           </div>
           <div style={{flex:1.15}}>
-            <div style={{fontSize:9,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.5,marginBottom:3}}>{TR("Hacim")}</div>
+            <div style={{fontSize:9,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5,marginBottom:3}}>{TR("Hacim")}</div>
             <div style={{fontSize:13,fontWeight:800,fontFamily:"monospace",color:(TEMA==="acik"?C.label:"#fff"),whiteSpace:"nowrap"}}>{fmtByk(hisseIstatistik.hacimToplam)}</div>
           </div>
         </div>
@@ -2214,7 +2214,7 @@ function KatilimEndeksiTopHareketliler({ nav, onSecim }: { nav: (sc: string) => 
   return (
     <div style={{ marginBottom: 14 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: WA(0.4), textTransform: "uppercase", letterSpacing: 0.5 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: (TEMA==="acik"?"#1A2430":"#A8C2DC"), textTransform: "uppercase", letterSpacing: 0.5 }}>
           Katılım Endeksi · Top Hareketliler
         </span>
       </div>
@@ -7475,7 +7475,7 @@ function VadeTakibi(){
             <p style={{margin:"0 0 14px",fontSize:13,fontWeight:700,color:C.soft}}>Yeni Kayıt</p>
 
             {/* Tip */}
-            <p style={{margin:"0 0 6px",fontSize:10,fontWeight:700,color:WA(0.4),textTransform:"uppercase"}}>{TR("Tür")}</p>
+            <p style={{margin:"0 0 6px",fontSize:10,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase"}}>{TR("Tür")}</p>
             <div style={{display:"flex",gap:6,marginBottom:14}}>
               {([["katilim","🏦","Katılım"],["kredi","💳","Kredi"],["not","📌","Not"]] as const).map(([v,ic,l])=>(
                 <button key={v} onClick={()=>setForm(f=>({...f,tip:v}))} style={{
@@ -7489,19 +7489,19 @@ function VadeTakibi(){
             </div>
 
             {/* Başlık */}
-            <p style={{margin:"0 0 5px",fontSize:10,fontWeight:700,color:WA(0.4),textTransform:"uppercase"}}>{TR("Başlık *")}</p>
+            <p style={{margin:"0 0 5px",fontSize:10,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase"}}>{TR("Başlık *")}</p>
             <input value={form.baslik} onChange={e=>setForm(p=>({...p,baslik:e.target.value}))}
               placeholder={form.tip==="katilim"?"ör. 3 Aylık TL — Kuveyt Türk":form.tip==="kredi"?"ör. Konut Son Taksit":"ör. ZK Kontrol"}
               style={{...INP,marginBottom:10}}/>
 
             {/* Açıklama */}
-            <p style={{margin:"0 0 5px",fontSize:10,fontWeight:700,color:WA(0.4),textTransform:"uppercase"}}>{TR("Açıklama")}</p>
+            <p style={{margin:"0 0 5px",fontSize:10,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase"}}>{TR("Açıklama")}</p>
             <input value={form.aciklama} onChange={e=>setForm(p=>({...p,aciklama:e.target.value}))}
               placeholder="İsteğe bağlı not" style={{...INP,marginBottom:10}}/>
 
             {/* Tutar (not tipinde gizle) */}
             {form.tip!=="not"&&(<>
-              <p style={{margin:"0 0 5px",fontSize:10,fontWeight:700,color:WA(0.4),textTransform:"uppercase"}}>{TR("Tutar (isteğe bağlı)")}</p>
+              <p style={{margin:"0 0 5px",fontSize:10,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase"}}>{TR("Tutar (isteğe bağlı)")}</p>
               <div style={{display:"flex",gap:6,marginBottom:10}}>
                 <input
                   value={form.tutar?Number(form.tutar.replace(/\./g,"")).toLocaleString("tr-TR"):""}
@@ -7519,12 +7519,12 @@ function VadeTakibi(){
             </>)}
 
             {/* Vade */}
-            <p style={{margin:"0 0 5px",fontSize:10,fontWeight:700,color:WA(0.4),textTransform:"uppercase"}}>{TR(form.tip==="not"?"Tarih *":"Vade Tarihi *")}</p>
+            <p style={{margin:"0 0 5px",fontSize:10,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase"}}>{TR(form.tip==="not"?"Tarih *":"Vade Tarihi *")}</p>
             <input value={form.vade} onChange={e=>setForm(p=>({...p,vade:e.target.value}))}
               type="date" lang="tr" style={{...INP,marginBottom:12,colorScheme:"dark"}}/>
 
             {/* Uyarı günü */}
-            <p style={{margin:"0 0 6px",fontSize:10,fontWeight:700,color:WA(0.4),textTransform:"uppercase"}}>{TR("Kaç gün önce uyarı?")}</p>
+            <p style={{margin:"0 0 6px",fontSize:10,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase"}}>{TR("Kaç gün önce uyarı?")}</p>
             <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:16}}>
               {[0,1,3,5,7,14].map(g=>(
                 <button key={g} onClick={()=>setForm(p=>({...p,hatirlatmaGun:g}))} style={{
@@ -7925,7 +7925,7 @@ function HaftalikPiyasaOzeti(){
           {/* Bülten tablosu */}
           <div style={{background:WA(0.04),border:`1px solid ${WA(0.07)}`,borderRadius:16,overflow:"hidden",marginBottom:14}}>
             <div style={{display:"flex",alignItems:"center",padding:"10px 14px",borderBottom:`1px solid ${WA(0.1)}`,background:WA(0.03)}}>
-              <span style={{flex:1,fontSize:10,fontWeight:800,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.4}}>Enstrüman</span>
+              <span style={{flex:1,fontSize:10,fontWeight:800,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.4}}>Enstrüman</span>
               <span style={{width:82,textAlign:"right",fontSize:10,fontWeight:800,color:WA(0.4)}}>{donemBas||"Önceki"}</span>
               <span style={{width:82,textAlign:"right",fontSize:10,fontWeight:800,color:WA(0.4)}}>{donemSon||"Güncel"}</span>
               <span style={{width:74,textAlign:"right",fontSize:10,fontWeight:800,color:WA(0.4)}}>Değişim</span>
@@ -8368,11 +8368,11 @@ function KatilimBankalari(){
 
         <div style={{display:"flex",gap:8,marginBottom:10}}>
           <div style={{flex:1,background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,borderRadius:12,padding:"11px 12px"}}>
-            <p style={{margin:0,fontSize:9,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Merkez")}</p>
+            <p style={{margin:0,fontSize:9,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Merkez")}</p>
             <p style={{margin:"3px 0 0",fontSize:13,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff")}}>{secili.merkez}</p>
           </div>
           <div style={{flex:1,background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,borderRadius:12,padding:"11px 12px"}}>
-            <p style={{margin:0,fontSize:9,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Sermaye Yapısı")}</p>
+            <p style={{margin:0,fontSize:9,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Sermaye Yapısı")}</p>
             <p style={{margin:"3px 0 0",fontSize:11.5,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),lineHeight:1.3}}>{secili.sermaye}</p>
           </div>
         </div>
@@ -8383,7 +8383,7 @@ function KatilimBankalari(){
               <a href={`https://www.${secili.site}`} target="_blank" rel="noopener noreferrer" style={{textDecoration:"none",display:"flex",alignItems:"center",gap:10,padding:"11px 13px",borderBottom:secili.adres?`1px solid ${WA(0.06)}`:"none"}}>
                 <span style={{fontSize:14,flexShrink:0}}>🌐</span>
                 <div style={{flex:1,minWidth:0}}>
-                  <p style={{margin:0,fontSize:9,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Web Sitesi")}</p>
+                  <p style={{margin:0,fontSize:9,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Web Sitesi")}</p>
                   <p style={{margin:"2px 0 0",fontSize:12.5,fontWeight:700,color:C.blue}}>www.{secili.site}</p>
                 </div>
                 <span style={{color:WA(0.3),fontSize:14}}>↗</span>
@@ -8393,7 +8393,7 @@ function KatilimBankalari(){
               <div style={{display:"flex",alignItems:"flex-start",gap:10,padding:"11px 13px"}}>
                 <span style={{fontSize:14,flexShrink:0,marginTop:1}}>📍</span>
                 <div style={{flex:1,minWidth:0}}>
-                  <p style={{margin:0,fontSize:9,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Genel Müdürlük")}</p>
+                  <p style={{margin:0,fontSize:9,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Genel Müdürlük")}</p>
                   <p style={{margin:"2px 0 0",fontSize:12,fontWeight:600,color:C.soft,lineHeight:1.4}}>{secili.adres}</p>
                 </div>
               </div>
@@ -8401,7 +8401,7 @@ function KatilimBankalari(){
           </div>
         )}
 
-        <p style={{margin:"0 0 8px",fontSize:11,fontWeight:800,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Öne Çıkanlar")}</p>
+        <p style={{margin:"0 0 8px",fontSize:11,fontWeight:800,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Öne Çıkanlar")}</p>
         <div style={{background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,borderRadius:14,overflow:"hidden"}}>
           {secili.detaylar.map((d:string,i:number)=>(
             <div key={i} style={{display:"flex",gap:10,padding:"12px 14px",borderBottom:i<secili.detaylar.length-1?`1px solid ${WA(0.06)}`:"none"}}>
@@ -12107,7 +12107,7 @@ function FavoriDuzenleModal({favoriler,onToggle,onClose}:{favoriler:string[],onT
             if(items.length===0) return null;
             return(
               <div key={kat.id} style={{marginBottom:16}}>
-                <div style={{fontSize:11,fontWeight:800,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>{TR(kat.label)}</div>
+                <div style={{fontSize:11,fontWeight:800,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>{TR(kat.label)}</div>
                 {items.map(it=>{
                   const secili=favoriler.includes(it.key);
                   return(
@@ -12169,7 +12169,7 @@ function PiyasaOzetiDuzenleModal({secili,onToggle,onClose}:{secili:string[],onTo
             if(items.length===0) return null;
             return(
               <div key={kat.id} style={{marginBottom:16}}>
-                <div style={{fontSize:11,fontWeight:800,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>{TR(kat.label)}</div>
+                <div style={{fontSize:11,fontWeight:800,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>{TR(kat.label)}</div>
                 {items.map((it:any)=>{
                   const seciliMi=secili.includes(it.sembol);
                   return(
@@ -12462,7 +12462,7 @@ function AltinUrunleriTablo(){
           ...(TEMA==="acik"
             ? {background:"#E9EEF4",border:"1px solid rgba(22,34,46,0.08)"}
             : {background:"#16222E",border:`1px solid ${WA(0.07)}`})}}>
-          <p style={{margin:0,fontSize:12,fontWeight:600,color:C.soft}}>Gram Altın (Has · 24 Ayar)</p>
+          <p style={{margin:0,fontSize:13,fontWeight:800,color:C.soft}}>Gram Altın (Has · 24 Ayar)</p>
           <span style={{fontSize:13,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace"}}>
             {yukleniyor?"…":gramFiyat!=null?fmtTL(gramFiyat):"—"}
           </span>
@@ -12473,7 +12473,7 @@ function AltinUrunleriTablo(){
             ...(TEMA==="acik"
               ? {background:((i+1)%2===1?"#F3F6FA":"#E9EEF4"),border:"1px solid rgba(22,34,46,0.08)"}
               : {background:((i+1)%2===1?"#1A2633":"#16222E"),border:`1px solid ${WA(0.07)}`})}}>
-            <p style={{margin:0,fontSize:12,fontWeight:600,color:C.soft}}>{u.ad}</p>
+            <p style={{margin:0,fontSize:13,fontWeight:800,color:C.soft}}>{u.ad}</p>
             <span style={{fontSize:13,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace"}}>
               {yukleniyor?"…":gramFiyat!=null?fmtTL(gramFiyat*u.carpan):"—"}
             </span>
@@ -12940,7 +12940,7 @@ function App(){
             </div>
             <div style={{display:"flex",flexDirection:"column",minWidth:0}}>
               <span style={{fontSize:16,fontWeight:800,letterSpacing:"-0.01em",color:(TEMA==="acik"?"#16222E":"#EAF1FA")}}>Katılım <span style={{background:"linear-gradient(90deg,#1B9E7A,#2CCB9A)",WebkitBackgroundClip:"text",backgroundClip:"text",color:"transparent"}}>Plus</span></span>
-              <span style={{fontSize:9.5,fontWeight:500,color:WA(0.45),marginTop:1,whiteSpace:"nowrap"}}>{CV("Katılım Finansının Akıllı Asistanı")}</span>
+              <span style={{fontSize:9.5,fontWeight:600,color:(TEMA==="acik"?"#2E4256":"rgba(255,255,255,0.62)"),marginTop:1,whiteSpace:"nowrap"}}>{CV("Katılım Finansının Akıllı Asistanı")}</span>
             </div>
           </div>
           {/* Ana gezinme (alt bar sekmelerinin masaüstü karşılığı) */}
@@ -13005,7 +13005,7 @@ function App(){
                 </div>
                 <div style={{display:"flex",flexDirection:"column",justifyContent:"center",minWidth:0}}>
                   <span style={{fontSize:17,fontWeight:800,letterSpacing:"-0.01em",color:(TEMA==="acik"?"#16222E":"#EAF1FA")}}>Katılım <span style={{background:"linear-gradient(90deg,#1B9E7A,#2CCB9A)",WebkitBackgroundClip:"text",backgroundClip:"text",color:"transparent"}}>Plus</span></span>
-                  <span style={{fontSize:10.5,fontWeight:500,color:WA(0.5),letterSpacing:"0.01em",marginTop:1}}>{CV("Katılım Finansının Akıllı Asistanı")}</span>
+                  <span style={{fontSize:10.5,fontWeight:600,color:(TEMA==="acik"?"#2E4256":"rgba(255,255,255,0.62)"),letterSpacing:"0.01em",marginTop:1}}>{CV("Katılım Finansının Akıllı Asistanı")}</span>
                 </div>
               </div>
               <button onClick={()=>{setBildirimGecmisiAcik(true);bildirimOkunduIsaretle();}} style={{
@@ -13023,7 +13023,7 @@ function App(){
             {/* Tarih/saat — küçük, tek satır, "Hoş geldin"in hemen üstünde */}
             <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
               <span style={{width:3,height:12,borderRadius:2,background:C.blue,flexShrink:0}}/>
-              <span style={{fontSize:10,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.8}}>{TR(selamlama)} · {kisaTarihStr}</span>
+              <span style={{fontSize:10,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.8}}>{TR(selamlama)} · {kisaTarihStr}</span>
             </div>
             {(()=>{
               const selamMetni = kullaniciAdi?`${CV("Hoş geldin")} ${kullaniciAdi}`:CV("Hoş geldin");
@@ -13042,7 +13042,7 @@ function App(){
                 } as any}>{selamMetni}</div>
               );
             })()}
-            <div style={{fontSize:13.5,color:WA(0.5),marginBottom:16}}>{CV("Bugün ne hesaplamak istersin?")}</div>
+            <div style={{fontSize:13.5,color:(TEMA==="acik"?"#2E4256":"rgba(255,255,255,0.65)"),marginBottom:16}}>{CV("Bugün ne hesaplamak istersin?")}</div>
 
             {/* ── ANA MENÜ ARAMA ── */}
             {(()=>{
@@ -13192,7 +13192,7 @@ function App(){
 
             {/* Piyasa Özeti */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-              <span style={{fontSize:11,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Piyasa Özeti")}</span>
+              <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Piyasa Özeti")}</span>
               <div style={{display:"flex",alignItems:"center",gap:12}}>
                 <span onClick={()=>setPiyasaOzetiDuzenleAcik(true)} style={{fontSize:11,fontWeight:700,color:WA(0.4),cursor:"pointer"}}>Düzenle</span>
                 <span onClick={()=>nav("piyasaMenu")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
@@ -13215,7 +13215,7 @@ function App(){
 
             {/* Favorilerim */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-              <span style={{fontSize:11,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Favori Hesaplamalarım")}</span>
+              <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Favori Hesaplamalarım")}</span>
               <span onClick={()=>setFavoriDuzenleAcik(true)} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>Düzenle</span>
             </div>
             <div className="piyasa-scroll" style={{display:"flex",overflowX:"auto",gap:8,marginBottom:26,scrollSnapType:"x mandatory",WebkitOverflowScrolling:"touch",paddingBottom:2}}>
@@ -13247,7 +13247,7 @@ function App(){
 
             {/* Piyasalar */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-              <span style={{fontSize:11,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Piyasalar")}</span>
+              <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Piyasalar")}</span>
               <span onClick={()=>nav("piyasaMenu")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:26}}>
@@ -13310,15 +13310,12 @@ function App(){
 
             {/* Finansal Göstergeler — ana sayfa özeti (Seçenek A: ikonlu satırlar) */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:18,marginBottom:8}}>
-              <span style={{fontSize:11,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Finansal Göstergeler")}</span>
+              <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Finansal Göstergeler")}</span>
               <span onClick={()=>{setPiyasaTabloFiltre("gostergeler");nav("piyasaMenu");}} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
             </div>
             <div onClick={()=>{setPiyasaTabloFiltre("gostergeler");nav("piyasaMenu");}} style={{
-              background:(TEMA==="acik"?"linear-gradient(135deg,#E9EEF4 0%,#E3E9F1 100%)":"linear-gradient(135deg,#16222E 0%,#131C27 100%)"),borderRadius:16,
-              border:`1px solid ${WA(0.08)}`,position:"relative",overflow:"hidden",
               marginBottom:14,cursor:"pointer",
             }}>
-              <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:"linear-gradient(90deg,transparent,#FBBF24,transparent)"}}/>
               {[
                 {ad:"TCMB Politika Faizi", deger:"%37,00", tarih:"Haziran 2026 · PPK", ikon:Landmark, renk:C.blue},
                 {ad:"TÜFE (Yıllık)", deger:evdsMakro?.["TUFE_YILLIK"]?.deger!=null?`%${evdsMakro["TUFE_YILLIK"].deger.toFixed(2).replace(".",",")}`:"—", tarih:evdsMakro?.["TUFE_YILLIK"]?.tarih?`${evdsMakro["TUFE_YILLIK"].tarih} · canlı`:"", ikon:TrendingUp, renk:C.red, seri:evdsMakro?.["TUFE_YILLIK_SERI"], seriAd:"TÜFE Yıllık Değişim"},
@@ -13346,13 +13343,16 @@ function App(){
                     setGostergeUyari("Veri henüz yüklenmedi, birkaç saniye sonra tekrar dene.");
                     setTimeout(()=>setGostergeUyari(null),2200);
                   }
-                }} style={{display:"flex",alignItems:"center",gap:11,padding:"12px 16px",borderBottom:i<arr.length-1?`1px solid ${WA(0.06)}`:"none",cursor:gecmisDestekli?"pointer":"default"}}>
+                }} style={{display:"flex",alignItems:"center",gap:11,padding:"12px 16px",borderRadius:12,marginBottom:8,cursor:gecmisDestekli?"pointer":"default",
+                  ...(TEMA==="acik"
+                    ? {background:(i%2===1?"#F3F6FA":"#E9EEF4"),border:"1px solid rgba(22,34,46,0.08)"}
+                    : {background:(i%2===1?"#1A2633":"#16222E"),border:`1px solid ${WA(0.07)}`})}}>
                   <div style={{width:32,height:32,borderRadius:9,background:`${g.renk}26`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                     <IkonBileseni size={16} color={g.renk} strokeWidth={2}/>
                   </div>
                   <div style={{minWidth:0,flex:1}}>
                     <div style={{color:WA(0.85),fontSize:12.5,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{g.ad}</div>
-                    {g.tarih&&<div style={{color:WA(0.3),fontSize:9.5,marginTop:1}}>{g.tarih}</div>}
+                    {g.tarih&&<div style={{color:(TEMA==="acik"?"#4A6178":"rgba(255,255,255,0.55)"),fontSize:10,marginTop:1}}>{g.tarih}</div>}
                   </div>
                   <span style={{fontSize:14.5,fontWeight:800,fontFamily:"monospace",color:C.label,flexShrink:0}}>{g.deger}</span>
                   {gecmisDestekli&&<span style={{fontSize:12,color:WA(0.25),flexShrink:0,marginLeft:2}}>›</span>}
@@ -13369,7 +13369,7 @@ function App(){
             {(sonHaberler.length>0||sonHaberlerHata||sonHaberlerIlkYuklemeBitti)&&(
               <>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-                  <span style={{fontSize:11,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Son Haberler")}</span>
+                  <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Son Haberler")}</span>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
                     {sonHaberlerGuncelleme&&<span style={{fontSize:9.5,color:WA(0.3)}}>{sonHaberlerGuncelleme.toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"})}</span>}
                     <button onClick={()=>anaSayfaHaberGetir(true)} aria-label="Haberleri yenile" style={{background:WA(0.08),border:"none",width:22,height:22,borderRadius:11,fontSize:12,color:WA(0.6),cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"transform 0.6s",transform:sonHaberlerYenileniyor?"rotate(360deg)":"none"}}>↻</button>
@@ -13425,7 +13425,7 @@ function App(){
             {yaklasanTakvim.length>0&&(
               <>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-                  <span style={{fontSize:11,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Yaklaşan Takvim · 7 Gün")}</span>
+                  <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Yaklaşan Takvim · 7 Gün")}</span>
                   <span onClick={()=>nav("finansalTakvim")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
                 </div>
                 <div style={{marginBottom:14}}>
@@ -13458,7 +13458,7 @@ function App(){
 
             {/* Haftalık Piyasa Özeti — ana menü alt kısayolu */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-              <span style={{fontSize:11,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Haftalık Piyasa Özeti")}</span>
+              <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Haftalık Piyasa Özeti")}</span>
               <span onClick={()=>nav("haftalikOzet")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Aç")} ›</span>
             </div>
             <div className="press-card" onClick={()=>nav("haftalikOzet")} style={{
@@ -13480,7 +13480,7 @@ function App(){
 
             {/* Getiri Karşılaştırma — ana menü alt kısayolu */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-              <span style={{fontSize:11,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Getiri Karşılaştırma")}</span>
+              <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Getiri Karşılaştırma")}</span>
               <span onClick={()=>nav("getiriKarsilastirma")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Aç")} ›</span>
             </div>
             <div className="press-card" onClick={()=>nav("getiriKarsilastirma")} style={{
@@ -13534,7 +13534,7 @@ function App(){
             {gecmis.length>0 && hesaplaAramaQ==="" && (hesaplaFiltre==="tumu") && (
               <div style={{marginBottom:14}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-                  <span style={{fontSize:11,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Son Kullanılanlar")}</span>
+                  <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Son Kullanılanlar")}</span>
                   <span onClick={()=>setHesaplaFiltre("gecmis")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
                 </div>
                 <div className="piyasa-scroll" style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:2}}>
@@ -13753,8 +13753,8 @@ function App(){
                              background:(i%2===1?"#1A2633":"#16222E"),
                              border:`1px solid ${WA(0.07)}`})}}>
                         <div>
-                          <p style={{margin:0,fontSize:12,fontWeight:600,color:C.soft}}>{g.ad}</p>
-                          {g.tarih&&<p style={{margin:"1px 0 0",fontSize:9,color:WA(0.3)}}>{g.tarih}{g.canli?" · canlı":""}</p>}
+                          <p style={{margin:0,fontSize:13,fontWeight:800,color:C.soft}}>{g.ad}</p>
+                          {g.tarih&&<p style={{margin:"1px 0 0",fontSize:10,color:(TEMA==="acik"?"#4A6178":"rgba(255,255,255,0.55)")}}>{g.tarih}{g.canli?" · canlı":""}</p>}
                         </div>
                         <div style={{display:"flex",alignItems:"center",gap:6}}>
                           <span style={{fontSize:13,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace"}}>{g.deger}</span>
@@ -13769,7 +13769,7 @@ function App(){
                   {/* Piyasa Duyarlılığı — VIX/DXY: diğerleri gibi EVDS/FRED üzerinden
                       değil, doğrudan Yahoo Finance'ten canlı çekilir (PiyasaSatiri,
                       sparkline dahil) — tıklanınca aynı grafik ekranı + alarm kurma açılır. */}
-                  <p style={{margin:"16px 0 6px 4px",fontSize:11,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.5}}>Piyasa Duyarlılığı</p>
+                  <p style={{margin:"16px 0 6px 4px",fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>Piyasa Duyarlılığı</p>
                   <div>
                     {(PIYASA_TABLO_VERISI["gostergeler"]||[]).map((r:any,sira:number)=>(
                       <PiyasaSatiri key={r.sembol} sira={sira} ad={r.ad} sembol={r.sembol} dec={r.dec} paraOnek={r.paraOnek}
