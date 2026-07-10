@@ -2218,7 +2218,7 @@ function KatilimEndeksiTopHareketliler({ nav, onSecim }: { nav: (sc: string) => 
           Katılım Endeksi · Top Hareketliler
         </span>
       </div>
-      <div style={{ background: (TEMA==="acik"?"#FFFFFF":WA(0.05)), border: `1px solid ${WA(0.08)}`, borderRadius: 16, padding: 10 }}>
+      <div style={{ background: (TEMA==="acik"?"transparent":WA(0.05)), border: (TEMA==="acik"?"none":`1px solid ${WA(0.08)}`), borderRadius: 16, padding: (TEMA==="acik"?0:10) }}>
         <div style={{ display: "flex", background: (TEMA==="acik"?"#E4E9F0":"rgba(0,0,0,0.25)"), borderRadius: 10, padding: 3, marginBottom: 10 }}>
           {[{ key: "hisse", label: "BİST Hisse" }, { key: "fon", label: "Yatırım Fonları" }].map(t => (
             <button key={t.key} onClick={() => setSekme(t.key as any)} style={{
@@ -12383,8 +12383,9 @@ function PiyasaSatiri({ad,sembol,paraOnek,dec,onTikla,sira}:{ad:string,sembol:st
         ? {padding:"12px 12px",borderRadius:12,marginBottom:8,
            background:((sira||0)%2===1?"#F3F6FA":"#E9EEF4"),
            border:"1px solid rgba(22,34,46,0.08)"}
-        : {padding:"12px 4px",borderRadius:8,background:"transparent",
-           borderBottom:`1px solid ${WA(0.06)}`}),
+        : {padding:"12px 12px",borderRadius:12,marginBottom:8,
+           background:((sira||0)%2===1?"#1A2633":"#16222E"),
+           border:`1px solid ${WA(0.07)}`}),
       transition:"background-color 700ms ease",
       ...flashStil,
     }}>
@@ -12456,15 +12457,22 @@ function AltinUrunleriTablo(){
 
   return(
     <div>
-      <div style={{background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,borderRadius:14,overflow:"hidden",marginTop:8}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"11px 14px",borderBottom:`1px solid ${WA(0.06)}`}}>
+      <div style={{marginTop:8}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"11px 14px",borderRadius:12,marginBottom:8,
+          ...(TEMA==="acik"
+            ? {background:"#E9EEF4",border:"1px solid rgba(22,34,46,0.08)"}
+            : {background:"#16222E",border:`1px solid ${WA(0.07)}`})}}>
           <p style={{margin:0,fontSize:12,fontWeight:600,color:C.soft}}>Gram Altın (Has · 24 Ayar)</p>
           <span style={{fontSize:13,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace"}}>
             {yukleniyor?"…":gramFiyat!=null?fmtTL(gramFiyat):"—"}
           </span>
         </div>
         {ALTIN_URUN_TABLOSU.map((u,i)=>(
-          <div key={u.ad} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"11px 14px",borderBottom:i<ALTIN_URUN_TABLOSU.length-1?`1px solid ${WA(0.06)}`:"none"}}>
+          <div key={u.ad} style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+            padding:"11px 14px",borderRadius:12,marginBottom:8,
+            ...(TEMA==="acik"
+              ? {background:((i+1)%2===1?"#F3F6FA":"#E9EEF4"),border:"1px solid rgba(22,34,46,0.08)"}
+              : {background:((i+1)%2===1?"#1A2633":"#16222E"),border:`1px solid ${WA(0.07)}`})}}>
             <p style={{margin:0,fontSize:12,fontWeight:600,color:C.soft}}>{u.ad}</p>
             <span style={{fontSize:13,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace"}}>
               {yukleniyor?"…":gramFiyat!=null?fmtTL(gramFiyat*u.carpan):"—"}
@@ -13732,9 +13740,7 @@ function App(){
               ];
               return(
                 <div>
-                  <div style={TEMA==="acik"
-                    ? {marginTop:8}
-                    : {background:WA(0.05),border:`1px solid ${WA(0.08)}`,borderRadius:14,overflow:"hidden",marginTop:8}}>
+                  <div style={{marginTop:8}}>
                     {GOSTERGELER.map((g,i)=>{
                       const tiklanabilir = g.seri && g.seri.length>0;
                       return(
@@ -13743,7 +13749,9 @@ function App(){
                           ? {padding:"11px 14px",borderRadius:12,marginBottom:8,
                              background:(i%2===1?"#F3F6FA":"#E9EEF4"),
                              border:"1px solid rgba(22,34,46,0.08)"}
-                          : {padding:"11px 14px",borderBottom:i<GOSTERGELER.length-1?`1px solid ${WA(0.06)}`:"none"})}}>
+                          : {padding:"11px 14px",borderRadius:12,marginBottom:8,
+                             background:(i%2===1?"#1A2633":"#16222E"),
+                             border:`1px solid ${WA(0.07)}`})}}>
                         <div>
                           <p style={{margin:0,fontSize:12,fontWeight:600,color:C.soft}}>{g.ad}</p>
                           {g.tarih&&<p style={{margin:"1px 0 0",fontSize:9,color:WA(0.3)}}>{g.tarih}{g.canli?" · canlı":""}</p>}
@@ -13762,9 +13770,7 @@ function App(){
                       değil, doğrudan Yahoo Finance'ten canlı çekilir (PiyasaSatiri,
                       sparkline dahil) — tıklanınca aynı grafik ekranı + alarm kurma açılır. */}
                   <p style={{margin:"16px 0 6px 4px",fontSize:11,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.5}}>Piyasa Duyarlılığı</p>
-                  <div style={TEMA==="acik"
-                    ? {}
-                    : {background:WA(0.05),border:`1px solid ${WA(0.08)}`,borderRadius:14,overflow:"hidden"}}>
+                  <div>
                     {(PIYASA_TABLO_VERISI["gostergeler"]||[]).map((r:any,sira:number)=>(
                       <PiyasaSatiri key={r.sembol} sira={sira} ad={r.ad} sembol={r.sembol} dec={r.dec} paraOnek={r.paraOnek}
                         onTikla={()=>setSeciliKur({kod:r.ad,ad:r.ad,sembol:r.sembol,birim:r.paraOnek||"₺"})}/>
