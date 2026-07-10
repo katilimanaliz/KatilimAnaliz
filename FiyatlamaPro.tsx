@@ -1964,21 +1964,26 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi }: { initialTicke
           <div key={key} onClick={()=>{setSiraGorunum(key);if(col){setSiraBy(col as typeof siraBy);setSiraDir(dir as 1|-1);}}} style={{
             flex:1,textAlign:"center",padding:"8px 0",borderRadius:9,fontSize:12.5,fontWeight:700,cursor:"pointer",
             background:siraGorunum===key?C.card:"transparent",
-            color:siraGorunum===key?"#fff":C.sub,
-            boxShadow:siraGorunum===key?"0 2px 6px rgba(0,0,0,0.3)":"none",
+            color:siraGorunum===key?C.label:C.sub,
+            boxShadow:siraGorunum===key?(TEMA==="acik"?"0 2px 6px rgba(22,34,46,0.12)":"0 2px 6px rgba(0,0,0,0.3)"):"none",
           }}>{lbl}</div>
         ))}
       </div>
 
-      {/* Sıralama butonları */}
-      <div style={{display:"flex",gap:4,marginBottom:10,overflowX:"auto"}}>
+      {/* Sıralama butonları — üstteki Tümü/Yükselenler/Düşenler/Hacim segmentiyle
+          aynı görsel dil: tek bir yumuşak kapsül zemin, seçili olan kart üstünde
+          yükselir. Önceden her çip kendi başına C.card+kenarlık taşıyordu; bu da
+          açık temada bazı kutuların beyaz bazılarının gri görünmesine (tutarsız
+          "kart üstünde kart" hissi) yol açıyordu. */}
+      <div style={{display:"flex",gap:2,marginBottom:10,overflowX:"auto",background:WA(0.05),borderRadius:12,padding:3}} className="piyasa-scroll">
         {([["degisim1g","Gün%"],["degisim1h","Haf%"],["degisim1a","Ay%"],["degisim1y","Yıl%"],["fk","F/K"],["pddd","PD/DD"],["roe","ROE"],["temetu","Tmt%"]] as [typeof siraBy, string][]).map(([col, lbl]) => (
           <button key={col} onClick={() => siraToggle(col)}
             style={{
-              padding:"4px 10px",borderRadius:6,border:`1px solid ${C.border}`,
-              background: siraBy===col ? C.blueLight : C.card,
+              padding:"6px 11px",borderRadius:9,border:"none",
+              background: siraBy===col ? C.card : "transparent",
               color: siraBy===col ? C.blue : C.sub,
-              fontSize:11,fontWeight:siraBy===col?700:400,
+              boxShadow: siraBy===col ? "0 2px 6px rgba(0,0,0,0.12)" : "none",
+              fontSize:11,fontWeight:siraBy===col?700:600,
               cursor:"pointer",fontFamily:"inherit",flexShrink:0,whiteSpace:"nowrap",
             }}>
             {lbl} {siraBy===col ? (siraDir===1?"↑":"↓") : ""}
@@ -7823,6 +7828,10 @@ function HaftalikPiyasaOzeti(){
     const bul=(kod:string)=>satirlar.find((g:any)=>g.kod===kod);
     const y=(g:any)=>`${g.getiri>=0?"+":""}${g.getiri.toFixed(2).replace(".",",")}%`;
     const yon=(g:any,poz:string,neg:string)=>g.getiri>=0?poz:neg;
+    // Enstrümanın son fiyatını birimiyle birlikte yazar (örn. "46,7235 TL", "4.113 $/ons")
+    // — yorum metninin yalnızca yüzdesel değişim değil, ulaşılan somut seviyeyi de
+    // vermesi için (profesyonel piyasa notu standardı).
+    const f=(g:any,birim:string)=>g?.son!=null?`${fmtFiyat(g.son)} ${birim}`:null;
     const sirali=[...satirlar].sort((a:any,b:any)=>b.getiri-a.getiri);
     const enIyi=sirali[0], enKotu=sirali[sirali.length-1];
     const yukselen=satirlar.filter((g:any)=>g.getiri>0).length;
@@ -7832,45 +7841,55 @@ function HaftalikPiyasaOzeti(){
     const xu=bul("XU100"), xk=bul("XK100");
     const brent=bul("BRENT"), eurusd=bul("EURUSD"), sp=bul("SP500");
 
+    const birimBul=(g:any)=>{
+      if(!g) return "";
+      if(g.kod==="USDTRY"||g.kod==="EURTRY") return "TL";
+      if(g.kod==="ONS_ALTIN"||g.kod==="ONS_GUMUS"||g.kod==="BRENT") return "$";
+      if(g.kod==="GRAM_ALTIN"||g.kod==="GRAM_GUMUS") return "TL";
+      return "";
+    };
+    const enIyiFiyat=f(enIyi,birimBul(enIyi));
+    const enKotuFiyat=f(enKotu,birimBul(enKotu));
+
     const paragraflar:string[]=[];
 
     // 1) Genel görünüm
     const p1:string[]=[];
     p1.push(`${donemBas&&donemSon?`${donemBas} – ${donemSon} haftasında`:"Bu hafta"} takip edilen ${satirlar.length} enstrümanın ${yukselen} tanesi değer kazandı.`);
-    p1.push(`Haftanın en güçlü performansı ${y(enIyi)} ile ${enIyi.ad} tarafında gerçekleşirken, en zayıf görünüm ${y(enKotu)} ile ${enKotu.ad} oldu.`);
+    p1.push(`Haftanın en güçlü performansı ${y(enIyi)} ile ${enIyi.ad} tarafında gerçekleşti${enIyiFiyat?` ve fiyat ${enIyiFiyat} seviyesine ulaştı`:""}; en zayıf görünüm ise ${y(enKotu)} ile ${enKotu.ad} oldu${enKotuFiyat?`, fiyat ${enKotuFiyat} seviyesinde gerçekleşti`:""}.`);
     paragraflar.push(p1.join(" "));
 
     // 2) Döviz
     if(usd||eur||eurusd){
       const p2:string[]=[];
-      if(usd&&eur) p2.push(`Döviz tarafında USD/TRY hafta boyunca ${y(usd)} ${yon(usd,"yükselerek","gerileyerek")}haftayı tamamlarken, EUR/TRY ${y(eur)} ${yon(eur,"değer kazandı","değer kaybetti")}.`);
-      else if(usd) p2.push(`USD/TRY haftayı ${y(usd)} değişimle tamamladı.`);
-      if(eurusd) p2.push(`Küresel tarafta EUR/USD paritesi ${y(eurusd)} ${yon(eurusd,"yükseldi","geriledi")}.`);
+      if(usd&&eur) p2.push(`Döviz tarafında USD/TRY hafta boyunca ${y(usd)} ${yon(usd,"yükselerek","gerileyerek")}${f(usd,"TL")?` ${f(usd,"TL")} seviyesinden`:""} haftayı tamamlarken, EUR/TRY ${y(eur)} ${yon(eur,"değer kazanarak","değer kaybederek")}${f(eur,"TL")?` ${f(eur,"TL")} seviyesine ulaştı`:""}.`);
+      else if(usd) p2.push(`USD/TRY haftayı ${y(usd)} değişimle${f(usd,"TL")?` ${f(usd,"TL")} seviyesinden`:""} tamamladı.`);
+      if(eurusd) p2.push(`Küresel tarafta EUR/USD paritesi ${y(eurusd)} ${yon(eurusd,"yükselerek","gerileyerek")}${f(eurusd,"")?` ${f(eurusd,"")} seviyesinde işlem gördü`:""}.`);
       paragraflar.push(p2.join(" "));
     }
 
     // 3) Kıymetli madenler
     if(onsAu||onsAg){
       const p3:string[]=[];
-      if(onsAu&&grAu) p3.push(`Kıymetli madenlerde altının ons fiyatı dolar bazında ${y(onsAu)} ${yon(onsAu,"artarken","gerilerken")}, kur etkisiyle birlikte gram altın TL bazında ${y(grAu)} ${yon(grAu,"değer kazandı","değer kaybetti")}.`);
-      if(onsAg&&grAg) p3.push(`Gümüşte ons ${y(onsAg)}, gram gümüş ise ${y(grAg)} değişim gösterdi.`);
+      if(onsAu&&grAu) p3.push(`Kıymetli madenlerde altının ons fiyatı dolar bazında ${y(onsAu)} ${yon(onsAu,"artarak","gerileyerek")}${f(onsAu,"$")?` ${f(onsAu,"$")} seviyesine`:""} çıktı; kur etkisiyle birlikte gram altın TL bazında ${y(grAu)} ${yon(grAu,"değer kazanarak","değer kaybederek")}${f(grAu,"TL")?` ${f(grAu,"TL")} seviyesinden işlem görmeye başladı`:""}.`);
+      if(onsAg&&grAg) p3.push(`Gümüşte ons fiyatı ${y(onsAg)} değişimle${f(onsAg,"$")?` ${f(onsAg,"$")} seviyesine`:""} ulaşırken, gram gümüş ${y(grAg)} değişimle${f(grAg,"TL")?` ${f(grAg,"TL")} seviyesinde`:""} gerçekleşti.`);
       paragraflar.push(p3.join(" "));
     }
 
     // 4) Hisse piyasaları
     if(xu||xk||sp){
       const p4:string[]=[];
-      if(xu) p4.push(`Yurt içi hisse piyasasında BIST 100 endeksi haftayı ${y(xu)} ${yon(xu,"yükselişle","düşüşle")} kapattı${xk?`; Katılım Endeksi (XK100) ${y(xk)} ile ${xk.getiri>(xu?.getiri??0)?"endeksin üzerinde":"endeksin gerisinde"} performans gösterdi`:""}.`);
+      if(xu) p4.push(`Yurt içi hisse piyasasında BIST 100 endeksi haftayı ${y(xu)} ${yon(xu,"yükselişle","düşüşle")}${f(xu,"puan")?` ${f(xu,"puan")} seviyesinden`:""} kapattı${xk?`; Katılım Endeksi (XK100) ${y(xk)} ile ${xk.getiri>(xu?.getiri??0)?"endeksin üzerinde":"endeksin gerisinde"} performans gösterdi`:""}.`);
       if(usd&&xu) p4.push(xu.getiri>usd.getiri
         ?`Borsa, hafta genelinde dolar kurunun (${y(usd)}) üzerinde getiri sağladı.`
         :`Dolar kuru (${y(usd)}), hafta genelinde borsa getirisinin önünde yer aldı.`);
-      if(sp) p4.push(`Küresel hisse tarafında S&P 500 endeksi ${y(sp)} ${yon(sp,"yükseldi","geriledi")}.`);
+      if(sp) p4.push(`Küresel hisse tarafında S&P 500 endeksi ${y(sp)} ${yon(sp,"yükselerek","gerileyerek")}${f(sp,"puan")?` ${f(sp,"puan")} seviyesine ulaştı`:""}.`);
       paragraflar.push(p4.join(" "));
     }
 
     // 5) Emtia + fonlar
     const p5:string[]=[];
-    if(brent) p5.push(`Enerji tarafında Brent petrolün varil fiyatı haftalık bazda ${y(brent)} ${yon(brent,"artış","düşüş")} kaydetti.`);
+    if(brent) p5.push(`Enerji tarafında Brent petrolün varil fiyatı haftalık bazda ${y(brent)} ${yon(brent,"artışla","düşüşle")}${f(brent,"$")?` ${f(brent,"$")} seviyesine ${yon(brent,"yükseldi","geriledi")}`:""}.`);
     if(fonHafta!=null) p5.push(`Katılım esaslı para piyasası fonlarının haftalık ortalama getirisi ${(fonHafta>=0?"+":"")}${fonHafta.toFixed(2).replace(".",",")}% düzeyinde gerçekleşti.`);
     if(p5.length) paragraflar.push(p5.join(" "));
 
@@ -7936,7 +7955,7 @@ function HaftalikPiyasaOzeti(){
                 <div key={g.kod} style={{display:"flex",alignItems:"center",padding:"11px 14px",borderBottom:i<satirlar.length-1?`1px solid ${WA(0.05)}`:"none"}}>
                   <span style={{flex:1,minWidth:0,fontSize:12.5,fontWeight:700,color:C.soft,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{g.ad}</span>
                   <span style={{width:82,textAlign:"right",fontSize:12,fontFamily:"monospace",color:WA(0.55)}}>{fmtFiyat(g.ilk)}</span>
-                  <span style={{width:82,textAlign:"right",fontSize:12,fontFamily:"monospace",fontWeight:700,color:g.son!=null?"#fff":WA(0.35)}}>{fmtFiyat(g.son)}</span>
+                  <span style={{width:82,textAlign:"right",fontSize:12,fontFamily:"monospace",fontWeight:700,color:g.son!=null?(TEMA==="acik"?C.label:"#fff"):WA(0.35)}}>{fmtFiyat(g.son)}</span>
                   <span style={{width:74,textAlign:"right",fontSize:12,fontWeight:800,color:poz?C.green:C.red}}>
                     {poz?"▲":"▼"} %{Math.abs(g.getiri).toFixed(2).replace(".",",")}
                   </span>
@@ -8162,7 +8181,7 @@ function GetiriKarsilastirma(){
   const fmtYzd=(v:number)=>`${v.toFixed(2).replace(".",",")} %`;
 
   // Grafik geometrisi — negatif getirileri de destekler (sıfır çizgisi)
-  const H=210, ETIKET_H=64, BAR_W=52, GAP=18;
+  const H=210, ETIKET_H=64, BAR_W=52, GAP=18, LABEL_GAP=20;
   const grafikBarlar=barlar.filter(b=>b.getiri!=null) as {ad:string,getiri:number,kisaAd?:string,silinebilir?:string}[];
   const maxV=Math.max(0,...grafikBarlar.map(b=>b.getiri));
   const minV=Math.min(0,...grafikBarlar.map(b=>b.getiri));
@@ -8276,14 +8295,14 @@ function GetiriKarsilastirma(){
                   return(
                     <div key={b.ad} style={{width:BAR_W,flexShrink:0,display:"flex",flexDirection:"column",alignItems:"center"}}>
                       {/* Grafik alanı */}
-                      <div style={{position:"relative",height:H,width:"100%"}}>
+                      <div style={{position:"relative",height:H+LABEL_GAP,width:"100%"}}>
                         {/* Sıfır çizgisi */}
-                        <div style={{position:"absolute",left:-GAP/2,right:-GAP/2,top:sifirY,height:1,background:WA(0.14)}}/>
+                        <div style={{position:"absolute",left:-GAP/2,right:-GAP/2,top:sifirY+LABEL_GAP,height:1,background:WA(0.14)}}/>
                         {/* Bar */}
                         <div style={{
                           position:"absolute",left:"50%",transform:"translateX(-50%)",
                           width:BAR_W-8,height:yukseklik,
-                          top:pozitif?sifirY-yukseklik:sifirY,
+                          top:pozitif?sifirY+LABEL_GAP-yukseklik:sifirY+LABEL_GAP,
                           background:pozitif
                             ?"linear-gradient(180deg,#4C6FE8 0%,#2E4CC7 100%)"
                             :"linear-gradient(180deg,#C73E4C 0%,#E85B6A 100%)",
@@ -8293,7 +8312,7 @@ function GetiriKarsilastirma(){
                         {/* Değer etiketi */}
                         <span style={{
                           position:"absolute",left:"50%",transform:"translateX(-50%)",
-                          top:pozitif?Math.max(0,sifirY-yukseklik-18):Math.min(H-14,sifirY+yukseklik+4),
+                          top:pozitif?(sifirY+LABEL_GAP-yukseklik-16):Math.min(H+LABEL_GAP-14,sifirY+LABEL_GAP+yukseklik+4),
                           fontSize:10.5,fontWeight:800,color:C.label,whiteSpace:"nowrap",
                         }}>{fmtYzd(b.getiri)}</span>
                       </div>
