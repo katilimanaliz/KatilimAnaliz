@@ -123,6 +123,27 @@ function Icon({k, size=22, color="#8FA8D8", strokeWidth=2, style}:{k:string, siz
 // yoksa Türkçesi gösterilir (güvenli geri düşüş). Böylece sözlük zamanla
 // ekran ekran genişletilebilir.
 let DIL: "tr" | "en" = (() => { try { return localStorage.getItem("kp_dil") === "en" ? "en" : "tr"; } catch (e) { return "tr"; } })();
+
+// ── SAFE AREA GARANTİSİ (native/Capacitor) ──
+// env(safe-area-inset-top/bottom) değerlerinin dolması için viewport meta'sında
+// viewport-fit=cover ŞART. Web'de tarayıcı durum çubuğu payını kendi ayırdığı
+// için fark edilmez ama native WebView'de bu olmadan içerik saatin/çentiğin
+// altına girer (App Store sürümünde logo saatle çakışıyordu — bu yüzden eklendi).
+(() => {
+  try {
+    if (typeof document === "undefined") return;
+    let m = document.querySelector('meta[name="viewport"]') as HTMLMetaElement | null;
+    if (!m) {
+      m = document.createElement("meta");
+      m.name = "viewport";
+      m.content = "width=device-width, initial-scale=1";
+      document.head.appendChild(m);
+    }
+    if (!/viewport-fit\s*=\s*cover/.test(m.content)) {
+      m.content = m.content.replace(/\s*$/, "") + ", viewport-fit=cover";
+    }
+  } catch (e) {}
+})();
 // Dili sayfa yenilemeden değiştirir: kaydeder, modül değişkenini günceller ve
 // App'in dinlediği "kp-dil" olayını yayınlayarak tüm arayüzü yeniden çizdirir.
 // (location.reload() Claude artifact önizlemesinde çalışmadığı için kullanılmıyor.)
@@ -9365,9 +9386,6 @@ function FinansalGostergeler({onKurTikla}:any){
       {ad:"ABD 10 Yıllık", deger:evdsMakro?.["FRED_US10Y"]?.deger!=null?`%${evdsMakro["FRED_US10Y"].deger.toFixed(2).replace(".",",")}`:"—", tarih:evdsMakro?.["FRED_US10Y"]?.tarih||"FRED", canli:evdsMakro?.["FRED_US10Y"]!=null,
        seri:evdsMakro?.["FRED_US10Y_SERI"],seriAd:"ABD 10 Yıllık Tahvil Faizi"},
     ]},
-    {kategori:"CDS & Risk",icon:"⚡",color:"#9C3060",items:[
-      {ad:"Türkiye 5Y CDS",deger:"~221 bps",tarih:"Temmuz 2026"},
-    ]},
   ];
 
 
@@ -12878,7 +12896,7 @@ function App(){
       ...(icerikOlcek!==1?{zoom:icerikOlcek}:{})} as any}>
       <div key={screen} className="screen-anim">
       {/* header */}
-      <div style={{background:"#0F1923",padding:screen==="home"?"18px 20px 20px":"44px 20px 20px"}}>
+      <div style={{background:"#0F1923",padding:screen==="home"?"calc(18px + env(safe-area-inset-top,0px)) 20px 20px":"calc(44px + env(safe-area-inset-top,0px)) 20px 20px"}}>
         {screen==="home"?(
           <div>
             {/* Logo + marka — dikeyde tam ortalanmış, net hiyerarşi (marka adı
@@ -13622,7 +13640,6 @@ function App(){
                  seri:evdsMakro?.["FRED_US5Y_SERI"], seriAd:"ABD 5 Yıllık Tahvil Faizi"},
                 {ad:"ABD 10 Yıllık Tahvil", deger:evdsMakro?.["FRED_US10Y"]?.deger!=null?`%${evdsMakro["FRED_US10Y"].deger.toFixed(2).replace(".",",")}`:"—", tarih:evdsMakro?.["FRED_US10Y"]?.tarih||"FRED", canli:evdsMakro?.["FRED_US10Y"]!=null,
                  seri:evdsMakro?.["FRED_US10Y_SERI"], seriAd:"ABD 10 Yıllık Tahvil Faizi"},
-                {ad:"Türkiye 5Y CDS",      deger:"~221 bps", tarih:"Temmuz 2026"},
               ];
               return(
                 <div>
