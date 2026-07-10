@@ -1808,7 +1808,7 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi }: { initialTicke
           )}
         </div>
 
-        <div style={{background:WA(0.05),borderRadius:12,padding:"8px 11px",margin:"10px 0"}}>
+        <div style={{background:"rgba(91,155,216,0.09)",borderRadius:12,padding:"8px 11px",margin:"10px 0"}}>
           <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12.5,fontWeight:700,color:piyasaDurum.acik?C.green:C.sub}}>
             <span style={{width:5,height:5,borderRadius:2.5,background:piyasaDurum.acik?C.green:C.sub,flexShrink:0}}/>
             {piyasaDurum.etiket}
@@ -1871,7 +1871,7 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi }: { initialTicke
             onClick={()=>setEndeksFiltre(f=>f===kod?"tumu":kod)}
             style={{
               flex:"0 0 108px",cursor:"pointer",
-              background:aktif?"rgba(91,155,216,0.16)":WA(0.05),
+              background:aktif?"rgba(91,155,216,0.16)":C.card,
               border:`1px solid ${aktif?C.blue:C.border}`,borderRadius:14,padding:"10px 12px",
             }}>
             <div style={{fontSize:10,fontWeight:700,color:aktif?C.blue:WA(0.5),textTransform:"uppercase",letterSpacing:0.4}}>{TR(ad)}</div>
@@ -1899,9 +1899,10 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi }: { initialTicke
         <button
           onClick={() => setSadeceKatilim(k => !k)}
           style={{
-            padding:"7px 13px",borderRadius:18,border:"none",cursor:"pointer",fontFamily:"inherit",
+            padding:"7px 13px",borderRadius:18,cursor:"pointer",fontFamily:"inherit",
             fontSize:11.5,fontWeight:700,whiteSpace:"nowrap",
-            background: sadeceKatilim ? C.green : C.greenLight,
+            background: sadeceKatilim ? C.green : C.card,
+            border: sadeceKatilim ? "none" : `1.5px solid ${C.green}55`,
             color: sadeceKatilim ? "#fff" : C.green,
           }}>
           {sadeceKatilim ? "✓ Katılım Endeksi (XK100)" : "Katılım Endeksi (XK100)"}
@@ -13364,8 +13365,8 @@ function App(){
                   }
                 }} style={{display:"flex",alignItems:"center",gap:11,padding:"12px 16px",borderRadius:12,marginBottom:8,cursor:gecmisDestekli?"pointer":"default",
                   ...(TEMA==="acik"
-                    ? {background:(i%2===1?"#F3F6FA":"#E9EEF4"),border:"1px solid rgba(22,34,46,0.08)"}
-                    : {background:(i%2===1?"#1A2633":"#16222E"),border:`1px solid ${WA(0.07)}`})}}>
+                    ? {background:"#E9EEF4",border:"1px solid rgba(22,34,46,0.08)"}
+                    : {background:"#16222E",border:`1px solid ${WA(0.07)}`})}}>
                   <div style={{width:32,height:32,borderRadius:9,background:`${g.renk}26`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                     <IkonBileseni size={16} color={g.renk} strokeWidth={2}/>
                   </div>
