@@ -1,5 +1,4 @@
 User-agent: *
 Allow: /
-Allow: /blog/
 
 Sitemap: https://www.katilimplus.com/sitemap.xml
