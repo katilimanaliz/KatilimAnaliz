@@ -11967,11 +11967,11 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla}:{ad:string,sembol:stri
       <p style={{margin:0,fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:0.2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingRight:28}}>{TR(ad)}</p>
       {guncel!=null ? (
         <>
-          <p style={{margin:"4px 0 2px",fontSize:15,fontWeight:800,color:"#fff",fontFamily:"monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:4}}>
+          <p className="spark-in" style={{margin:"4px 0 2px",fontSize:15,fontWeight:800,color:"#fff",fontFamily:"monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:4}}>
             {`${paraOnek||""}${fmtDeger(guncel)}`}
             <span style={{fontSize:11,opacity:flash?1:0,transition:"opacity 700ms ease",color:flash==="up"?"#4ADE80":"#F87171"}}>{flash==="up"?"▲":flash==="down"?"▼":""}</span>
           </p>
-          <p style={{margin:"0 0 6px",fontSize:11,fontWeight:700,color:degisim!=null?renk:"rgba(255,255,255,0.3)"}}>
+          <p className="spark-in" style={{margin:"0 0 6px",fontSize:11,fontWeight:700,color:degisim!=null?renk:"rgba(255,255,255,0.3)"}}>
             {degisim!=null?`${pozitif?"+":""}${degisim.toFixed(2).replace(".",",")}%`:"—"}
           </p>
         </>
@@ -11981,9 +11981,11 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla}:{ad:string,sembol:stri
           <div className="skeleton" style={{height:11,width:"45%",marginBottom:8}}/>
         </>
       )}
-      <svg width="100%" height="24" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{display:"block"}}>
-        {pathD&&<path d={pathD} fill="none" stroke={renk} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/>}
-      </svg>
+      {(guncel==null&&yukleniyor)
+        ? <div className="skeleton" style={{height:24,borderRadius:6}}/>
+        : <svg width="100%" height="24" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{display:"block"}}>
+            {pathD&&<path className="spark-in" d={pathD} fill="none" stroke={renk} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/>}
+          </svg>}
     </div>
   );
 }
@@ -12282,14 +12284,24 @@ function PiyasaSatiri({ad,sembol,paraOnek,dec,onTikla}:{ad:string,sembol:string,
     }}>
       <span style={{flex:1,fontSize:13,fontWeight:800,color:"#fff",minWidth:0}}>{ad}</span>
       <span style={{width:78,textAlign:"right",fontSize:13,fontWeight:700,color:"#E8F0FA",fontFamily:"monospace",flexShrink:0}}>
-        {guncel!=null?`${paraOnek||""}${fmtDeger(guncel)}`:(yukleniyor?"…":"—")}
+        {guncel!=null
+          ? <span className="spark-in">{`${paraOnek||""}${fmtDeger(guncel)}`}</span>
+          : yukleniyor
+            ? <span className="skeleton" style={{display:"inline-block",width:56,height:12,borderRadius:6,verticalAlign:"middle"}}/>
+            : "—"}
       </span>
       <span style={{width:60,textAlign:"right",fontSize:11,fontWeight:700,color:degisim!=null?renk:"rgba(255,255,255,0.3)",flexShrink:0}}>
-        {degisim!=null?`${pozitif?"+":""}${degisim.toFixed(2).replace(".",",")}%`:"—"}
+        {degisim!=null
+          ? <span className="spark-in">{`${pozitif?"+":""}${degisim.toFixed(2).replace(".",",")}%`}</span>
+          : (yukleniyor&&guncel==null)
+            ? <span className="skeleton" style={{display:"inline-block",width:38,height:10,borderRadius:5,verticalAlign:"middle"}}/>
+            : "—"}
       </span>
-      <svg width={56} height={22} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{flexShrink:0}}>
-        {pathD&&<path d={pathD} fill="none" stroke={renk} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"/>}
-      </svg>
+      {(guncel==null&&yukleniyor)
+        ? <div className="skeleton" style={{width:56,height:22,borderRadius:6,flexShrink:0}}/>
+        : <svg width={56} height={22} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{flexShrink:0}}>
+            {pathD&&<path className="spark-in" d={pathD} fill="none" stroke={renk} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"/>}
+          </svg>}
     </div>
   );
 }
@@ -12793,6 +12805,10 @@ function App(){
         /* Masaüstü yan menü öğeleri */
         .kp-side-item { transition: background 0.15s ease, color 0.15s ease; cursor: pointer; -webkit-tap-highlight-color: transparent; }
         .kp-side-item:hover { background: rgba(255,255,255,0.06) !important; }
+        /* Sparkline/deger ilk yüklendiğinde yumuşak belirme (parça parça
+           gelen verinin sert "pat" diye görünmesini engeller) */
+        .spark-in { animation: sparkIn 360ms ease-out; }
+        @keyframes sparkIn { from { opacity:0; } to { opacity:1; } }
       `}</style>
       {/* ── MASAÜSTÜ YAN MENÜ (sadece geniş ekran web) ── */}
       {genisEkran&&(
