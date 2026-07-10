@@ -2641,7 +2641,7 @@ function OdemePlani({plan, bsmvOran, kkdfOran, onClose, showKomisyon, basitOran,
             </div>
             {/* Veri satırları */}
             {plan.map((row,i)=>{
-              const rowBg = i%2===0 ? "#1B2833" : C.card;
+              const rowBg = i%2===0 ? (TEMA==="acik"?"#F3F6FA":"#1B2833") : C.card;
               return(
                 <div key={i} style={{display:"grid",gridTemplateColumns:gridSablon,borderBottom:`1px solid ${C.border}`}}>
                   <div style={{...hucreOrtak,...stickyNo,justifyContent:"flex-start",fontWeight:700,color:C.blue,background:rowBg}}>{row.ay}</div>
