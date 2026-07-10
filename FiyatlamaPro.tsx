@@ -12891,8 +12891,7 @@ function App(){
         </div>
       )}
     <div style={{paddingLeft:SIDEBAR_W}}>
-    <div style={{fontFamily:"-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif",background:"#0F1923",minHeight:"100dvh",maxWidth:kolonW,margin:"0 auto",
-      ...(genisEkran?{borderLeft:"1px solid rgba(255,255,255,0.06)",borderRight:"1px solid rgba(255,255,255,0.06)",boxShadow:"0 0 80px rgba(0,0,0,0.5)"}:{}),
+    <div style={{fontFamily:"-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif",background:"#0F1923",minHeight:"100dvh",maxWidth:genisEkran?"none":kolonW,margin:"0 auto",
       ...(icerikOlcek!==1?{zoom:icerikOlcek}:{})} as any}>
       <div key={screen} className="screen-anim">
       {/* header */}
