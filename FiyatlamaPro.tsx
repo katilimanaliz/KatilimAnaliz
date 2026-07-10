@@ -2207,7 +2207,7 @@ function KatilimEndeksiTopHareketliler({ nav, onSecim }: { nav: (sc: string) => 
   };
 
   const Panel = ({ title, icon, data, accent }: { title: string; icon: any; data: any[]; accent: string }) => (
-    <div style={{ flex: "1 1 0", minWidth: 0, boxSizing: "border-box", background: (TEMA==="acik"?"#F0F4F8":WA(0.035)), borderRadius: 12, border: `1px solid ${WA(0.07)}`, padding: "8px 7px 2px" }}>
+    <div style={{ flex: "1 1 0", minWidth: 0, boxSizing: "border-box", background: (TEMA==="acik"?"#F0F4F8":"#16222E"), borderRadius: 12, border: `1px solid ${WA(0.07)}`, padding: "8px 7px 2px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "2px 2px 6px", fontSize: 10.5, fontWeight: 700, color: accent, whiteSpace: "nowrap" }}>
         {icon}{title}
       </div>
@@ -2224,8 +2224,8 @@ function KatilimEndeksiTopHareketliler({ nav, onSecim }: { nav: (sc: string) => 
           Katılım Endeksi · Top Hareketliler
         </span>
       </div>
-      <div style={{ background: (TEMA==="acik"?"transparent":WA(0.05)), border: (TEMA==="acik"?"none":`1px solid ${WA(0.08)}`), borderRadius: 16, padding: (TEMA==="acik"?0:10) }}>
-        <div style={{ display: "flex", background: (TEMA==="acik"?"#E4E9F0":"rgba(0,0,0,0.25)"), borderRadius: 10, padding: 3, marginBottom: 10 }}>
+      <div style={{ background: "transparent", border: "none", borderRadius: 16, padding: 0 }}>
+        <div style={{ display: "flex", background: (TEMA==="acik"?"#E4E9F0":"#0F1923"), borderRadius: 10, padding: 3, marginBottom: 10 }}>
           {[{ key: "hisse", label: "BİST Hisse" }, { key: "fon", label: "Yatırım Fonları" }].map(t => (
             <button key={t.key} onClick={() => setSekme(t.key as any)} style={{
               flex: 1, border: "none", cursor: "pointer", padding: "7px 0", borderRadius: 8,
