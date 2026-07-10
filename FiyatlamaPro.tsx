@@ -1874,7 +1874,7 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi }: { initialTicke
               background:aktif?"rgba(91,155,216,0.16)":C.card,
               border:`1px solid ${aktif?C.blue:C.border}`,borderRadius:14,padding:"10px 12px",
             }}>
-            <div style={{fontSize:10,fontWeight:700,color:aktif?C.blue:WA(0.5),textTransform:"uppercase",letterSpacing:0.4}}>{TR(ad)}</div>
+            <div style={{fontSize:10,fontWeight:700,color:C.blue,textTransform:"uppercase",letterSpacing:0.4}}>{TR(ad)}</div>
             <div style={{fontSize:15,fontWeight:800,fontFamily:"monospace",margin:"4px 0 3px",color:(TEMA==="acik"?C.label:"#fff")}}>
               {endeksVeri[ad] ? endeksVeri[ad].deger.toLocaleString("tr-TR",{maximumFractionDigits:0}) : "—"}
             </div>
