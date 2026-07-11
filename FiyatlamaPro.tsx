@@ -2330,7 +2330,9 @@ function VadeliKatilim({s,onGecmis}){
           {label:`Stopaj (%${fmtN(r.sOran)})`, value:`- ${fmtTL(r.stop)}`},
           {label:"Net Kâr Payı", value:fmtTL(r.nf)},
           {label:"Vade Sonu Tutar", value:fmtTL(r.nv)},
-          {label:"Efektif Net Yıllık %", value:`% ${fmtN(r.ey)}`},
+          // NOT (2026-07-11): "Efektif Net Yıllık %" satırı kullanıcı isteğiyle
+          // kaldırıldı — basit getiri hesabında bu değer zaten oran×(1−stopaj)
+          // olduğundan ekstra bilgi taşımıyordu (örn. %40 → %33,00).
         ];
         return(
       <Card>
@@ -2339,7 +2341,6 @@ function VadeliKatilim({s,onGecmis}){
         <RRow label={`Stopaj (%${fmtN(r.sOran)})`} value={`- ${fmtTL(r.stop)}`} sub accent={C.red}/>
         <RRow label="Net Kâr Payı" value={fmtTL(r.nf)} accent={C.green} big/>
         <RRow label="Vade Sonu Tutar" value={fmtTL(r.nv)} accent={C.blue} big/>
-        <RRow label="Efektif Net Yıllık Kâr Payı %" value={`% ${fmtN(r.ey)}`} sub/>
         <button onClick={()=>{if(onGecmis&&r){onGecmis({modul:"Katılım Hesabı Getiri",tutar:fmtTL(parseFloat(tutar)),vade:gun+" Gün",oran:oran+"% (Brüt)",sonuc:fmtTL(r?.bf),netGetiri:fmtTL(r?.nf),aylikTaksit:"-",plan:[],satirlar:raporSatirlari});setKaydedildi(true);setTimeout(()=>setKaydedildi(false),2000);}}} style={{width:"100%",marginTop:6,marginBottom:2,padding:"10px",borderRadius:12,border:`1.5px solid ${kaydedildi?C.green:C.blue}`,background:kaydedildi?C.greenLight:C.blueLight,color:kaydedildi?C.green:C.blue,fontWeight:700,fontSize:13,cursor:"pointer",transition:"all 0.2s"}}>
           {kaydedildi?"✅ Kaydedildi":"🕐 Geçmişe Kaydet"}
         </button>
@@ -2574,7 +2575,7 @@ function OranAnalizi({s}){
             <span style={{fontSize:13,fontWeight:700,color:C.blue}}>Gün</span>
           </div>
         </div>
-        <Field label="Net Kâr Payı" value={netGetiri} onChange={setNetGetiri} suffix="₺" hint="Aldığınız net kâr payı tutarı"/>
+        <Field label="Net Kâr Payı Tutarı" value={netGetiri} onChange={setNetGetiri} suffix="₺" hint="Aldığınız net kâr payı tutarı"/>
       </Card>
 
       {r?.limitAsim&&<div style={{background:"rgba(248,113,113,0.12)",borderRadius:14,padding:"14px 16px",marginBottom:10,border:`1.5px solid ${C.red}`}}>
@@ -3160,7 +3161,7 @@ function KonutFinansman({s,onGecmis})/* v2 */{
         <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.6)",zIndex:200,display:"flex",alignItems:"flex-end",...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}}>
           <div style={{background:C.card,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",maxHeight:"90vh",display:"flex",flexDirection:"column"}}>
             <div style={{padding:"14px 18px",borderBottom:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
-              <span style={{fontSize:15,fontWeight:800,color:C.label}}>🏠 Konut Kullandırım Limitleri</span>
+              <span style={{fontSize:15,fontWeight:800,color:C.label}}>🏠 Konut Finansmanı Kullandırım Sınırları</span>
               <button onClick={()=>setShowLimits(false)} style={{background:WA(0.1),border:"none",width:32,height:32,borderRadius:16,fontSize:20,cursor:"pointer"}}>×</button>
             </div>
             <div style={{flex:1,overflowY:"auto",padding:"12px 16px 24px"}}>
@@ -3402,7 +3403,7 @@ function TasitFinansman({s,onGecmis}){
         <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.6)",zIndex:200,display:"flex",alignItems:"flex-end",...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}}>
           <div style={{background:C.card,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",maxHeight:"80vh",display:"flex",flexDirection:"column"}}>
             <div style={{padding:"14px 18px",borderBottom:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
-              <span style={{fontSize:15,fontWeight:800,color:C.label}}>🚗 Standart Taşıt Kredisi Limitleri</span>
+              <span style={{fontSize:15,fontWeight:800,color:C.label}}>🚗 Standart Taşıt Finansmanı Sınırları</span>
               <button onClick={()=>setShowLimits(false)} style={{background:WA(0.1),border:"none",width:32,height:32,borderRadius:16,fontSize:20,cursor:"pointer"}}>×</button>
             </div>
             <div style={{flex:1,overflowY:"auto",padding:"16px 16px 28px"}}>
@@ -3432,7 +3433,7 @@ function TasitFinansman({s,onGecmis}){
               </table>
               <div style={{background:"rgba(248,113,113,0.12)",borderRadius:10,padding:"10px 12px",marginTop:12,border:`1px solid ${C.red}`}}>
                 <p style={{margin:0,fontSize:11,color:C.red,fontWeight:700}}>
-                  🚫 2.000.001 ₺ ve üzeri araçlar için bireysel amaçlı taşıt kredisi kullandırımı yapılmamaktadır.
+                  🚫 2.000.001 ₺ ve üzeri araçlar için bireysel amaçlı taşıt finansmanı kullandırımı yapılmamaktadır.
                 </p>
               </div>
             </div>
@@ -3929,7 +3930,7 @@ function ToggFinansman({s,onGecmis}){
               </table>
               <div style={{background:"rgba(248,113,113,0.12)",borderRadius:10,padding:"10px 12px",marginTop:12,border:`1px solid ${C.red}`}}>
                 <p style={{margin:0,fontSize:11,color:C.red,fontWeight:700}}>
-                  🚫 7.500.001 ₺ ve üzeri araçlar için bireysel taşıt kredisi kullandırımı yapılmamaktadır.
+                  🚫 7.500.001 ₺ ve üzeri araçlar için bireysel taşıt finansmanı kullandırımı yapılmamaktadır.
                 </p>
               </div>
             </div>
