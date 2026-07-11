@@ -13134,8 +13134,8 @@ function App(){
                 }}>
                   <span style={{fontSize:22,flexShrink:0}}>📲</span>
                   <div style={{flex:1,minWidth:0}}>
-                    <p style={{margin:0,fontSize:12.5,fontWeight:800,color:C.label,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{CV("Katılım Plus iOS uygulaması yayında")}</p>
-                    <p style={{margin:"1px 0 0",fontSize:11,color:C.sub,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{CV("App Store'dan indirin, bildirimlerle takipte kalın.")}</p>
+                    <p style={{margin:0,fontSize:12.5,fontWeight:800,color:C.label,lineHeight:1.3}}>{CV("Katılım Plus iOS uygulaması yayında")}</p>
+                    <p style={{margin:"2px 0 0",fontSize:11,color:C.sub,lineHeight:1.35}}>{CV("App Store'dan indirin, bildirimlerle takipte kalın.")}</p>
                   </div>
                   <a href="https://apps.apple.com/app/id6788268835" target="_blank" rel="noopener noreferrer" style={{
                     flexShrink:0,padding:"8px 14px",borderRadius:9,background:C.blue,color:"#fff",
