@@ -2779,77 +2779,148 @@ function RaporModal({baslik, satirlar, plan, onClose, showKdv=false, bsmvOran=0,
   const tarih = new Date().toLocaleString("tr-TR");
   const fmt=(n)=>n==null?"—":new Intl.NumberFormat("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}).format(n);
 
+  // Rapor HTML'ini üreten ORTAK yardımcı (2026-07-11): aynı şablonu hem
+  // web'in yazdırma penceresi hem de native'in html2canvas+jsPDF yolu kullanır,
+  // iki platformda birebir aynı görünümlü rapor üretilir.
+  const raporDivOlustur = () => {
+    // Geçici div oluştur — rapor HTML'i
+    const div = document.createElement("div");
+    div.style.cssText = "position:fixed;left:-9999px;top:0;width:595px;background:#fff;font-family:Arial,sans-serif;padding:0;";
+    const planSatirlari = plan && plan.length > 0 ? plan.filter(r=>r&&!r._toplamSabitTaksit) : [];
+    const totTaksit = planSatirlari.reduce((s,r)=>s+(r.taksit||r.toplam||0),0);
+    const totKP = planSatirlari.reduce((s,r)=>s+(r.karPayi||r.faiz||0),0);
+    const totAna = planSatirlari.reduce((s,r)=>s+(r.anapara||0),0);
+    const totKDV = planSatirlari.reduce((s,r)=>s+(r.kdvTutar||r.vergi||0),0);
+
+    div.innerHTML = `
+      <div style="background:#1C3A5E;padding:20px 24px 16px;">
+        <div style="font-size:18px;color:#fff;font-weight:800;margin-bottom:4px;">${escapeHtml(baslik)}</div>
+        <div style="font-size:11px;color:rgba(255,255,255,0.65);">${escapeHtml(tarih)}</div>
+        <div style="font-size:10px;color:rgba(255,255,255,0.5);margin-top:2px;">Vakıf Katılım Bankası — Fon Fiyatlama Müdürlüğü</div>
+      </div>
+      <div style="padding:0;">
+        ${satirlar.filter(s=>s?.label).map((s,i)=>`
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:${s.big?"11px":"8px"} 24px;background:${s.big?"rgba(91,155,216,0.15)":i%2===0?"#FAFBFC":"#fff"};border-bottom:1px solid rgba(255,255,255,0.1);">
+            <span style="font-size:${s.big?12:11}px;color:${s.big?C.thead:"#6B7280"};font-weight:${s.big?700:500};">${escapeHtml(s.label)}</span>
+            <span style="font-size:${s.big?14:12}px;color:${s.big?C.thead:"#1a1a1a"};font-weight:${s.big?900:600};font-family:monospace;">${escapeHtml(s.value)}</span>
+          </div>`).join("")}
+      </div>
+      ${planSatirlari.length>0?`
+      <div style="margin-top:4px;">
+        <div style="background:#1C3A5E;padding:9px 24px;">
+          <span style="font-size:11px;font-weight:700;color:#fff;">ÖDEME PLANI — ${planSatirlari.length} TAKSİT</span>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:8px;">
+          <thead>
+            <tr style="background:#EBF3FB;">
+              <th style="padding:5px 4px;text-align:center;color:#1C3A5E;font-weight:700;border-bottom:1px solid #D1E0EF;">#</th>
+              <th style="padding:5px 4px;text-align:center;color:#1C3A5E;font-weight:700;border-bottom:1px solid #D1E0EF;">Vade Tarihi</th>
+              ${(showKdv?["Taksit","Kâr Payı","Anapara","KDV","Kalan"]:["Taksit","Kâr Payı","Anapara","BSMV","KKDF","Kalan"]).map(h=>`<th style="padding:5px 4px;text-align:right;color:#1C3A5E;font-weight:700;border-bottom:1px solid #D1E0EF;">${h}</th>`).join("")}
+            </tr>
+          </thead>
+          <tbody>
+            ${planSatirlari.map((r,i)=>{
+              const vals = showKdv
+                ? [r.taksit||r.toplam, r.karPayi||r.faiz, r.anapara, r.kdvTutar||r.vergi||0, r.bakiye]
+                : [r.taksit||r.toplam, r.karPayi||r.faiz, r.anapara, (r.karPayi||0)*bsmvOran/100, (r.karPayi||0)*kkdfOran/100, r.bakiye];
+              return `<tr style="background:${i%2===0?"#F8FAFB":"#fff"};border-bottom:1px solid rgba(255,255,255,0.1);">
+                <td style="padding:4px;text-align:center;color:#6B7280;font-weight:600;">${r.ay||i+1}</td>
+                <td style="padding:4px;text-align:center;color:#6B7280;">${escapeHtml(r.tarih||"—")}</td>
+                ${vals.map(v=>`<td style="padding:4px;text-align:right;font-family:monospace;color:#1a1a1a;">${fmt(v)}</td>`).join("")}
+              </tr>`;
+            }).join("")}
+            <tr style="background:#1C3A5E;">
+              <td style="padding:5px 4px;text-align:center;color:#fff;font-weight:800;font-size:9px;">∑</td>
+              <td style="padding:5px 4px;text-align:center;color:#fff;font-weight:800;font-size:9px;">—</td>
+              ${(showKdv
+                ? [totTaksit,totKP,totAna,totKDV,"—"]
+                : [totTaksit,totKP,totAna,planSatirlari.reduce((s,r)=>s+(r.karPayi||0)*bsmvOran/100,0),planSatirlari.reduce((s,r)=>s+(r.karPayi||0)*kkdfOran/100,0),"—"]
+              ).map(v=>`<td style="padding:5px 4px;text-align:right;color:#fff;font-weight:800;font-family:monospace;font-size:8px;">${typeof v==="number"?fmt(v):v}</td>`).join("")}
+            </tr>
+          </tbody>
+        </table>
+      </div>`:""}
+      <div style="margin:16px 24px;padding:12px 16px;background:#FFFBEB;border-left:4px solid #F59E0B;border-radius:4px;">
+        <div style="display:flex;align-items:flex-start;gap:10px;">
+          <span style="font-size:16px;flex-shrink:0;">⚠️</span>
+          <p style="margin:0;font-size:10px;color:#374151;font-style:italic;line-height:1.7;">
+            Bu hesaplamalar yalnızca bilgilendirme amaçlıdır; kesin teklif, resmi belge veya hukuki taahhüt niteliği taşımaz. Nihai oran ve koşullar için bankanız ile iletişime geçiniz.
+          </p>
+        </div>
+      </div>
+    `;
+    return div;
+  };
+
   const pdfOlusturVePaylas = async () => {
     setYukleniyor(true);
+    // ── NATIVE (Capacitor/iOS) DALI (2026-07-11) ─────────────────────────
+    // window.open + printWindow.print() yaklaşımı WKWebView'de ÇALIŞMAZ:
+    // window.open gerçek pencere açamaz, print() desteklenmez — buton
+    // sessizce hiçbir şey yapmıyordu (web'de sorunsuzdu). Native tarafta
+    // önce jsPDF+html2canvas ile GERÇEK PDF üretilip Capacitor Share ile
+    // paylaşılır; herhangi bir adım başarısız olursa navigator.share ile
+    // METİN raporu yedek olarak devreye girer. Web akışı aynen korunur.
+    if(IS_NATIVE){
+      // ── 1. TERCİH: GERÇEK PDF (2026-07-11, jsPDF + html2canvas) ─────────
+      // Web'dekiyle AYNI rapor HTML'i (raporDivOlustur) html2canvas ile
+      // görüntüye, jsPDF ile çok sayfalı A4 PDF'e çevrilir; dosya Capacitor
+      // Filesystem ile önbelleğe yazılıp Capacitor Share ile iOS paylaşım
+      // menüsünden gönderilir. Görüntü tabanlı olduğundan Türkçe karakter
+      // sorunu yoktur (jsPDF'in gömülü fontları ğ/ş/İ desteklemez).
+      // Kütüphaneler dinamik import edilir — web tarafı bunları hiç yüklemez.
+      try{
+        const div = raporDivOlustur();
+        document.body.appendChild(div);
+        const { default: html2canvas } = await import("html2canvas");
+        const { jsPDF } = await import("jspdf");
+        const canvas = await html2canvas(div,{scale:2,backgroundColor:"#ffffff",logging:false});
+        document.body.removeChild(div);
+        const pdf = new jsPDF({unit:"mm",format:"a4",compress:true});
+        const sayfaW=210, sayfaH=297;
+        const imgH=canvas.height*sayfaW/canvas.width;
+        const imgData=canvas.toDataURL("image/jpeg",0.92);
+        let konum=0, kalan=imgH;
+        pdf.addImage(imgData,"JPEG",0,konum,sayfaW,imgH);
+        kalan-=sayfaH;
+        while(kalan>0){ konum-=sayfaH; pdf.addPage(); pdf.addImage(imgData,"JPEG",0,konum,sayfaW,imgH); kalan-=sayfaH; }
+        const base64=pdf.output("datauristring").split(",")[1];
+        const { Filesystem, Directory } = await import("@capacitor/filesystem");
+        const { Share } = await import("@capacitor/share");
+        const dosyaAdi="katilimplus-rapor-"+Date.now()+".pdf";
+        const yazilan=await Filesystem.writeFile({path:dosyaAdi,data:base64,directory:Directory.Cache});
+        await Share.share({title:baslik,files:[yazilan.uri]});
+        setYukleniyor(false);
+        return;
+      }catch(e:any){
+        // Kullanıcı paylaşım menüsünü kendisi kapattıysa sessizce çık
+        if(e?.name==="AbortError"||/cancel/i.test(String(e?.message||""))){ setYukleniyor(false); return; }
+        // Diğer hatalarda (eklenti yok, canvas hatası vs.) metin paylaşımına düş
+        try{ console.warn("PDF yolu başarısız, metin paylaşımına geçiliyor:", e?.message); }catch{}
+      }
+      // ── 2. YEDEK: METİN PAYLAŞIMI ───────────────────────────────────────
+      try{
+        const metinSatirlar = satirlar.filter(s=>s?.label).map(s=>`${s.label}: ${s.value}`);
+        const planNotu = plan && plan.length>0 ? `\n(${plan.filter(r=>r&&!r._toplamSabitTaksit).length} taksitlik ödeme planı hesaplandı — detay için uygulamadaki Ödeme Planı ekranını kullanın)` : "";
+        const rapor = `${baslik}\n${tarih}\n${"─".repeat(28)}\n${metinSatirlar.join("\n")}${planNotu}\n${"─".repeat(28)}\nBu hesaplamalar yalnızca bilgilendirme amaçlıdır; kesin teklif, resmi belge veya hukuki taahhüt niteliği taşımaz.\n\nKatılım Plus — katilimplus.com`;
+        if(typeof navigator!=="undefined" && (navigator as any).share){
+          await (navigator as any).share({title:baslik, text:rapor});
+        } else if((navigator as any)?.clipboard?.writeText){
+          await (navigator as any).clipboard.writeText(rapor);
+          alert("Rapor panoya kopyalandı — istediğiniz uygulamaya yapıştırabilirsiniz.");
+        } else {
+          alert("Bu cihazda paylaşım desteklenmiyor.");
+        }
+      }catch(e:any){
+        // Kullanıcı paylaşım menüsünü kendisi kapatırsa AbortError gelir — hata sayılmaz.
+        if(e?.name!=="AbortError") alert("Paylaşım hatası: "+(e?.message||"bilinmiyor"));
+      }
+      setYukleniyor(false);
+      return;
+    }
     try {
-      // Geçici div oluştur — rapor HTML'i
-      const div = document.createElement("div");
-      div.style.cssText = "position:fixed;left:-9999px;top:0;width:595px;background:#fff;font-family:Arial,sans-serif;padding:0;";
+      const div = raporDivOlustur();
       document.body.appendChild(div);
-
-      const planSatirlari = plan && plan.length > 0 ? plan.filter(r=>r&&!r._toplamSabitTaksit) : [];
-      const totTaksit = planSatirlari.reduce((s,r)=>s+(r.taksit||r.toplam||0),0);
-      const totKP = planSatirlari.reduce((s,r)=>s+(r.karPayi||r.faiz||0),0);
-      const totAna = planSatirlari.reduce((s,r)=>s+(r.anapara||0),0);
-      const totKDV = planSatirlari.reduce((s,r)=>s+(r.kdvTutar||r.vergi||0),0);
-
-      div.innerHTML = `
-        <div style="background:#1C3A5E;padding:20px 24px 16px;">
-          <div style="font-size:18px;color:#fff;font-weight:800;margin-bottom:4px;">${escapeHtml(baslik)}</div>
-          <div style="font-size:11px;color:rgba(255,255,255,0.65);">${escapeHtml(tarih)}</div>
-          <div style="font-size:10px;color:rgba(255,255,255,0.5);margin-top:2px;">Vakıf Katılım Bankası — Fon Fiyatlama Müdürlüğü</div>
-        </div>
-        <div style="padding:0;">
-          ${satirlar.filter(s=>s?.label).map((s,i)=>`
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:${s.big?"11px":"8px"} 24px;background:${s.big?"rgba(91,155,216,0.15)":i%2===0?"#FAFBFC":"#fff"};border-bottom:1px solid rgba(255,255,255,0.1);">
-              <span style="font-size:${s.big?12:11}px;color:${s.big?C.thead:"#6B7280"};font-weight:${s.big?700:500};">${escapeHtml(s.label)}</span>
-              <span style="font-size:${s.big?14:12}px;color:${s.big?C.thead:"#1a1a1a"};font-weight:${s.big?900:600};font-family:monospace;">${escapeHtml(s.value)}</span>
-            </div>`).join("")}
-        </div>
-        ${planSatirlari.length>0?`
-        <div style="margin-top:4px;">
-          <div style="background:#1C3A5E;padding:9px 24px;">
-            <span style="font-size:11px;font-weight:700;color:#fff;">ÖDEME PLANI — ${planSatirlari.length} TAKSİT</span>
-          </div>
-          <table style="width:100%;border-collapse:collapse;font-size:8px;">
-            <thead>
-              <tr style="background:#EBF3FB;">
-                <th style="padding:5px 4px;text-align:center;color:#1C3A5E;font-weight:700;border-bottom:1px solid #D1E0EF;">#</th>
-                <th style="padding:5px 4px;text-align:center;color:#1C3A5E;font-weight:700;border-bottom:1px solid #D1E0EF;">Vade Tarihi</th>
-                ${(showKdv?["Taksit","Kâr Payı","Anapara","KDV","Kalan"]:["Taksit","Kâr Payı","Anapara","BSMV","KKDF","Kalan"]).map(h=>`<th style="padding:5px 4px;text-align:right;color:#1C3A5E;font-weight:700;border-bottom:1px solid #D1E0EF;">${h}</th>`).join("")}
-              </tr>
-            </thead>
-            <tbody>
-              ${planSatirlari.map((r,i)=>{
-                const vals = showKdv
-                  ? [r.taksit||r.toplam, r.karPayi||r.faiz, r.anapara, r.kdvTutar||r.vergi||0, r.bakiye]
-                  : [r.taksit||r.toplam, r.karPayi||r.faiz, r.anapara, (r.karPayi||0)*bsmvOran/100, (r.karPayi||0)*kkdfOran/100, r.bakiye];
-                return `<tr style="background:${i%2===0?"#F8FAFB":"#fff"};border-bottom:1px solid rgba(255,255,255,0.1);">
-                  <td style="padding:4px;text-align:center;color:#6B7280;font-weight:600;">${r.ay||i+1}</td>
-                  <td style="padding:4px;text-align:center;color:#6B7280;">${escapeHtml(r.tarih||"—")}</td>
-                  ${vals.map(v=>`<td style="padding:4px;text-align:right;font-family:monospace;color:#1a1a1a;">${fmt(v)}</td>`).join("")}
-                </tr>`;
-              }).join("")}
-              <tr style="background:#1C3A5E;">
-                <td style="padding:5px 4px;text-align:center;color:#fff;font-weight:800;font-size:9px;">∑</td>
-                <td style="padding:5px 4px;text-align:center;color:#fff;font-weight:800;font-size:9px;">—</td>
-                ${(showKdv
-                  ? [totTaksit,totKP,totAna,totKDV,"—"]
-                  : [totTaksit,totKP,totAna,planSatirlari.reduce((s,r)=>s+(r.karPayi||0)*bsmvOran/100,0),planSatirlari.reduce((s,r)=>s+(r.karPayi||0)*kkdfOran/100,0),"—"]
-                ).map(v=>`<td style="padding:5px 4px;text-align:right;color:#fff;font-weight:800;font-family:monospace;font-size:8px;">${typeof v==="number"?fmt(v):v}</td>`).join("")}
-              </tr>
-            </tbody>
-          </table>
-        </div>`:""}
-        <div style="margin:16px 24px;padding:12px 16px;background:#FFFBEB;border-left:4px solid #F59E0B;border-radius:4px;">
-          <div style="display:flex;align-items:flex-start;gap:10px;">
-            <span style="font-size:16px;flex-shrink:0;">⚠️</span>
-            <p style="margin:0;font-size:10px;color:#374151;font-style:italic;line-height:1.7;">
-              Bu hesaplamalar yalnızca bilgilendirme amaçlıdır; kesin teklif, resmi belge veya hukuki taahhüt niteliği taşımaz. Nihai oran ve koşullar için bankanız ile iletişime geçiniz.
-            </p>
-          </div>
-        </div>
-      `;
 
       // window.print() ile PDF
       const printWindow = window.open("", "_blank", "width=650,height=900");
@@ -2907,7 +2978,9 @@ function RaporModal({baslik, satirlar, plan, onClose, showKdv=false, bsmvOran=0,
             {yukleniyor ? "⏳ Hazırlanıyor..." : "📄 PDF Oluştur & Paylaş"}
           </button>
           <p style={{margin:"10px 0 0",fontSize:11,color:(TEMA==="acik"?"#5A6B7C":"#9CA3AF"),textAlign:"center",lineHeight:1.5}}>
-            PDF önizleme açılır → Paylaş butonundan Mail, WhatsApp veya Dosyalar'a kaydedebilirsiniz
+            {IS_NATIVE
+              ? "Paylaşım menüsü açılır → PDF'i Mail, WhatsApp veya Dosyalar'a gönderebilirsiniz"
+              : "PDF önizleme açılır → Paylaş butonundan Mail, WhatsApp veya Dosyalar'a kaydedebilirsiniz"}
           </p>
         </div>
       </div>
@@ -5739,7 +5812,14 @@ function Asistan({nav, settings}:{nav:any, settings?:any}){
   const sohbetBasladi=msgs.length>0;
 
   return(
-    <div style={{display:"flex",flexDirection:"column",height:"calc(100dvh - 182px)",background:C.bg}}>
+    // DÜZELTME (2026-07-11): sabit "182px" değeri üst başlığın
+    // env(safe-area-inset-top,0px) (çentik/Dynamic Island) ve alt yüzen
+    // menünün env(safe-area-inset-bottom,0px) payını hiç hesaba katmıyordu.
+    // Bu iki değer büyük olduğu cihazlarda (örn. Dynamic Island'lı iPhone'lar)
+    // konteyner gerekenden uzun hesaplanıyor, mesaj yazma alanı ekranın
+    // altına, yüzen menünün arkasına taşıp görünmez oluyordu. Sabit payı
+    // hem büyüttük hem de her iki safe-area terimini ayrıca ekledik.
+    <div style={{display:"flex",flexDirection:"column",height:"calc(100dvh - 172px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px))",background:C.bg}}>
       {!sohbetBasladi?(
         <div style={{flex:1,overflowY:"auto",padding:"16px 14px"}}>
           {/* Hero kart */}
@@ -8293,7 +8373,10 @@ function GetiriKarsilastirma(){
             </div>
             {ekleUyari&&<p style={{margin:"8px 2px 0",fontSize:11,color:C.red,fontWeight:600}}>{ekleUyari}</p>}
             {oneriler.length>0&&(
-              <div style={{marginTop:8,borderRadius:10,overflow:"hidden",border:`1px solid ${WA(0.1)}`,background:"rgba(15,25,35,0.9)"}}>
+              <div style={{marginTop:8,borderRadius:10,overflow:"hidden",border:`1px solid ${WA(0.1)}`,
+                // DÜZELTME (2026-07-11): arka plan sabit koyu yazılmıştı; açık
+                // temada koyu kutu + koyu metin okunmuyordu. Tema duyarlı yapıldı.
+                background:TEMA==="acik"?"#FFFFFF":"rgba(15,25,35,0.9)"}}>
                 {oneriler.map((o:any,i:number)=>(
                   <div key={o.tip+o.etiket} onClick={()=>oneridenEkle(o)} style={{
                     display:"flex",alignItems:"center",gap:10,padding:"10px 12px",cursor:"pointer",
@@ -10780,7 +10863,10 @@ function PiyasaHaberleri(){
   };
 
   return(
-    <div style={{background:"#0B0E14",minHeight:"100dvh",paddingBottom:32}}>
+    // DÜZELTME (2026-07-11): kök arka plan sabit koyu (#0B0E14) yazılmıştı;
+    // açık temada kartlar arasındaki boşluklarda koyu şeritler görünüyor,
+    // "renkler karışık" izlenimi veriyordu. C.bg ile tema duyarlı yapıldı.
+    <div style={{background:C.bg,minHeight:"100dvh",paddingBottom:32}}>
       <div style={{background:(TEMA==="acik"?"linear-gradient(135deg,#33335C 0%,#2E4A8E 100%)":"linear-gradient(135deg,#1A1A2E 0%,#16213E 100%)"),padding:"16px 16px 14px",borderBottom:"2px solid #FF6B35"}}>
         <p style={{margin:"0 0 2px",fontSize:11,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:"0.07em"}}>{TR("Katılım Plus")}</p>
         <h2 style={{margin:0,fontSize:18,fontWeight:800,color:"#fff",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
@@ -10789,8 +10875,8 @@ function PiyasaHaberleri(){
         </h2>
         <p style={{margin:"4px 0 0",fontSize:11,color:"rgba(255,255,255,0.55)"}}>
           {ekranModu==="haberler"
-            ? `Bloomberg HT ${haberGuncelleme && `· Güncelleme: ${new Date(haberGuncelleme).toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"})}`}`
-            : `🇹🇷 Türkiye + 🇺🇸 ABD + 🇪🇺 Avrupa ${guncelleme && `· Güncelleme: ${new Date(guncelleme).toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"})}`}`}
+            ? `Bloomberg HT${haberGuncelleme?` · Güncelleme: ${new Date(haberGuncelleme).toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"})}`:""}`
+            : `🇹🇷 Türkiye + 🇺🇸 ABD + 🇪🇺 Avrupa${guncelleme?` · Güncelleme: ${new Date(guncelleme).toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"})}`:""}`}
         </p>
       </div>
 
@@ -10823,7 +10909,7 @@ function PiyasaHaberleri(){
                 padding:"12px 14px",marginBottom:8,
                 background:(TEMA==="acik"?"#E9EEF4":"#151823"),borderRadius:10,borderLeft:"3px solid #FF6B35",
               }}>
-                <p style={{margin:0,fontSize:14,fontWeight:700,color:"#F3F4F6",lineHeight:1.35}}>{h.baslik}</p>
+                <p style={{margin:0,fontSize:14,fontWeight:700,color:(TEMA==="acik"?"#16222E":"#F3F4F6"),lineHeight:1.35}}>{h.baslik}</p>
                 {h.ozet && <p style={{margin:"6px 0 0",fontSize:12,color:(TEMA==="acik"?"#5A6B7C":"#9CA3AF"),lineHeight:1.4}}>{h.ozet}</p>}
                 <div style={{display:"flex",alignItems:"center",gap:6,marginTop:6}}>
                   {h.tarih && <p style={{margin:0,fontSize:10,color:"#6B7280"}}>🕐 {formatHaberTarih(h.tarih)}</p>}
