@@ -10899,7 +10899,7 @@ function PosHesaplama({s}){
 
   // Max izinli bloke bu komisyon için: 30 × (3,56/komisyon - 1), max 40 gün
   const maxBlokForKom = komVal > 0
-    ? Math.min(Math.floor(AZAMI_BLOK * (1 - komVal / AZAMI_KOM)), AZAMI_BLOK)
+    ? Math.min(Math.floor(AZAMI_BLOK * (1 - komVal / AZAMI_KOM) + 1e-9), AZAMI_BLOK)
     : AZAMI_BLOK;
 
   const hatalar = [];
@@ -10984,7 +10984,7 @@ function PosHesaplama({s}){
     const zkOranBlok = (parseFloat(s.zkTL_vadesiz) || 17) / 100;
     // Max izinli TOPLAM bloke gün (mevcut komisyon için)
     const maxBlokForKomOner = komVal > 0
-      ? Math.min(Math.floor(AZAMI_BLOK * (1 - komVal / AZAMI_KOM)), AZAMI_BLOK)
+      ? Math.min(Math.floor(AZAMI_BLOK * (1 - komVal / AZAMI_KOM) + 1e-9), AZAMI_BLOK)
       : AZAMI_BLOK;
 
     // Mevcut bloke geliri zaten hesaplanmış (blokeGeliri)
@@ -11104,11 +11104,11 @@ function PosHesaplama({s}){
       <Card>
         <SecTitle>Hesap Ortalamaları</SecTitle>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-          <Field label="Cari Ortalama" value={cariOrt} onChange={setCariOrt} suffix="₺"/>
+          <Field label="Aylık Cari Ortalama" value={cariOrt} onChange={setCariOrt} suffix="₺"/>
           <Field label="Cari Kâr Payı" value={cariKarPay} onChange={setCariKarPay} suffix="% Yıllık"/>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-          <Field label="Katılım Ortalama" value={vadOrt} onChange={setVadOrt} suffix="₺"/>
+          <Field label="Aylık Katılım Ortalama" value={vadOrt} onChange={setVadOrt} suffix="₺"/>
           <Field label="Katılım Kâr Payı" value={vadKarPay} onChange={setVadKarPay} suffix="% Yıllık"/>
         </div>
       </Card>
@@ -11170,13 +11170,6 @@ function PosHesaplama({s}){
                   <span style={{fontSize:14,fontWeight:700,color:C.green,fontFamily:"monospace"}}>+ {fmtTL(r.vadGelir)}</span>
                 </div>
               )}
-              {r.blokVal > 0 && (
-                <div style={{background:"rgba(91,155,216,0.10)",borderRadius:8,padding:"8px 10px",marginTop:6}}>
-                  <p style={{margin:0,fontSize:10,color:C.sub}}>
-                    Formül: Ciro × Bloke Gün × Oran ÷ 36500 — Oran: %{fmtN(r.fonlamaOran,2)} (Ayarlar → Fonlama Maliyeti)
-                  </p>
-                </div>
-              )}
               <div style={{height:1,background:"rgba(0,0,0,0.08)",margin:"8px 0"}}/>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <span style={{fontSize:12,fontWeight:700,color:C.green}}>Toplam Gelir</span>
@@ -11202,6 +11195,9 @@ function PosHesaplama({s}){
                 Aylık net — {fmtTL(r.ciroVal)} ciro üzerinden
               </p>
             </div>
+            <p style={{margin:"8px 2px 0",fontSize:10,color:C.sub,fontStyle:"italic"}}>
+              ℹ️ Ciro, not-on-us kredi kartı işlemleri esas alınarak hesaplanmıştır; on-us ve banka kartı işlemlerinde takas/maliyet oranları farklılaştığından sonuçlar değişir.
+            </p>
           </Card>
 
           {/* ÖNERİLER — sadece zarar varsa */}
@@ -11212,8 +11208,13 @@ function PosHesaplama({s}){
               Aylık {fmtTL(r.zararTutar)} zararı gidermek için aşağıdaki seçeneklerden biri yeterli:
             </p>
 
-            {/* A: Komisyon */}
-            <div style={{background:r.onerKomYeterli?C.blueLight:r.onerKomEfektifAsim?"rgba(248,113,113,0.12)":"rgba(224,165,61,0.12)",borderRadius:10,padding:"12px 14px",marginBottom:10,border:`1.5px solid ${r.onerKomYeterli?C.blue:r.onerKomEfektifAsim?C.red:C.orange}`}}>
+            {/* A ve B tavan nedeniyle uygulanamıyorsa bilgi notu */}
+            {!r.onerKomYeterli&&!((r.onerBlokYeterli&&r.onerEkGunGoster>0)||(r.onerBlokKombine&&!r.onerBlokKombine.tavanAsim))&&<p style={{margin:"0 0 10px",fontSize:11,color:C.sub}}>
+              ℹ️ Komisyon ve bloke gün Tebliğ tavanında olduğundan artırılamaz — çözüm hesap bakiyelerinde:
+            </p>}
+
+            {/* A: Komisyon — yalnızca Tebliğ tavanı içinde uygulanabilirse gösterilir */}
+            {r.onerKomYeterli&&<div style={{background:r.onerKomYeterli?C.blueLight:r.onerKomEfektifAsim?"rgba(248,113,113,0.12)":"rgba(224,165,61,0.12)",borderRadius:10,padding:"12px 14px",marginBottom:10,border:`1.5px solid ${r.onerKomYeterli?C.blue:r.onerKomEfektifAsim?C.red:C.orange}`}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <div>
                   <p style={{margin:"0 0 2px",fontSize:11,fontWeight:700,color:r.onerKomYeterli?C.blue:r.onerKomEfektifAsim?C.red:C.orange}}>
@@ -11228,12 +11229,10 @@ function PosHesaplama({s}){
                   {r.onerKomEfektifAsim&&<p style={{margin:0,fontSize:10,color:C.red}}>max: %{fmtN(maxKomForBlok,4)}</p>}
                 </div>
               </div>
-              {r.onerKomEfektifAsim&&<p style={{margin:"6px 0 0",fontSize:10,color:C.red}}>⛔ Tebliğ gereği {blokVal} gün bloke ile max komisyon %{fmtN(maxKomForBlok,4)} olabilir. B) seçeneğini kullanın.</p>}
-              {!r.onerKomYeterli&&!r.onerKomEfektifAsim&&<p style={{margin:"6px 0 0",fontSize:10,color:C.orange}}>⚠️ Tavan %{fmtN(AZAMI_KOM,4)} — bu oran tek başına yetmez</p>}
-            </div>
+            </div>}
 
-            {/* B: Bloke */}
-            <div style={{background:r.onerBlokMaks?"rgba(248,113,113,0.12)":r.onerBlokKombine?C.orangeLight:r.onerBlokYeterli?C.blueLight:"rgba(224,165,61,0.12)",borderRadius:10,padding:"12px 14px",marginBottom:10,border:`1.5px solid ${r.onerBlokMaks?C.red:r.onerBlokKombine?C.orange:r.onerBlokYeterli?C.blue:C.orange}`}}>
+            {/* B: Bloke — yalnızca uygulanabilir bir çözüm sunuyorsa gösterilir */}
+            {((r.onerBlokYeterli&&r.onerEkGunGoster>0)||(r.onerBlokKombine&&!r.onerBlokKombine.tavanAsim))&&<div style={{background:r.onerBlokMaks?"rgba(248,113,113,0.12)":r.onerBlokKombine?C.orangeLight:r.onerBlokYeterli?C.blueLight:"rgba(224,165,61,0.12)",borderRadius:10,padding:"12px 14px",marginBottom:10,border:`1.5px solid ${r.onerBlokMaks?C.red:r.onerBlokKombine?C.orange:r.onerBlokYeterli?C.blue:C.orange}`}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:4}}>
                 <div style={{flex:1}}>
                   <p style={{margin:"0 0 2px",fontSize:11,fontWeight:700,color:r.onerBlokMaks?C.red:r.onerBlokKombine?C.orange:r.onerBlokYeterli?C.blue:C.orange}}>
@@ -11270,8 +11269,7 @@ function PosHesaplama({s}){
                     : `Efektif maliyet: %${fmtN(r.onerBlokKombine.efektif,4)} ✓ — tavan ${fmtN(AZAMI_KOM,4)} içinde`}
                 </p>
               </div>}
-              {!r.onerBlokYeterli&&!r.onerBlokKombine&&<p style={{margin:"6px 0 0",fontSize:10,color:C.orange}}>⚠️ Tavan {AZAMI_BLOK} gün — bu süre tek başına yetmez</p>}
-            </div>
+            </div>}
 
             {/* C: Cari hesap */}
             {r.onerCariBakiye&&<div style={{background:C.greenLight,borderRadius:10,padding:"12px 14px",marginBottom:10,border:`1.5px solid ${C.green}`}}>
