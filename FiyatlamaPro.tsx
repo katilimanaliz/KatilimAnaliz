@@ -288,6 +288,7 @@ const EN_SOZLUK: Record<string, string> = {
   "Tüzel Finansman": "Corporate Financing",
   "Hazine İşlemleri": "Treasury Operations",
   "Tümü": "All",
+  "Dış Ticaret": "Foreign Trade",
   "Katılım Hesabı Hesaplama": "Participation Account",
   "Katılım Hesabı Hesaplamaları": "Participation Account Calculations",
   // ── Ana sayfa ──
@@ -12326,6 +12327,7 @@ function PiyasaOzetiDuzenleModal({secili,onToggle,onClose}:{secili:string[],onTo
 const PIYASA_TABLO_KATEGORILER = [
   {id:"tumu",        label:"Tümü"},
   {id:"gostergeler", label:"Göstergeler"},
+  {id:"disticaret",  label:"Dış Ticaret"},
   {id:"altin",       label:"Altın"},
   {id:"doviz",       label:"Döviz"},
   {id:"emtia",       label:"Emtia"},
@@ -13819,18 +13821,79 @@ function App(){
               </div>
             ):piyasaTabloFiltre==="altin"?(
               <AltinUrunleriTablo/>
-            ):piyasaTabloFiltre==="gostergeler"?(()=>{
+            ):piyasaTabloFiltre==="disticaret"?(()=>{
+              // ── DIŞ TİCARET & ÖDEMELER DENGESİ sekmesi (v10 verileri) ──
+              // Seriler EVDS katalog keşfiyle doğrulandı (bkz. evds-proxy v10);
+              // "12 Aylık" satırları proxy'de hesaplanan hareketli kümülatif
+              // toplamlardır (takvim yılına kilitli değil, her ay güncellenir).
+              // Değerler proxy'de MİLYON USD'a normalize edilir.
+              const fmtMr=(v:any)=>v?.deger!=null?`${v.deger<0?"-":""}$${Math.abs(v.deger/1000).toFixed(2).replace(".",",")} Milyar`:"—";
+              const fmtOran=(v:any)=>v?.deger!=null?`%${v.deger.toFixed(1).replace(".",",")}`:"—";
+              const fmtEndeks=(v:any)=>v?.deger!=null?v.deger.toFixed(2).replace(".",","):"—";
+              const gm=(k:string)=>evdsMakro?.[k];
+              const DTGOSTERGELER=[
+                {ad:"İhracat (Aylık)", deger:fmtMr(gm("DT_IHRACAT")), tarih:gm("DT_IHRACAT")?.tarih||"TÜİK · aylık", canli:gm("DT_IHRACAT")!=null,
+                 seri:gm("DT_IHRACAT_SERI"), seriAd:"İhracat (Aylık, Milyon $)", seriBirim:"milyon$"},
+                {ad:"İhracat (12 Aylık)", deger:fmtMr(gm("DT_IHRACAT_12AY")), tarih:gm("DT_IHRACAT_12AY")?.tarih||"kümülatif", canli:gm("DT_IHRACAT_12AY")!=null,
+                 seri:gm("DT_IHRACAT_12AY_SERI"), seriAd:"İhracat (12 Aylık Kümülatif, Milyon $)", seriBirim:"milyon$"},
+                {ad:"İthalat (Aylık)", deger:fmtMr(gm("DT_ITHALAT")), tarih:gm("DT_ITHALAT")?.tarih||"TÜİK · aylık", canli:gm("DT_ITHALAT")!=null,
+                 seri:gm("DT_ITHALAT_SERI"), seriAd:"İthalat (Aylık, Milyon $)", seriBirim:"milyon$"},
+                {ad:"İthalat (12 Aylık)", deger:fmtMr(gm("DT_ITHALAT_12AY")), tarih:gm("DT_ITHALAT_12AY")?.tarih||"kümülatif", canli:gm("DT_ITHALAT_12AY")!=null,
+                 seri:gm("DT_ITHALAT_12AY_SERI"), seriAd:"İthalat (12 Aylık Kümülatif, Milyon $)", seriBirim:"milyon$"},
+                {ad:"Dış Ticaret Dengesi (Aylık)", deger:fmtMr(gm("DT_DENGE")), tarih:gm("DT_DENGE")?.tarih||"ihracat−ithalat", canli:gm("DT_DENGE")!=null,
+                 seri:gm("DT_DENGE_SERI"), seriAd:"Dış Ticaret Dengesi (Aylık, Milyon $)", seriBirim:"milyon$"},
+                {ad:"Dış Ticaret Dengesi (12 Aylık)", deger:fmtMr(gm("DT_DENGE_12AY")), tarih:gm("DT_DENGE_12AY")?.tarih||"kümülatif", canli:gm("DT_DENGE_12AY")!=null,
+                 seri:gm("DT_DENGE_12AY_SERI"), seriAd:"Dış Ticaret Dengesi (12 Aylık, Milyon $)", seriBirim:"milyon$"},
+                {ad:"Karşılama Oranı (İhr/İth)", deger:fmtOran(gm("DT_KARSILAMA")), tarih:gm("DT_KARSILAMA")?.tarih||"aylık", canli:gm("DT_KARSILAMA")!=null,
+                 seri:gm("DT_KARSILAMA_SERI"), seriAd:"İhracatın İthalatı Karşılama Oranı"},
+                {ad:"Cari İşlemler Dengesi (Aylık)", deger:fmtMr(gm("CARI_DENGE")), tarih:gm("CARI_DENGE")?.tarih||"TCMB · aylık", canli:gm("CARI_DENGE")!=null,
+                 seri:gm("CARI_DENGE_SERI"), seriAd:"Cari İşlemler Dengesi (Aylık, Milyon $)", seriBirim:"milyon$"},
+                {ad:"Cari Denge (12 Aylık)", deger:fmtMr(gm("CARI_DENGE_12AY")), tarih:gm("CARI_DENGE_12AY")?.tarih||"kümülatif", canli:gm("CARI_DENGE_12AY")!=null,
+                 seri:gm("CARI_DENGE_12AY_SERI"), seriAd:"Cari İşlemler Dengesi (12 Aylık, Milyon $)", seriBirim:"milyon$"},
+                {ad:"Cari Denge (Altın+Enerji Hariç)", deger:fmtMr(gm("CARI_DENGE_AE")), tarih:gm("CARI_DENGE_AE")?.tarih||"TCMB · aylık", canli:gm("CARI_DENGE_AE")!=null,
+                 seri:gm("CARI_DENGE_AE_SERI"), seriAd:"Altın+Enerji Hariç Cari Denge (Milyon $)", seriBirim:"milyon$"},
+                {ad:"Reel Efektif Döviz Kuru (TÜFE)", deger:fmtEndeks(gm("REK_TUFE")), tarih:gm("REK_TUFE")?.tarih?`${gm("REK_TUFE").tarih} · 2025=100`:"TCMB · 2025=100", canli:gm("REK_TUFE")!=null,
+                 seri:gm("REK_TUFE_SERI"), seriAd:"Reel Efektif Döviz Kuru (TÜFE, 2025=100)", seriBirim:"endeks"},
+              ];
+              return(
+                <div>
+                  <div style={{marginTop:8}}>
+                    {DTGOSTERGELER.map((g:any,i:number)=>{
+                      const tiklanabilir = g.seri && g.seri.length>0;
+                      return(
+                      <div key={i} onClick={()=>tiklanabilir&&setPiyasaGostergeTablo({ad:g.seriAd,seri:g.seri,birim:g.seriBirim})} style={{display:"flex",justifyContent:"space-between",alignItems:"center",cursor:tiklanabilir?"pointer":"default",
+                        ...(TEMA==="acik"
+                          ? {padding:"11px 14px",borderRadius:12,marginBottom:8,
+                             background:(i%2===1?"#F3F6FA":"#E9EEF4"),
+                             border:"1px solid rgba(22,34,46,0.08)"}
+                          : {padding:"11px 14px",borderRadius:12,marginBottom:8,
+                             background:(i%2===1?"#1A2633":"#16222E"),
+                             border:`1px solid ${WA(0.07)}`})}}>
+                        <div>
+                          <p style={{margin:0,fontSize:13,fontWeight:800,color:C.soft}}>{g.ad}</p>
+                          {g.tarih&&<p style={{margin:"1px 0 0",fontSize:10,color:(TEMA==="acik"?"#4A6178":"rgba(255,255,255,0.55)")}}>{g.tarih}{g.canli?" · canlı":""}</p>}
+                        </div>
+                        <div style={{display:"flex",alignItems:"center",gap:6}}>
+                          <span style={{fontSize:13,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace"}}>{g.deger}</span>
+                          {tiklanabilir&&<span style={{color:WA(0.3),fontSize:16}}>›</span>}
+                        </div>
+                      </div>
+                      );
+                    })}
+                  </div>
+                  <p style={{margin:"10px 4px 0",fontSize:10,color:WA(0.35),lineHeight:1.5}}>
+                    Kaynak: TCMB EVDS (TÜİK dış ticaret, ödemeler dengesi, reel efektif kur). 12 aylık değerler son 12 ayın hareketli toplamıdır. Satıra dokunarak geçmiş verileri görebilirsiniz.
+                  </p>
+                  {piyasaGostergeTablo&&<GostergeTabloModal ad={piyasaGostergeTablo.ad} seri={piyasaGostergeTablo.seri||[]} birim={piyasaGostergeTablo.birim} onClose={()=>setPiyasaGostergeTablo(null)}/>}
+                </div>
+              );
+            })():piyasaTabloFiltre==="gostergeler"?(()=>{
               const tufY=evdsMakro?.["TUFE_YILLIK"];
               const tufA=evdsMakro?.["TUFE_AYLIK"];
               const aofm=evdsMakro?.["TP.APIFON4"];
               const rezerv=evdsMakro?.["TP.AB.TOPLAM"];
               const fmtPct=(v:any)=>v?.deger!=null?`%${parseFloat(v.deger).toFixed(2).replace(".",",")}`:"—";
               const fmtRezerv=(v:any)=>v?.deger!=null?`$${(v.deger/1000).toFixed(2).replace(".",",")} Milyar`:"—";
-              // Dış Ticaret biçimleyicileri (proxy değerleri MİLYON USD normalize):
-              const fmtMr=(v:any)=>v?.deger!=null?`${v.deger<0?"-":""}$${Math.abs(v.deger/1000).toFixed(2).replace(".",",")} Milyar`:"—";
-              const fmtOran=(v:any)=>v?.deger!=null?`%${v.deger.toFixed(1).replace(".",",")}`:"—";
-              const fmtEndeks=(v:any)=>v?.deger!=null?v.deger.toFixed(2).replace(".",","):"—";
-              const gm=(k:string)=>evdsMakro?.[k];
               const tlrefk=tlrefkTahmini(evdsMakro);
               const GOSTERGELER=[
                 // NOT: TP.APIFON4, TCMB'nin Ağırlıklı Ortalama Fonlama Maliyeti (AOFM) —
@@ -13890,31 +13953,6 @@ function App(){
                  seri:evdsMakro?.["FRED_US5Y_SERI"], seriAd:"ABD 5 Yıllık Tahvil Faizi"},
                 {ad:"ABD 10 Yıllık Tahvil", deger:evdsMakro?.["FRED_US10Y"]?.deger!=null?`%${evdsMakro["FRED_US10Y"].deger.toFixed(2).replace(".",",")}`:"—", tarih:evdsMakro?.["FRED_US10Y"]?.tarih||"FRED", canli:evdsMakro?.["FRED_US10Y"]!=null,
                  seri:evdsMakro?.["FRED_US10Y_SERI"], seriAd:"ABD 10 Yıllık Tahvil Faizi"},
-                // ── Dış Ticaret & Ödemeler Dengesi (v10, EVDS katalog keşfiyle
-                // doğrulanan seriler; "12 Aylık" = proxy'de hesaplanan hareketli
-                // kümülatif toplam, her ay güncellenir) ──
-                {ad:"İhracat (Aylık)", deger:fmtMr(gm("DT_IHRACAT")), tarih:gm("DT_IHRACAT")?.tarih||"TÜİK · aylık", canli:gm("DT_IHRACAT")!=null,
-                 seri:gm("DT_IHRACAT_SERI"), seriAd:"İhracat (Aylık, Milyon $)", seriBirim:"milyon$"},
-                {ad:"İhracat (12 Aylık)", deger:fmtMr(gm("DT_IHRACAT_12AY")), tarih:gm("DT_IHRACAT_12AY")?.tarih||"kümülatif", canli:gm("DT_IHRACAT_12AY")!=null,
-                 seri:gm("DT_IHRACAT_12AY_SERI"), seriAd:"İhracat (12 Aylık Kümülatif, Milyon $)", seriBirim:"milyon$"},
-                {ad:"İthalat (Aylık)", deger:fmtMr(gm("DT_ITHALAT")), tarih:gm("DT_ITHALAT")?.tarih||"TÜİK · aylık", canli:gm("DT_ITHALAT")!=null,
-                 seri:gm("DT_ITHALAT_SERI"), seriAd:"İthalat (Aylık, Milyon $)", seriBirim:"milyon$"},
-                {ad:"İthalat (12 Aylık)", deger:fmtMr(gm("DT_ITHALAT_12AY")), tarih:gm("DT_ITHALAT_12AY")?.tarih||"kümülatif", canli:gm("DT_ITHALAT_12AY")!=null,
-                 seri:gm("DT_ITHALAT_12AY_SERI"), seriAd:"İthalat (12 Aylık Kümülatif, Milyon $)", seriBirim:"milyon$"},
-                {ad:"Dış Ticaret Dengesi (Aylık)", deger:fmtMr(gm("DT_DENGE")), tarih:gm("DT_DENGE")?.tarih||"ihracat−ithalat", canli:gm("DT_DENGE")!=null,
-                 seri:gm("DT_DENGE_SERI"), seriAd:"Dış Ticaret Dengesi (Aylık, Milyon $)", seriBirim:"milyon$"},
-                {ad:"Dış Ticaret Dengesi (12 Aylık)", deger:fmtMr(gm("DT_DENGE_12AY")), tarih:gm("DT_DENGE_12AY")?.tarih||"kümülatif", canli:gm("DT_DENGE_12AY")!=null,
-                 seri:gm("DT_DENGE_12AY_SERI"), seriAd:"Dış Ticaret Dengesi (12 Aylık, Milyon $)", seriBirim:"milyon$"},
-                {ad:"Karşılama Oranı (İhr/İth)", deger:fmtOran(gm("DT_KARSILAMA")), tarih:gm("DT_KARSILAMA")?.tarih||"aylık", canli:gm("DT_KARSILAMA")!=null,
-                 seri:gm("DT_KARSILAMA_SERI"), seriAd:"İhracatın İthalatı Karşılama Oranı"},
-                {ad:"Cari İşlemler Dengesi (Aylık)", deger:fmtMr(gm("CARI_DENGE")), tarih:gm("CARI_DENGE")?.tarih||"TCMB · aylık", canli:gm("CARI_DENGE")!=null,
-                 seri:gm("CARI_DENGE_SERI"), seriAd:"Cari İşlemler Dengesi (Aylık, Milyon $)", seriBirim:"milyon$"},
-                {ad:"Cari Denge (12 Aylık)", deger:fmtMr(gm("CARI_DENGE_12AY")), tarih:gm("CARI_DENGE_12AY")?.tarih||"kümülatif", canli:gm("CARI_DENGE_12AY")!=null,
-                 seri:gm("CARI_DENGE_12AY_SERI"), seriAd:"Cari İşlemler Dengesi (12 Aylık, Milyon $)", seriBirim:"milyon$"},
-                {ad:"Cari Denge (Altın+Enerji Hariç)", deger:fmtMr(gm("CARI_DENGE_AE")), tarih:gm("CARI_DENGE_AE")?.tarih||"TCMB · aylık", canli:gm("CARI_DENGE_AE")!=null,
-                 seri:gm("CARI_DENGE_AE_SERI"), seriAd:"Altın+Enerji Hariç Cari Denge (Milyon $)", seriBirim:"milyon$"},
-                {ad:"Reel Efektif Döviz Kuru (TÜFE)", deger:fmtEndeks(gm("REK_TUFE")), tarih:gm("REK_TUFE")?.tarih?`${gm("REK_TUFE").tarih} · 2025=100`:"TCMB · 2025=100", canli:gm("REK_TUFE")!=null,
-                 seri:gm("REK_TUFE_SERI"), seriAd:"Reel Efektif Döviz Kuru (TÜFE, 2025=100)", seriBirim:"endeks"},
               ];
               return(
                 <div>
