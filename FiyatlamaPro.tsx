@@ -7,7 +7,7 @@ import {
   ArrowRightLeft, FileSpreadsheet, TrendingUp, TrendingDown, ArrowUp, ArrowDown, Activity, Droplets, ShieldCheck,
   Search, Landmark, Gem, Package, Bell, ClipboardList, FileText, Star,
   Settings, Headphones, BookOpen, Bot, User, Clock, Briefcase,
-  Bitcoin,
+  Bitcoin, Banknote,
 } from "lucide-react";
 // NOT: @capacitor/push-notifications bilinçli olarak burada static import
 // EDİLMİYOR — modül, aşağıdaki push useEffect'i içinde dinamik import ile
@@ -54,6 +54,7 @@ const ICON_MAP: Record<string, any> = {
   spotFinansman: Zap,
   taksitliTicari: Building2,
   esnekOdemePlanlari: CalendarRange,
+  cekArkasiFinansman: Banknote,
   leasing: Car,
   posHesaplama: CreditCard,
   tmKomisyon: FileBadge,
@@ -286,6 +287,7 @@ const EN_SOZLUK: Record<string, string> = {
   "Katılım Hesabı": "Participation Account",
   "Bireysel Finansman": "Retail Financing",
   "Tüzel Finansman": "Corporate Financing",
+  "Çek Arkası Finansman Hesaplama": "Cheque-Backed Financing",
   "Hazine İşlemleri": "Treasury Operations",
   "Tümü": "All",
   "Dış Ticaret": "Foreign Trade",
@@ -516,7 +518,7 @@ const EKRAN_KATEGORI: Record<string,string> = {
   konutFinansman:"bireysel", tasitFinansman:"bireysel", yatirimFonuFinansman:"bireysel",
   toggFinansman:"bireysel", esnekOdemePlanlari:"bireysel", arsaIsyeri:"bireysel", taksitenKredi:"bireysel",
   // Tüzel Finansman
-  spotFinansman:"tuzel", taksitliTicari:"tuzel", leasing:"tuzel", posHesaplama:"tuzel",
+  spotFinansman:"tuzel", taksitliTicari:"tuzel", leasing:"tuzel", cekArkasiFinansman:"tuzel", posHesaplama:"tuzel",
   tmKomisyon:"tuzel", akreditifKomisyon:"tuzel", soikReeskont:"tuzel",
   // Piyasa & Veriler
   bistHisseTarayici:"piyasa", fonGetiriIzleme:"piyasa", karPayiOranlari:"piyasa", finansalGostergeler:"piyasa", piyasaHaberleri:"piyasa", fiyatAlarmlarim:"piyasa",
@@ -4464,6 +4466,286 @@ function SpotErkenKapamaModal({T, G, yillikOran, doviz, bsmvOran, kkdfOran, onCl
   );
 }
 
+
+// ─── ÇEK ARKASI FİNANSMAN (2026-07-11) ───────────────────────────────────────
+// Müşterinin ibraz ettiği çeklerin (her biri farklı tutar+vade) BAKİYE/
+// AMORTİSMAN yöntemiyle bugünkü değeri hesaplanır (banka sistemiyle uyumlu):
+// kullandırım, çek ödemelerinin krediyi tam kapattığı anaparadır; kâr payı
+// her dönemde kalan bakiye üzerinden işler. Toplam = "kullandırılabilir tutar".
+// Kurallar: (1) hafta sonuna denk gelen vade bir sonraki iş gününe kaydırılır
+// ve gün sayısı kaydırılmış tarihe göre hesaplanır; (2) finansman tarafı
+// 360 GÜN esası kullanır (Spot Finansman ile aynı — katılım hesapları 365);
+// (3) YP'de BSMV muafiyet anahtarı; (4) TL'de kullandırım komisyonu tavanı
+// Madde 9/2'ye göre çeklerin AĞIRLIKLI ORTALAMA vadesine oransaldır.
+function CekArkasiFinansman({s,onGecmis}){
+  const [doviz,setDoviz]=useState("TL");
+  const [tip,setTip]=useState("yillik");
+  const [oran,setOran]=useState("");
+  const [ypBsmvMuaf,setYpBsmvMuaf]=useState(false);
+  const [kullKomisyon,setKullKomisyon]=useState("1.10");
+  const [komAsim,setKomAsim]=useState(false);
+  const [showPlan,setShowPlan]=useState(false);
+  const bugunIso=()=>{const d=new Date();d.setHours(0,0,0,0);return d;};
+  const isoArti=(g)=>{const d=bugunIso();d.setDate(d.getDate()+g);return d.toISOString().slice(0,10);};
+  const [cekler,setCekler]=useState(()=>[{tutar:"",vade:isoArti(30)}]);
+
+  const SABIT_KULLANIRIM=1.10;
+  const dovizSembol=doviz==="TL"?"₺":doviz==="USD"?"$":"€";
+  const fmtDoviz=(n)=>n==null?"—":`${dovizSembol}${new Intl.NumberFormat("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}).format(n)}`;
+  const GUNLER=["Paz","Pzt","Sal","Çar","Per","Cum","Cmt"];
+  const AYLAR=["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"];
+
+  // Hafta sonu → bir sonraki iş günü (Cmt/Paz → Pzt)
+  const isGunuKaydir=(iso)=>{
+    if(!iso) return null;
+    const d=new Date(iso+"T00:00:00");
+    if(isNaN(d.getTime())) return null;
+    let kaydi=false;
+    while(d.getDay()===0||d.getDay()===6){d.setDate(d.getDate()+1);kaydi=true;}
+    return {tarih:d,kaydi};
+  };
+  const cekGun=(iso)=>{
+    const k=isGunuKaydir(iso);
+    if(!k) return {g:0,kaydi:false,efTarih:null};
+    const g=Math.round((k.tarih.getTime()-bugunIso().getTime())/86400000);
+    return {g,kaydi:k.kaydi,efTarih:k.tarih};
+  };
+  const trTarih=(d)=>d?`${d.getDate()} ${AYLAR[d.getMonth()]} ${GUNLER[d.getDay()]}`:"";
+
+  // Ağırlıklı ortalama vade (gün) — komisyon tavanı bunun üzerinden oransal
+  const ortVadeGun=()=>{
+    let top=0,ag=0;
+    cekler.forEach(c=>{
+      const T=parseFloat(c.tutar)||0, {g}=cekGun(c.vade);
+      if(T<=0||g<=0)return;
+      top+=T; ag+=g*T;
+    });
+    return top>0?ag/top:0;
+  };
+  const azamiKom=()=>{
+    const g=ortVadeGun();
+    if(g<=0) return SABIT_KULLANIRIM;
+    return g<365?SABIT_KULLANIRIM*(g/365):SABIT_KULLANIRIM;
+  };
+
+  // Döviz değişince komisyonu sıfırla (SpotKredi kalıbı)
+  useEffect(()=>{ setKullKomisyon("1.10"); setKomAsim(false); },[doviz]);
+  // TL: çek seti değişince azami komisyonu doldur (ağırlıklı vade değişir)
+  useEffect(()=>{
+    if(doviz==="TL"){
+      const az=azamiKom();
+      if(ortVadeGun()>0) setKullKomisyon(fmtN(az,4).replace(",","."));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[JSON.stringify(cekler.map(c=>[c.tutar,c.vade])),doviz]);
+
+  const r=(()=>{
+    let rY=parseFloat(oran)||0;
+    if(tip==="aylik") rY=rY*12;
+    if(rY<=0) return null;
+    const bsmvOran=(doviz==="TL"||!ypBsmvMuaf)?s.ticariBSMV:0;
+
+    // ── BAKİYE/AMORTİSMAN YÖNTEMİ (2026-07-12, banka sistemiyle uyumlu) ──
+    // Kullandırım = çek ödemelerinin krediyi TAM kapattığı anapara. Kâr payı
+    // her dönemde KALAN BAKİYE üzerinden işler (360 gün, basit tahakkuk);
+    // ödeme önce dönem kâr payını kapatır, kalanı anaparadan düşer. Bu,
+    // Taksitli Ticari'nin amortisman mantığının düzensiz-akışlı halidir.
+    // Kapalı form: her çekin katkısı, vadesine kadarki dönem faktörlerinin
+    // ZİNCİRLİ çarpımıyla iskontosudur: PV_i = T_i ÷ ∏(1+r×Δgün/36000).
+    // (Önceki akış-bazlı senet iskontosu PV=T÷(1+r×gün/36000) kaldırıldı.)
+    const gecerli=cekler.map((c,idx)=>{
+      const T=parseFloat(c.tutar)||0, {g,kaydi,efTarih}=cekGun(c.vade);
+      return (T>0&&g>0)?{idx,T,g,kaydi,efTarih}:null;
+    }).filter(Boolean) as any[];
+    if(gecerli.length===0) return null;
+
+    // Gün → zincirli iskonto faktörü (sıralı benzersiz vade günleri üzerinden)
+    const gunler=[...new Set(gecerli.map(x=>x.g))].sort((a:any,b:any)=>a-b);
+    const faktorMap:Record<number,number>={};
+    let f=1, oncekiG=0;
+    gunler.forEach((g:any)=>{ f*=(1+rY*(g-oncekiG)/36000); faktorMap[g]=f; oncekiG=g; });
+
+    let toplamT=0,toplamKP=0,toplamPV=0,agirlikGun=0;
+    const satirlar=cekler.map((c,idx)=>{
+      const kayit=gecerli.find(x=>x.idx===idx);
+      if(!kayit) return null;
+      const {T,g,kaydi,efTarih}=kayit;
+      const pv=T/faktorMap[g], kp=T-pv;
+      toplamT+=T; toplamKP+=kp; toplamPV+=pv; agirlikGun+=g*T;
+      return {T,g,kp,pv,kaydi,efTarih};
+    });
+    if(toplamT<=0) return null;
+
+    // Ödeme planı (amortisman görünümü): dönem kâr payı bakiye üzerinden
+    const AYLAR_P=["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"];
+    const siraliAkis=[...gecerli].sort((a:any,b:any)=>a.g-b.g);
+    let bakiye=toplamPV, pg=0;
+    const plan=siraliAkis.map((x:any,i:number)=>{
+      const donemKP=bakiye*rY*(x.g-pg)/36000;
+      const anaKapama=x.T-donemKP;
+      bakiye=Math.max(0, bakiye+donemKP-x.T);
+      if(bakiye<0.01) bakiye=0; // kuruş yuvarlama artığı
+      pg=x.g;
+      return {ay:i+1,
+        tarih:`${x.efTarih.getDate()} ${AYLAR_P[x.efTarih.getMonth()]} ${x.efTarih.getFullYear()}`,
+        toplam:x.T, taksit:x.T, karPayi:donemKP, anapara:anaKapama, bakiye};
+    });
+    const bsmvTutar=toplamKP*((bsmvOran||0)/100);
+    let komOran=parseFloat(kullKomisyon.replace(",","."))||0;
+    const az=azamiKom();
+    const asim=doviz==="TL"&&komOran>az;
+    if(doviz==="TL") komOran=Math.min(komOran,az);
+    const komTutar=toplamPV*(komOran/100);
+    const net=toplamPV-bsmvTutar-komTutar;
+    // Efektif Yıllık Maliyet (BSMV + komisyon dahil): müşterinin eline geçen
+    // NET tutara karşılık ödediği çek akışlarının günlük IRR'ı, yıllık bileşik.
+    // Bisection: Σ T_i/(1+i)^g_i = net → efektif = (1+i)^365 − 1
+    let efektifYillik=0;
+    if(net>0){
+      let lo=1e-9, hi=0.02;
+      for(let k=0;k<120;k++){
+        const mid=(lo+hi)/2;
+        let pvT=0; gecerli.forEach((x:any)=>{ pvT+=x.T/Math.pow(1+mid,x.g); });
+        if(pvT>net) lo=mid; else hi=mid;
+      }
+      efektifYillik=Math.round((Math.pow(1+(lo+hi)/2,365)-1)*10000)/100;
+    }
+    return {satirlar,plan,toplamT,toplamKP,bsmvOran,bsmvTutar,komOran,komTutar,
+            net,toplamPV,efektifYillik,
+            ortVade:agirlikGun/toplamT,asim,azami:az};
+  })();
+
+  const cekGuncelle=(i,alan,v)=>setCekler(p=>p.map((c,j)=>j===i?{...c,[alan]:v}:c));
+  const cekSil=(i)=>setCekler(p=>p.filter((_,j)=>j!==i));
+  const cekEkle=()=>setCekler(p=>[...p,{tutar:"",vade:isoArti(30)}]);
+
+  const raporSatirlari = r?[
+    {label:"Çek Adedi", value:String(cekler.length)},
+    {label:"Toplam Çek Tutarı", value:fmtDoviz(r.toplamT)},
+    {label:"Ağırlıklı Ortalama Vade", value:`${Math.round(r.ortVade)} Gün`},
+    {label:`Kâr Payı Oranı (${tip==="yillik"?"Yıllık":"Aylık"})`, value:`%${oran}`},
+    ...r.satirlar.map((sr,i)=>sr?{label:`Çek ${i+1} — ${sr.g} gün${sr.kaydi?" (hafta sonu kaydırıldı)":""}`, value:`${fmtDoviz(sr.T)} → ${fmtDoviz(sr.pv)}`}:null).filter(Boolean),
+    {label:"Toplam Kâr Payı", value:fmtDoviz(r.toplamKP)},
+    {label:r.bsmvOran>0?`BSMV (%${fmtN(r.bsmvOran,0)})`:"BSMV (muaf)", value:r.bsmvOran>0?`- ${fmtDoviz(r.bsmvTutar)}`:fmtDoviz(0)},
+    {label:`Kullandırım Komisyonu (%${fmtN(r.komOran,4)})`, value:`- ${fmtDoviz(r.komTutar)}`},
+    {label:"Efektif Yıllık Maliyet", value:`%${fmtN(r.efektifYillik,2)}`},
+    {label:"Kullandırılabilir Tutar", value:fmtDoviz(r.net), big:true},
+  ]:[];
+
+  // Ödeme planı r içinde amortisman mantığıyla hazır üretiliyor (r.plan):
+  // dönem kâr payı kalan bakiye üzerinden, ödeme önce kâr payını kapatır.
+  const cekPlan = r ? r.plan : [];
+
+  return(
+    <div style={{padding:"0 16px 32px"}}>
+      {showPlan&&r&&<OdemePlani
+        plan={cekPlan}
+        bsmvOran={r.bsmvOran} kkdfOran={0}
+        onClose={()=>setShowPlan(false)}
+        showKomisyon={false}
+        basitOran={(parseFloat(oran)||0)*(tip==="aylik"?12:1)}
+        efektifOran={r.efektifYillik}
+        anaparaTutar={r.toplamPV}/>}
+      <Card>
+        <Seg options={[{v:"TL",l:"₺ TL"},{v:"USD",l:"$ USD"},{v:"EUR",l:"€ EUR"}]} value={doviz} onChange={setDoviz}/>
+        <Seg options={[{v:"yillik",l:"Yıllık %"},{v:"aylik",l:"Aylık %"}]} value={tip} onChange={setTip}/>
+        <Field label={`Kâr Payı Oranı (${tip==="yillik"?"Yıllık":"Aylık"})`} value={oran} onChange={setOran} suffix="%"/>
+        {/* Kullandırım Komisyonu (Madde 9/2 — TL'de ağırlıklı ortalama vadeye oransal tavan) */}
+        <div style={{marginBottom:4}}>
+          <label style={{display:"block",fontSize:12,fontWeight:600,color:C.sub,marginBottom:4}}>Kullandırım Komisyonu</label>
+          <div style={{position:"relative"}}>
+            <input type="number" inputMode="decimal" value={kullKomisyon}
+              onChange={e=>{
+                const v=parseFloat(e.target.value)||0;
+                const az=azamiKom();
+                if(doviz==="TL"&&v>az){ setKullKomisyon(fmtN(az,4).replace(",",".")); setKomAsim(true); }
+                else { setKullKomisyon(e.target.value); setKomAsim(false); }
+              }}
+              style={{width:"100%",boxSizing:"border-box",padding:"11px 40px 11px 13px",fontSize:15,fontWeight:600,fontFamily:"monospace",background:WA(0.06),border:`1.5px solid ${C.border}`,borderRadius:10,color:C.label,outline:"none",WebkitAppearance:"none"}}/>
+            <span style={{position:"absolute",right:11,top:"50%",transform:"translateY(-50%)",color:C.blue,fontWeight:700,fontSize:13}}>%</span>
+          </div>
+          <p style={{margin:"3px 0 0 2px",fontSize:11,color:C.sub}}>
+            {doviz==="TL"
+              ? `TL azami: %${fmtN(azamiKom(),4)}${ortVadeGun()>0&&ortVadeGun()<365?" (ağırlıklı vadeye oransal)":""} — aşağı revize edilebilir`
+              : "YP — Tavan yok, serbestçe belirlenebilir (Madde 9/2)"}
+          </p>
+          {komAsim&&<div style={{background:"rgba(248,113,113,0.12)",borderRadius:8,padding:"7px 10px",marginTop:4,border:`1px solid ${C.red}`}}>
+            <p style={{margin:0,fontSize:11,color:C.red,fontWeight:700}}>⛔ TL azami %{fmtN(azamiKom(),4)} uygulandı</p>
+          </div>}
+        </div>
+        {doviz!=="TL"&&(
+          <div onClick={()=>setYpBsmvMuaf(v=>!v)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"11px 12px",marginTop:10,borderRadius:10,background:ypBsmvMuaf?C.greenLight:WA(0.04),border:`1px solid ${ypBsmvMuaf?C.green:C.border}`,cursor:"pointer"}}>
+            <div>
+              <p style={{margin:0,fontSize:13,fontWeight:700,color:ypBsmvMuaf?C.green:C.label}}>BSMV Muafiyeti</p>
+              <p style={{margin:"2px 0 0",fontSize:11,color:C.sub}}>YP işlem BSMV'den muafsa açın — kapalıyken standart oranla hesaplanır</p>
+            </div>
+            <div style={{width:44,height:26,borderRadius:13,background:ypBsmvMuaf?C.green:WA(0.15),position:"relative",transition:"background 0.2s",flexShrink:0}}>
+              <div style={{position:"absolute",top:3,left:ypBsmvMuaf?21:3,width:20,height:20,borderRadius:10,background:"#fff",transition:"left 0.2s"}}/>
+            </div>
+          </div>
+        )}
+      </Card>
+
+      <Card>
+        <label style={{display:"block",fontSize:12,fontWeight:600,color:C.sub,marginBottom:8}}>
+          Çekler <span style={{color:C.blue,fontWeight:800}}>({cekler.length} adet)</span>
+        </label>
+        {cekler.length===0&&(
+          <p style={{textAlign:"center",padding:"14px 8px",fontSize:12,color:C.sub}}>Henüz çek eklenmedi — "＋ Çek Ekle" ile başlayın</p>
+        )}
+        {cekler.map((c,i)=>{
+          const bilgi=cekGun(c.vade);
+          const T=parseFloat(c.tutar)||0;
+          const pv=r?.satirlar?.[i]?.pv ?? null; // zincirli faktörle (bakiye yöntemi)
+          return(
+            <div key={i} style={{background:WA(0.04),border:`1px solid ${WA(0.08)}`,borderRadius:12,padding:"10px 10px 8px",marginBottom:8}}>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <span style={{flexShrink:0,width:24,height:24,borderRadius:12,background:C.blueLight,color:C.blue,fontSize:11,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center"}}>{i+1}</span>
+                <input type="text" inputMode="decimal" placeholder="Tutar" value={c.tutar?formatWithDots(String(c.tutar)):""}
+                  onChange={e=>{const f=formatWithDots(e.target.value.replace(/[^0-9,]/g,""));cekGuncelle(i,"tutar",parseVal(f));}}
+                  style={{flex:1,minWidth:0,background:WA(0.06),border:`1.5px solid ${C.border}`,borderRadius:9,color:C.label,fontFamily:"monospace",fontSize:14,fontWeight:600,padding:"9px 10px",outline:"none",WebkitAppearance:"none"}}/>
+                <input type="date" value={c.vade}
+                  onChange={e=>cekGuncelle(i,"vade",e.target.value)}
+                  style={{flexShrink:0,width:132,background:WA(0.06),border:`1.5px solid ${C.border}`,borderRadius:9,color:C.label,fontFamily:"monospace",fontSize:13,fontWeight:600,padding:"9px 8px",outline:"none",WebkitAppearance:"none",colorScheme:TEMA==="acik"?"light":"dark"} as any}/>
+                <button onClick={()=>cekSil(i)} style={{flexShrink:0,width:26,height:26,borderRadius:13,border:"none",background:"rgba(248,113,113,0.14)",color:C.red,fontSize:13,fontWeight:800,cursor:"pointer"}}>✕</button>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginTop:7,padding:"0 2px 0 32px",fontSize:10.5,color:C.sub,flexWrap:"wrap"}}>
+                {T>0&&bilgi.g>0?(
+                  <>
+                    <span><span style={{background:C.blueLight,color:C.blue,borderRadius:6,padding:"1px 7px",fontWeight:800,fontSize:10}}>{bilgi.g} gün</span></span>
+                    <span>{pv!=null?<>Kullandırım: <b style={{color:C.soft,fontFamily:"monospace"}}>{fmtDoviz(pv)}</b></>:"Oran girin"}</span>
+                    {bilgi.kaydi&&<span style={{display:"block",width:"100%",marginTop:4,color:(TEMA==="acik"?"#B07A1E":"#F5C26B"),fontSize:10,fontWeight:700}}>📅 Vade hafta sonu → {trTarih(bilgi.efTarih)} gününe kaydırıldı</span>}
+                  </>
+                ):(
+                  <span style={{color:C.red}}>Tutar ve ileri tarihli vade girin</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+        <button onClick={cekEkle} style={{width:"100%",padding:11,borderRadius:12,border:"1.5px dashed rgba(91,155,216,0.55)",background:"rgba(91,155,216,0.08)",color:C.blue,fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"inherit",marginTop:2}}>＋ Çek Ekle</button>
+        <p style={{margin:"8px 2px 0",fontSize:11,color:C.sub,lineHeight:1.5}}>📅 Hafta sonuna denk gelen vadeler otomatik olarak bir sonraki iş gününe kaydırılır ve gün sayısı kaydırılmış tarihe göre hesaplanır.</p>
+      </Card>
+
+      {r&&(
+        <Card>
+          <p style={{margin:"0 0 6px",fontSize:11,fontWeight:800,letterSpacing:1.2,color:C.sub}}>SONUÇLAR</p>
+          <RRow label="Toplam Çek Tutarı" value={fmtDoviz(r.toplamT)}/>
+          <RRow label="Ağırlıklı Ortalama Vade" value={`${Math.round(r.ortVade)} Gün`} sub/>
+          <RRow label="Toplam Kâr Payı" value={fmtDoviz(r.toplamKP)}/>
+          <RRow label={r.bsmvOran>0?`BSMV (%${fmtN(r.bsmvOran,0)})`:"BSMV (muaf)"} value={r.bsmvOran>0?`- ${fmtDoviz(r.bsmvTutar)}`:fmtDoviz(0)} accent={r.bsmvOran>0?C.red:undefined} sub/>
+          <RRow label={`Kullandırım Komisyonu (%${fmtN(r.komOran,4)})`} value={`- ${fmtDoviz(r.komTutar)}`} accent={C.red} sub/>
+          <RRow label="Efektif Yıllık Maliyet" value={`%${fmtN(r.efektifYillik,2)}`} accent={C.green} sub/>
+          <RRow label="Kullandırılabilir Tutar" value={fmtDoviz(r.net)} accent={C.blue} big/>
+          <button onClick={()=>setShowPlan(true)} style={{width:"100%",marginTop:12,padding:"12px",borderRadius:12,border:`1.5px solid ${C.blue}`,background:C.blueLight,color:C.blue,fontWeight:700,fontSize:14,cursor:"pointer"}}>📋 Ödeme Planı</button>
+          <button onClick={()=>{if(onGecmis)onGecmis({modul:"Çek Arkası Finansman",tutar:fmtDoviz(r.toplamT),vade:`${Math.round(r.ortVade)} Gün (ort.)`,oran:`%${oran}`,sonuc:fmtDoviz(r.net),aylikTaksit:"-",plan:cekPlan,satirlar:raporSatirlari,bsmvOran:r.bsmvOran,kkdfOran:0});}} style={{width:"100%",marginTop:12,padding:"12px",borderRadius:12,border:`1.5px solid ${C.blue}`,background:C.blueLight,color:C.blue,fontWeight:700,fontSize:14,cursor:"pointer"}}>🕐 Geçmişe Kaydet</button>
+          <RaporButon baslik={`Çek Arkası Finansman Analizi (${doviz})`} plan={cekPlan} satirlar={raporSatirlari} bsmvOran={r.bsmvOran} kkdfOran={0}/>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 function SpotKredi({s,onGecmis}){
   const [doviz,setDoviz]=useState("TL");
   const [ypBsmvMuaf,setYpBsmvMuaf]=useState(false); // YP işlemde BSMV muafiyeti (yalnızca YP seçiliyken görünür)
@@ -5552,7 +5834,8 @@ function Sozluk(){
           </div>
         ):filtre.map((d,i)=>(
           <div key={i} onClick={()=>setAcik(acik===i?null:i)} style={{
-            background:"#1C2A38",borderRadius:14,padding:"13px 15px",marginBottom:8,
+            background:(TEMA==="acik"?"#FFFFFF":"#1C2A38"),borderRadius:14,padding:"13px 15px",marginBottom:8,
+            boxShadow:(TEMA==="acik"?"0 1px 5px rgba(22,34,46,0.08)":"none"),
             borderLeft:`3px solid ${katRenk(d.kategori)}`,cursor:"pointer",
             transition:"background 0.15s",
           }}>
@@ -5567,7 +5850,7 @@ function Sozluk(){
               <span style={{color:"#475569",fontSize:14,marginLeft:8,flexShrink:0}}>{acik===i?"▲":"▼"}</span>
             </div>
             {acik===i&&(
-              <div style={{marginTop:10,paddingTop:10,borderTop:"1px solid #2A3A4A"}}>
+              <div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
                 <p style={{margin:"0 0 8px",fontSize:12,color:(TEMA==="acik"?"#4A6178":"#94A3B8"),lineHeight:1.6}}>{d.tanim}</p>
                 {d.ar&&<p style={{margin:0,fontSize:13,color:"#64748B",textAlign:"right",fontFamily:"serif",direction:"rtl"}}>{d.ar}</p>}
               </div>
@@ -7474,7 +7757,7 @@ function VadeTakibi(){
   return(
     <div style={{paddingBottom:32,background:C.bg,minHeight:"100dvh"}}>
       {/* Header */}
-      <div style={{background:(TEMA==="acik"?"linear-gradient(135deg,#1F8A55 0%,#27A868 100%)":"linear-gradient(135deg,#1A3A2A 0%,#2A5A3A 100%)"),padding:"16px 16px 14px"}}>
+      <div style={{background:(TEMA==="acik"?"linear-gradient(135deg,#33335C 0%,#2E4A8E 100%)":"linear-gradient(135deg,#1A1A2E 0%,#16213E 100%)"),padding:"16px 16px 14px"}}>
         <p style={{margin:"0 0 2px",fontSize:11,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:"0.07em"}}>{TR("Katılım Plus")}</p>
         <h2 style={{margin:0,fontSize:18,fontWeight:800,color:"#fff"}}>Vade Takip & Hatırlatma Ajandam</h2>
         <p style={{margin:"4px 0 0",fontSize:11,color:"rgba(255,255,255,0.55)"}}>
@@ -7513,8 +7796,8 @@ function VadeTakibi(){
           {([["liste","📋 Kayıtlar"],["ekle","➕ Yeni Ekle"]] as const).map(([s,l])=>(
             <button key={s} onClick={()=>setAktifSekme(s)} style={{
               flex:1,padding:"9px",borderRadius:9,border:"none",
-              background:aktifSekme===s?"#2A5A3A":"transparent",
-              color:aktifSekme===s?"#fff":"#9AAFC2",
+              background:aktifSekme===s?C.blue:"transparent",
+              color:aktifSekme===s?"#fff":C.sub,
               fontWeight:aktifSekme===s?700:600,fontSize:12,cursor:"pointer",
             }}>{l}</button>
           ))}
@@ -7535,10 +7818,10 @@ function VadeTakibi(){
           </div>
 
           {filtreli.length===0?(
-            <div style={{textAlign:"center",padding:"40px 20px",color:"#9AAFC2"}}>
+            <div style={{textAlign:"center",padding:"40px 20px",color:C.sub}}>
               <p style={{fontSize:32,margin:"0 0 8px"}}>📭</p>
               <p style={{fontSize:13,fontWeight:600}}>Henüz kayıt yok</p>
-              <button onClick={()=>setAktifSekme("ekle")} style={{marginTop:10,padding:"8px 20px",borderRadius:20,border:"none",background:"#2A5A3A",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>➕ İlk Kaydı Ekle</button>
+              <button onClick={()=>setAktifSekme("ekle")} style={{marginTop:10,padding:"8px 20px",borderRadius:20,border:"none",background:C.green,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>➕ İlk Kaydı Ekle</button>
             </div>
           ):(
             filtreli.map(k=>{
@@ -7588,7 +7871,7 @@ function VadeTakibi(){
                       <button onClick={e=>{e.stopPropagation();kayitSil(k.id);}} style={{
                         width:"100%",padding:"8px",borderRadius:8,
                         border:"1px solid rgba(184,50,50,0.4)",background:"rgba(184,50,50,0.15)",
-                        color:"#FF6B6B",fontSize:12,fontWeight:700,cursor:"pointer",
+                        color:C.red,fontSize:12,fontWeight:700,cursor:"pointer",
                       }}>🗑️ Kaydı Sil</button>
                     </div>
                   )}
@@ -7609,8 +7892,8 @@ function VadeTakibi(){
               {([["katilim","🏦","Katılım"],["kredi","💳","Kredi"],["not","📌","Not"]] as const).map(([v,ic,l])=>(
                 <button key={v} onClick={()=>setForm(f=>({...f,tip:v}))} style={{
                   flex:1,padding:"8px 4px",borderRadius:10,
-                  border:`1px solid ${form.tip===v?"#2A5A3A":WA(0.08)}`,
-                  background:form.tip===v?"rgba(42,90,58,0.3)":"transparent",
+                  border:`1px solid ${form.tip===v?C.green:WA(0.08)}`,
+                  background:form.tip===v?C.greenLight:"transparent",
                   color:form.tip===v?C.green:WA(0.45),
                   fontSize:10,fontWeight:700,cursor:"pointer",textAlign:"center",
                 }}><div style={{fontSize:18,marginBottom:2}}>{ic}</div>{l}</button>
@@ -7650,7 +7933,7 @@ function VadeTakibi(){
             {/* Vade */}
             <p style={{margin:"0 0 5px",fontSize:10,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase"}}>{TR(form.tip==="not"?"Tarih *":"Vade Tarihi *")}</p>
             <input value={form.vade} onChange={e=>setForm(p=>({...p,vade:e.target.value}))}
-              type="date" lang="tr" style={{...INP,marginBottom:12,colorScheme:"dark"}}/>
+              type="date" lang="tr" style={{...INP,marginBottom:12,colorScheme:(TEMA==="acik"?"light":"dark")} as any}/>
 
             {/* Uyarı günü */}
             <p style={{margin:"0 0 6px",fontSize:10,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase"}}>{TR("Kaç gün önce uyarı?")}</p>
@@ -7658,8 +7941,8 @@ function VadeTakibi(){
               {[0,1,3,5,7,14].map(g=>(
                 <button key={g} onClick={()=>setForm(p=>({...p,hatirlatmaGun:g}))} style={{
                   padding:"6px 12px",borderRadius:20,
-                  border:`1px solid ${form.hatirlatmaGun===g?"#2A5A3A":WA(0.08)}`,
-                  background:form.hatirlatmaGun===g?"rgba(42,90,58,0.3)":"transparent",
+                  border:`1px solid ${form.hatirlatmaGun===g?C.green:WA(0.08)}`,
+                  background:form.hatirlatmaGun===g?C.greenLight:"transparent",
                   color:form.hatirlatmaGun===g?C.green:WA(0.4),
                   fontSize:11,fontWeight:form.hatirlatmaGun===g?700:500,cursor:"pointer",
                 }}>{g===0?"Sadece vadede":`${g} gün`}</button>
@@ -7668,7 +7951,7 @@ function VadeTakibi(){
 
             <button onClick={formKaydet} disabled={!form.baslik||!form.vade} style={{
               width:"100%",padding:"12px",borderRadius:10,border:"none",
-              background:!form.baslik||!form.vade?WA(0.08):"#2A5A3A",
+              background:!form.baslik||!form.vade?WA(0.08):C.green,
               color:!form.baslik||!form.vade?WA(0.3):"#fff",
               fontSize:13,fontWeight:700,cursor:!form.baslik||!form.vade?"not-allowed":"pointer",
             }}>💾 Kaydet</button>
@@ -9852,6 +10135,7 @@ const MENU = {
   spotFinansman:{title:"Spot Finansman Hesaplama",back:"hesaplaMenu"},
   taksitliTicari:{title:"Taksitli Ticari Finansman Hesaplama",back:"hesaplaMenu"},
   leasing:{title:"Finansal Kiralama Hesaplama",back:"hesaplaMenu"},
+  cekArkasiFinansman:{title:"Çek Arkası Finansman Hesaplama",back:"hesaplaMenu"},
   posHesaplama:{title:"POS Komisyon Hesaplama",back:"hesaplaMenu"},
   tmKomisyon:{title:"Teminat Mektubu Komisyon Hesaplama",back:"hesaplaMenu"},
   akreditifKomisyon:{title:"Akreditif Komisyon Hesaplama",back:"hesaplaMenu"},
@@ -9983,6 +10267,7 @@ const MENU_ARAMA_LIST=[
   {key:"spotFinansman",      label:"Spot Finansman Hesaplama",             icon:"⚡", grup:"Tüzel Finansman"},
   {key:"taksitliTicari",     label:"Taksitli Ticari Finansman Hesaplama",  icon:"🏗️", grup:"Tüzel Finansman"},
   {key:"leasing",            label:"Finansal Kiralama Hesaplama",          icon:"🔑", grup:"Tüzel Finansman"},
+  {key:"cekArkasiFinansman", label:"Çek Arkası Finansman Hesaplama",       icon:"🧾", grup:"Tüzel Finansman", alt:["çek","iskonto","kırdırma","çek arkası","bugünkü değer"]},
   {key:"posHesaplama",       label:"POS Komisyon Hesaplama",               icon:"💳", grup:"Tüzel Finansman"},
   {key:"tmKomisyon",         label:"Teminat Mektubu Komisyon Hesaplama",                icon:"📄", grup:"Tüzel Finansman"},
   {key:"akreditifKomisyon",  label:"Akreditif Komisyon Hesaplama",         icon:"🌐", grup:"Tüzel Finansman"},
@@ -10038,6 +10323,7 @@ const HESAPLA_ARAC_LISTESI = [
   {key:"spotFinansman",      icon:"⚡", label:"Spot Finansman Hesaplama",             kat:"ticari"},
   {key:"taksitliTicari",     icon:"🏗️", label:"Taksitli Ticari Finansman Hesaplama",  kat:"ticari"},
   {key:"esnekOdemePlanlari", icon:"📋", label:"Esnek Ödeme Planları Hesaplama",       kat:"ticari"},
+  {key:"cekArkasiFinansman", icon:"🧾", label:"Çek Arkası Finansman Hesaplama",       kat:"ticari"},
   {key:"leasing",            icon:"🚙", label:"Finansal Kiralama Hesaplama",          kat:"ticari"},
   {key:"posHesaplama",       icon:"💳", label:"POS Komisyon Hesaplama",               kat:"ticari"},
   {key:"tmKomisyon",         icon:"📄", label:"Teminat Mektubu Komisyon Hesaplama",                kat:"ticari"},
@@ -14291,6 +14577,7 @@ function App(){
         {screen==="taksitenKredi"&&<TaksitenKredi s={settings}/>}
         {screen==="spotFinansman"&&<SpotKredi s={settings} onGecmis={k=>gecmisKaydet(gecmis,setGecmis,k)}/>}
         {screen==="taksitliTicari"&&<TaksitliTicariFinansman s={settings}/>}
+        {screen==="cekArkasiFinansman"&&<CekArkasiFinansman s={settings} onGecmis={k=>gecmisKaydet(gecmis,setGecmis,k)}/>}
         {screen==="katkiPayi"&&<KatkiPayiHesaplama/>}
         {screen==="leasing"&&<Leasing s={settings} onGecmis={k=>gecmisKaydet(gecmis,setGecmis,k)}/>}
         {screen==="posHesaplama"&&<PosHesaplama s={settings}/>}
