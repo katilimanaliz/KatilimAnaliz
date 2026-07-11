@@ -296,6 +296,9 @@ const EN_SOZLUK: Record<string, string> = {
   "İyi akşamlar": "Good evening",
   "İyi geceler": "Good night",
   "Hoş geldin": "Welcome",
+  "Katılım Plus iOS uygulaması yayında": "Katılım Plus is now on the App Store",
+  "App Store'dan indirin, bildirimlerle takipte kalın.": "Download it and stay on top with price alerts.",
+  "İndir": "Get",
   "Bugün ne hesaplamak istersin?": "What would you like to calculate today?",
   "Menülerde ara…": "Search menus…",
   "Hesaplama ara…": "Search calculators…",
@@ -12762,6 +12765,10 @@ function App(){
   const [pendingHisseSecim,setPendingHisseSecim]=useState<string|null>(null);
   const [pendingFonSecim,setPendingFonSecim]=useState<string|null>(null);
   const [menuAramaQ,setMenuAramaQ]=useState("");
+  // App Store banner'ı (yalnızca web'de görünür) kullanıcı kapattıysa bir daha gösterilmez
+  const [appBannerKapali,setAppBannerKapali]=useState<boolean>(()=>{
+    try{ return localStorage.getItem("kp_appstore_banner")==="kapali"; }catch{ return false; }
+  });
   const [menuAramaOdakli,setMenuAramaOdakli]=useState(false);
   const [hesaplaAramaQ,setHesaplaAramaQ]=useState("");
   const [hesaplaAramaOdakli,setHesaplaAramaOdakli]=useState(false);
@@ -13114,6 +13121,33 @@ function App(){
               );
             })()}
             <div style={{fontSize:13.5,color:(TEMA==="acik"?"#2E4256":"rgba(255,255,255,0.65)"),marginBottom:16}}>{CV("Bugün ne hesaplamak istersin?")}</div>
+
+            {/* ── APP STORE BANNER — yalnızca web'de (masaüstü + mobil tarayıcı), native'de gizli ── */}
+            {(()=>{
+              const nativeMi=(window as any).Capacitor?.isNativePlatform?.()??false;
+              if(nativeMi||appBannerKapali)return null;
+              return (
+                <div style={{
+                  display:"flex",alignItems:"center",gap:10,padding:"10px 12px",marginBottom:14,borderRadius:12,
+                  background:TEMA==="acik"?"linear-gradient(100deg,#E9F1FA,#DCE9F6)":"linear-gradient(100deg,rgba(91,155,216,0.16),rgba(91,155,216,0.05))",
+                  border:`1px solid ${TEMA==="acik"?"rgba(46,109,168,0.28)":"rgba(91,155,216,0.32)"}`,
+                }}>
+                  <span style={{fontSize:22,flexShrink:0}}>📲</span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <p style={{margin:0,fontSize:12.5,fontWeight:800,color:C.label,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{CV("Katılım Plus iOS uygulaması yayında")}</p>
+                    <p style={{margin:"1px 0 0",fontSize:11,color:C.sub,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{CV("App Store'dan indirin, bildirimlerle takipte kalın.")}</p>
+                  </div>
+                  <a href="https://apps.apple.com/app/id6788268835" target="_blank" rel="noopener noreferrer" style={{
+                    flexShrink:0,padding:"8px 14px",borderRadius:9,background:C.blue,color:"#fff",
+                    fontSize:11.5,fontWeight:800,textDecoration:"none",lineHeight:1,
+                  }}>{CV("İndir")}</a>
+                  <button onClick={()=>{setAppBannerKapali(true);try{localStorage.setItem("kp_appstore_banner","kapali");}catch{}}} style={{
+                    flexShrink:0,width:26,height:26,borderRadius:13,border:"none",background:WA(0.08),
+                    color:C.sub,cursor:"pointer",fontSize:12,fontWeight:700,lineHeight:1,padding:0,
+                  }}>✕</button>
+                </div>
+              );
+            })()}
 
             {/* ── ANA MENÜ ARAMA ── */}
             {(()=>{
