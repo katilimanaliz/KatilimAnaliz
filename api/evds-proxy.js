@@ -1,5 +1,6 @@
-// api/evds-proxy.js - FINAL v7
+// api/evds-proxy.js - FINAL v10
 // Haftalık kredi oranları + Aylık stok + Enflasyon + TLREF (oran, endeksten türetilmiş) + AOFM
+// + Dış Ticaret & Ödemeler Dengesi (v10)
 //
 // TLREF DÜZELTMESİ (2026-07): TP.BISTTLREF.KAPANIS ham değeri bir ORAN (%) değil,
 // bir ENDEKS seviyesidir (örn. 6223.01) — TLREF'in her gün bileşik olarak
@@ -19,6 +20,19 @@
 // hesap zaten doğruydu (tufeDizi.length-13, ki bu length-1'den 12 geridir);
 // sadece seri döngüsündeki indeks kayması düzeltildi — artık ikisi birebir
 // aynı ayı, aynı yöntemle hesaplayıp aynı sonucu veriyor.
+//
+// DIŞ TİCARET & ÖDEMELER DENGESİ (2026-07, v10): Seri kodları EVDS katalog
+// keşfiyle (?katalog=1&filtre=DIS TICARET / ODEMELER DENGESI / EFEKTIF DOVIZ)
+// bulunup doğrulandı:
+//   TP.IHRACATBEC.9999    İhracat toplamı (Genel Ticaret Sistemi, aylık, USD)
+//   TP.ITHALATBEC.9999    İthalat toplamı (Genel Ticaret Sistemi, aylık, USD)
+//   TP.ODANA6.Q01         Cari İşlemler Hesabı (Analitik Sunum, aylık, USD)
+//   TP.HARICCARIACIK.K10  Altın ve Enerji Hariç Cari İşlemler Hesabı (aylık)
+//   TP.RK.T1.Y            TÜFE Bazlı Reel Efektif Döviz Kuru (2025=100, endeks)
+// Türetilenler: Dış Ticaret Dengesi (ihracat-ithalat), Karşılama Oranı
+// (ihracat/ithalat*100) ve ihracat/ithalat/denge/cari için 12 AYLIK KÜMÜLATİF
+// (yıllıklandırılmış) toplamlar — takvim yılına kilitli olmadığından her ay
+// güncellenir; ekstra EVDS isteği gerektirmez.
 
 const BASE = "https://evds3.tcmb.gov.tr/igmevdsms-dis";
 
@@ -57,8 +71,11 @@ const redis = new Redis({
 // bu yeni alanları içermeden 6 saat daha döner (bkz. bir önceki v6→v7 dersi).
 // NOT (2026-07-09c): v8 → v9 sürüm değişikliği — FED Üst/Alt Bant (DFEDTARU/
 // DFEDTARL) eklendiği için yapıldı.
-const KV_ANLIK_KEY = "evds:anlik:v9";
-const KV_TARIHSEL_PREFIX = "evds:tarihsel:v9:";
+// NOT (2026-07-11): v9 → v10 sürüm değişikliği — Dış Ticaret & Ödemeler
+// Dengesi serileri (DT_* / CARI_* / REK_*) eklendiği için yapıldı. Aynı ders:
+// versiyon artırılmazsa eski önbellek yeni alanları 6 saat boyunca göstermez.
+const KV_ANLIK_KEY = "evds:anlik:v10";
+const KV_TARIHSEL_PREFIX = "evds:tarihsel:v10:";
 
 // Vercel'in varsayılan fonksiyon süresi (Hobby planda genelde 10sn) artık 8 dış
 // isteğe (5 EVDS + 3 FRED) yetmiyor — bu yüzden ERR_CONNECTION_CLOSED alınıyordu
@@ -109,6 +126,15 @@ const POLITIKA = [
 
 const GUNLUK = [
   "TP.BISTTLREF.KAPANIS",
+];
+
+// Dış Ticaret & Ödemeler Dengesi (v10) — kodlar katalog keşfiyle doğrulandı.
+const DISTICARET = [
+  "TP.IHRACATBEC.9999",
+  "TP.ITHALATBEC.9999",
+  "TP.ODANA6.Q01",
+  "TP.HARICCARIACIK.K10",
+  "TP.RK.T1.Y",
 ];
 
 const FRED_API_URL = (seri, apiKey) =>
@@ -167,6 +193,54 @@ function tumDegerler(items, seri) {
     }
     return null;
   }).filter(Boolean);
+}
+
+// ── DIŞ TİCARET yardımcıları (v10) ─────────────────────────────────────────
+// BİRİM NORMALİZASYONU: EVDS bu serileri kaynağına göre "Bin USD" ya da
+// "Milyon USD" olarak verebiliyor; hangisi olduğu API yanıtında yazmıyor.
+// Seri bazında MEDYAN mutlak büyüklükten tespit edip her şeyi MİLYON USD'a
+// çeviriyoruz: medyan > 100.000 ise değerler Bin USD kabul edilir (aylık
+// hiçbir dış ticaret/cari kalemi 100 milyar USD'ı aşmadığından, milyon USD
+// cinsinden hiçbir aylık değer bu eşiği geçemez — güvenli ayrım noktası).
+function milyonUSDNormalize(dizi){
+  if(!dizi || dizi.length===0) return dizi||[];
+  const mutlak = dizi.map(n=>Math.abs(n.deger)).filter(v=>v>0).sort((a,b)=>a-b);
+  if(mutlak.length===0) return dizi;
+  const medyan = mutlak[Math.floor(mutlak.length/2)];
+  if(medyan > 100000) return dizi.map(n=>({tarih:n.tarih, deger:n.deger/1000}));
+  return dizi;
+}
+// 12 aylık kümülatif (hareketli) toplam — i. nokta, i dahil geriye doğru 12
+// aylık pencerenin toplamıdır. İlk 11 nokta (eksik pencere) atlanır.
+function kumulatif12Ay(dizi){
+  const sonuc=[];
+  for(let i=11;i<dizi.length;i++){
+    let toplam=0;
+    for(let j=i-11;j<=i;j++) toplam+=dizi[j].deger;
+    sonuc.push({tarih:dizi[i].tarih, deger:toplam});
+  }
+  return sonuc;
+}
+// İki aylık seriyi tarihe göre eşleştirip f(a,b) ile birleştirir (denge,
+// karşılama oranı gibi türetilmiş seriler için). Yalnızca iki seride de aynı
+// ay varsa nokta üretir — yayın gecikmeleri farklıysa uçtaki aylar atlanır.
+function seriBirlestir(a, b, f){
+  const map={};
+  for(const n of b) map[n.tarih]=n.deger;
+  const sonuc=[];
+  for(const n of a){
+    const v=map[n.tarih];
+    if(v===undefined) continue;
+    const r=f(n.deger, v);
+    if(r==null || !isFinite(r)) continue;
+    sonuc.push({tarih:n.tarih, deger:r});
+  }
+  return sonuc;
+}
+function sonNokta(dizi){
+  if(!dizi || dizi.length===0) return null;
+  const s=dizi[dizi.length-1];
+  return {deger:s.deger, tarih:s.tarih};
 }
 
 function tarihParseDDMMYYYY(s) {
@@ -391,13 +465,16 @@ export default async function handler(req,res){
   }
 
   try{
-    const [hafJson,ayJson,gunJson,enfJson,polJson,rezervJson]=await Promise.all([
+    const [hafJson,ayJson,gunJson,enfJson,polJson,rezervJson,dtJson]=await Promise.all([
       guvenliCek("haftalik", `${BASE}/series=${HAFTALIK.join("-")}&startDate=${onceki(60)}&endDate=${tarihStr(new Date())}&type=json&frequency=3`),
       guvenliCek("aylik",    `${BASE}/series=${AYLIK.join("-")}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
       guvenliCek("gunluk_tlref", `${BASE}/series=${GUNLUK.join("-")}&startDate=${onceki(30)}&endDate=${tarihStr(new Date())}&type=json&frequency=1`),
       guvenliCek("enflasyon", `${BASE}/series=${ENFLASYON.join("-")}&startDate=${onceki(730)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
       guvenliCek("politika_aofm", `${BASE}/series=${POLITIKA.join("-")}&startDate=${onceki(60)}&endDate=${tarihStr(new Date())}&type=json&frequency=1`),
       guvenliCek("rezerv", `${BASE}/series=${REZERV.join("-")}&startDate=${onceki(180)}&endDate=${tarihStr(new Date())}&type=json&frequency=3`),
+      // Dış ticaret (v10): 12 aylık kümülatif serinin 24 noktası için ~36 ay
+      // ham aylık veri gerekir → 1150 günlük pencere (~38 ay), tek istek.
+      guvenliCek("disticaret", `${BASE}/series=${DISTICARET.join("-")}&startDate=${onceki(1150)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
     ]);
 
     const [sofr,eur3m,us2y,us5y,us10y,fedFonlama,ecbMevduat,sofr3m,sofr6m,fedUst,fedAlt]=await Promise.all([
@@ -460,6 +537,54 @@ export default async function handler(req,res){
 
     sonuclar["TP.APIFON4_SERI"]=tumDegerler(polJson?.items||[], "TP.APIFON4").slice(-24);
     sonuclar["TP_AB_TOPLAM_SERI"]=tumDegerler(rezervJson?.items||[], "TP_AB_TOPLAM").slice(-24);
+
+    // ── DIŞ TİCARET & ÖDEMELER DENGESİ (v10) ──────────────────────────────
+    // Tüm parasal değerler milyonUSDNormalize ile MİLYON USD'a normalize
+    // edilir; UI tarafı "milyon$" birimiyle Milyar $ olarak biçimlendirir.
+    const dtItems = dtJson?.items||[];
+    const ihrDizi  = milyonUSDNormalize(tumDegerler(dtItems, "TP.IHRACATBEC.9999"));
+    const ithDizi  = milyonUSDNormalize(tumDegerler(dtItems, "TP.ITHALATBEC.9999"));
+    const cariDizi = milyonUSDNormalize(tumDegerler(dtItems, "TP.ODANA6.Q01"));
+    const cariAEDizi = milyonUSDNormalize(tumDegerler(dtItems, "TP.HARICCARIACIK.K10"));
+    const rekDizi  = tumDegerler(dtItems, "TP.RK.T1.Y"); // endeks, normalize edilmez
+    // Türetilmiş aylık seriler (tarih eşleştirmeli — yayın gecikmesi farkları
+    // uçtaki ayları güvenle atlar):
+    const dengeDizi     = seriBirlestir(ihrDizi, ithDizi, (ih,it)=>ih-it);
+    const karsilamaDizi = seriBirlestir(ihrDizi, ithDizi, (ih,it)=>it!==0?(ih/it*100):null);
+    // 12 aylık kümülatifler:
+    const ihr12  = kumulatif12Ay(ihrDizi);
+    const ith12  = kumulatif12Ay(ithDizi);
+    const denge12= kumulatif12Ay(dengeDizi);
+    const cari12 = kumulatif12Ay(cariDizi);
+    teshis.disticaret_hesap = {
+      ihracat_nokta: ihrDizi.length, ithalat_nokta: ithDizi.length,
+      cari_nokta: cariDizi.length, cariAE_nokta: cariAEDizi.length,
+      rek_nokta: rekDizi.length,
+      ihracat_son: sonNokta(ihrDizi), ithalat_son: sonNokta(ithDizi),
+      cari_son: sonNokta(cariDizi),
+    };
+    sonuclar["DT_IHRACAT"]=sonNokta(ihrDizi);
+    sonuclar["DT_IHRACAT_SERI"]=ihrDizi.slice(-24);
+    sonuclar["DT_IHRACAT_12AY"]=sonNokta(ihr12);
+    sonuclar["DT_IHRACAT_12AY_SERI"]=ihr12.slice(-24);
+    sonuclar["DT_ITHALAT"]=sonNokta(ithDizi);
+    sonuclar["DT_ITHALAT_SERI"]=ithDizi.slice(-24);
+    sonuclar["DT_ITHALAT_12AY"]=sonNokta(ith12);
+    sonuclar["DT_ITHALAT_12AY_SERI"]=ith12.slice(-24);
+    sonuclar["DT_DENGE"]=sonNokta(dengeDizi);
+    sonuclar["DT_DENGE_SERI"]=dengeDizi.slice(-24);
+    sonuclar["DT_DENGE_12AY"]=sonNokta(denge12);
+    sonuclar["DT_DENGE_12AY_SERI"]=denge12.slice(-24);
+    sonuclar["DT_KARSILAMA"]=sonNokta(karsilamaDizi);
+    sonuclar["DT_KARSILAMA_SERI"]=karsilamaDizi.slice(-24);
+    sonuclar["CARI_DENGE"]=sonNokta(cariDizi);
+    sonuclar["CARI_DENGE_SERI"]=cariDizi.slice(-24);
+    sonuclar["CARI_DENGE_12AY"]=sonNokta(cari12);
+    sonuclar["CARI_DENGE_12AY_SERI"]=cari12.slice(-24);
+    sonuclar["CARI_DENGE_AE"]=sonNokta(cariAEDizi);
+    sonuclar["CARI_DENGE_AE_SERI"]=cariAEDizi.slice(-24);
+    sonuclar["REK_TUFE"]=sonNokta(rekDizi);
+    sonuclar["REK_TUFE_SERI"]=rekDizi.slice(-24);
 
     const tlrefEndeksDizi=tumDegerler(gunJson?.items||[], "TP.BISTTLREF.KAPANIS");
     teshis.tlrefEndeksDizi_uzunluk = tlrefEndeksDizi.length;
