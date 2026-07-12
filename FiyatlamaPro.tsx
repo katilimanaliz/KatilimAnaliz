@@ -942,6 +942,19 @@ function KarPayiOranlari({nav}:{nav:any}){
     if(k==="ihtiyac12") return {grup:"💰 "+CV("İhtiyaç"),vade:"12 "+CV("Ay")};
     return {grup:"💰 "+CV("İhtiyaç"),vade:"24 "+CV("Ay")};
   };
+  // Sabit (position:sticky) hücrelerde WA()'nın yarı-saydamlığı yetmez — altından
+  // kayan içerik hafifçe sızıp görünür (bkz. 2026-07-12 ekran görüntüsü raporu:
+  // "60 Ay" başlığı Banka sütununun altına girince okunur kalıyordu). WA(a)
+  // katmanını C.card üzerine alfa-karıştırıp TAM OPAK bir renge çeviriyoruz —
+  // sadece sabit hücrelerde kullanılır, görünüş WA(0.05) ile aynı kalır.
+  const waSolid=(a:number):string=>{
+    const hex=C.card.replace("#","");
+    const cr=parseInt(hex.substring(0,2),16), cg=parseInt(hex.substring(2,4),16), cb=parseInt(hex.substring(4,6),16);
+    const ov=TEMA==="acik"?[22,34,46]:[255,255,255];
+    const al=TEMA==="acik"?(a<0.55?Math.min(0.9,a*1.35):a):a;
+    const r=Math.round(ov[0]*al+cr*(1-al)), g=Math.round(ov[1]*al+cg*(1-al)), b=Math.round(ov[2]*al+cb*(1-al));
+    return `rgb(${r},${g},${b})`;
+  };
 
   const finTarihMetni=(iso?:string)=>{
     if(!iso) return null;
@@ -988,7 +1001,7 @@ function KarPayiOranlari({nav}:{nav:any}){
             <table style={{borderCollapse:"collapse",width:"max-content",minWidth:"100%"}}>
               <thead>
                 <tr>
-                  <th style={{position:"sticky",left:0,zIndex:2,background:WA(0.05),textAlign:"left",fontSize:9,fontWeight:800,letterSpacing:0.3,color:C.sub,padding:"10px 10px",borderBottom:`1px solid ${C.border}`,boxShadow:"2px 0 4px rgba(0,0,0,0.15)"}}>{CV("Banka")}</th>
+                  <th style={{position:"sticky",left:0,zIndex:2,background:waSolid(0.05),textAlign:"left",fontSize:9,fontWeight:800,letterSpacing:0.3,color:C.sub,padding:"10px 10px",borderBottom:`1px solid ${C.border}`,boxShadow:"2px 0 4px rgba(0,0,0,0.15)"}}>{CV("Banka")}</th>
                   {FIN_KOLONLAR.map(k=>{
                     const {grup,vade}=kolonBaslik(k);
                     const aktif=siralamaKolon===k;
