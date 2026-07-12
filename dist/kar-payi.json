@@ -83,7 +83,7 @@
     "guncelleme": {
       "konut": "2026-07-12",
       "tasit": "2026-07-12",
-      "ihtiyac": "2026-07-09"
+      "ihtiyac": "2026-07-12"
     },
     "bankalar": [
       {
@@ -93,7 +93,7 @@
         "tasit12": 3.34,
         "tasit24": 3.24,
         "ihtiyac12": 3.85,
-        "ihtiyac24": 3.85
+        "ihtiyac24": 3.75
       },
       {
         "ad": "Albaraka Türk",
@@ -102,7 +102,7 @@
         "tasit12": 3.53,
         "tasit24": 3.19,
         "ihtiyac12": 3.9,
-        "ihtiyac24": 3.9
+        "ihtiyac24": 3.85
       },
       {
         "ad": "Kuveyt Türk",
@@ -120,7 +120,7 @@
         "tasit12": 3.75,
         "tasit24": 3.63,
         "ihtiyac12": 4.05,
-        "ihtiyac24": 4.05
+        "ihtiyac24": 3.99
       },
       {
         "ad": "Dünya Katılım",
@@ -137,8 +137,8 @@
         "konut120": null,
         "tasit12": 3.49,
         "tasit24": null,
-        "ihtiyac12": null,
-        "ihtiyac24": null
+        "ihtiyac12": 4.99,
+        "ihtiyac24": 4.99
       },
       {
         "ad": "Emlak Katılım",

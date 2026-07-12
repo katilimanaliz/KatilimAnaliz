@@ -6365,7 +6365,7 @@ function Asistan({nav, settings}:{nav:any, settings?:any}){
             )}
             <div ref={endRef}/>
           </div>
-          <div style={{padding:"10px 14px 20px",background:"#15212E",borderTop:`1px solid ${WA(0.08)}`,flexShrink:0}}>
+          <div style={{padding:"10px 14px 20px",background:C.card,borderTop:`1px solid ${WA(0.08)}`,flexShrink:0}}>
             <div style={{display:"flex",gap:8,alignItems:"flex-end"}}>
               <textarea value={input} onChange={e=>setInput(e.target.value)}
                 onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}}
@@ -12434,7 +12434,7 @@ function BildirimGecmisiModal({gecmis,onClose}:{gecmis:any[],onClose:()=>void}){
   };
   return(
     <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.6)",zIndex:500,display:"flex",alignItems:"flex-end",...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}} onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} style={{background:"#15212E",borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",maxHeight:"78vh",display:"flex",flexDirection:"column"}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:C.card,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",maxHeight:"78vh",display:"flex",flexDirection:"column"}}>
         <div style={{padding:"16px 18px",borderBottom:`1px solid ${WA(0.08)}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
           <span style={{fontSize:16,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff")}}>🔔 Bildirimler</span>
           <button onClick={onClose} style={{background:WA(0.1),border:"none",width:32,height:32,borderRadius:16,fontSize:18,color:(TEMA==="acik"?C.label:"#fff"),cursor:"pointer"}}>×</button>
@@ -12736,7 +12736,7 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla}:{ad:string,sembol:stri
 function FavoriDuzenleModal({favoriler,onToggle,onClose}:{favoriler:string[],onToggle:(key:string)=>void,onClose:()=>void}){
   return(
     <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.6)",zIndex:500,display:"flex",alignItems:"flex-end",...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}}>
-      <div style={{background:"#15212E",borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",maxHeight:"82vh",display:"flex",flexDirection:"column"}}>
+      <div style={{background:C.card,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",maxHeight:"82vh",display:"flex",flexDirection:"column"}}>
         <div style={{padding:"16px 18px",borderBottom:`1px solid ${WA(0.08)}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
           <span style={{fontSize:16,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff")}}>⭐ Favorilerimi Düzenle</span>
           <button onClick={onClose} style={{background:WA(0.1),border:"none",width:32,height:32,borderRadius:16,fontSize:18,color:(TEMA==="acik"?C.label:"#fff"),cursor:"pointer"}}>×</button>
@@ -12798,7 +12798,7 @@ function PiyasaOzetiDuzenleModal({secili,onToggle,onClose}:{secili:string[],onTo
   const KATEGORILER=[{id:"doviz",label:"Döviz"},{id:"emtia",label:"Emtia"},{id:"borsa",label:"Borsa"},{id:"gostergeler",label:"Göstergeler"},{id:"kripto",label:"Kripto"}];
   return(
     <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.6)",zIndex:500,display:"flex",alignItems:"flex-end",...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}}>
-      <div style={{background:"#15212E",borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",maxHeight:"82vh",display:"flex",flexDirection:"column"}}>
+      <div style={{background:C.card,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",maxHeight:"82vh",display:"flex",flexDirection:"column"}}>
         <div style={{padding:"16px 18px",borderBottom:`1px solid ${WA(0.08)}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
           <span style={{fontSize:16,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff")}}>💹 Piyasa Özetini Düzenle</span>
           <button onClick={onClose} style={{background:WA(0.1),border:"none",width:32,height:32,borderRadius:16,fontSize:18,color:(TEMA==="acik"?C.label:"#fff"),cursor:"pointer"}}>×</button>
