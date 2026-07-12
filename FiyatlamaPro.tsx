@@ -246,7 +246,7 @@ const EN_SOZLUK: Record<string, string> = {
   "Basitten Bileşiğe Oran Hesaplama": "Simple to Compound Rate Calculator",
   "Verimlilik Analizi": "Efficiency Analysis",
   "Yatırım Fonları Getiri İzleme": "Mutual Fund Return Tracker",
-  "Kâr Payı Oranları": "Profit Share Rates",
+  "Kâr Payı Oran Karşılaştırma": "Profit Share Rate Comparison",
   "Fiyat Alarmlarım": "My Price Alerts",
   "BİST Hisse Veri İzleme": "BIST Stock Data Tracker",
   "Konut Finansmanı Hesaplama": "Housing Finance Calculator",
@@ -270,6 +270,21 @@ const EN_SOZLUK: Record<string, string> = {
   "Esnek Ödemeli Plan": "Flexible Payment Plan",
   "Yapay Zeka Asistan": "AI Assistant",
   "Katılım Bankacılığı Sözlüğü": "Participation Banking Glossary",
+  "Finansman": "Financing",
+  "Katılma Hesabı": "Participation Account",
+  "Katılım bankalarının konut, taşıt ve ihtiyaç finansmanında uyguladığı": "The lowest advertised monthly profit rate applied by participation banks to housing, vehicle,",
+  "en düşük ilan edilen aylık kâr payı oranı": "and personal financing",
+  "(TL, gösterge niteliğinde).": "(TRY, indicative only).",
+  "Konut": "Housing",
+  "Taşıt": "Vehicle",
+  "İhtiyaç": "Personal",
+  "Banka": "Bank",
+  "Yükleniyor…": "Loading…",
+  "Henüz veri girilmemiş.": "No data entered yet.",
+  "Ay": "Months",
+  "EN İYİ": "BEST",
+  "Tabloyu yana kaydırarak diğer vadeleri görebilirsiniz": "Scroll the table sideways to see other terms",
+  "Başlığa dokunarak o vadeye göre sıralayabilirsiniz (en düşük / en yüksek). Veri olmayan hücreler \"—\" ile gösterilir.": "Tap a header to sort by that term (lowest / highest). Cells with no data show \"—\".",
   "Son Hesaplamalar": "Recent Calculations",
   "Finansal Takvim": "Financial Calendar",
   "Vade Takip & Hatırlatma Ajandam": "Maturity Tracker & Reminders",
@@ -857,6 +872,16 @@ function KarPayiOranlari({nav}:{nav:any}){
   const [yukleniyor,setYukleniyor]=useState(true);
   const [hata,setHata]=useState<string|null>(null);
   const [siralamaParaBirimi,setSiralamaParaBirimi]=useState<"tl"|"usd"|"eur"|"altin">("tl");
+  // YENİ (2026-07-12): Finansman (konut/taşıt/ihtiyaç) sekmesi — katılma hesabıyla
+  // AYNI kar-payi.json dosyasının "finansman" alanından okunur, ayrı istek atılmaz.
+  const [sekme,setSekme]=useState<"finansman"|"katilma">("finansman");
+  // YENİ (2026-07-12): vade kırılımı — konut 60/120 ay, taşıt/ihtiyaç 12/24 ay.
+  // Bankalar şu an vadeye göre AYRI oran ilan etmiyor (araştırıldı, doğrulandı);
+  // bu yüzden kar-payi.json'da iki vade sütunu aynı bilinen oranı taşıyor.
+  // İleride bir banka gerçekten ayrışık oran açıklarsa, sadece o hücre güncellenir.
+  const FIN_KOLONLAR=["konut60","konut120","tasit12","tasit24","ihtiyac12","ihtiyac24"] as const;
+  type FinKolon = typeof FIN_KOLONLAR[number];
+  const [siralamaKolon,setSiralamaKolon]=useState<FinKolon>("konut120"); // onaylanan varsayılan
 
   // NOT (2026-07): Bu veri artık backend/Redis'te değil, repo içindeki
   // public/kar-payi.json dosyasında — GitHub'dan elle düzenlenip commit
@@ -871,6 +896,8 @@ function KarPayiOranlari({nav}:{nav:any}){
   },[]);
 
   const bankalar=veri?.bankalar||[];
+  const finBankalar=veri?.finansman?.bankalar||[];
+  const finTarihler=veri?.finansman?.guncelleme||{};
 
   // Seçilen para birimine göre yüksekten düşüğe sıralı liste — değeri olmayan
   // (null) bankalar en sona düşer, aralarında orijinal (alfabetik) sıra korunur.
@@ -884,6 +911,46 @@ function KarPayiOranlari({nav}:{nav:any}){
     });
   },[bankalar,siralamaParaBirimi]);
 
+  // Finansman: seçilen vade sütununa göre — varsayılan en düşük üstte (borç
+  // alan için "en iyi" budur, katılma hesabındaki mantığın TERSİ). Değeri
+  // olmayan bankalar her zaman en sona düşer, sıralama yönünden bağımsız.
+  const [siralamaYon,setSiralamaYon]=useState<"asc"|"desc">("asc");
+  const finBankalarSirali=useMemo(()=>{
+    return [...finBankalar].sort((a:any,b:any)=>{
+      const av=a[siralamaKolon], bv=b[siralamaKolon];
+      if(av==null&&bv==null) return 0;
+      if(av==null) return 1;
+      if(bv==null) return -1;
+      return siralamaYon==="asc" ? av-bv : bv-av;
+    });
+  },[finBankalar,siralamaKolon,siralamaYon]);
+  const finEnIyiDeger=useMemo(()=>{
+    let en:number|null=null;
+    finBankalar.forEach((b:any)=>{ const v=b[siralamaKolon]; if(v!=null&&(en==null||v<en)) en=v; });
+    return en;
+  },[finBankalar,siralamaKolon]);
+
+  const kolonTikla=(k:FinKolon)=>{
+    if(siralamaKolon===k) setSiralamaYon(y=>y==="asc"?"desc":"asc");
+    else { setSiralamaKolon(k); setSiralamaYon("asc"); }
+  };
+  const kolonBaslik=(k:FinKolon):{grup:string,vade:string}=>{
+    if(k==="konut60") return {grup:"🏠 "+CV("Konut"),vade:"60 "+CV("Ay")};
+    if(k==="konut120") return {grup:"🏠 "+CV("Konut"),vade:"120 "+CV("Ay")};
+    if(k==="tasit12") return {grup:"🚗 "+CV("Taşıt"),vade:"12 "+CV("Ay")};
+    if(k==="tasit24") return {grup:"🚗 "+CV("Taşıt"),vade:"24 "+CV("Ay")};
+    if(k==="ihtiyac12") return {grup:"💰 "+CV("İhtiyaç"),vade:"12 "+CV("Ay")};
+    return {grup:"💰 "+CV("İhtiyaç"),vade:"24 "+CV("Ay")};
+  };
+
+  const finTarihMetni=(iso?:string)=>{
+    if(!iso) return null;
+    const farkGun=Math.floor((Date.now()-new Date(iso).getTime())/86400000);
+    const gunStr = farkGun<=0 ? "bugün" : farkGun===1 ? "1 gün önce" : `${farkGun} gün önce`;
+    const d=new Date(iso);
+    return `${d.toLocaleDateString("tr-TR",{day:"numeric",month:"short",year:"numeric"})} (${gunStr})`;
+  };
+
   const guncellemeMetni=(()=>{
     if(!veri?.guncelleme) return null;
     const farkGun=Math.floor((Date.now()-new Date(veri.guncelleme).getTime())/86400000);
@@ -894,6 +961,75 @@ function KarPayiOranlari({nav}:{nav:any}){
 
   return(
     <div style={{padding:"0 16px 32px"}}>
+      <Seg options={[{v:"finansman",l:CV("Finansman")},{v:"katilma",l:CV("Katılma Hesabı")}]} value={sekme} onChange={setSekme}/>
+
+      {sekme==="finansman"&&(<>
+      <Card>
+        <p style={{margin:0,fontSize:12,color:C.sub,lineHeight:1.6}}>
+          {CV("Katılım bankalarının konut, taşıt ve ihtiyaç finansmanında uyguladığı")} <b style={{color:C.soft}}>{CV("en düşük ilan edilen aylık kâr payı oranı")}</b> {CV("(TL, gösterge niteliğinde).")}
+        </p>
+        <div style={{display:"flex",flexWrap:"wrap",gap:"6px 14px",marginTop:10}}>
+          <span style={{fontSize:10.5,color:C.sub}}>🏠 {CV("Konut")}: <b style={{color:C.soft}}>{finTarihMetni(finTarihler.konut)||"—"}</b></span>
+          <span style={{fontSize:10.5,color:C.sub}}>🚗 {CV("Taşıt")}: <b style={{color:C.soft}}>{finTarihMetni(finTarihler.tasit)||"—"}</b></span>
+          <span style={{fontSize:10.5,color:C.sub}}>💰 {CV("İhtiyaç")}: <b style={{color:C.soft}}>{finTarihMetni(finTarihler.ihtiyac)||"—"}</b></span>
+        </div>
+      </Card>
+
+      {yukleniyor&&<Card><p style={{margin:0,fontSize:13,color:C.sub,textAlign:"center",padding:"20px 0"}}>{CV("Yükleniyor…")}</p></Card>}
+      {!yukleniyor&&hata&&<Card><p style={{margin:0,fontSize:13,color:C.red,textAlign:"center",padding:"20px 0"}}>⚠️ {hata}</p></Card>}
+      {!yukleniyor&&!hata&&finBankalar.every((b:any)=>FIN_KOLONLAR.every(k=>b[k]==null))&&(
+        <Card><p style={{margin:0,fontSize:13,color:C.sub,textAlign:"center",padding:"20px 0"}}>{CV("Henüz veri girilmemiş.")}</p></Card>
+      )}
+
+      {!yukleniyor&&!hata&&!finBankalar.every((b:any)=>FIN_KOLONLAR.every(k=>b[k]==null))&&(<>
+        <p style={{margin:"0 2px 8px",fontSize:10.5,color:C.sub}}>👉 {CV("Tabloyu yana kaydırarak diğer vadeleri görebilirsiniz")}</p>
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden"}}>
+          <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+            <table style={{borderCollapse:"collapse",width:"max-content",minWidth:"100%"}}>
+              <thead>
+                <tr>
+                  <th style={{position:"sticky",left:0,zIndex:2,background:WA(0.05),textAlign:"left",fontSize:9,fontWeight:800,letterSpacing:0.3,color:C.sub,padding:"10px 10px",borderBottom:`1px solid ${C.border}`,boxShadow:"2px 0 4px rgba(0,0,0,0.15)"}}>{CV("Banka")}</th>
+                  {FIN_KOLONLAR.map(k=>{
+                    const {grup,vade}=kolonBaslik(k);
+                    const aktif=siralamaKolon===k;
+                    return(
+                      <th key={k} onClick={()=>kolonTikla(k)} style={{textAlign:"right",fontSize:9,fontWeight:800,letterSpacing:0.3,color:aktif?C.blue:C.sub,padding:"10px 10px",borderBottom:`1px solid ${C.border}`,background:WA(0.05),cursor:"pointer",whiteSpace:"nowrap"}}>
+                        <span style={{display:"block",fontSize:8,opacity:0.75,marginBottom:1}}>{grup}</span>
+                        {vade}{aktif?(siralamaYon==="asc"?" ▲":" ▼"):""}
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {finBankalarSirali.map((b:any,i:number)=>{
+                  const enIyiMi=b[siralamaKolon]!=null&&b[siralamaKolon]===finEnIyiDeger;
+                  return(
+                    <tr key={i}>
+                      <td style={{position:"sticky",left:0,zIndex:1,background:C.card,textAlign:"left",fontWeight:700,fontSize:12.5,color:enIyiMi?C.green:C.label,padding:"11px 10px",borderBottom:i<finBankalarSirali.length-1?`1px solid ${C.border}`:"none",whiteSpace:"nowrap",boxShadow:"2px 0 4px rgba(0,0,0,0.15)"}}>
+                        {b.ad}{enIyiMi&&<span style={{display:"block",fontSize:8,fontWeight:800,color:C.green,marginTop:1}}>{CV("EN İYİ")}</span>}
+                      </td>
+                      {FIN_KOLONLAR.map(k=>{
+                        const deger=b[k];
+                        const aktif=k===siralamaKolon;
+                        return(
+                          <td key={k} style={{textAlign:"right",fontSize:12.5,fontFamily:"monospace",fontWeight:aktif?800:700,padding:"11px 10px",borderBottom:i<finBankalarSirali.length-1?`1px solid ${C.border}`:"none",color:deger==null?C.sub:(aktif&&enIyiMi?C.green:(aktif?C.blue:C.label)),whiteSpace:"nowrap"}}>
+                            {deger!=null?`%${fmtN(deger,2)}`:"—"}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <p style={{margin:"10px 2px 0",fontSize:10.5,color:C.sub,lineHeight:1.6}}>{CV("Başlığa dokunarak o vadeye göre sıralayabilirsiniz (en düşük / en yüksek). Veri olmayan hücreler \"—\" ile gösterilir.")}</p>
+      </>)}
+      </>)}
+
+      {sekme==="katilma"&&(<>
       <Card>
         <p style={{margin:0,fontSize:12,color:C.sub,lineHeight:1.6}}>
           100 Bin TL / 100 Bin USD / 100 Bin EUR / 1.000gr Altın, 1 aylık vade, şubeden açılan standart hesaba dağıtılan brüt yıllık kâr payı oranı (%). Kâr payı oranları ileriye yönelik bir taahhüt değildir, gösterge niteliğindedir.
@@ -936,6 +1072,7 @@ function KarPayiOranlari({nav}:{nav:any}){
           ))}
         </div>
       )}
+      </>)}
     </div>
   );
 }
@@ -5964,7 +6101,7 @@ function asistanIlgiliEkran(soru:string, cevap:string):{ekran:string,label:strin
     [/altın|gümüş|ons\b/,"piyasaMenu","🥇 Piyasa & Kurlar"],
     [/haber|gündem/,"piyasaHaberleri","📰 Piyasa Haberleri"],
     [/katılım fonu|fon getiri|yatırım fonu/,"fonGetiriIzleme","📈 Yatırım Fonları Getiri İzleme"],
-    [/kâr payı oran|kar payi oran|banka.*oran.*kıyasla|hangi banka.*yüksek/,"karPayiOranlari","🏦 Kâr Payı Oranları"],
+    [/kâr payı oran|kar payi oran|banka.*oran.*kıyasla|hangi banka.*yüksek/,"karPayiOranlari","🏦 Kâr Payı Oran Karşılaştırma"],
     [/getiri karşılaştırma|dönemsel getiri/,"getiriKarsilastirma","📊 Getiri Karşılaştırma"],
     [/haftalık.*özet|haftalık.*piyasa/,"haftalikOzet","📰 Haftalık Piyasa Özeti"],
     [/spot finansman/,"spotFinansman","⚡ Spot Finansman Hesaplama"],
@@ -10123,7 +10260,7 @@ const MENU = {
   kasaOranAnalizi:{title:"Basitten Bileşiğe Oran Hesaplama",back:"hesaplaMenu"},
   verimlilikAnalizi:{title:"Verimlilik Analizi",back:"hesaplaMenu"},
   fonGetiriIzleme:{title:"Yatırım Fonları Getiri İzleme",back:"home"},
-  karPayiOranlari:{title:"Kâr Payı Oranları",back:"home"},
+  karPayiOranlari:{title:"Kâr Payı Oran Karşılaştırma",back:"home"},
   fiyatAlarmlarim:{title:"Fiyat Alarmlarım",back:"piyasaMenu"},
   bistHisseTarayici:{title:"BİST Hisse Veri İzleme",back:"home"},
   // bireysel finansman (sadece 3)
@@ -10274,7 +10411,7 @@ const MENU_ARAMA_LIST=[
   {key:"soikReeskont",       label:"SÖİK ve Reeskont Finansmanı Hesaplama",            icon:"🚢", grup:"Tüzel Finansman"},
   {key:"bistHisseTarayici",  label:"BİST Hisse Veri İzleme",                     icon:"📊", grup:"Piyasa & Veriler"},
   {key:"fonGetiriIzleme",    label:"Yatırım Fonları Getiri İzleme",        icon:"📈", grup:"Piyasa & Veriler"},
-  {key:"karPayiOranlari",    label:"Kâr Payı Oranları",                    icon:"🏦", grup:"Piyasa & Veriler"},
+  {key:"karPayiOranlari",    label:"Kâr Payı Oran Karşılaştırma",          icon:"🏦", grup:"Piyasa & Veriler"},
   {key:"fiyatAlarmlarim",    label:"Fiyat Alarmlarım",                     icon:"🔔", grup:"Piyasa & Veriler", alt:["alarm","fiyat alarmı","uyarı","bildirim"]},
   {key:"finansalTakvim",     label:"Finansal Takvim",                      icon:"📅", grup:"Araçlar"},
   {key:"vadeTakibi",         label:"Vade Takip & Hatırlatma Ajandam",             icon:"⏰", grup:"Araçlar"},
@@ -13777,7 +13914,7 @@ function App(){
               {[
                 {key:"bistHisseTarayici", icon:"📊", label:"BİST Hisse Veri İzleme"},
                 {key:"fonGetiriIzleme",   icon:"📈", label:"Yatırım Fonları Getiri İzleme"},
-                {key:"karPayiOranlari",   icon:"🏦", label:"Kâr Payı Oranları"},
+                {key:"karPayiOranlari",   icon:"🏦", label:"Kâr Payı Oran Karşılaştırma"},
                 {key:"piyasaHaberleri",   icon:"📡", label:"Piyasa Haberleri"},
               ].map(c=>{
                 const renk=KATEGORI_RENK[EKRAN_KATEGORI[c.key]];
