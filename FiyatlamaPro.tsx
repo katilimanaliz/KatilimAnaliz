@@ -174,6 +174,12 @@ function WA(a: number): string {
 
 let DIL: "tr" | "en" = (() => { try { return localStorage.getItem("kp_dil") === "en" ? "en" : "tr"; } catch (e) { return "tr"; } })();
 
+// ── App Store QR (masaüstü popup) ──
+// Yer tutucu; Colab push hücresi build öncesi bunu gerçek "data:image/png;base64,..."
+// QR görseliyle değiştirir (qrcode kütüphanesi, https://apps.apple.com/app/id6788268835).
+// Yer tutucu dolmadıysa popup QR sütununu göstermez, kart yine çalışır.
+const KP_QR_B64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQgAAAEIAQAAAACLjVdSAAABkklEQVR4nO2ZsY7DMAxDH4P8/y+zg2TXPuDQqapQN0OSOhxYgZYoWebFdb0C/BBfjLhB8WZhEEbEDcBtmJbFA8MaFSwvq12Y1sUjBIFBlpFJqeBGTAvjEZdCHRmVYh4NEQZs5H8RNTw+irghUwUAcmQPea52YVoXj0ylsohIyJqrbZjWIJbdoZQGrIppw7QMISQkOWtKlpr80IlpDcKrF4uISIpc0otpESJdh9KZIhz7RXIvpu9HyLAYdIsteeg0v34NOSg04ZFRI3scqY/06KNhcchlOPYuTAv1MSIiYZxKKefRBRFasDAzrUbb7/P2ywUYKR26lrKbeaQT0xrEbFo04uDMKt2YliBi+iPhKDKjAp/qx+L/27O0hEBGZ9OIaQEi29kw7CkLza/n6WPrb7Oo7I1uF6Zl8485SZ+TdSsnQuf1L+t8PfeMGdunkEcXxDZfF7Ke/iPGyl2YliOUHiyU4Tx46Mj0jYh7/RGC0HhwoD6W+bq15Y1RZrowrYvHnK9vvd2Z5w1/T58+xeOH6Il4AOjrsxVxqTNmAAAAAElFTkSuQmCC";
+
 // ── SAFE AREA GARANTİSİ (native/Capacitor) ──
 // env(safe-area-inset-top/bottom) değerlerinin dolması için viewport meta'sında
 // viewport-fit=cover ŞART. Web'de tarayıcı durum çubuğu payını kendi ayırdığı
@@ -303,6 +309,12 @@ const EN_SOZLUK: Record<string, string> = {
   "Bireysel Finansman": "Retail Financing",
   "Tüzel Finansman": "Corporate Financing",
   "Çek Teminatlı Finansman Hesaplama": "Cheque-Backed Financing",
+  "Katılım Plus artık cebinde": "Katılım Plus, now in your pocket",
+  "Kâr payı oranları, piyasa verileri ve tüm hesaplama araçları her an yanında.": "Profit share rates, market data and every calculator, always with you.",
+  "iOS uygulaması App Store'da yayında.": "The iOS app is live on the App Store.",
+  "App Store'dan İndirin": "Download on the App Store",
+  "Android yakında": "Android coming soon",
+  "telefonunla okut": "scan with your phone",
   "Hazine İşlemleri": "Treasury Operations",
   "Tümü": "All",
   "Dış Ticaret": "Foreign Trade",
@@ -13399,6 +13411,10 @@ function App(){
   const [appBannerKapali,setAppBannerKapali]=useState<boolean>(()=>{
     try{ return localStorage.getItem("kp_appstore_banner")==="kapali"; }catch{ return false; }
   });
+  // Masaüstü sağ alt App Store QR kartı (Fonoloji tarzı); kapatınca bir daha çıkmaz
+  const [qrPopupKapali,setQrPopupKapali]=useState<boolean>(()=>{
+    try{ return localStorage.getItem("kp_qr_popup_kapali")==="kapali"; }catch{ return false; }
+  });
   const [menuAramaOdakli,setMenuAramaOdakli]=useState(false);
   const [hesaplaAramaQ,setHesaplaAramaQ]=useState("");
   const [hesaplaAramaOdakli,setHesaplaAramaOdakli]=useState(false);
@@ -13696,6 +13712,46 @@ function App(){
           </div>
         </div>
       )}
+      {/* ── MASAÜSTÜ APP STORE QR KARTI (sağ alt, Fonoloji tarzı) ── */}
+      {genisEkran&&!qrPopupKapali&&(
+        <div className="empty-anim" style={{position:"fixed",right:22,bottom:22,width:344,zIndex:90,boxSizing:"border-box",
+          background:TEMA==="acik"?"#FFFFFF":"linear-gradient(180deg,#152233 0%,#101B29 100%)",
+          border:`1px solid ${TEMA==="acik"?"rgba(22,34,46,0.14)":"rgba(255,255,255,0.10)"}`,
+          borderRadius:18,padding:"16px 16px 14px",boxShadow:"0 12px 40px rgba(0,0,0,0.45), 0 3px 12px rgba(0,0,0,0.3)"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <div style={{width:38,height:38,borderRadius:19,background:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"0 1px 4px rgba(0,0,0,0.25)"}}>
+              <img src={KATILIM_LOGO_B64} alt="" style={{height:24,width:"auto",display:"block"}}/>
+            </div>
+            <div style={{flex:1,fontSize:15.5,fontWeight:800,letterSpacing:"-0.01em",color:TEMA==="acik"?"#16222E":"#EAF1FA"}}>{CV("Katılım Plus artık cebinde")}</div>
+            <button onClick={()=>{setQrPopupKapali(true);try{localStorage.setItem("kp_qr_popup_kapali","kapali");}catch{}}} style={{
+              width:28,height:28,borderRadius:14,border:"none",cursor:"pointer",flexShrink:0,
+              background:TEMA==="acik"?"rgba(22,34,46,0.07)":"rgba(255,255,255,0.08)",
+              color:TEMA==="acik"?"#3A4E62":"rgba(255,255,255,0.6)",fontSize:14,fontWeight:700,lineHeight:"28px"}}>✕</button>
+          </div>
+          <div style={{fontSize:12,lineHeight:1.55,marginTop:10,color:TEMA==="acik"?"#2E4256":"rgba(255,255,255,0.62)"}}>
+            {CV("Kâr payı oranları, piyasa verileri ve tüm hesaplama araçları her an yanında.")} {CV("iOS uygulaması App Store'da yayında.")}
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:14,marginTop:13,paddingTop:13,borderTop:`1px solid ${TEMA==="acik"?"rgba(22,34,46,0.09)":"rgba(255,255,255,0.08)"}`}}>
+            <div style={{flex:1,display:"flex",flexDirection:"column",gap:7,minWidth:0}}>
+              <a href="https://apps.apple.com/app/id6788268835" target="_blank" rel="noopener noreferrer" style={{
+                display:"flex",alignItems:"center",justifyContent:"center",gap:7,textDecoration:"none",
+                background:TEMA==="acik"?"#16222E":"#000000",color:"#FFFFFF",borderRadius:11,
+                border:"1px solid rgba(255,255,255,0.18)",padding:"9px 10px",fontSize:12.5,fontWeight:700}}>
+                <span style={{fontSize:15,lineHeight:1}}></span> {CV("App Store'dan İndirin")}
+              </a>
+              <div style={{fontSize:10.5,fontWeight:600,color:TEMA==="acik"?"#5A7086":"rgba(255,255,255,0.4)",textAlign:"center"}}>{CV("Android yakında")}</div>
+            </div>
+            {KP_QR_B64.indexOf("data:image")===0&&(
+              <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:5,flexShrink:0}}>
+                <div style={{background:"#FFFFFF",borderRadius:10,padding:5,border:`1px solid ${TEMA==="acik"?"rgba(22,34,46,0.12)":"rgba(255,255,255,0.14)"}`}}>
+                  <img src={KP_QR_B64} alt="App Store QR" style={{width:96,height:96,display:"block"}}/>
+                </div>
+                <div style={{fontSize:9.5,fontWeight:600,color:TEMA==="acik"?"#5A7086":"rgba(255,255,255,0.4)"}}>{CV("telefonunla okut")} →</div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     <div style={{paddingLeft:SIDEBAR_W}}>
     <div style={{fontFamily:"-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif",background:C.bg,minHeight:"100dvh",maxWidth:genisEkran?"none":kolonW,margin:"0 auto",
       ...(icerikOlcek!==1?{zoom:icerikOlcek}:{})} as any}>
@@ -13752,10 +13808,12 @@ function App(){
             })()}
             <div style={{fontSize:13.5,color:(TEMA==="acik"?"#2E4256":"rgba(255,255,255,0.65)"),marginBottom:16}}>{CV("Bugün ne hesaplamak istersin?")}</div>
 
-            {/* ── APP STORE BANNER — yalnızca web'de (masaüstü + mobil tarayıcı), native'de gizli ── */}
+            {/* ── APP STORE BANNER — yalnızca MOBİL tarayıcıda; native'de gizli.
+                Masaüstünde de gizli (2026-07-13): sağ alttaki QR kartı aynı işi
+                gördüğünden üstte ikinci bir çağrı gereksiz tekrardı. ── */}
             {(()=>{
               const nativeMi=(window as any).Capacitor?.isNativePlatform?.()??false;
-              if(nativeMi||appBannerKapali)return null;
+              if(nativeMi||appBannerKapali||genisEkran)return null;
               return (
                 <div style={{
                   display:"flex",alignItems:"center",gap:10,padding:"10px 12px",marginBottom:14,borderRadius:12,
