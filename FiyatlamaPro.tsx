@@ -13728,7 +13728,7 @@ function App(){
               background:TEMA==="acik"?"rgba(22,34,46,0.07)":"rgba(255,255,255,0.08)",
               color:TEMA==="acik"?"#3A4E62":"rgba(255,255,255,0.6)",fontSize:14,fontWeight:700,lineHeight:"28px"}}>✕</button>
           </div>
-          <div style={{fontSize:12,lineHeight:1.55,marginTop:10,color:TEMA==="acik"?"#2E4256":"rgba(255,255,255,0.62)"}}>
+          <div style={{fontSize:12.5,lineHeight:1.55,marginTop:10,color:TEMA==="acik"?"#2E4256":"#C7D4E2"}}>
             {CV("Kâr payı oranları, piyasa verileri ve tüm hesaplama araçları her an yanında.")} {CV("iOS uygulaması App Store'da yayında.")}
           </div>
           <div style={{display:"flex",alignItems:"center",gap:14,marginTop:13,paddingTop:13,borderTop:`1px solid ${TEMA==="acik"?"rgba(22,34,46,0.09)":"rgba(255,255,255,0.08)"}`}}>
@@ -13737,16 +13737,16 @@ function App(){
                 display:"flex",alignItems:"center",justifyContent:"center",gap:7,textDecoration:"none",
                 background:TEMA==="acik"?"#16222E":"#000000",color:"#FFFFFF",borderRadius:11,
                 border:"1px solid rgba(255,255,255,0.18)",padding:"9px 10px",fontSize:12.5,fontWeight:700}}>
-                <span style={{fontSize:15,lineHeight:1}}></span> {CV("App Store'dan İndirin")}
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="#FFFFFF" style={{flexShrink:0,marginTop:-2}} aria-hidden="true"><path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8.98-.2 1.92-.9 3.16-.81 1.79.14 3.04.86 3.81 2.17-3.42 2.11-2.87 6.3.65 7.66-.67 1.19-1.53 2.36-2.7 3.15zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/></svg> {CV("App Store'dan İndirin")}
               </a>
-              <div style={{fontSize:10.5,fontWeight:600,color:TEMA==="acik"?"#5A7086":"rgba(255,255,255,0.4)",textAlign:"center"}}>{CV("Android yakında")}</div>
+              <div style={{fontSize:10.5,fontWeight:600,color:TEMA==="acik"?"#5A7086":"rgba(255,255,255,0.58)",textAlign:"center"}}>{CV("Android yakında")}</div>
             </div>
             {KP_QR_B64.indexOf("data:image")===0&&(
               <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:5,flexShrink:0}}>
                 <div style={{background:"#FFFFFF",borderRadius:10,padding:5,border:`1px solid ${TEMA==="acik"?"rgba(22,34,46,0.12)":"rgba(255,255,255,0.14)"}`}}>
                   <img src={KP_QR_B64} alt="App Store QR" style={{width:96,height:96,display:"block"}}/>
                 </div>
-                <div style={{fontSize:9.5,fontWeight:600,color:TEMA==="acik"?"#5A7086":"rgba(255,255,255,0.4)"}}>{CV("telefonunla okut")} →</div>
+                <div style={{fontSize:9.5,fontWeight:600,color:TEMA==="acik"?"#5A7086":"rgba(255,255,255,0.58)"}}>{CV("telefonunla okut")} →</div>
               </div>
             )}
           </div>
