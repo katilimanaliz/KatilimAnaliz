@@ -6138,7 +6138,14 @@ async function asistanPiyasaOzeti():Promise<string>{
 // anahtar kelime eşleşmesi kullanıyoruz — böylece buton her zaman GERÇEK ve
 // GEÇERLİ bir ekrana gider.
 function asistanIlgiliEkran(soru:string, cevap:string):{ekran:string,label:string}|null{
-  const metin=`${soru} ${cevap}`.toLocaleLowerCase("tr-TR");
+  // DÜZELTME (2026-07-13): eskiden soru+cevap TEK metinde birleşip kalıplara
+  // sırayla bakılıyordu — cevapta tesadüfen geçen bir kelime (ör. piyasa
+  // özetinden sızan "BIST 100"), kur sorusuna hisse ekranı önerilmesine yol
+  // açıyordu (kullanıcı raporu). Artık İKİ AŞAMALI: önce SADECE kullanıcının
+  // sorusu taranır (niyetin asıl taşıyıcısı odur); soruda eşleşme yoksa
+  // cevaba düşülür. Böylece öneri her zaman sorulan konuyu izler.
+  const soruMetin=soru.toLocaleLowerCase("tr-TR");
+  const cevapMetin=cevap.toLocaleLowerCase("tr-TR");
   const eslesmeler:[RegExp,string,string][]=[
     [/bist\s*100|bist100|xu100|hisse senedi|hisse fiyat/,"bistHisseTarayici","📊 BİST Hisse Veri İzleme"],
     [/katılım endeksi|xk100/,"bistHisseTarayici","📊 BİST Hisse Veri İzleme"],
@@ -6161,7 +6168,10 @@ function asistanIlgiliEkran(soru:string, cevap:string):{ekran:string,label:strin
     [/zorunlu karşılık|zk\b/,"hesaplaMenu","🧮 Hesaplama Araçları"],
   ];
   for(const [regex,ekran,label] of eslesmeler){
-    if(regex.test(metin)) return {ekran,label};
+    if(regex.test(soruMetin)) return {ekran,label};
+  }
+  for(const [regex,ekran,label] of eslesmeler){
+    if(regex.test(cevapMetin)) return {ekran,label};
   }
   return null;
 }
