@@ -302,7 +302,7 @@ const EN_SOZLUK: Record<string, string> = {
   "Katılım Hesabı": "Participation Account",
   "Bireysel Finansman": "Retail Financing",
   "Tüzel Finansman": "Corporate Financing",
-  "Çek Arkası Finansman Hesaplama": "Cheque-Backed Financing",
+  "Çek Teminatlı Finansman Hesaplama": "Cheque-Backed Financing",
   "Hazine İşlemleri": "Treasury Operations",
   "Tümü": "All",
   "Dış Ticaret": "Foreign Trade",
@@ -2483,6 +2483,13 @@ function VadeliKatilim({s,onGecmis}){
   const [oran,setOran]=useState("");
   const [doviz,setDoviz]=useState("TL");
   const [kaydedildi,setKaydedildi]=useState(false);
+  // DÜZELTME (2026-07-13): sonuçlar sabit fmtTL (₺) ile basılıyordu — USD/EUR
+  // sekmesinde de TL sembolü görünüyordu (kullanıcı raporu). Tutar zaten
+  // seçilen para biriminde hesaplandığı için sadece sembol yanlıştı; artık
+  // sonuç satırları, geçmiş kaydı ve rapor seçilen para biriminin sembolünü
+  // kullanıyor.
+  const dovizSembol = doviz==="TL"?"₺":doviz==="USD"?"$":"€";
+  const fmtP = (n:number) => (isNaN(n)||n===null) ? "—" : `${dovizSembol}${fmtN(n,2)}`;
 
   const r=useCallback(()=>{
     const T=parseFloat(tutar),G=parseInt(gun),rt=parseFloat(oran);
@@ -2511,10 +2518,10 @@ function VadeliKatilim({s,onGecmis}){
           {label:"Katılım Hesabı Tutarı", value:`${doviz==="TL"?"₺":doviz==="USD"?"$":"€"}${fmtN(parseFloat(tutar)||0,2)}`},
           {label:"Vade", value:`${gun} Gün`},
           {label:"Basit Oran (Yıllık)", value:`% ${fmtN(parseFloat(oran)||0,2)}`},
-          {label:"Brüt Kâr Payı", value:fmtTL(r.bf)},
-          {label:`Stopaj (%${fmtN(r.sOran)})`, value:`- ${fmtTL(r.stop)}`},
-          {label:"Net Kâr Payı", value:fmtTL(r.nf)},
-          {label:"Vade Sonu Tutar", value:fmtTL(r.nv)},
+          {label:"Brüt Kâr Payı", value:fmtP(r.bf)},
+          {label:`Stopaj (%${fmtN(r.sOran)})`, value:`- ${fmtP(r.stop)}`},
+          {label:"Net Kâr Payı", value:fmtP(r.nf)},
+          {label:"Vade Sonu Tutar", value:fmtP(r.nv)},
           // NOT (2026-07-11): "Efektif Net Yıllık %" satırı kullanıcı isteğiyle
           // kaldırıldı — basit getiri hesabında bu değer zaten oran×(1−stopaj)
           // olduğundan ekstra bilgi taşımıyordu (örn. %40 → %33,00).
@@ -2522,11 +2529,11 @@ function VadeliKatilim({s,onGecmis}){
         return(
       <Card>
         <SecTitle>Sonuçlar</SecTitle>
-        <RRow label="Brüt Kâr Payı" value={fmtTL(r.bf)}/>
-        <RRow label={`Stopaj (%${fmtN(r.sOran)})`} value={`- ${fmtTL(r.stop)}`} sub accent={C.red}/>
-        <RRow label="Net Kâr Payı" value={fmtTL(r.nf)} accent={C.green} big/>
-        <RRow label="Vade Sonu Tutar" value={fmtTL(r.nv)} accent={C.blue} big/>
-        <button onClick={()=>{if(onGecmis&&r){onGecmis({modul:"Katılım Hesabı Getiri",tutar:fmtTL(parseFloat(tutar)),vade:gun+" Gün",oran:oran+"% (Brüt)",sonuc:fmtTL(r?.bf),netGetiri:fmtTL(r?.nf),aylikTaksit:"-",plan:[],satirlar:raporSatirlari});setKaydedildi(true);setTimeout(()=>setKaydedildi(false),2000);}}} style={{width:"100%",marginTop:6,marginBottom:2,padding:"10px",borderRadius:12,border:`1.5px solid ${kaydedildi?C.green:C.blue}`,background:kaydedildi?C.greenLight:C.blueLight,color:kaydedildi?C.green:C.blue,fontWeight:700,fontSize:13,cursor:"pointer",transition:"all 0.2s"}}>
+        <RRow label="Brüt Kâr Payı" value={fmtP(r.bf)}/>
+        <RRow label={`Stopaj (%${fmtN(r.sOran)})`} value={`- ${fmtP(r.stop)}`} sub accent={C.red}/>
+        <RRow label="Net Kâr Payı" value={fmtP(r.nf)} accent={C.green} big/>
+        <RRow label="Vade Sonu Tutar" value={fmtP(r.nv)} accent={C.blue} big/>
+        <button onClick={()=>{if(onGecmis&&r){onGecmis({modul:"Katılım Hesabı Getiri",tutar:fmtP(parseFloat(tutar)),vade:gun+" Gün",oran:oran+"% (Brüt)",sonuc:fmtP(r?.bf),netGetiri:fmtP(r?.nf),aylikTaksit:"-",plan:[],satirlar:raporSatirlari});setKaydedildi(true);setTimeout(()=>setKaydedildi(false),2000);}}} style={{width:"100%",marginTop:6,marginBottom:2,padding:"10px",borderRadius:12,border:`1.5px solid ${kaydedildi?C.green:C.blue}`,background:kaydedildi?C.greenLight:C.blueLight,color:kaydedildi?C.green:C.blue,fontWeight:700,fontSize:13,cursor:"pointer",transition:"all 0.2s"}}>
           {kaydedildi?"✅ Kaydedildi":"🕐 Geçmişe Kaydet"}
         </button>
         <RaporButon baslik="Katılım Hesabı Getiri Analizi" satirlar={raporSatirlari}/>
@@ -4650,7 +4657,9 @@ function SpotErkenKapamaModal({T, G, yillikOran, doviz, bsmvOran, kkdfOran, onCl
 }
 
 
-// ─── ÇEK ARKASI FİNANSMAN (2026-07-11) ───────────────────────────────────────
+// ─── ÇEK TEMİNATLI FİNANSMAN (2026-07-11; ad değişikliği 2026-07-13 — dahili
+// anahtar `cekArkasiFinansman` BİLEREK korundu: kullanıcı favorileri localStorage'da
+// bu anahtarla kayıtlı, değiştirmek favorileri bozar) ──────────────────────────
 // Müşterinin ibraz ettiği çeklerin (her biri farklı tutar+vade) BAKİYE/
 // AMORTİSMAN yöntemiyle bugünkü değeri hesaplanır (banka sistemiyle uyumlu):
 // kullandırım, çek ödemelerinin krediyi tam kapattığı anaparadır; kâr payı
@@ -4921,8 +4930,8 @@ function CekArkasiFinansman({s,onGecmis}){
           <RRow label="Efektif Yıllık Maliyet" value={`%${fmtN(r.efektifYillik,2)}`} accent={C.green} sub/>
           <RRow label="Kullandırılabilir Tutar" value={fmtDoviz(r.net)} accent={C.blue} big/>
           <button onClick={()=>setShowPlan(true)} style={{width:"100%",marginTop:12,padding:"12px",borderRadius:12,border:`1.5px solid ${C.blue}`,background:C.blueLight,color:C.blue,fontWeight:700,fontSize:14,cursor:"pointer"}}>📋 Ödeme Planı</button>
-          <button onClick={()=>{if(onGecmis)onGecmis({modul:"Çek Arkası Finansman",tutar:fmtDoviz(r.toplamT),vade:`${Math.round(r.ortVade)} Gün (ort.)`,oran:`%${oran}`,sonuc:fmtDoviz(r.net),aylikTaksit:"-",plan:cekPlan,satirlar:raporSatirlari,bsmvOran:r.bsmvOran,kkdfOran:0});}} style={{width:"100%",marginTop:12,padding:"12px",borderRadius:12,border:`1.5px solid ${C.blue}`,background:C.blueLight,color:C.blue,fontWeight:700,fontSize:14,cursor:"pointer"}}>🕐 Geçmişe Kaydet</button>
-          <RaporButon baslik={`Çek Arkası Finansman Analizi (${doviz})`} plan={cekPlan} satirlar={raporSatirlari} bsmvOran={r.bsmvOran} kkdfOran={0}/>
+          <button onClick={()=>{if(onGecmis)onGecmis({modul:"Çek Teminatlı Finansman",tutar:fmtDoviz(r.toplamT),vade:`${Math.round(r.ortVade)} Gün (ort.)`,oran:`%${oran}`,sonuc:fmtDoviz(r.net),aylikTaksit:"-",plan:cekPlan,satirlar:raporSatirlari,bsmvOran:r.bsmvOran,kkdfOran:0});}} style={{width:"100%",marginTop:12,padding:"12px",borderRadius:12,border:`1.5px solid ${C.blue}`,background:C.blueLight,color:C.blue,fontWeight:700,fontSize:14,cursor:"pointer"}}>🕐 Geçmişe Kaydet</button>
+          <RaporButon baslik={`Çek Teminatlı Finansman Analizi (${doviz})`} plan={cekPlan} satirlar={raporSatirlari} bsmvOran={r.bsmvOran} kkdfOran={0}/>
         </Card>
       )}
     </div>
@@ -10327,7 +10336,7 @@ const MENU = {
   spotFinansman:{title:"Spot Finansman Hesaplama",back:"hesaplaMenu"},
   taksitliTicari:{title:"Taksitli Ticari Finansman Hesaplama",back:"hesaplaMenu"},
   leasing:{title:"Finansal Kiralama Hesaplama",back:"hesaplaMenu"},
-  cekArkasiFinansman:{title:"Çek Arkası Finansman Hesaplama",back:"hesaplaMenu"},
+  cekArkasiFinansman:{title:"Çek Teminatlı Finansman Hesaplama",back:"hesaplaMenu"},
   posHesaplama:{title:"POS Komisyon Hesaplama",back:"hesaplaMenu"},
   tmKomisyon:{title:"Teminat Mektubu Komisyon Hesaplama",back:"hesaplaMenu"},
   akreditifKomisyon:{title:"Akreditif Komisyon Hesaplama",back:"hesaplaMenu"},
@@ -10459,7 +10468,7 @@ const MENU_ARAMA_LIST=[
   {key:"spotFinansman",      label:"Spot Finansman Hesaplama",             icon:"⚡", grup:"Tüzel Finansman"},
   {key:"taksitliTicari",     label:"Taksitli Ticari Finansman Hesaplama",  icon:"🏗️", grup:"Tüzel Finansman"},
   {key:"leasing",            label:"Finansal Kiralama Hesaplama",          icon:"🔑", grup:"Tüzel Finansman"},
-  {key:"cekArkasiFinansman", label:"Çek Arkası Finansman Hesaplama",       icon:"🧾", grup:"Tüzel Finansman", alt:["çek","iskonto","kırdırma","çek arkası","bugünkü değer"]},
+  {key:"cekArkasiFinansman", label:"Çek Teminatlı Finansman Hesaplama",   icon:"🧾", grup:"Tüzel Finansman", alt:["çek","iskonto","kırdırma","çek arkası","teminat","bugünkü değer"]},
   {key:"posHesaplama",       label:"POS Komisyon Hesaplama",               icon:"💳", grup:"Tüzel Finansman"},
   {key:"tmKomisyon",         label:"Teminat Mektubu Komisyon Hesaplama",                icon:"📄", grup:"Tüzel Finansman"},
   {key:"akreditifKomisyon",  label:"Akreditif Komisyon Hesaplama",         icon:"🌐", grup:"Tüzel Finansman"},
@@ -10515,7 +10524,7 @@ const HESAPLA_ARAC_LISTESI = [
   {key:"spotFinansman",      icon:"⚡", label:"Spot Finansman Hesaplama",             kat:"ticari"},
   {key:"taksitliTicari",     icon:"🏗️", label:"Taksitli Ticari Finansman Hesaplama",  kat:"ticari"},
   {key:"esnekOdemePlanlari", icon:"📋", label:"Esnek Ödeme Planları Hesaplama",       kat:"ticari"},
-  {key:"cekArkasiFinansman", icon:"🧾", label:"Çek Arkası Finansman Hesaplama",       kat:"ticari"},
+  {key:"cekArkasiFinansman", icon:"🧾", label:"Çek Teminatlı Finansman Hesaplama",   kat:"ticari"},
   {key:"leasing",            icon:"🚙", label:"Finansal Kiralama Hesaplama",          kat:"ticari"},
   {key:"posHesaplama",       icon:"💳", label:"POS Komisyon Hesaplama",               kat:"ticari"},
   {key:"tmKomisyon",         icon:"📄", label:"Teminat Mektubu Komisyon Hesaplama",                kat:"ticari"},
@@ -13619,7 +13628,7 @@ function App(){
         .empty-anim { animation: fadeInUp 400ms ease-out; }
         /* Masaüstü yan menü öğeleri */
         .kp-side-item { transition: background 0.15s ease, color 0.15s ease; cursor: pointer; -webkit-tap-highlight-color: transparent; }
-        .kp-side-item:hover { background: rgba(255,255,255,0.06) !important; }
+        .kp-side-item:hover { background: ${TEMA==="acik"?"rgba(22,34,46,0.07)":"rgba(255,255,255,0.06)"} !important; }
         /* Sparkline/deger ilk yüklendiğinde yumuşak belirme (parça parça
            gelen verinin sert "pat" diye görünmesini engeller) */
         .spark-in { animation: sparkIn 360ms ease-out; }
@@ -13653,14 +13662,14 @@ function App(){
                   borderLeft:aktif?"3px solid #5B9BD8":"3px solid transparent",
                 }}>
                   <AltBarIcon tip={t.tip} aktif={aktif}/>
-                  <span style={{fontSize:13.5,fontWeight:aktif?700:500,color:aktif?(TEMA==="acik"?"#16222E":"#EAF1FA"):WA(0.6)}}>{CV(t.label)}</span>
+                  <span style={{fontSize:13.5,fontWeight:aktif?700:500,color:aktif?(TEMA==="acik"?"#16222E":"#EAF1FA"):(TEMA==="acik"?"#1F3247":WA(0.6))}}>{CV(t.label)}</span>
                 </div>
               );
             })}
           </div>
           {/* Hızlı erişim */}
           <div style={{marginTop:18,paddingTop:14,borderTop:`1px solid ${WA(0.07)}`}}>
-            <div style={{fontSize:9.5,fontWeight:800,letterSpacing:1,color:WA(0.35),padding:"0 12px 8px"}}>{CV("HIZLI ERİŞİM")}</div>
+            <div style={{fontSize:9.5,fontWeight:800,letterSpacing:1,color:TEMA==="acik"?"#40566C":WA(0.35),padding:"0 12px 8px"}}>{CV("HIZLI ERİŞİM")}</div>
             {[
               {key:"getiriKarsilastirma",label:"Getiri Karşılaştırma"},
               {key:"haftalikOzet",label:"Haftalık Piyasa Özeti"},
@@ -13673,7 +13682,7 @@ function App(){
                 background:screen===m.key?"rgba(91,155,216,0.14)":"transparent",
               }}>
                 <span style={{width:20,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon k={m.key} size={15}/></span>
-                <span style={{fontSize:12.5,fontWeight:screen===m.key?700:500,color:screen===m.key?"#DCE9F7":WA(0.55)}}>{CV(m.label)}</span>
+                <span style={{fontSize:12.5,fontWeight:screen===m.key?700:500,color:screen===m.key?(TEMA==="acik"?"#0F3B66":"#DCE9F7"):(TEMA==="acik"?"#24384E":WA(0.55))}}>{CV(m.label)}</span>
               </div>
             ))}
           </div>
@@ -13681,7 +13690,7 @@ function App(){
           <div style={{marginTop:"auto",paddingTop:12,borderTop:`1px solid ${WA(0.07)}`}}>
             <div className="kp-side-item" onClick={()=>nav("ayarlar")} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:10,background:screen==="ayarlar"?"rgba(91,155,216,0.14)":"transparent"}}>
               <span style={{width:20,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon k="ayarlar" size={15}/></span>
-              <span style={{fontSize:12.5,fontWeight:600,color:screen==="ayarlar"?"#DCE9F7":WA(0.55)}}>{CV("Ayarlar")}</span>
+              <span style={{fontSize:12.5,fontWeight:600,color:screen==="ayarlar"?(TEMA==="acik"?"#0F3B66":"#DCE9F7"):(TEMA==="acik"?"#24384E":WA(0.55))}}>{CV("Ayarlar")}</span>
             </div>
             <div style={{fontSize:9.5,color:WA(0.3),padding:"10px 12px 0",lineHeight:1.5}}>© {new Date().getFullYear()} Katılım Plus</div>
           </div>
