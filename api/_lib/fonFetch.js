@@ -248,6 +248,13 @@ function mapFon(f, vakif, takasAraligi) {
 }
 
 const VAKIF_KODLARI = ["VPA","VLT","VHS","VKK","VKV"];
+// TEŞHİS (2026-07-13 akşam): tam tarama artık sayfa kaybetmiyor (kanıtlandı:
+// hamAdet~3500, kayipSayfalar:[]) ama count hâlâ 142'de sabit kaldı — yani
+// NSA/DNP/FTL/MPE/EP1 ham taramanın İÇİNDE görülüyor ama katılım filtresi
+// (mapFon.katilimUygun) onları eliyor. Bu kodları görürse HAM halini (filtre
+// sonucundan bağımsız) rapora düşür — API'nin gerçek name/category/
+// is_participation alanlarını görüp filtreyi buna göre düzeltebilelim.
+const ARANAN_TESHIS_KODLARI = ["NSA","FTL","MPE","DNP","EP1"];
 const PAGE_SIZE = 100;
 const ŞÜPHELİ_EŞİK = 100; // normal günde 150+ katılım fonu beklenir
 const MAKS_SAYFA = 60;    // emniyet: 6.000 fon üstü beklenmiyor (bugün ~3.450)
@@ -273,6 +280,7 @@ async function fonVerisiCek(parcaNo = null) {
   let sayfaTekrarKaldi = 3; // tarama genelinde toplam 3 ek deneme hakkı
   let offset = 0;
   let sayfaSayisi = 0;
+  const kayipFonlarHamVeri = {}; // ARANAN_TESHIS_KODLARI'ndan görülenlerin ham içeriği
 
   while (sayfaSayisi < MAKS_SAYFA) {
     const url = `https://fonoloji.com/v1/funds?limit=${PAGE_SIZE}&offset=${offset}`;
@@ -307,6 +315,18 @@ async function fonVerisiCek(parcaNo = null) {
     if (!items.length) break;
     hamToplam += items.length;
     for (const f of items) {
+      const kodHam = f.code || "";
+      if (ARANAN_TESHIS_KODLARI.includes(kodHam) && !kayipFonlarHamVeri[kodHam]) {
+        // Filtre kararından ÖNCE ham veriyi kaydet — trading_status'a takılsa
+        // bile görünsün, gerçek sebep tam olarak anlaşılsın.
+        kayipFonlarHamVeri[kodHam] = {
+          name: f.name ?? null,
+          category: f.category ?? f.fund_type ?? null,
+          is_participation: f.is_participation ?? null,
+          participation: f.participation ?? null,
+          trading_status: f.trading_status ?? null,
+        };
+      }
       if (f.trading_status && f.trading_status !== "AKTİF") continue;
       const kod = f.code || "";
       if (!kod || gorulmuKodlar.has(kod)) continue;
@@ -337,6 +357,9 @@ async function fonVerisiCek(parcaNo = null) {
       sayfaSayisi,
       hedefToplam,
       kayipSayfalar,
+      // Aranan 5 fon taramada hiç görülmediyse burada eksik kalır — bu da
+      // kendi başına bir bulgu (Fonoloji'nin tam listesinde yoklar demektir).
+      aranilanKayipFonlar: kayipFonlarHamVeri,
     },
   };
 
