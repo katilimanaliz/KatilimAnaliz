@@ -8,6 +8,20 @@
 //
 // DEĞİŞİKLİK (2026-07-13) — "bizde olmayan fonlar var" raporu (NSA, FTL, MPE,
 // DNP, EP1 Fonoloji'de görünüp uygulamada yoktu). İki düzeltme:
+//   0) TAM TARAMA MİMARİSİ (2026-07-13 akşam, kullanıcı önerisi): kategori
+//      bazlı çekim TAMAMEN KALDIRILDI. Kök sorun: kategori adları Fonoloji
+//      ile birebir tutmak zorundaydı (yanlış ad = sessizce 0 fon, ör. "Endeks
+//      Şemsiye Fonu"), kalabalık kategorilerde sayfa kayıpları oluyordu ve
+//      NSA/DNP gibi fonlar günlerce listeye giremedi. Artık /v1/funds TÜM
+//      liste olarak taranıyor (~3.450 fon, ~35 sayfa, sefer başı ~35 istek,
+//      8 sefer/gün ≈ ayda ~6.300 istek — 15.000 kotanın içinde) ve katılım
+//      filtresi (isim/kategori "KATILIM" + is_participation bayrağı) BİZDE
+//      uygulanıyor. Kategori ne olursa olsun hiçbir katılım fonu kaçamaz.
+//      `parcaNo` parametresi geriye dönük uyum için duruyor (cron URL'leri
+//      ?parca=N gönderiyor) ama artık yok sayılıyor — her çağrı tam tarama.
+//      tefas-proxy'nin parça birleştirmesi (kod bazlı merge) bilerek korundu:
+//      taramada sayfa kaybı olursa eski fonlar silinmez, sadece güncellenen
+//      güncellenir.
 //   1) SAYFALAMA DİRENCİ: pagination döngüsü bir sayfada hata (özellikle
 //      hızlı-vazgeçilen 429) alınca `break` ile kategorinin KALAN TÜM
 //      sayfalarını o günlük kaybediyordu — kuyruktaki fonlar hiç çekilmiyordu.
@@ -233,205 +247,78 @@ function mapFon(f, vakif, takasAraligi) {
   };
 }
 
-const KATEGORILER = [
-  {kat: "Katılım",                        tumunu: true},
-  {kat: "Altın Katılım Fonu",             tumunu: true},
-  {kat: "OKS Katılım Standart Fon",       tumunu: true},
-  {kat: "Katılım Katkı Fonu",             tumunu: true},
-  {kat: "Katılım Fonu",                   tumunu: true},
-  {kat: "Katılım Standart Fon",           tumunu: true},
-  {kat: "Başlangıç Katılım Fonu",         tumunu: true},
-  {kat: "Katılım Değişken Fon",           tumunu: true},
-  {kat: "Katılım Hisse Senedi Fonu",      tumunu: true},
-  {kat: "Kira Sertifikası Katılım Fonu",  tumunu: true},
-  // ADAY KATEGORİLER (2026-07-13, eksik fon teşhisi): Fonoloji'de bu adlarla
-  // kategori yoksa boş döner (1 istek, zararsız); varsa NSA/FTL/MPE/DNP/EP1
-  // gibi kayıp fonları kapsama alır. Gerçek sonuç kategoriTeshis'ten izlenecek.
-  {kat: "Katılım Şemsiye Fonu",           tumunu: true},
-  {kat: "Para Piyasası Katılım Şemsiye Fonu", tumunu: true},
-  {kat: "Hisse Senedi Şemsiye Fonu",      tumunu: false},
-  {kat: "Para Piyasası Şemsiye Fonu",     tumunu: false},
-  {kat: "Değişken Şemsiye Fonu",          tumunu: false},
-  {kat: "Karma Şemsiye Fonu",             tumunu: false},
-  {kat: "Fon Sepeti Şemsiye Fonu",        tumunu: false},
-  {kat: "Altın Şemsiye Fonu",             tumunu: false},
-  {kat: "Kıymetli Madenler Şemsiye Fonu", tumunu: false},
-  {kat: "Endeks Şemsiye Fonu",            tumunu: false},
-  {kat: "Serbest Şemsiye Fonu",           tumunu: false},
-  {kat: "Altın Fonu",                     tumunu: false},
-  {kat: "Kıymetli Madenler",              tumunu: false},
-];
-
 const VAKIF_KODLARI = ["VPA","VLT","VHS","VKK","VKV"];
 const PAGE_SIZE = 100;
-const ŞÜPHELİ_EŞİK = 100; // normal günde 150+ fon beklenir (TÜM parçalar birleştiğinde)
+const ŞÜPHELİ_EŞİK = 100; // normal günde 150+ katılım fonu beklenir
+const MAKS_SAYFA = 60;    // emniyet: 6.000 fon üstü beklenmiyor (bugün ~3.450)
 
-// ── Parça (batch) bölüştürme — DÜZELTME 2 (2026-07) ─────────────────────────
-// KÖK NEDEN (gerçek log'la doğrulandı): Eski 3-parça bölüşümünde Parça 1
-// içinde HEM 5 Vakıf fonu HEM "Katılım" kategorisi (kendi başına ~5 sayfa,
-// "ağır" diye zaten yorumla işaretliydi) HEM 6 kategori daha vardı. Bunların
-// toplamı — özellikle "Katılım" kategorisinin gerçekte tahmin edilenden çok
-// daha fazla sayfa çekmesi ve/veya 429'lar yüzünden tekrar denemelerin
-// eklenmesiyle — 280 saniyelik fonksiyon süresini AŞTI ve Vercel Runtime
-// Timeout ile öldürüldü (log: "Task timed out after 280 seconds"). Fonksiyon
-// hiçbir zaman kv.set()'e ulaşamadığı için veri günlerce güncellenmeden kaldı.
-//
-// ÇÖZÜM: 3 parça yerine 8 DAHA KÜÇÜK parçaya bölündü. En kritik değişiklik:
-// bilinen İKİ "ağır" kategori ("Katılım" ve "Katılım Değişken Fon") artık
-// KENDİ BAŞLARINA, tek başına bir parça olarak çalışıyor — başka hiçbir
-// kategoriyle aynı çağrıda yarışmıyorlar, tüm 280sn'lik bütçeyi tek başlarına
-// kullanabiliyorlar. Vakıf fonları (hızlı, 5 istek) en hafif parçaya (1) taşındı.
-// vercel.json'da buna karşılık gelen 8 ayrı cron saati tanımlandı — Vercel
-// Hobby planı HER cron girdisinin kendi başına günde bir kez çalışmasına izin
-// verdiği için (toplam sayı değil, her girdinin kendi sıklığı sınırlanıyor)
-// bu sorun teşkil etmiyor.
-// SAAT DEĞİŞİKLİĞİ (2026-07-13): pencere 05-12 UTC'den (08-15 TR) 08-15
-// UTC'ye (11-18 TR) kaydırıldı — Fonoloji güne ait TEFAS fiyatlarını ~11:00
-// TR'de işlediği için eski pencerede parçaların çoğu (özellikle 09:00 TR'deki
-// "Katılım") bir önceki günün verisini çekiyordu; kullanıcılar gün boyu bayat
-// veri görüyordu (13 Tem pazartesi raporu: uygulama cuma verisi, Fonoloji
-// pazartesi verisi gösteriyordu).
-const PARCALAR = [
-  // Parça 1: Vakıf fonları (5 istek, hızlı) + en hafif 2 kategori
-  [
-    {kat: "Altın Katılım Fonu",             tumunu: true},
-    {kat: "OKS Katılım Standart Fon",       tumunu: true},
-  ],
-  // Parça 2: "Katılım" — TEK BAŞINA (bilinen en ağır kategori, ~5+ sayfa)
-  [
-    {kat: "Katılım",                        tumunu: true},
-  ],
-  // Parça 3: "Katılım Değişken Fon" — TEK BAŞINA (bilinen ikinci ağır kategori)
-  [
-    {kat: "Katılım Değişken Fon",           tumunu: true},
-  ],
-  // Parça 4 (+ aday kategori "Katılım Şemsiye Fonu")
-  [
-    {kat: "Katılım Katkı Fonu",             tumunu: true},
-    {kat: "Katılım Fonu",                   tumunu: true},
-    {kat: "Katılım Standart Fon",           tumunu: true},
-    {kat: "Katılım Şemsiye Fonu",           tumunu: true},
-  ],
-  // Parça 5 (+ aday kategori "Para Piyasası Katılım Şemsiye Fonu")
-  [
-    {kat: "Başlangıç Katılım Fonu",         tumunu: true},
-    {kat: "Katılım Hisse Senedi Fonu",      tumunu: true},
-    {kat: "Kira Sertifikası Katılım Fonu",  tumunu: true},
-    {kat: "Para Piyasası Katılım Şemsiye Fonu", tumunu: true},
-  ],
-  // Parça 6
-  [
-    {kat: "Hisse Senedi Şemsiye Fonu",      tumunu: false},
-    {kat: "Para Piyasası Şemsiye Fonu",     tumunu: false},
-    {kat: "Değişken Şemsiye Fonu",          tumunu: false},
-    {kat: "Karma Şemsiye Fonu",             tumunu: false},
-  ],
-  // Parça 7
-  [
-    {kat: "Fon Sepeti Şemsiye Fonu",        tumunu: false},
-    {kat: "Altın Şemsiye Fonu",             tumunu: false},
-    {kat: "Kıymetli Madenler Şemsiye Fonu", tumunu: false},
-    {kat: "Endeks Şemsiye Fonu",            tumunu: false},
-  ],
-  // Parça 8
-  [
-    {kat: "Serbest Şemsiye Fonu",           tumunu: false},
-    {kat: "Altın Fonu",                     tumunu: false},
-    {kat: "Kıymetli Madenler",              tumunu: false},
-  ],
-];
+// ESKİ MİMARİDEN KALAN: PARCALAR artık kullanılmıyor (tam tarama). Başka bir
+// modül import ediyorsa kırılmasın diye boş dizi olarak export ediliyor.
+const PARCALAR = [];
 
-// Fonoloji'den katılım fonlarını çeker. `parcaNo` verilirse (1-8) SADECE o
-// parçadaki kategorileri işler (Vakıf kodları sadece 1. parçada çekilir).
-// `parcaNo` verilmezse TÜMÜNÜ işler (uzun sürer — sadece elle/test amaçlı kullan).
+// Fonoloji'den TÜM fon listesini tarar, katılım filtresini yerelde uygular.
+// `parcaNo` yok sayılır (geriye dönük uyum — cron URL'leri ?parca=N gönderiyor).
 async function fonVerisiCek(parcaNo = null) {
   const API_KEY = process.env.FONOLOJI_KEY;
   if (!API_KEY) throw new Error("FONOLOJI_KEY tanımlı değil");
   const headers = { "X-API-Key": API_KEY, "Accept": "application/json" };
   const takasAraligi = sonTakasGunuAralik();
 
-  const isleneckKategoriler = parcaNo ? PARCALAR[parcaNo - 1] : KATEGORILER;
-  const vakifIsle = !parcaNo || parcaNo === 1; // Vakıf kodları sadece 1. parçada
-
   const gorulmuKodlar = new Set();
-  let katilimFonlar = [];
+  const katilimFonlar = [];
+  let hamToplam = 0;        // taranan (aktif+pasif dahil sayfadan gelen) ham kayıt
+  let hedefToplam = null;   // API total bildiriyorsa: kayıp sayfa atlarken pusula
+  const kayipSayfalar = []; // tekrarlara rağmen alınamayan offset'ler
+  let sonHata = null;
+  let sayfaTekrarKaldi = 3; // tarama genelinde toplam 3 ek deneme hakkı
+  let offset = 0;
+  let sayfaSayisi = 0;
 
-  if (vakifIsle) {
-    const vakifRes = await Promise.all(
-      VAKIF_KODLARI.map(kod =>
-        fetchTekrarli(`https://fonoloji.com/v1/funds/${kod}`, { headers }, 2)
-          .then(r => r ? r.json() : null).catch(() => null)
-      )
-    );
-    for (const d of vakifRes) {
-      if (!d) continue;
-      const f = d.fund ?? d;
+  while (sayfaSayisi < MAKS_SAYFA) {
+    const url = `https://fonoloji.com/v1/funds?limit=${PAGE_SIZE}&offset=${offset}`;
+    const { res, hata } = await fetchTeshisli(url, { headers }, 2);
+    if (!res) {
+      // Geçici hata: önce tarama genel tekrar hakkını kullan (5sn nefes)
+      if (sayfaTekrarKaldi > 0) {
+        sayfaTekrarKaldi--;
+        await new Promise(r => setTimeout(r, 5000));
+        continue; // aynı offset'i tekrar dene
+      }
+      // Haklar bitti: bu sayfayı kayıp say, mümkünse taramaya devam et.
+      kayipSayfalar.push(offset);
+      sonHata = hata;
+      if (hedefToplam === null) break; // toplamı bilmeden körlemesine ilerlenmez
+      offset += PAGE_SIZE; sayfaSayisi++;
+      if (offset >= hedefToplam) break;
+      continue;
+    }
+    const d = await res.json().catch(() => null);
+    if (!d) {
+      kayipSayfalar.push(offset); sonHata = "JSON parse hatası";
+      offset += PAGE_SIZE; sayfaSayisi++;
+      if (hedefToplam !== null && offset >= hedefToplam) break;
+      continue;
+    }
+    if (hedefToplam === null) {
+      const t = d.total ?? d.count ?? d.meta?.total;
+      if (typeof t === "number" && t > 0) hedefToplam = t;
+    }
+    const items = d.items ?? d.funds ?? d.data ?? (Array.isArray(d) ? d : []);
+    if (!items.length) break;
+    hamToplam += items.length;
+    for (const f of items) {
+      if (f.trading_status && f.trading_status !== "AKTİF") continue;
       const kod = f.code || "";
       if (!kod || gorulmuKodlar.has(kod)) continue;
-      gorulmuKodlar.add(kod);
-      katilimFonlar.push(mapFon(f, true, takasAraligi));
-    }
-  }
-
-  const kategoriPromises = isleneckKategoriler.map(async ({kat, tumunu}) => {
-    const sonuclar = [];
-    let offset = 0;
-    let herhangiIstekBasarisiz = false;
-    let sonHata = null;
-    let sayfaTekrarKaldi = 1; // SAYFALAMA DİRENCİ: kategori başına 1 ek sayfa hakkı
-    const encKat = encodeURIComponent(kat);
-    while (true) {
-      const url = `https://fonoloji.com/v1/funds?category=${encKat}&limit=${PAGE_SIZE}&offset=${offset}`;
-      const { res, hata } = await fetchTeshisli(url, { headers }, 2);
-      if (!res) {
-        // DÜZELTME (2026-07-13): eskiden burada doğrudan `break` vardı —
-        // sayfalama ortasındaki tek bir geçici 429/timeout, kategorinin
-        // KALAN TÜM sayfalarını o günlük kaybettiriyordu (NSA/FTL gibi
-        // kuyruktaki fonlar hiç çekilmiyordu). Artık aynı offset, 5sn ek
-        // bekleme sonrası bir kez daha denenir; ancak o da başarısızsa
-        // vazgeçilir. Ek maliyet: kategori başına en fazla 1 tekrar.
-        if (sayfaTekrarKaldi > 0) {
-          sayfaTekrarKaldi--;
-          await new Promise(r => setTimeout(r, 5000));
-          continue; // aynı offset'i tekrar dene
-        }
-        herhangiIstekBasarisiz = true; sonHata = hata; break;
-      }
-      const d = await res.json().catch(() => null);
-      if (!d) { herhangiIstekBasarisiz = true; sonHata = "JSON parse hatası"; break; }
-      const items = d.items ?? d.funds ?? d.data ?? (Array.isArray(d) ? d : []);
-      if (!items.length) break;
-      for (const f of items) {
-        if (f.trading_status && f.trading_status !== "AKTİF") continue;
-        if (!tumunu) {
-          const isim = (f.name || "").toUpperCase();
-          if (!isim.includes("KATILIM")) continue;
-        }
-        sonuclar.push(f);
-      }
-      if (items.length < PAGE_SIZE) break;
-      offset += PAGE_SIZE;
-    }
-    return { kat, sonuclar, herhangiIstekBasarisiz, sonHata };
-  });
-
-  const tumKategoriSonuclari = await Promise.all(kategoriPromises);
-  // Teşhis: hangi kategori kaç ham fon getirdi, hangisi ağ hatasıyla tamamen boş kaldı.
-  // Sayı düşük çıktığında ("gelmeyen fonlar var") bu, hangi kategorinin sorunlu
-  // olduğunu tek tek göstererek kör tahmin yerine kesin teşhis sağlar.
-  const kategoriTeshis = {};
-  for (const {kat, sonuclar, herhangiIstekBasarisiz, sonHata} of tumKategoriSonuclari) {
-    kategoriTeshis[kat] = { hamAdet: sonuclar.length, agHatasi: herhangiIstekBasarisiz, hata: sonHata };
-  }
-  for (const {sonuclar} of tumKategoriSonuclari) {
-    for (const f of sonuclar) {
-      const kod = f.code || "";
-      if (!kod || gorulmuKodlar.has(kod)) continue;
-      const mapped = mapFon(f, false, takasAraligi);
+      const mapped = mapFon(f, VAKIF_KODLARI.includes(kod), takasAraligi);
       if (!mapped.katilimUygun) continue;
       gorulmuKodlar.add(kod);
       katilimFonlar.push(mapped);
     }
+    sayfaSayisi++;
+    offset += PAGE_SIZE;
+    if (items.length < PAGE_SIZE) break;
+    if (hedefToplam !== null && offset >= hedefToplam) break;
   }
 
   const kategoriSayac = {};
@@ -440,16 +327,22 @@ async function fonVerisiCek(parcaNo = null) {
     kategoriSayac[k] = (kategoriSayac[k] || 0) + 1;
   }
 
-  // "Eksik görünüyor" tanımı parça moduna göre değişir:
-  //  - Tam mod (parcaNo yok): toplam fon sayısı 100'ün altındaysa şüpheli.
-  //  - Parça modu: bu parçadaki kategorilerin YARISINDAN FAZLASI ağ hatası
-  //    verdiyse şüpheli (mutlak sayı değil, oran — bir parça zaten az kategori
-  //    işlediği için düşük mutlak sayı normaldir). Tek kategorili parçalarda
-  //    (2 ve 3) bu, o TEK kategori hata verirse şüpheli sayılır demektir.
-  const hataliKategoriSayisi = Object.values(kategoriTeshis).filter(k => k.agHatasi).length;
-  const eksikGorunuyor = parcaNo
-    ? hataliKategoriSayisi > isleneckKategoriler.length / 2
-    : katilimFonlar.length < ŞÜPHELİ_EŞİK;
+  // Teşhis: eski kategori-bazlı yapıyla alan uyumu korunuyor (hamAdet/agHatasi/hata)
+  // ki tefas-proxy'deki teshisBirlestir değişmeden çalışsın.
+  const kategoriTeshis = {
+    "Tam Tarama": {
+      hamAdet: hamToplam,
+      agHatasi: kayipSayfalar.length > 0,
+      hata: sonHata,
+      sayfaSayisi,
+      hedefToplam,
+      kayipSayfalar,
+    },
+  };
+
+  // Katılım fonu sayısı eşiğin altındaysa VEYA 3'ten fazla sayfa kaybolduysa
+  // "eksik görünüyor" — tefas-proxy bu durumda eski veriyi korur.
+  const eksikGorunuyor = katilimFonlar.length < ŞÜPHELİ_EŞİK || kayipSayfalar.length > 3;
 
   return {
     success: true,
@@ -458,7 +351,7 @@ async function fonVerisiCek(parcaNo = null) {
     eksikGorunuyor,
     guncelleme: new Date().toISOString(),
     kategori_dagilim: kategoriSayac,
-    kategoriTeshis, // her kategori için {hamAdet, agHatasi} — hangi kategori sorunlu, kesin teşhis
+    kategoriTeshis,
     data: katilimFonlar,
   };
 }
