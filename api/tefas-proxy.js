@@ -10,10 +10,9 @@
 // aşıldı"). Toplam ~34 isteği (5 Vakıf + 21 kategori + pagination) tek çağrıda
 // bu kurala uyacak şekilde yavaşlatınca süre ~75-90sn'ye çıkıyor — bu, Vercel
 // fonksiyon zaman aşımı sınırına (plana göre değişir) takılma riski taşıyor.
-// Çözüm: 21 kategori 3 dengeli PARÇAya bölündü (_lib/fonFetch.js'deki
-// KATEGORILER sıralamasına bkz), günde zaten var olan 3 cron saatine
-// (08:00/09:00/10:00 TR) birer parça dağıtıldı. Her çağrı ~20-45sn sürer,
-// güvenli. Sabah 10'a gelindiğinde 3 parça birikip tam liste oluşur.
+// Çözüm: kategoriler 8 dengeli PARÇAya bölündü (_lib/fonFetch.js'deki
+// PARCALAR'a bkz), her parçaya vercel.json'da bir cron saati tanımlandı.
+// Her çağrı ~20-45sn sürer, güvenli. Son parça bittiğinde tam liste oluşur.
 //
 // NEDEN TEK DOSYA (ayrı bir cron-*.js değil): Vercel Hobby plan deployment
 // başına en fazla 12 Serverless Function'a izin veriyor (bu repo zaten
@@ -52,6 +51,13 @@
 //      dakika içinde gelen diğer istekler YENİ bir tam-çekim tetiklemez,
 //      sadece "veri henüz yok" der. Böylece art arda gelen çok sayıda soğuk
 //      istek, art arda çok sayıda ağır Fonoloji çekimine dönüşemez.
+//
+// TEŞHİS KALICILIĞI (2026-07-13): fonVerisiCek'in ürettiği kategoriTeshis
+// (kategori başına hamAdet/agHatasi/hata) artık KV'ye YAZILIYOR ve public
+// yanıtta dönülüyor — parça bazında birleştirilerek (her cron kendi
+// kategorilerinin teşhisini günceller, diğerlerini korur). Böylece "bizde
+// olmayan fonlar var" tarzı raporlarda tarayıcıdan /api/tefas-proxy açıp
+// hangi kategorinin boş/hatalı olduğu anında görülebiliyor.
 export const config = { maxDuration: 280 };
 
 import { Redis } from "@upstash/redis";
@@ -83,6 +89,12 @@ function birlestir(eskiData, yeniData) {
   for (const f of (eskiData || [])) map.set(f.kod, f);
   for (const f of yeniData) map.set(f.kod, f);
   return [...map.values()];
+}
+
+// kategoriTeshis birleştirme: parça sadece kendi kategorilerini işlediği için
+// eski teşhisin üzerine yalnızca bu parçanın kategorileri yazılır.
+function teshisBirlestir(eskiTeshis, yeniTeshis) {
+  return { ...(eskiTeshis || {}), ...(yeniTeshis || {}) };
 }
 
 function kategoriDagilimHesapla(data) {
@@ -131,6 +143,9 @@ async function cronYaz(req, res) {
         count: sonucSayim,
         guncelleme: new Date().toISOString(),
         kategori_dagilim: kategoriDagilimHesapla(sonucData),
+        // TEŞHİS KALICILIĞI (2026-07-13): parça teşhisi eski teşhisle
+        // birleştirilerek saklanır — /api/tefas-proxy yanıtında görünür.
+        kategoriTeshis: teshisBirlestir(eski?.kategoriTeshis, yeni.kategoriTeshis),
         // Cron zaten gerçek veri yazdığı için "eksik" bayrağını temizliyoruz —
         // bootstrap'tan kalma eksik işareti kalıcı olmasın.
         eksik: false,
@@ -195,6 +210,7 @@ async function herkesOku(req, res) {
                 count: taze.count,
                 guncelleme: taze.guncelleme,
                 kategori_dagilim: taze.kategori_dagilim,
+                kategoriTeshis: taze.kategoriTeshis,
                 // DÜZELTME: kısmi sonuç bile olsa artık KV'ye YAZILIYOR (eski
                 // davranış: sadece count>=ŞÜPHELİ_EŞİK ise yazılıyordu — düşük
                 // sonuçlar hiç yazılmadığı için `kayit` sonsuza dek null kalıp
@@ -245,6 +261,7 @@ async function herkesOku(req, res) {
       kaynakBayat: bayatMi,
       kaynakEksik: !!kayit.eksik,
       kategori_dagilim: kayit.kategori_dagilim,
+      kategoriTeshis: kayit.kategoriTeshis || null,
       data: kayit.data,
     });
   } catch (error) {

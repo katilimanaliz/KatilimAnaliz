@@ -81,9 +81,9 @@
   ],
   "finansman": {
     "guncelleme": {
-      "konut": "2026-07-12",
-      "tasit": "2026-07-12",
-      "ihtiyac": "2026-07-12"
+      "konut": "2026-07-13",
+      "tasit": "2026-07-13",
+      "ihtiyac": "2026-07-13"
     },
     "bankalar": [
       {
@@ -107,7 +107,7 @@
       {
         "ad": "Kuveyt Türk",
         "konut60": 2.8,
-        "konut120": 2.91,
+        "konut120": 2.8,
         "tasit12": 3.78,
         "tasit24": 3.53,
         "ihtiyac12": 4.11,
@@ -116,7 +116,7 @@
       {
         "ad": "Türkiye Finans",
         "konut60": 3.14,
-        "konut120": 2.95,
+        "konut120": 2.99,
         "tasit12": 3.75,
         "tasit24": 3.63,
         "ihtiyac12": 4.05,
@@ -125,29 +125,29 @@
       {
         "ad": "Dünya Katılım",
         "konut60": 2.89,
-        "konut120": 2.99,
+        "konut120": 2.89,
         "tasit12": 3.29,
-        "tasit24": 3.29,
+        "tasit24": 3.39,
         "ihtiyac12": 3.99,
         "ihtiyac24": 3.99
       },
       {
         "ad": "Ziraat Katılım",
         "konut60": 2.89,
-        "konut120": null,
+        "konut120": 2.89,
         "tasit12": 3.49,
-        "tasit24": null,
+        "tasit24": 3.49,
         "ihtiyac12": 4.99,
         "ihtiyac24": 4.99
       },
       {
         "ad": "Emlak Katılım",
-        "konut60": null,
+        "konut60": 3.39,
         "konut120": 3.39,
-        "tasit12": null,
-        "tasit24": null,
-        "ihtiyac12": null,
-        "ihtiyac24": null
+        "tasit12": 4.29,
+        "tasit24": 4.29,
+        "ihtiyac12": 3.89,
+        "ihtiyac24": 3.89
       },
       {
         "ad": "Hayat Finans",

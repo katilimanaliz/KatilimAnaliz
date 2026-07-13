@@ -5,6 +5,22 @@
 // bakım gerektirmez.
 // NOT: Dosya adı "_lib" ile başladığı için Vercel bunu bir API route olarak
 // görmez, sadece import edilebilir bir modüldür.
+//
+// DEĞİŞİKLİK (2026-07-13) — "bizde olmayan fonlar var" raporu (NSA, FTL, MPE,
+// DNP, EP1 Fonoloji'de görünüp uygulamada yoktu). İki düzeltme:
+//   1) SAYFALAMA DİRENCİ: pagination döngüsü bir sayfada hata (özellikle
+//      hızlı-vazgeçilen 429) alınca `break` ile kategorinin KALAN TÜM
+//      sayfalarını o günlük kaybediyordu — kuyruktaki fonlar hiç çekilmiyordu.
+//      Artık başarısız sayfa, 5sn ek bekleme sonrası BİR kez daha denenir;
+//      yine olmazsa o zaman vazgeçilir (eski davranış). Tek seferlik geçici
+//      429'lar artık kuyruk kaybına yol açmaz.
+//   2) ADAY KATEGORİLER: bazı katılım fonlarının Fonoloji kategorisi mevcut
+//      21'lik listede olmayabilir. İki muhtemel TEFAS şemsiye adı eklendi
+//      ("Katılım Şemsiye Fonu", "Para Piyasası Katılım Şemsiye Fonu").
+//      Kategori Fonoloji'de yoksa maliyeti 1 boş istek (~2sn) — ucuz.
+//      Hangi kategorinin gerçekte kaç fon getirdiği artık kategoriTeshis ile
+//      KV'ye yazılıp /api/tefas-proxy yanıtında görülebiliyor (bkz.
+//      tefas-proxy.js) — bir sonraki teşhis turu kör tahmin gerektirmez.
 
 import { Redis } from "@upstash/redis";
 
@@ -228,6 +244,11 @@ const KATEGORILER = [
   {kat: "Katılım Değişken Fon",           tumunu: true},
   {kat: "Katılım Hisse Senedi Fonu",      tumunu: true},
   {kat: "Kira Sertifikası Katılım Fonu",  tumunu: true},
+  // ADAY KATEGORİLER (2026-07-13, eksik fon teşhisi): Fonoloji'de bu adlarla
+  // kategori yoksa boş döner (1 istek, zararsız); varsa NSA/FTL/MPE/DNP/EP1
+  // gibi kayıp fonları kapsama alır. Gerçek sonuç kategoriTeshis'ten izlenecek.
+  {kat: "Katılım Şemsiye Fonu",           tumunu: true},
+  {kat: "Para Piyasası Katılım Şemsiye Fonu", tumunu: true},
   {kat: "Hisse Senedi Şemsiye Fonu",      tumunu: false},
   {kat: "Para Piyasası Şemsiye Fonu",     tumunu: false},
   {kat: "Değişken Şemsiye Fonu",          tumunu: false},
@@ -260,10 +281,16 @@ const ŞÜPHELİ_EŞİK = 100; // normal günde 150+ fon beklenir (TÜM parçala
 // KENDİ BAŞLARINA, tek başına bir parça olarak çalışıyor — başka hiçbir
 // kategoriyle aynı çağrıda yarışmıyorlar, tüm 280sn'lik bütçeyi tek başlarına
 // kullanabiliyorlar. Vakıf fonları (hızlı, 5 istek) en hafif parçaya (1) taşındı.
-// vercel.json'da buna karşılık gelen 8 ayrı cron saati (05:00-12:00 UTC,
-// hafta içi) tanımlandı — Vercel Hobby planı HER cron girdisinin kendi
-// başına günde bir kez çalışmasına izin verdiği için (toplam sayı değil,
-// her girdinin kendi sıklığı sınırlanıyor) bu sorun teşkil etmiyor.
+// vercel.json'da buna karşılık gelen 8 ayrı cron saati tanımlandı — Vercel
+// Hobby planı HER cron girdisinin kendi başına günde bir kez çalışmasına izin
+// verdiği için (toplam sayı değil, her girdinin kendi sıklığı sınırlanıyor)
+// bu sorun teşkil etmiyor.
+// SAAT DEĞİŞİKLİĞİ (2026-07-13): pencere 05-12 UTC'den (08-15 TR) 08-15
+// UTC'ye (11-18 TR) kaydırıldı — Fonoloji güne ait TEFAS fiyatlarını ~11:00
+// TR'de işlediği için eski pencerede parçaların çoğu (özellikle 09:00 TR'deki
+// "Katılım") bir önceki günün verisini çekiyordu; kullanıcılar gün boyu bayat
+// veri görüyordu (13 Tem pazartesi raporu: uygulama cuma verisi, Fonoloji
+// pazartesi verisi gösteriyordu).
 const PARCALAR = [
   // Parça 1: Vakıf fonları (5 istek, hızlı) + en hafif 2 kategori
   [
@@ -278,17 +305,19 @@ const PARCALAR = [
   [
     {kat: "Katılım Değişken Fon",           tumunu: true},
   ],
-  // Parça 4
+  // Parça 4 (+ aday kategori "Katılım Şemsiye Fonu")
   [
     {kat: "Katılım Katkı Fonu",             tumunu: true},
     {kat: "Katılım Fonu",                   tumunu: true},
     {kat: "Katılım Standart Fon",           tumunu: true},
+    {kat: "Katılım Şemsiye Fonu",           tumunu: true},
   ],
-  // Parça 5
+  // Parça 5 (+ aday kategori "Para Piyasası Katılım Şemsiye Fonu")
   [
     {kat: "Başlangıç Katılım Fonu",         tumunu: true},
     {kat: "Katılım Hisse Senedi Fonu",      tumunu: true},
     {kat: "Kira Sertifikası Katılım Fonu",  tumunu: true},
+    {kat: "Para Piyasası Katılım Şemsiye Fonu", tumunu: true},
   ],
   // Parça 6
   [
@@ -349,11 +378,25 @@ async function fonVerisiCek(parcaNo = null) {
     let offset = 0;
     let herhangiIstekBasarisiz = false;
     let sonHata = null;
+    let sayfaTekrarKaldi = 1; // SAYFALAMA DİRENCİ: kategori başına 1 ek sayfa hakkı
     const encKat = encodeURIComponent(kat);
     while (true) {
       const url = `https://fonoloji.com/v1/funds?category=${encKat}&limit=${PAGE_SIZE}&offset=${offset}`;
       const { res, hata } = await fetchTeshisli(url, { headers }, 2);
-      if (!res) { herhangiIstekBasarisiz = true; sonHata = hata; break; }
+      if (!res) {
+        // DÜZELTME (2026-07-13): eskiden burada doğrudan `break` vardı —
+        // sayfalama ortasındaki tek bir geçici 429/timeout, kategorinin
+        // KALAN TÜM sayfalarını o günlük kaybettiriyordu (NSA/FTL gibi
+        // kuyruktaki fonlar hiç çekilmiyordu). Artık aynı offset, 5sn ek
+        // bekleme sonrası bir kez daha denenir; ancak o da başarısızsa
+        // vazgeçilir. Ek maliyet: kategori başına en fazla 1 tekrar.
+        if (sayfaTekrarKaldi > 0) {
+          sayfaTekrarKaldi--;
+          await new Promise(r => setTimeout(r, 5000));
+          continue; // aynı offset'i tekrar dene
+        }
+        herhangiIstekBasarisiz = true; sonHata = hata; break;
+      }
       const d = await res.json().catch(() => null);
       if (!d) { herhangiIstekBasarisiz = true; sonHata = "JSON parse hatası"; break; }
       const items = d.items ?? d.funds ?? d.data ?? (Array.isArray(d) ? d : []);

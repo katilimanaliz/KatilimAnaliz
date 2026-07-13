@@ -1159,9 +1159,9 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi }: { setting
     const veriCek = async (sessiz: boolean) => {
       if (!sessiz) { setYukleniyor(true); setHata(null); }
       try {
-        // NOT: ?t=Date.now() KULLANMA — bu, sunucudaki 23 saatlik CDN cache'ini
-        // (s-maxage=82800) devre dışı bırakır ve her çağrıda Fonoloji API'sine
-        // ~25 istek (5 Vakıf fonu + 20 kategori) gitmesine sebep olur.
+        // NOT: ?t=Date.now() KULLANMA — sunucudaki CDN cache'ini (s-maxage=1800)
+        // devre dışı bırakır. Veri KV'den okunur, Fonoloji'ye gitmez ama cache
+        // bypass'ı yine de gereksiz yük üretir.
         const r = await fetch(`${API_BASE}/api/tefas-proxy`);
         const text = await r.text();
         let json: any;
@@ -1200,21 +1200,14 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi }: { setting
 
   const YONETICILER = useMemo(()=>[...new Set(fonlar.map(f=>f.yonetici.trim()).filter(Boolean))].sort(),[fonlar]);
 
-  // "Günlük" periyodu seçiliyken ham `gunluk` yerine takas aralığına göre
-  // normalize edilmiş `gunlukNorm` kullanılır. NEDEN: bazı fonların takas
-  // aralığı (takasAraligi) 1 günden fazla (ör. Vakıf Katılım fonlarında 3
-  // gün) — bu fonların ham `gunluk` değeri aslında o kaç günlük birikmiş
-  // getiriyi gösteriyor, tek bir güne ait değil. Bu yüzden takasAraligi:1
-  // olan fonlarla (çoğunluk) doğrudan karşılaştırılamaz/sıralanamaz — VPA
-  // gibi bir fon günlük %0,32 gösterirken aslında 3 günlük getirisi bu,
-  // gerçek günlük karşılığı ~%0,11 (diğerleriyle aynı seviyede). `gunlukNorm`
-  // zaten backend'de (fonFetch.js) bu bölmeyi yapıyor, sadece burada
-  // kullanılmıyordu.
+  // DEĞİŞİKLİK (2026-07-13, kullanıcı kararı): "Günlük" kolonu artık HAM
+  // `gunluk` gösterir — Fonoloji/TEFAS ile birebir aynı rakam. Daha önce takas
+  // aralığına bölünmüş `gunlukNorm` gösteriliyordu (pazartesi 3 günlük birikim
+  // 3'e bölünüyordu); kullanıcılar Fonoloji ile karşılaştırınca uygulama hatalı
+  // sanılıyordu. Normalizasyon YALNIZCA hesaplamalarda yaşamaya devam eder:
+  // yıllıklandırma (yillikBasit) ve Getiri Hesaplayıcı gunlukNorm kullanır.
   const fonDeger = (fon: any, period: string) => {
-    if (period === "gunluk") {
-      return (fon.gunlukNorm !== undefined && fon.gunlukNorm !== null && fon.gunlukNorm !== 0) ? fon.gunlukNorm : fon.gunluk;
-    }
-    return fon[period];
+    return fon[period === "gunluk" ? "gunluk" : period];
   };
 
   const maxVal = useMemo(()=>Math.max(...fonlar.map(f=>Math.abs(fonDeger(f,aktifPeriod)??0)),1),[fonlar,aktifPeriod]);
@@ -1443,7 +1436,7 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi }: { setting
       {/* Alt bilgi */}
       <div style={s.footer}>
         <span style={{color:FC.sub2}}>{filtreli.length} / {fonlar.length} fon</span>
-        <span style={{color:FC.sub2,fontSize:10}}>🕗 Her gün 08:30'da güncellenir · Fonoloji · TEFAS</span>
+        <span style={{color:FC.sub2,fontSize:10}}>🕗 Hafta içi 11:00-18:00 arasında kademeli güncellenir · Fonoloji · TEFAS</span>
 
       {/* Getiri Hesaplayıcı — Bottom Sheet Modal */}
       {hesapFon&&(
@@ -1974,6 +1967,16 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi }: { initialTicke
     else { setSiraBy(col); setSiraDir(1); }
   };
 
+  // DÜZELTME (2026-07-13): Liste satırının sağındaki yüzde her zaman GÜNLÜK
+  // değişimi gösteriyordu; Haf%/Ay%/Yıl% ile sıralayınca sıralama doğru ama
+  // görünen oran günlük kalıyordu (kullanıcı raporu, IMG_9346). Artık sıralama
+  // bir periyot kolonuysa o periyodun değeri gösterilir ve başına küçük bir
+  // 1H/1A/1Y rozeti eklenir; diğer kolonlarda (F/K, PD/DD, ROE, Tmt%, Hacim,
+  // Tümü/Yükselenler/Düşenler) günlük değişim aynen korunur.
+  const perKol: "degisim1g"|"degisim1h"|"degisim1a"|"degisim1y" =
+    (siraBy==="degisim1h"||siraBy==="degisim1a"||siraBy==="degisim1y") ? siraBy : "degisim1g";
+  const perEtiket = perKol==="degisim1h" ? "1H" : perKol==="degisim1a" ? "1A" : perKol==="degisim1y" ? "1Y" : "";
+
   if (detayHisse) return <HisseDetay hisse={detayHisse} onGeri={() => setDetayHisse(null)} />;
 
   return (
@@ -2228,7 +2231,7 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi }: { initialTicke
                   </div>
                 </div>
 
-                {/* Fiyat + Günlük değişim */}
+                {/* Fiyat + seçili periyodun değişimi (varsayılan: günlük) */}
                 <div style={{textAlign:"right",flexShrink:0}}>
                   <div style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:"tabular-nums",marginBottom:2,display:"flex",alignItems:"center",justifyContent:"flex-end",gap:3}}>
                     {h.fiyat ? h.fiyat.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}) : "—"}
@@ -2236,9 +2239,10 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi }: { initialTicke
                   </div>
                   <div style={{
                     fontSize:11,fontWeight:700,
-                    color:h.degisim1g>0?C.green:h.degisim1g<0?C.red:C.sub,
+                    color:h[perKol]>0?C.green:h[perKol]<0?C.red:C.sub,
                   }}>
-                    {h.degisim1g ? (h.degisim1g>0?"▲ +":h.degisim1g<0?"▼ ":"")+h.degisim1g.toFixed(2)+"%" : "—"}
+                    {perEtiket&&<span style={{fontSize:8.5,fontWeight:800,color:C.sub,marginRight:3,verticalAlign:"1px"}}>{perEtiket}</span>}
+                    {h[perKol]!=null ? (h[perKol]>0?"▲ +":h[perKol]<0?"▼ ":"")+h[perKol].toFixed(2)+"%" : "—"}
                   </div>
                 </div>
               </div>
@@ -2350,11 +2354,10 @@ function KatilimEndeksiTopHareketliler({ nav, onSecim }: { nav: (sc: string) => 
   const hisseYukselen = useMemo(() => [...hisseKE].sort((a, b) => b.degisim1g - a.degisim1g).slice(0, 5), [hisseKE]);
   const hisseDusen     = useMemo(() => [...hisseKE].sort((a, b) => a.degisim1g - b.degisim1g).slice(0, 5), [hisseKE]);
 
-  // "Günlük" sıralaması takas aralığına göre normalize edilmiş gunlukNorm
-  // kullanır — bkz. FonGetiriIzleme'deki fonDeger notu: takasAraligi>1 olan
-  // fonlarda ham `gunluk` birden fazla günün birikmiş getirisi olduğu için
-  // takasAraligi:1 olan fonlarla doğrudan karşılaştırılamaz.
-  const fonGunlukDeger = (f: any) => (f.gunlukNorm !== undefined && f.gunlukNorm !== null && f.gunlukNorm !== 0) ? f.gunlukNorm : f.gunluk;
+  // DEĞİŞİKLİK (2026-07-13): ham `gunluk` gösterilir/sıralanır — Fonoloji ile
+  // birebir uyum (bkz. FonGetiriIzleme.fonDeger notu). Normalizasyon yalnızca
+  // yıllıklandırma ve Getiri Hesaplayıcı hesaplarında kullanılır.
+  const fonGunlukDeger = (f: any) => f.gunluk;
   const fonOK       = useMemo(() => fonlar.filter((f: any) => typeof f.gunluk === "number"), [fonlar]);
   const fonYukselen = useMemo(() => [...fonOK].sort((a, b) => fonGunlukDeger(b) - fonGunlukDeger(a)).slice(0, 5), [fonOK]);
   const fonDusen     = useMemo(() => [...fonOK].sort((a, b) => fonGunlukDeger(a) - fonGunlukDeger(b)).slice(0, 5), [fonOK]);
@@ -6365,7 +6368,7 @@ function Asistan({nav, settings}:{nav:any, settings?:any}){
             )}
             <div ref={endRef}/>
           </div>
-          <div style={{padding:"10px 14px 20px",background:C.card,borderTop:`1px solid ${WA(0.08)}`,flexShrink:0}}>
+          <div style={{padding:"10px 14px 20px",background:"#15212E",borderTop:`1px solid ${WA(0.08)}`,flexShrink:0}}>
             <div style={{display:"flex",gap:8,alignItems:"flex-end"}}>
               <textarea value={input} onChange={e=>setInput(e.target.value)}
                 onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}}
@@ -12434,7 +12437,7 @@ function BildirimGecmisiModal({gecmis,onClose}:{gecmis:any[],onClose:()=>void}){
   };
   return(
     <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.6)",zIndex:500,display:"flex",alignItems:"flex-end",...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}} onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} style={{background:C.card,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",maxHeight:"78vh",display:"flex",flexDirection:"column"}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"#15212E",borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",maxHeight:"78vh",display:"flex",flexDirection:"column"}}>
         <div style={{padding:"16px 18px",borderBottom:`1px solid ${WA(0.08)}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
           <span style={{fontSize:16,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff")}}>🔔 Bildirimler</span>
           <button onClick={onClose} style={{background:WA(0.1),border:"none",width:32,height:32,borderRadius:16,fontSize:18,color:(TEMA==="acik"?C.label:"#fff"),cursor:"pointer"}}>×</button>
@@ -12577,6 +12580,14 @@ function BildirimModal({onClose}){
 }
 
 // ─── PİYASA ÖZETİ KARTI (mini sparkline + günlük değişim) ──────────────────
+// Windows, bayrak emojilerini (🇺🇸 🇪🇺 🇬🇧 🇹🇷) renderlayamaz — Chrome/Edge'de
+// soluk "US/EU/GB" harf çiftine dönüşürler ve açık/koyu temada okunmazlar
+// (kullanıcı raporu, 13 Tem masaüstü ekran görüntüsü). Bayrak desteği olmayan
+// platformlarda kart rozetleri Au/Ag ile aynı görsel dildeki yuvarlak metin
+// rozetlerine düşer ($ € £ ₺ …). iOS/Android/macOS bayrakları doğru çizer,
+// onlarda davranış değişmez.
+const BAYRAK_EMOJI_OK=(()=>{ try{ return !/Windows/i.test(navigator.userAgent); }catch{ return true; } })();
+
 function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla}:{ad:string,sembol:string,paraOnek?:string,dec:number,onTikla:()=>void}){
   const CACHE_KEY = `poz_${sembol}`;
   const [veri,setVeri]=useState<any>(()=>{
@@ -12670,17 +12681,20 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla}:{ad:string,sembol:stri
   // anlam ifade etmez.
   const kucukIkon = (()=>{
     const a = ad.toUpperCase();
-    if(a.includes("USD")||a.includes("DOLAR")) return {tip:"bayrak",deger:"🇺🇸"};
-    if(a.includes("EUR")) return {tip:"bayrak",deger:"🇪🇺"};
-    if(a.includes("GBP")||a.includes("STERLİN")) return {tip:"bayrak",deger:"🇬🇧"};
+    // Bayrak destekleniyorsa emoji, desteklenmiyorsa (Windows) yuvarlak metin rozeti
+    const bayrak=(emoji:string,yedek:string,yedekBg:string)=>
+      BAYRAK_EMOJI_OK ? {tip:"bayrak",deger:emoji} : {tip:"metin",deger:yedek,bg:yedekBg};
+    if(a.includes("USD")||a.includes("DOLAR")) return bayrak("🇺🇸","$","#2E7D32");
+    if(a.includes("EUR")) return bayrak("🇪🇺","€","#24479E");
+    if(a.includes("GBP")||a.includes("STERLİN")) return bayrak("🇬🇧","£","#5B3A8E");
     if(a.includes("ALTIN")||a.includes("ALTİN")) return {tip:"metin",deger:"Au",bg:"#B8912E"};
     if(a.includes("GÜMÜŞ")||a.includes("GUMUS")) return {tip:"metin",deger:"Ag",bg:"#7A8591"};
     if(a.includes("BITCOIN")||a.includes("BTC")) return {tip:"ikon",Comp:Bitcoin,bg:"#D9820A"};
     if(a.includes("ETHEREUM")||a.includes("ETH")) return {tip:"metin",deger:"Ξ",bg:"#4A5FC1"};
-    if(a.includes("BIST")) return {tip:"bayrak",deger:"🇹🇷"};
+    if(a.includes("BIST")) return bayrak("🇹🇷","₺","#C0392B");
     if(a.includes("BRENT")||a.includes("PETROL")||a.includes("WTI")) return {tip:"ikon",Comp:Droplets,bg:"#1E3A5F"};
-    if(a.includes("DAX")) return {tip:"bayrak",deger:"🇩🇪"};
-    if(a.includes("S&P")||a.includes("NASDAQ")||a.includes("DOW")) return {tip:"bayrak",deger:"🇺🇸"};
+    if(a.includes("DAX")) return bayrak("🇩🇪","DE","#3A3A3A");
+    if(a.includes("S&P")||a.includes("NASDAQ")||a.includes("DOW")) return bayrak("🇺🇸","US","#1A3A6E");
     return null;
   })();
 
@@ -12736,7 +12750,7 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla}:{ad:string,sembol:stri
 function FavoriDuzenleModal({favoriler,onToggle,onClose}:{favoriler:string[],onToggle:(key:string)=>void,onClose:()=>void}){
   return(
     <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.6)",zIndex:500,display:"flex",alignItems:"flex-end",...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}}>
-      <div style={{background:C.card,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",maxHeight:"82vh",display:"flex",flexDirection:"column"}}>
+      <div style={{background:"#15212E",borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",maxHeight:"82vh",display:"flex",flexDirection:"column"}}>
         <div style={{padding:"16px 18px",borderBottom:`1px solid ${WA(0.08)}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
           <span style={{fontSize:16,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff")}}>⭐ Favorilerimi Düzenle</span>
           <button onClick={onClose} style={{background:WA(0.1),border:"none",width:32,height:32,borderRadius:16,fontSize:18,color:(TEMA==="acik"?C.label:"#fff"),cursor:"pointer"}}>×</button>
@@ -12798,7 +12812,7 @@ function PiyasaOzetiDuzenleModal({secili,onToggle,onClose}:{secili:string[],onTo
   const KATEGORILER=[{id:"doviz",label:"Döviz"},{id:"emtia",label:"Emtia"},{id:"borsa",label:"Borsa"},{id:"gostergeler",label:"Göstergeler"},{id:"kripto",label:"Kripto"}];
   return(
     <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.6)",zIndex:500,display:"flex",alignItems:"flex-end",...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}}>
-      <div style={{background:C.card,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",maxHeight:"82vh",display:"flex",flexDirection:"column"}}>
+      <div style={{background:"#15212E",borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",maxHeight:"82vh",display:"flex",flexDirection:"column"}}>
         <div style={{padding:"16px 18px",borderBottom:`1px solid ${WA(0.08)}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
           <span style={{fontSize:16,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff")}}>💹 Piyasa Özetini Düzenle</span>
           <button onClick={onClose} style={{background:WA(0.1),border:"none",width:32,height:32,borderRadius:16,fontSize:18,color:(TEMA==="acik"?C.label:"#fff"),cursor:"pointer"}}>×</button>
@@ -13872,11 +13886,26 @@ function App(){
               </div>
             </div>
             <div className="piyasa-scroll" style={{display:"flex",overflowX:"auto",gap:6,marginBottom:26,scrollSnapType:"x mandatory",WebkitOverflowScrolling:"touch",paddingBottom:2}}>
-              {piyasaOzetiSecim.map(sembol=>PIYASA_OZETI_KATALOG[sembol]).filter(Boolean).map((k:any)=>(
+              {(()=>{
+                // Masaüstünde (genisEkran) varsayılan 10 kart geniş ekranı yarım
+                // bırakıyordu; şerit, ekranı dolduracak adede kadar kataloğun
+                // devamından kartlarla tamamlanır. Kullanıcının Düzenle seçimi
+                // AYNEN korunur (localStorage'a dokunulmaz, ekleme yalnızca
+                // görünümde). Mobil web ve native değişmez.
+                let liste=piyasaOzetiSecim.map(sembol=>PIYASA_OZETI_KATALOG[sembol]).filter(Boolean);
+                if(genisEkran){
+                  const hedef=Math.max(liste.length, Math.ceil((ekranW-SIDEBAR_W-40)/(114*icerikOlcek)));
+                  for(const sembol of Object.keys(PIYASA_OZETI_KATALOG)){
+                    if(liste.length>=hedef) break;
+                    if(!piyasaOzetiSecim.includes(sembol)) liste=[...liste,PIYASA_OZETI_KATALOG[sembol]];
+                  }
+                }
+                return liste.map((k:any)=>(
                 <div key={k.sembol} style={{flex:"0 0 108px",minWidth:0,scrollSnapAlign:"start"}}>
                   <PiyasaOzetiKart ad={k.ad} sembol={k.sembol} dec={k.dec} onTikla={()=>setSeciliKur({kod:k.ad,ad:k.ad,sembol:k.sembol,birim:k.paraOnek})}/>
                 </div>
-              ))}
+                ));
+              })()}
               {piyasaOzetiSecim.length===0&&(
                 <div onClick={()=>setPiyasaOzetiDuzenleAcik(true)} style={{flex:"0 0 108px",display:"flex",alignItems:"center",justifyContent:"center",height:88,borderRadius:14,border:`1.5px dashed ${WA(0.2)}`,cursor:"pointer"}}>
                   <span style={{fontSize:11,color:WA(0.4),textAlign:"center",padding:"0 8px"}}>+ Kart Ekle</span>
@@ -13892,7 +13921,19 @@ function App(){
               <span onClick={()=>setFavoriDuzenleAcik(true)} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>Düzenle</span>
             </div>
             <div className="piyasa-scroll" style={{display:"flex",overflowX:"auto",gap:8,marginBottom:26,scrollSnapType:"x mandatory",WebkitOverflowScrolling:"touch",paddingBottom:2}}>
-              {favoriler.map(key=>{
+              {(()=>{
+                // Masaüstünde favori şeridi de ekranı dolduracak adede tamamlanır
+                // (araç listesinin başından, seçilmemiş olanlarla). Kayıtlı
+                // favoriler değişmez; mobil ve native etkilenmez.
+                let favListe=[...favoriler];
+                if(genisEkran){
+                  const hedef=Math.ceil((ekranW-SIDEBAR_W-40)/(100*icerikOlcek));
+                  for(const h of HESAPLA_ARAC_LISTESI){
+                    if(favListe.length>=hedef) break;
+                    if(!favListe.includes(h.key)) favListe.push(h.key);
+                  }
+                }
+                return favListe.map(key=>{
                 const item=HESAPLA_ARAC_LISTESI.find(h=>h.key===key);
                 if(!item) return null;
                 const renk=KATEGORI_RENK[EKRAN_KATEGORI[item.key]];
@@ -13910,7 +13951,7 @@ function App(){
                     <span style={{fontSize:10.5,fontWeight:700,color:C.soft,textAlign:"center",lineHeight:1.2}}>{item.label}</span>
                   </div>
                 );
-              })}
+              });})()}
               {favoriler.length===0&&(
                 <div onClick={()=>setFavoriDuzenleAcik(true)} style={{flex:"1 0 auto",textAlign:"center",padding:"16px 0",color:WA(0.35),fontSize:12,cursor:"pointer"}}>
                   Henüz favori eklemedin — eklemek için dokun
