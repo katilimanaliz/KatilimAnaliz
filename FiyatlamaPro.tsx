@@ -478,6 +478,36 @@ function addMonthsSafe(baslangic: Date, adet: number): Date {
   hedef.setDate(Math.min(d, ayinSonGunu));
   return hedef;
 }
+// Hafta sonuna veya SABİT tarihli resmi tatile denk gelen taksit vadesini bir
+// sonraki iş gününe kaydırır — banka pratiğiyle uyumlu (2026-07-13 kullanıcı
+// isteği; tüm ödeme planlarında geçerli). Sabit ulusal tatiller yıldan yıla
+// değişmediği için bakım gerektirmeden 120 aylık plana kadar doğru çalışır.
+// Dini bayramlar (Ramazan/Kurban) bilinçli olarak kapsam DIŞI: her yıl ~11 gün
+// kaydıkları için ileri yıllara sabit listeyle güvenilir yazılamazlar (elle
+// bakım ister, unutulunca sessizce yanlış gösterir).
+// Not: 28 Ekim ve arefe günleri yarım gün — bankalar açık olduğu için tam
+// tatil sayılmadı.
+const SABIT_TATILLER = new Set([
+  "01-01", // Yılbaşı
+  "04-23", // Ulusal Egemenlik ve Çocuk Bayramı
+  "05-01", // Emek ve Dayanışma Günü
+  "05-19", // Atatürk'ü Anma, Gençlik ve Spor Bayramı
+  "07-15", // Demokrasi ve Milli Birlik Günü
+  "08-30", // Zafer Bayramı
+  "10-29", // Cumhuriyet Bayramı
+]);
+function isGununeKaydir(d: Date): Date {
+  const k = new Date(d);
+  const tatilMi = (t: Date) => {
+    const ayGun = String(t.getMonth()+1).padStart(2,"0") + "-" + String(t.getDate()).padStart(2,"0");
+    return SABIT_TATILLER.has(ayGun);
+  };
+  // Hafta sonu VEYA sabit tatil olduğu sürece ilerle — zincirleme durumlar da
+  // doğru çözülür (ör. pazara denk gelen vade pazartesiye kayar, pazartesi
+  // 1 Mayıs ise salıya devam eder).
+  while (k.getDay() === 0 || k.getDay() === 6 || tatilMi(k)) k.setDate(k.getDate() + 1);
+  return k;
+}
 function tarihFormatla(d: Date): string {
   return d.toLocaleDateString("tr-TR",{day:"2-digit",month:"2-digit",year:"numeric"});
 }
@@ -2916,7 +2946,7 @@ function hesaplaOdemePlani(T, V, ao, bsmvOran, kkdfOran){
     }
     bakiye = Math.max(0, Math.round((bakiye-anapara)*100)/100);
     topKarPayi+=karPayi; topVergi+=vergi; topOdeme+=toplam;
-    const vadeTarihi = tarihFormatla(addMonthsSafe(bugun, i));
+    const vadeTarihi = tarihFormatla(isGununeKaydir(addMonthsSafe(bugun, i)));
     plan.push({ay:i, tarih:vadeTarihi, karPayi, anapara, vergi, toplam, bakiye});
   }
   // Geriye uyumluluk: mevcut çağrı noktaları bu alanları okuyor
@@ -3839,7 +3869,7 @@ function YatirimFonuFinansman({s,onGecmis}){
       if(i===V){ anapara=bakiye; toplam=Math.round((anapara+kar+vergi)*100)/100; }
       bakiye=Math.max(0,Math.round((bakiye-anapara)*100)/100);
       topKarPayi+=kar; topVergi+=vergi; topOdeme+=toplam;
-      const vadeTarihi=tarihFormatla(addMonthsSafe(kullTarih,i));
+      const vadeTarihi=tarihFormatla(isGununeKaydir(addMonthsSafe(kullTarih,i)));
       plan.push({ay:i, tarih:vadeTarihi, karPayi:kar, anapara, vergi, toplam, bakiye});
     }
     return {plan, taksitSabit:taksit, pesinTutar, pesinKar, pesinBsmv, pesinKkdf, toplamKarPayi:Math.round(topKarPayi*100)/100, toplamVergi:Math.round(topVergi*100)/100, toplamOdeme:Math.round(topOdeme*100)/100};
@@ -5228,12 +5258,11 @@ function Leasing({s,onGecmis}){
       const karPayi = Math.round(bakiye*aoNet*100)/100;
       const anapara = Math.round((pmt_net - karPayi)*100)/100;
       bakiye = Math.max(0, Math.round((bakiye-anapara)*100)/100);
-      const tarihAy = (now.getMonth()+i)%12;
-      const tarihYil = now.getFullYear()+Math.floor((now.getMonth()+i)/12);
+      const vadeD = isGununeKaydir(addMonthsSafe(now, i)); // hafta sonu/resmî tatil kaydırmalı vade (2026-07-13)
       // KDV = (anapara + kâr payı) × kdvR%
       const kdvTutar = Math.round((anapara + karPayi)*(kdvR/100)*100)/100;
       plan.push({
-        ay:i, tarih: MONTHS[tarihAy]+" "+tarihYil,
+        ay:i, tarih: tarihFormatla(vadeD),
         taksit: Math.round((pmt_net + kdvTutar)*100)/100,
         anapara, karPayi,
         kdvTutar,
@@ -6981,8 +7010,8 @@ function EsitAnapara({onGecmis}:any){
       const bsmv=Math.round(kp*bsmvR/100*100)/100;
       const anapara=i<V?esitAna:Math.round(bakiye*100)/100;
       bakiye=Math.max(0,Math.round((bakiye-anapara)*100)/100);
-      const d=new Date(now.getFullYear(),now.getMonth()+i,1);
-      rows.push({ay:i,tarih:MONTHS[d.getMonth()]+" "+d.getFullYear(),taksit:Math.round((anapara+kp+bsmv)*100)/100,anapara,karPayi:kp,bsmv,bakiye});
+      const d=isGununeKaydir(addMonthsSafe(now,i)); // vade: bugünün günü + i ay, hafta sonu/resmî tatil kaydırmalı (2026-07-13)
+      rows.push({ay:i,tarih:tarihFormatla(d),taksit:Math.round((anapara+kp+bsmv)*100)/100,anapara,karPayi:kp,bsmv,bakiye});
     }
     const toplamTaksit=rows.reduce((s,r)=>s+r.taksit,0);
     const toplamKP=rows.reduce((s,r)=>s+r.karPayi,0);
@@ -7122,8 +7151,8 @@ function AraOdemeli({onGecmis}:any){
       const kp=Math.round(bakiye*ao*100)/100;
       const bsmv=Math.round(kp*BSMV_ORAN/100*100)/100;
       const isAraAy=araAylar.includes(i)&&AT>0;
-      const d=new Date(now.getFullYear(),now.getMonth()+i,1);
-      const tarihStr=MONTHS[d.getMonth()]+" "+d.getFullYear();
+      const d=isGununeKaydir(addMonthsSafe(now,i)); // vade: bugünün günü + i ay, hafta sonu/resmî tatil kaydırmalı (2026-07-13)
+      const tarihStr=tarihFormatla(d);
 
       if(isAraAy){
         if(araYontem==="ekle"){
@@ -7313,8 +7342,8 @@ function ArtanOdemeli({onGecmis}:any){
       const bsmv=Math.round(kp*bsmvR/100*100)/100;
       const anapara=Math.min(Math.round((taksitNet-kp)*100)/100,bakiye);
       bakiye=Math.max(0,Math.round((bakiye-anapara)*100)/100);
-      const d=new Date(now.getFullYear(),now.getMonth()+i,1);
-      rows.push({ay:i,tarih:MONTHS[d.getMonth()]+" "+d.getFullYear(),taksit:Math.round((anapara+kp+bsmv)*100)/100,anapara,karPayi:kp,bsmv,bakiye});
+      const d=isGununeKaydir(addMonthsSafe(now,i)); // vade: bugünün günü + i ay, hafta sonu/resmî tatil kaydırmalı (2026-07-13)
+      rows.push({ay:i,tarih:tarihFormatla(d),taksit:Math.round((anapara+kp+bsmv)*100)/100,anapara,karPayi:kp,bsmv,bakiye});
     }
     const toplamTaksit=rows.reduce((s,r)=>s+r.taksit,0);
     const toplamKP=rows.reduce((s,r)=>s+r.karPayi,0);
@@ -7421,8 +7450,8 @@ function AzalanOdemeli({onGecmis}:any){
       const bsmv=Math.round(kp*bsmvR/100*100)/100;
       const anapara=Math.min(Math.max(0,Math.round((taksitNet-kp)*100)/100),bakiye);
       bakiye=Math.max(0,Math.round((bakiye-anapara)*100)/100);
-      const d=new Date(now.getFullYear(),now.getMonth()+i,1);
-      rows.push({ay:i,tarih:MONTHS[d.getMonth()]+" "+d.getFullYear(),taksit:Math.round((anapara+kp+bsmv)*100)/100,anapara,karPayi:kp,bsmv,bakiye});
+      const d=isGununeKaydir(addMonthsSafe(now,i)); // vade: bugünün günü + i ay, hafta sonu/resmî tatil kaydırmalı (2026-07-13)
+      rows.push({ay:i,tarih:tarihFormatla(d),taksit:Math.round((anapara+kp+bsmv)*100)/100,anapara,karPayi:kp,bsmv,bakiye});
     }
     const toplamTaksit=rows.reduce((s,r)=>s+r.taksit,0);
     const toplamKP=rows.reduce((s,r)=>s+r.karPayi,0);
@@ -7532,8 +7561,8 @@ function BalonOdemeli({onGecmis}:any){
       const bsmv=Math.round(kp*bsmvR/100*100)/100;
       const anapara=i<V?Math.min(Math.round((pmt-kp)*100)/100,bakiye):Math.round(bakiye*100)/100;
       bakiye=Math.max(0,Math.round((bakiye-anapara)*100)/100);
-      const d=new Date(now.getFullYear(),now.getMonth()+i,1);
-      rows.push({ay:i,tarih:MONTHS[d.getMonth()]+" "+d.getFullYear(),taksit:Math.round((anapara+kp+bsmv)*100)/100,anapara,karPayi:kp,bsmv,bakiye});
+      const d=isGununeKaydir(addMonthsSafe(now,i)); // vade: bugünün günü + i ay, hafta sonu/resmî tatil kaydırmalı (2026-07-13)
+      rows.push({ay:i,tarih:tarihFormatla(d),taksit:Math.round((anapara+kp+bsmv)*100)/100,anapara,karPayi:kp,bsmv,bakiye});
     }
     const toplamTaksit=rows.reduce((s,r)=>s+r.taksit,0);
     const toplamKP=rows.reduce((s,r)=>s+r.karPayi,0);
@@ -7630,8 +7659,8 @@ function EsnekOdemeli({onGecmis}:any){
       if(bakiye<=0) break;
       const kp=Math.round(bakiye*ao*100)/100;
       const bsmv=Math.round(kp*BSMV_ORAN/100*100)/100;
-      const d=new Date(now.getFullYear(),now.getMonth()+i,1);
-      const tarihStr=MONTHS[d.getMonth()]+" "+d.getFullYear();
+      const d=isGununeKaydir(addMonthsSafe(now,i)); // vade: bugünün günü + i ay, hafta sonu/resmî tatil kaydırmalı (2026-07-13)
+      const tarihStr=tarihFormatla(d);
       const atla=odemeYapma[i]||false;
       const sabit=parseFloat(sabitTutar[i]||"")||0;
       const ekstra=parseFloat(araOdeme[i]||"")||0;
