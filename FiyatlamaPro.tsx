@@ -89,6 +89,7 @@ const ICON_MAP: Record<string, any> = {
   piyasaHaberleri: Newspaper,
   finansalTakvim: CalendarDays,
   finansalGostergeler: Globe,
+  portfoyum: Bookmark,
   // Analiz / diğer
   efektifOran: Percent,
   karPayi: Coins,
@@ -10430,6 +10431,7 @@ const MENU = {
   getiriKarsilastirma:{title:"Getiri Karşılaştırma",back:"home"},
   haftalikOzet:{title:"Haftalık Piyasa Özeti",back:"home"},
   katilimBankalari:{title:"Katılım Bankaları",back:"araclarMenu"},
+  portfoyum:{title:"Portföyüm",back:"araclarMenu"},
   hazineDoviz:{title:"Döviz Dönüştürücü",back:"hesaplaMenu"},
   hazineForward:{title:"Forward Hesaplama",back:"hesaplaMenu"},
   hazineSwap:{title:"Swap Hesaplama",back:"hesaplaMenu"},
@@ -10457,7 +10459,7 @@ const TAB_OF_SCREEN:any = {
   hazineDoviz:"hesapla", hazineForward:"hesapla", hazineSwap:"hesapla",
   hazineBono:"hesapla", hazineSenaryo:"hesapla",
   piyasaHaberleri:"piyasa", finansalGostergeler:"piyasa",
-  araclarMenu:"araclar", sozluk:"araclar", vadeTakibi:"araclar", katilimBankalari:"araclar", getiriKarsilastirma:"araclar", haftalikOzet:"araclar",
+  araclarMenu:"araclar", sozluk:"araclar", vadeTakibi:"araclar", katilimBankalari:"araclar", getiriKarsilastirma:"araclar", haftalikOzet:"araclar", portfoyum:"araclar",
   asistan:"yapayzeka",
   profil:"profil",
 };
@@ -12989,7 +12991,6 @@ function PiyasaOzetiDuzenleModal({secili,onToggle,onClose}:{secili:string[],onTo
 // ─── PİYASALAR TABLOSU: kategori verisi ────────────────────────────────────
 const PIYASA_TABLO_KATEGORILER = [
   {id:"tumu",        label:"Tümü"},
-  {id:"portfoyum",   label:"📌 Portföyüm"},
   {id:"gostergeler", label:"Göstergeler"},
   {id:"disticaret",  label:"Dış Ticaret"},
   {id:"altin",       label:"Altın"},
@@ -13410,7 +13411,7 @@ function PortfoyWidget({liste, gizli, onGizliToggle, onDetay, onEkle}:{
         <div style={{fontSize:11.5,color:C.sub,lineHeight:1.5,marginBottom:16,maxWidth:280,marginLeft:"auto",marginRight:"auto"}}>
           Hisse, fon, altın, kripto veya emtia ekle — bugün ne kazandığını tek kartta gör. Sadece takip etmek istersen miktar girmene bile gerek yok.
         </div>
-        <button onClick={onEkle} style={{background:C.green,color:"#0F1923",border:"none",borderRadius:10,padding:"9px 18px",fontSize:12.5,fontWeight:800,cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",gap:6}}>
+        <button onClick={onEkle} style={{background:C.blue,color:C.bg,border:"none",borderRadius:10,padding:"9px 18px",fontSize:12.5,fontWeight:800,cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",gap:6}}>
           <Plus size={14}/> İlk ürününü ekle
         </button>
       </div>
@@ -13769,7 +13770,7 @@ function PortfoyEkleModal({onKapat, onEklendi}:{onKapat:()=>void; onEklendi:(k:P
             <button onClick={()=>{
               if (miktarInput.trim()==="") { kaydetVeKapat(null); return; }
               setAsama("alis");
-            }} style={{width:"100%",background:C.green,color:"#0F1923",border:"none",borderRadius:10,padding:"11px 0",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"inherit",marginBottom:8}}>
+            }} style={{width:"100%",background:C.blue,color:C.bg,border:"none",borderRadius:10,padding:"11px 0",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"inherit",marginBottom:8}}>
               Devam et
             </button>
             <button onClick={()=>kaydetVeKapat(null)} style={{width:"100%",background:"none",border:"none",color:C.sub,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",padding:"8px 0"}}>
@@ -13802,7 +13803,7 @@ function PortfoyEkleModal({onKapat, onEklendi}:{onKapat:()=>void; onEklendi:(k:P
                   </div>
                 )}
                 <div onClick={()=>setAlisModu("fiyat")} style={{display:"flex",alignItems:"center",gap:10,background:WA(0.04),border:`1px solid ${WA(0.08)}`,borderRadius:10,padding:12,cursor:"pointer"}}>
-                  <Tag size={16} color={C.green}/>
+                  <Tag size={16} color={C.blue}/>
                   <div style={{flex:1}}>
                     <div style={{fontSize:12.5,fontWeight:700,color:C.text}}>Fiyatı biliyorum, elle gireyim</div>
                     {!tarihOtomatikDestekli && <div style={{fontSize:10,color:C.orange}}>Fon için geçmiş fiyat otomatik bulunamıyor</div>}
@@ -13816,7 +13817,7 @@ function PortfoyEkleModal({onKapat, onEklendi}:{onKapat:()=>void; onEklendi:(k:P
               <>
                 <input type="date" value={alisTarihInput} onChange={e=>setAlisTarihInput(e.target.value)} max={new Date().toISOString().slice(0,10)} style={{width:"100%",boxSizing:"border-box",background:WA(0.04),border:`1px solid ${WA(0.08)}`,borderRadius:10,padding:"10px 12px",color:C.text,fontSize:14,fontFamily:"inherit",marginBottom:10}}/>
                 {alisHata && <div style={{fontSize:11,color:C.red,marginBottom:10}}>{alisHata}</div>}
-                <button disabled={!alisTarihInput||alisAraniyor} onClick={otomatikAlisAra} style={{width:"100%",background:C.green,color:"#0F1923",border:"none",borderRadius:10,padding:"11px 0",fontSize:13,fontWeight:800,cursor:alisTarihInput?"pointer":"default",opacity:alisTarihInput?1:0.5,fontFamily:"inherit"}}>
+                <button disabled={!alisTarihInput||alisAraniyor} onClick={otomatikAlisAra} style={{width:"100%",background:C.blue,color:C.bg,border:"none",borderRadius:10,padding:"11px 0",fontSize:13,fontWeight:800,cursor:alisTarihInput?"pointer":"default",opacity:alisTarihInput?1:0.5,fontFamily:"inherit"}}>
                   {alisAraniyor?"⟳ Fiyat aranıyor…":"Fiyatı bul ve ekle"}
                 </button>
               </>
@@ -13830,7 +13831,7 @@ function PortfoyEkleModal({onKapat, onEklendi}:{onKapat:()=>void; onEklendi:(k:P
                   const f = parseFloat(alisFiyatInput.replace(",","."));
                   if (isNaN(f)) return;
                   kaydetVeKapat({tarih:new Date().toLocaleDateString("tr-TR"), fiyat:f, kaynak:"elle"});
-                }} style={{width:"100%",background:C.green,color:"#0F1923",border:"none",borderRadius:10,padding:"11px 0",fontSize:13,fontWeight:800,cursor:alisFiyatInput?"pointer":"default",opacity:alisFiyatInput?1:0.5,fontFamily:"inherit"}}>
+                }} style={{width:"100%",background:C.blue,color:C.bg,border:"none",borderRadius:10,padding:"11px 0",fontSize:13,fontWeight:800,cursor:alisFiyatInput?"pointer":"default",opacity:alisFiyatInput?1:0.5,fontFamily:"inherit"}}>
                   Portföyüme ekle
                 </button>
               </>
@@ -13864,7 +13865,7 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil}:{
         </div>
         <div style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:4}}>Henüz portföyün boş</div>
         <div style={{fontSize:11.5,color:C.sub,lineHeight:1.5,marginBottom:16}}>Hisse, fon, altın, kripto veya emtia ekle.</div>
-        <button onClick={onEkle} style={{background:C.green,color:"#0F1923",border:"none",borderRadius:10,padding:"9px 18px",fontSize:12.5,fontWeight:800,cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",gap:6}}>
+        <button onClick={onEkle} style={{background:C.blue,color:C.bg,border:"none",borderRadius:10,padding:"9px 18px",fontSize:12.5,fontWeight:800,cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",gap:6}}>
           <Plus size={14}/> İlk ürününü ekle
         </button>
       </div>
@@ -14957,7 +14958,7 @@ function App(){
               liste={portfoy}
               gizli={portfoyGizli}
               onGizliToggle={portfoyGizliDegistir}
-              onDetay={()=>{setPiyasaTabloFiltre("portfoyum");nav("piyasaMenu");}}
+              onDetay={()=>nav("portfoyum")}
               onEkle={()=>setPortfoyEkleAcik(true)}
             />
 
@@ -15313,15 +15314,7 @@ function App(){
               <span style={{color:WA(0.3),fontSize:18,flexShrink:0}}>›</span>
             </div>
 
-            {piyasaTabloFiltre==="portfoyum"?(
-              <PortfoyDetayEkrani
-                liste={portfoy}
-                gizli={portfoyGizli}
-                onGizliToggle={portfoyGizliDegistir}
-                onEkle={()=>setPortfoyEkleAcik(true)}
-                onSil={portfoySil}
-              />
-            ):piyasaTabloFiltre==="fonlar"?(
+            {piyasaTabloFiltre==="fonlar"?(
               <div onClick={()=>nav("fonGetiriIzleme")} style={{
                 background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,
                 borderRadius:14,padding:"16px",display:"flex",alignItems:"center",gap:12,cursor:"pointer",marginTop:8,
@@ -15547,6 +15540,7 @@ function App(){
         {screen==="araclarMenu"&&(
           <div style={{background:C.bg,padding:"12px 12px 0",paddingBottom:"calc(108px + env(safe-area-inset-bottom,0px))",boxSizing:"border-box",overflowY:"auto"}}>
             {[
+              {key:"portfoyum", icon:"📌", label:"Portföyüm", desc:"Hisse, fon, altın, kripto ve emtia varlıklarını tek yerden takip et", renk:C.blue, bg:"rgba(91,155,216,0.15)"},
               {key:"haftalikOzet", icon:"📰", label:"Haftalık Piyasa Özeti", desc:(()=>{const b=new Date();const g=b.getDay();const geri=g===6?5:(g===0?6:(g-1)+7);const pzt=new Date(b);pzt.setDate(b.getDate()-geri);const cum=new Date(pzt);cum.setDate(pzt.getDate()+4);const f=(d:Date)=>d.toLocaleDateString("tr-TR",{day:"numeric",month:"long"});return `${f(pzt)} – ${f(cum)} · ${CV("tablo ve haftalık yorum")}`;})(), renk:C.blue, bg:"rgba(91,155,216,0.15)"},
               {key:"getiriKarsilastirma", icon:"📊", label:"Getiri Karşılaştırma", desc:"Döviz, altın, gümüş, endeks getirilerini dönemsel karşılaştır", renk:"#F59E0B", bg:"rgba(245,158,11,0.15)"},
               {key:"vadeTakibi", icon:"⏰", label:"Vade Takip & Hatırlatma Ajandam", desc:"Finansman ve ödeme vadelerini takip et, hatırlatma al", renk:C.green, bg:"rgba(74,222,128,0.15)"},
@@ -15567,6 +15561,19 @@ function App(){
                 <span style={{color:WA(0.3),fontSize:20,flexShrink:0}}>›</span>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* ── PORTFÖYÜM (Araçlar altında) ── */}
+        {screen==="portfoyum"&&(
+          <div style={{background:C.bg,padding:"12px 12px 0",paddingBottom:"calc(108px + env(safe-area-inset-bottom,0px))",boxSizing:"border-box",overflowY:"auto"}}>
+            <PortfoyDetayEkrani
+              liste={portfoy}
+              gizli={portfoyGizli}
+              onGizliToggle={portfoyGizliDegistir}
+              onEkle={()=>setPortfoyEkleAcik(true)}
+              onSil={portfoySil}
+            />
           </div>
         )}
 
