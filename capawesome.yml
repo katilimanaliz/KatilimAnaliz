@@ -1,31 +1,25 @@
 # capawesome.yml
 #
-# Capawesome Cloud'un CI_BUILD_NUMBER değişkenini (her build'de otomatik
-# artan sayı) native projelere işler:
-#   - iOS: Xcode projesindeki build number (CFBundleVersion)
-#   - Android: versionCode
+# Native build numarasını (iOS: CFBundleVersion, Android: versionCode)
+# Capawesome Cloud'un Trapeze entegrasyonu bu dosyadan okuyup native proje
+# dosyalarına yazıyor.
 #
-# Bu dosya repo KÖKÜNDE durmalı. Capawesome Cloud, build sırasında Trapeze
-# aracılığıyla bu dosyayı okuyup ilgili native proje dosyalarını (Info.plist,
-# build.gradle) otomatik günceller — Xcode'da elle değiştirmenize gerek kalmaz.
+# DÜZELTME (2026-07-14, ikinci deneme): $CI_BUILD_NUMBER değişkenine dayalı
+# yaklaşım İKİ ayrı build denemesinde de Apple'a hâlâ "8" olarak gitti —
+# demek ki Capawesome bu değişkeni kendi tarafından enjekte ediyor ve
+# buradaki "default" değerimiz hiç devreye girmiyor; kendi sayaçları da bir
+# nedenle 8'de donmuş görünüyor. Değişkene güvenmek yerine sayı DOĞRUDAN
+# SABİTLENDİ — artık hiçbir dış enjeksiyona bağımlı değil, ne yazarsak o
+# gider. 8'den kesin yüksek, birkaç deneme için pay bırakan bir taban: 20.
 #
-# Kaynak: https://capawesome.io/cloud/native-builds/guides/auto-incrementing-build-numbers/
-#
-# DÜZELTME (2026-07-14): 14 Temmuz build denemesi App Store Connect'e
-# "bundle version 8 zaten kullanılmış" hatasıyla reddedildi (önceki onaylanan
-# 1.2 build'i tam olarak 8 numarasını taşıyordu — bkz. Apple hata detayı:
-# previousBundleVersion:8). CI_BUILD_NUMBER'ın otomatik artan değeri bu
-# denemede beklenenden düşük geldi. Varsayılan taban 20'ye çekildi — hem 8'in
-# kesin üstünde hem birkaç deneme için pay bırakıyor. Capawesome kendi
-# sayacından daha yüksek bir değer sağlarsa bu varsayılan zaten devreye
-# girmez; yalnızca sayaç beklenenden düşük/aynı gelirse emniyet görevi görür.
-
-vars:
-  CI_BUILD_NUMBER:
-    default: 20
+# İLERİDE YENİ BUILD GÖNDERİRKEN: bu sayıyı bir öncekinden yüksek bir
+# değerle elle güncelleyip push edin (ör. bir sonraki sefer 21, 22...).
+# Capawesome'un kendi otomatik artan sayacı güvenilir çalışmaya başlarsa
+# (ör. panel ayarlarında bulunursa) o zaman $CI_BUILD_NUMBER'a geri
+# dönülebilir.
 
 platforms:
   android:
-    versionCode: $CI_BUILD_NUMBER
+    versionCode: 20
   ios:
-    buildNumber: $CI_BUILD_NUMBER
+    buildNumber: 20
