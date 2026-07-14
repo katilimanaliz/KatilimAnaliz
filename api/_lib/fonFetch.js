@@ -298,7 +298,14 @@ async function fonVerisiCek(parcaNo = null) {
   //   3) hamBenzersiz/mukerrer/kacak sayıları teşhise yazılır — sorun bir
   //      daha nüksederse tek bakışta görünür.
   const hamKodSeti = new Set(); // taramada görülen TÜM ham kodlar (filtre öncesi)
-  let sortParam = "&sort=code";
+  // sort=code DENENDİ ve GERİ ALINDI (12:07 taraması kanıtı): sort verilince
+  // Fonoloji offset'i yok sayıp aynı sayfayı döndürüyor — 3500 kayıtta yalnız
+  // 140 benzersiz kod kaldı. Varsayılan sıralamaya dönüldü; kayma riskine
+  // karşı iki önlem: (a) sayfalar %10 BİNDİRMELİ okunur (offset 90'ar artar,
+  // sınırda kayan kayıtlar komşu sayfada yakalanır), (b) yine kaçan olursa
+  // aşağıdaki kod-listesi diff geçidi tek tek tamamlar.
+  let sortParam = "";
+  const OFFSET_ADIM = PAGE_SIZE - 10; // %10 bindirme
 
   // Tek bir ham fon kaydını işler — hem sayfa döngüsü hem eksik-tamamlama
   // geçidi AYNI mantığı kullansın diye fonksiyona çıkarıldı.
@@ -326,12 +333,6 @@ async function fonVerisiCek(parcaNo = null) {
     const url = `https://fonoloji.com/v1/funds?limit=${PAGE_SIZE}&offset=${offset}${sortParam}`;
     const { res, hata } = await fetchTeshisli(url, { headers }, 2);
     if (!res) {
-      // sort=code parametresini API tanımıyorsa İLK sayfada anlaşılır —
-      // parametreyi bırak, tekrar hakkı HARCAMADAN aynı offset'i sort'suz dene.
-      if (sayfaSayisi === 0 && offset === 0 && sortParam) {
-        sortParam = "";
-        continue;
-      }
       // Geçici hata: önce tarama genel tekrar hakkını kullan (5sn nefes)
       if (sayfaTekrarKaldi > 0) {
         sayfaTekrarKaldi--;
@@ -342,14 +343,14 @@ async function fonVerisiCek(parcaNo = null) {
       kayipSayfalar.push(offset);
       sonHata = hata;
       if (hedefToplam === null) break; // toplamı bilmeden körlemesine ilerlenmez
-      offset += PAGE_SIZE; sayfaSayisi++;
+      offset += OFFSET_ADIM; sayfaSayisi++;
       if (offset >= hedefToplam) break;
       continue;
     }
     const d = await res.json().catch(() => null);
     if (!d) {
       kayipSayfalar.push(offset); sonHata = "JSON parse hatası";
-      offset += PAGE_SIZE; sayfaSayisi++;
+      offset += OFFSET_ADIM; sayfaSayisi++;
       if (hedefToplam !== null && offset >= hedefToplam) break;
       continue;
     }
@@ -362,7 +363,7 @@ async function fonVerisiCek(parcaNo = null) {
     hamToplam += items.length;
     for (const f of items) itemIsle(f);
     sayfaSayisi++;
-    offset += PAGE_SIZE;
+    offset += OFFSET_ADIM; // bindirmeli ilerleme — kayma emici
     if (items.length < PAGE_SIZE) break;
     if (hedefToplam !== null && offset >= hedefToplam) break;
   }
@@ -373,7 +374,7 @@ async function fonVerisiCek(parcaNo = null) {
   // emniyet ağıdır. Tek seferde en fazla EK_CEKIM_LIMITI fon tamamlanır
   // (maxDuration'ı zorlamamak için); artan olursa bir sonraki saatlik tarama
   // kaldığı yerden tamamlar.
-  const EK_CEKIM_LIMITI = 40;
+  const EK_CEKIM_LIMITI = 60;
   let kodListesiToplam = null;
   let kacakKodlar = [];
   let ekCekilenAdet = 0;
