@@ -13315,12 +13315,16 @@ const PORTFOY_ALTIN_TURLERI: {ad:string; birim:string; carpan:number}[] = [
 ];
 
 function portfoyGuncelDeger(k: PortfoyKalemi): number {
-  if (k.miktar == null) return 0; // izleme modu — sahiplik yok
-  if (k.tur === "fon") return k.miktar; // fon miktarı zaten ₺ tutar olarak tutuluyor
-  return k.miktar * (k.fiyat || 0);
+  // Portföyüm/Takip Listem ayrımı artık ALIŞ BİLGİSİNE göre: alış bilgisi
+  // yoksa (fiyat/tarih girilmediyse) Takip Listem'e düşer ve toplam değere
+  // katılmaz — miktar girilmiş olsa bile. (Akışta alış adımına miktarsız
+  // ulaşılamadığı için alis!=null her zaman miktar!=null demektir.)
+  if (k.alis == null) return 0;
+  if (k.tur === "fon") return k.miktar!; // fon miktarı zaten ₺ tutar olarak tutuluyor
+  return k.miktar! * (k.fiyat || 0);
 }
 function portfoyBugunkuKatki(k: PortfoyKalemi): number {
-  if (k.miktar == null || k.g == null) return 0;
+  if (k.alis == null || k.g == null) return 0;
   return portfoyGuncelDeger(k) * (k.g / 100);
 }
 function portfoyMaliyet(k: PortfoyKalemi): number | null {
@@ -13452,7 +13456,7 @@ function PortfoyWidget({liste, gizli, onGizliToggle, onDetay, onEkle}:{
       <div>
         {liste.map((k,i)=>{
           const meta = PORTFOY_TUR_META[k.tur];
-          const izlemeModu = k.miktar==null;
+          const izlemeModu = k.alis==null;
           return (
             <div key={k.id} onClick={onDetay} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:i<liste.length-1?`1px solid ${C.border}`:"none",cursor:"pointer"}}>
               <div style={{width:28,height:28,borderRadius:8,background:meta.bg,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
@@ -13466,10 +13470,10 @@ function PortfoyWidget({liste, gizli, onGizliToggle, onDetay, onEkle}:{
                   <span style={{fontSize:10.5,color:C.sub2,marginLeft:6}}>{gizli?"••":k.miktar!.toLocaleString("tr-TR")} {k.birim}</span>
                 )}
               </div>
-              {!izlemeModu && (
-                <span style={{fontSize:11.5,color:C.sub,marginRight:8,fontVariantNumeric:"tabular-nums"}}>{gizli?"₺••••":portfoyFmtTL(portfoyGuncelDeger(k))}</span>
-              )}
-              <PortfoyDegisimEtiket deger={k.g}/>
+              <span style={{fontSize:13,fontWeight:700,color:C.sub,marginRight:8,fontVariantNumeric:"tabular-nums"}}>
+                {gizli?"₺••••":portfoyFmtTL(izlemeModu ? (k.fiyat||0) : portfoyGuncelDeger(k))}
+              </span>
+              <PortfoyDegisimEtiket deger={k.g} boyut={13}/>
             </div>
           );
         })}
@@ -13847,12 +13851,22 @@ function PortfoyEkleModal({onKapat, onEklendi}:{onKapat:()=>void; onEklendi:(k:P
 function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil}:{
   liste: PortfoyKalemi[]; gizli: boolean; onGizliToggle: ()=>void; onEkle: ()=>void; onSil: (id:string)=>void;
 }){
-  const toplamDeger = liste.reduce((t,k)=>t+portfoyGuncelDeger(k),0);
-  const toplamKatki = liste.reduce((t,k)=>t+portfoyBugunkuKatki(k),0);
+  const [sekme, setSekme] = useState<"portfoy"|"takip">("portfoy");
+  const [filtre, setFiltre] = useState<"tumu"|PortfoyKalemi["tur"]>("tumu");
+
+  // Ayrım artık ALIŞ BİLGİSİNE göre: fiyat/tarih girilmişse Portföyüm,
+  // girilmemişse (miktar girilmiş olsa bile) Takip Listem.
+  const portfoyListesi = liste.filter(k=>k.alis!=null);
+  const takipListesi = liste.filter(k=>k.alis==null);
+  const aktifListe = sekme==="portfoy" ? portfoyListesi : takipListesi;
+  const filtreliListe = filtre==="tumu" ? aktifListe : aktifListe.filter(k=>k.tur===filtre);
+
+  const toplamDeger = portfoyListesi.reduce((t,k)=>t+portfoyGuncelDeger(k),0);
+  const toplamKatki = portfoyListesi.reduce((t,k)=>t+portfoyBugunkuKatki(k),0);
   const toplamYuzde = toplamDeger>0 ? (toplamKatki/toplamDeger)*100 : 0;
   const pozitif = toplamKatki>=0;
 
-  const kzKalemleri = liste.filter(k=>portfoyKarZarar(k)!=null);
+  const kzKalemleri = portfoyListesi.filter(k=>portfoyKarZarar(k)!=null);
   const toplamMaliyet = kzKalemleri.reduce((t,k)=>t+(portfoyMaliyet(k)||0),0);
   const toplamKZ = kzKalemleri.reduce((t,k)=>t+(portfoyKarZarar(k)||0),0);
   const toplamKZYuzde = toplamMaliyet>0 ? (toplamKZ/toplamMaliyet)*100 : 0;
@@ -13874,37 +13888,73 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil}:{
 
   return (
     <div style={{marginTop:8}}>
-      <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:16,marginBottom:14}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
-          <span style={{fontSize:10.5,color:C.sub}}>Toplam Değer</span>
-          <div onClick={onGizliToggle} style={{cursor:"pointer",padding:2}}>
-            {gizli ? <EyeOff size={15} color={C.sub2}/> : <Eye size={15} color={C.sub2}/>}
-          </div>
-        </div>
-        <div style={{fontSize:26,fontWeight:800,color:C.text,marginBottom:10,fontVariantNumeric:"tabular-nums"}}>
-          {gizli?"₺••••••":portfoyFmtTL(toplamDeger)}
-        </div>
-        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-          <span style={{fontSize:11.5,fontWeight:800,color:pozitif?C.green:C.red,background:pozitif?C.greenLight:"rgba(248,113,113,0.15)",borderRadius:8,padding:"5px 9px"}}>
-            Bugün {pozitif?"+":""}{gizli?"₺••••":portfoyFmtTL(toplamKatki)} ({pozitif?"+":""}{toplamYuzde.toFixed(2)}%)
-          </span>
-          {kzKalemleri.length>0 && (
-            <span style={{fontSize:11.5,fontWeight:800,color:toplamKZ>=0?C.green:C.red,background:toplamKZ>=0?C.greenLight:"rgba(248,113,113,0.15)",borderRadius:8,padding:"5px 9px"}}>
-              Alıştan beri {toplamKZ>=0?"+":""}{gizli?"₺••••":portfoyFmtTL(toplamKZ)} ({toplamKZ>=0?"+":""}{toplamKZYuzde.toFixed(2)}%)
-            </span>
-          )}
-        </div>
-        {kzKalemleri.length<liste.length && (
-          <div style={{display:"flex",alignItems:"flex-start",gap:5,marginTop:10,fontSize:10,color:C.sub2,lineHeight:1.4}}>
-            <Info size={11} style={{flexShrink:0,marginTop:1}}/>
-            <span>{liste.length-kzKalemleri.length} kalemde miktar/alış bilgisi yok — "Alıştan beri" hesabına dahil edilmedi.</span>
-          </div>
-        )}
+      {/* Sekme anahtarı — Portföyüm / Takip Listem */}
+      <div style={{display:"flex",background:WA(0.05),borderRadius:12,padding:4,marginBottom:12,gap:4}}>
+        {([["portfoy",`Portföyüm (${portfoyListesi.length})`],["takip",`Takip Listem (${takipListesi.length})`]] as [string,string][]).map(([id,label])=>{
+          const aktif = sekme===id;
+          return (
+            <div key={id} onClick={()=>setSekme(id as any)} style={{
+              flex:1,textAlign:"center",padding:"9px 0",borderRadius:9,cursor:"pointer",
+              background:aktif?C.blue:"transparent",
+              fontSize:12.5,fontWeight:800,color:aktif?C.bg:C.sub,
+            }}>{label}</div>
+          );
+        })}
       </div>
 
-      {liste.map(k=>{
+      {/* Tür filtre çipleri — iki sekmede de aynı, aktif sekmenin listesini süzer */}
+      <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:2,marginBottom:12}}>
+        {([["tumu","Tümü"],["hisse","Hisse"],["fon","Fon"],["altin","Altın"],["kripto","Kripto"],["emtia","Emtia"]] as [string,string][]).map(([id,label])=>{
+          const aktif = filtre===id;
+          return (
+            <div key={id} onClick={()=>setFiltre(id as any)} style={{
+              flexShrink:0,padding:"7px 14px",borderRadius:20,cursor:"pointer",whiteSpace:"nowrap",
+              background:aktif?C.blue:WA(0.07),
+              border:aktif?`1px solid ${C.blue}`:`1px solid ${WA(0.1)}`,
+              fontSize:12,fontWeight:700,color:aktif?C.bg:C.sub,
+            }}>{label}</div>
+          );
+        })}
+      </div>
+
+      {sekme==="portfoy" && (
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:16,marginBottom:14}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
+            <span style={{fontSize:10.5,color:C.sub}}>Toplam Değer</span>
+            <div onClick={onGizliToggle} style={{cursor:"pointer",padding:2}}>
+              {gizli ? <EyeOff size={15} color={C.sub2}/> : <Eye size={15} color={C.sub2}/>}
+            </div>
+          </div>
+          <div style={{fontSize:26,fontWeight:800,color:C.text,marginBottom:10,fontVariantNumeric:"tabular-nums"}}>
+            {gizli?"₺••••••":portfoyFmtTL(toplamDeger)}
+          </div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            <span style={{fontSize:11.5,fontWeight:800,color:pozitif?C.green:C.red,background:pozitif?C.greenLight:"rgba(248,113,113,0.15)",borderRadius:8,padding:"5px 9px"}}>
+              Bugün {pozitif?"+":""}{gizli?"₺••••":portfoyFmtTL(toplamKatki)} ({pozitif?"+":""}{toplamYuzde.toFixed(2)}%)
+            </span>
+            {kzKalemleri.length>0 && (
+              <span style={{fontSize:11.5,fontWeight:800,color:toplamKZ>=0?C.green:C.red,background:toplamKZ>=0?C.greenLight:"rgba(248,113,113,0.15)",borderRadius:8,padding:"5px 9px"}}>
+                Alıştan beri {toplamKZ>=0?"+":""}{gizli?"₺••••":portfoyFmtTL(toplamKZ)} ({toplamKZ>=0?"+":""}{toplamKZYuzde.toFixed(2)}%)
+              </span>
+            )}
+          </div>
+          {kzKalemleri.length<portfoyListesi.length && portfoyListesi.length>0 && (
+            <div style={{display:"flex",alignItems:"flex-start",gap:5,marginTop:10,fontSize:10,color:C.sub2,lineHeight:1.4}}>
+              <Info size={11} style={{flexShrink:0,marginTop:1}}/>
+              <span>{portfoyListesi.length-kzKalemleri.length} kalemde kar/zarar hesaplanamadı (fon için henüz desteklenmiyor).</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {filtreliListe.length===0 && (
+        <div style={{textAlign:"center",padding:"20px 0",color:C.sub2,fontSize:12}}>
+          {sekme==="portfoy" ? "Bu sekmede henüz ürün yok — alış bilgisiyle eklediklerin burada görünür." : "Bu sekmede henüz ürün yok — miktar/fiyat girmeden eklediklerin burada görünür."}
+        </div>
+      )}
+
+      {filtreliListe.map(k=>{
         const meta = PORTFOY_TUR_META[k.tur];
-        const izlemeModu = k.miktar==null;
         const kz = portfoyKarZarar(k);
         const m = portfoyMaliyet(k);
         const kzYuzde = m && m>0 ? (kz!/m)*100 : null;
@@ -13915,18 +13965,25 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil}:{
                 <meta.Icon size={14} color={meta.renk}/>
               </div>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{display:"flex",alignItems:"center",gap:6}}>
-                  <span style={{fontSize:13,fontWeight:800,color:C.text}}>{k.kod}</span>
-                  {izlemeModu && <span style={{fontSize:8.5,fontWeight:700,color:C.sub2,background:WA(0.06),borderRadius:4,padding:"1px 5px"}}>İzleniyor</span>}
-                </div>
-                <div style={{fontSize:10.5,color:C.sub2}}>
-                  {izlemeModu ? (gizli?"₺••••":portfoyFmtTL(k.fiyat||0)) : `${gizli?"••":k.miktar!.toLocaleString("tr-TR")} ${k.birim} · ${gizli?"₺••••":portfoyFmtTL(portfoyGuncelDeger(k))}`}
-                </div>
+                {sekme==="takip" ? (
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <span style={{fontSize:13,fontWeight:800,color:C.text}}>{k.kod}</span>
+                    <span style={{flex:1}}/>
+                    <span style={{fontSize:13,fontWeight:700,color:C.sub,fontVariantNumeric:"tabular-nums"}}>{gizli?"₺••••":portfoyFmtTL(k.fiyat||0)}</span>
+                  </div>
+                ) : (
+                  <>
+                    <span style={{fontSize:13,fontWeight:800,color:C.text}}>{k.kod}</span>
+                    <div style={{fontSize:10.5,color:C.sub2}}>
+                      {gizli?"••":k.miktar!.toLocaleString("tr-TR")} {k.birim} · {gizli?"₺••••":portfoyFmtTL(portfoyGuncelDeger(k))}
+                    </div>
+                  </>
+                )}
               </div>
               <Trash2 size={13} color={C.sub2} style={{cursor:"pointer"}} onClick={()=>onSil(k.id)}/>
             </div>
 
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:(k.alis||izlemeModu)?10:0}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
               {[["Günlük",k.g],["Haftalık",k.h],["Aylık",k.a],["Yıllık",k.y]].map(([lbl,val]:any)=>(
                 <div key={lbl} style={{textAlign:"center"}}>
                   <div style={{fontSize:9,color:C.sub2,marginBottom:3}}>{lbl}</div>
@@ -13935,28 +13992,26 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil}:{
               ))}
             </div>
 
-            {izlemeModu ? (
+            {sekme==="takip" ? (
               <div style={{borderTop:`1px solid ${C.border}`,paddingTop:9,display:"flex",alignItems:"center",gap:5,fontSize:10.5,color:C.sub2}}>
-                <Tag size={11}/> Miktar eklemek için ürünü sil, yeniden ekle
+                <Tag size={11}/> Alış bilgisi eklemek için sil, yeniden ekle — Portföyüm'e taşınır
               </div>
-            ) : k.alis ? (
+            ) : (
               <div style={{borderTop:`1px solid ${C.border}`,paddingTop:9,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:6}}>
                 <div style={{display:"flex",alignItems:"center",gap:5,fontSize:10,color:C.sub2}}>
                   <Calendar size={11}/>
-                  <span>{k.alis.tarih} · {gizli?"₺••••":portfoyFmtTL(k.alis.fiyat)}{k.tur!=="fon"?`/${k.birim==="lot"?"hisse":k.birim}`:""}</span>
-                  <span style={{fontSize:8.5,fontWeight:700,color:k.alis.kaynak==="otomatik"?C.blue:C.orange,background:k.alis.kaynak==="otomatik"?C.blueLight:"rgba(224,165,61,0.15)",borderRadius:4,padding:"1px 5px",marginLeft:2}}>
-                    {k.alis.kaynak==="otomatik"?"otomatik bulundu":"elle girildi"}
+                  <span>{k.alis!.tarih} · {gizli?"₺••••":portfoyFmtTL(k.alis!.fiyat)}{k.tur!=="fon"?`/${k.birim==="lot"?"hisse":k.birim}`:""}</span>
+                  <span style={{fontSize:8.5,fontWeight:700,color:k.alis!.kaynak==="otomatik"?C.blue:C.orange,background:k.alis!.kaynak==="otomatik"?C.blueLight:"rgba(224,165,61,0.15)",borderRadius:4,padding:"1px 5px",marginLeft:2}}>
+                    {k.alis!.kaynak==="otomatik"?"otomatik bulundu":"elle girildi"}
                   </span>
                 </div>
-                {kz!=null && (
+                {kz!=null ? (
                   <span style={{fontSize:11.5,fontWeight:800,color:kz>=0?C.green:C.red}}>
                     {kz>=0?"+":""}{gizli?"₺••••":portfoyFmtTL(kz)} ({kz>=0?"+":""}{kzYuzde?.toFixed(1)}%)
                   </span>
+                ) : (
+                  <span style={{fontSize:10,color:C.sub2}}>Kar/zarar hesaplanamıyor (fon)</span>
                 )}
-              </div>
-            ) : (
-              <div style={{borderTop:`1px solid ${C.border}`,paddingTop:9,fontSize:10.5,color:C.sub2}}>
-                Alış bilgisi girilmedi — kar/zarar hesaplanamıyor.
               </div>
             )}
           </div>
