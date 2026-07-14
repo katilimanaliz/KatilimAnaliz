@@ -39,6 +39,18 @@
 // tefas-proxy'nin kod bazlı merge'ü bilerek korunuyor: kısmi tarama eski
 // fonları SİLMEZ, sadece bu sefer çekilenleri günceller — FAZ 3/4'ün kısmi
 // sonuçları bu sayede güvenle yazılabiliyor.
+//
+// DEĞİŞİKLİK (2026-07-14 akşam) — FON FİYATI (birim pay değeri) EKLENDİ:
+// Fonoloji'nin /funds ve /funds/:code yanıtlarında `current_price` alanı
+// zaten geliyormuş (resmi API dokümanında GET /funds/PHE örneğinde
+// "current_price": 2.816142 olarak görülüyor) — mapFon() bunu şimdiye kadar
+// hiç okumuyordu, bu yüzden uygulama tarafında fon fiyatı hep boş kalıyordu.
+// Artık `fiyat` alanı olarak dışa aktarılıyor. Not: bulk `/funds?limit=...`
+// liste taramasının HER satırda bu alanı içerdiği garanti değil (dokümanda
+// örnek sadece tekil /funds/:code için verilmiş) — ama FAZ 2.5/3/4 zaten
+// tekil /funds/:code çağırıyor, o fonlar için current_price kesin gelir.
+// Liste taramasından gelenlerde alan yoksa `fiyat` null kalır, frontend
+// bunu zaten "—" göstererek nazikçe karşılıyor.
 
 import { Redis } from "@upstash/redis";
 
@@ -220,6 +232,11 @@ function mapFon(f, vakif, takasAraligi) {
     kaynakKategori: f.category || "",
     yatirimci: f.investor_count || f.investors || 0,
     portfoy:   f.aum || 0,
+    // Birim pay değeri (NAV) — Fonoloji'nin resmi API dokümanında
+    // current_price olarak dönüyor. Liste taramasında her satırda garanti
+    // olmayabilir; o durumda null kalır, frontend bunu "—" gösterir.
+    fiyat:    (typeof f.current_price === "number") ? f.current_price : null,
+    fiyatTarihi: f.current_date || null,
     takasAraligi: takasAraligi,
     gunluk:   parseFloat(((f.return_1d  || 0) * 100).toFixed(4)),
     gunlukNorm: f.return_1d ? parseFloat(((f.return_1d / takasAraligi) * 100).toFixed(4)) : 0,

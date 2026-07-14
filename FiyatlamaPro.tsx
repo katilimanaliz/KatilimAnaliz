@@ -13435,7 +13435,7 @@ function PortfoyWidget({liste, gizli, onGizliToggle, onDetay, onEkle}:{
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
           <div>
             <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
-              <span style={{fontSize:11,fontWeight:700,color:C.text,textTransform:"uppercase",letterSpacing:0.5}}>Portföyüm</span>
+              <span style={{fontSize:11,fontWeight:700,color:C.text,textTransform:"uppercase",letterSpacing:0.5}}>Takip Listem / Portföyüm</span>
               <div onClick={(e)=>{e.stopPropagation();onGizliToggle();}} style={{cursor:"pointer",padding:2,display:"flex"}}>
                 {gizli ? <EyeOff size={13} color={C.sub2}/> : <Eye size={13} color={C.sub2}/>}
               </div>
@@ -13476,7 +13476,7 @@ function PortfoyWidget({liste, gizli, onGizliToggle, onDetay, onEkle}:{
                 <div style={{fontSize:10.5,color:C.sub2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{k.ad}</div>
               </div>
               <span style={{fontSize:13,fontWeight:700,color:C.text,marginRight:8,fontVariantNumeric:"tabular-nums"}}>
-                {gizli?"₺••••":portfoyFmtTL(izlemeModu ? (k.fiyat||0) : portfoyGuncelDeger(k))}
+                {izlemeModu && k.fiyat==null ? "—" : (gizli?"₺••••":portfoyFmtTL(izlemeModu ? (k.fiyat||0) : portfoyGuncelDeger(k)))}
               </span>
               <PortfoyDegisimEtiket deger={k.g} boyut={13}/>
             </div>
@@ -13563,7 +13563,7 @@ function PortfoyEkleModal({onKapat, onEklendi}:{onKapat:()=>void; onEklendi:(k:P
       setSecilenEnstruman({kod:it.ticker, ad:it.sirket||it.ticker, fiyat:it.fiyat, birim:"lot", g:it.degisim1g, h:it.degisim1h, a:it.degisim1a, y:it.degisim1y, _ticker:it.ticker});
       setAsama("miktar");
     } else if (tur==="fon") {
-      setSecilenEnstruman({kod:it.kod, ad:it.ad, fiyat:null, birim:"₺ tutar", g:it.gunluk, h:null, a:it.aylik, y:it.yillik});
+      setSecilenEnstruman({kod:it.kod, ad:it.ad, fiyat:(typeof it.fiyat==="number"?it.fiyat:null), birim:"₺ tutar", g:it.gunluk, h:(typeof it.haftalik==="number"?it.haftalik:null), a:it.aylik, y:it.yillik});
       setAsama("miktar");
     } else { // kripto | emtia
       setEnstrumanYukleniyor(true);
@@ -13973,7 +13973,7 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onKalem
                       <span style={{fontSize:13,fontWeight:800,color:C.text}}>{k.kod}</span>
                       <span style={{fontSize:8.5,fontWeight:700,color:meta.renk,background:meta.bg,borderRadius:4,padding:"1px 5px"}}>{meta.label}</span>
                       <span style={{flex:1}}/>
-                      <span style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:"tabular-nums"}}>{gizli?"₺••••":portfoyFmtTL(k.fiyat||0)}</span>
+                      <span style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:"tabular-nums"}}>{k.fiyat==null?"—":(gizli?"₺••••":portfoyFmtTL(k.fiyat||0))}</span>
                     </div>
                     <div style={{fontSize:10.5,color:C.sub2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{k.ad}</div>
                   </>
