@@ -254,7 +254,7 @@ const VAKIF_KODLARI = ["VPA","VLT","VHS","VKK","VKV"];
 // (mapFon.katilimUygun) onları eliyor. Bu kodları görürse HAM halini (filtre
 // sonucundan bağımsız) rapora düşür — API'nin gerçek name/category/
 // is_participation alanlarını görüp filtreyi buna göre düzeltebilelim.
-const ARANAN_TESHIS_KODLARI = ["NSA","FTL","MPE","DNP","EP1"];
+const ARANAN_TESHIS_KODLARI = ["NSA", "FTL", "MPE", "DNP", "EP1", "KLU", "PPG"];
 const PAGE_SIZE = 100;
 const ŞÜPHELİ_EŞİK = 100; // normal günde 150+ katılım fonu beklenir
 const MAKS_SAYFA = 60;    // emniyet: 6.000 fon üstü beklenmiyor (bugün ~3.450)
@@ -308,6 +308,7 @@ async function fonVerisiCek(parcaNo = null) {
   //   3) hamBenzersiz/mukerrer/kacak sayıları teşhise yazılır — sorun bir
   //      daha nüksederse tek bakışta görünür.
   const hamKodSeti = new Set(); // taramada görülen TÜM ham kodlar (filtre öncesi)
+  let kirikOffsetSayaci = 0; // ardışık "büyümeyen" sayfa sayısı
   // sort=code DENENDİ ve GERİ ALINDI (12:07 taraması kanıtı): sort verilince
   // Fonoloji offset'i yok sayıp aynı sayfayı döndürüyor — 3500 kayıtta yalnız
   // 140 benzersiz kod kaldı. Varsayılan sıralamaya dönüldü; kayma riskine
@@ -372,7 +373,22 @@ async function fonVerisiCek(parcaNo = null) {
     const items = d.items ?? d.funds ?? d.data ?? (Array.isArray(d) ? d : []);
     if (!items.length) break;
     hamToplam += items.length;
+    const oncekiBenzersiz = hamKodSeti.size;
     for (const f of items) itemIsle(f);
+    // KIRIK OFFSET DEDEKTÖRÜ (2026-07-14): Fonoloji offset'i yok sayıp aynı
+    // sayfayı döndürürse (kanıt: 39 sayfada 110 benzersiz kod) sayfalarda
+    // ısrar etmek 90+ saniye çöpe atmaktır. 2. sayfadan itibaren benzersiz
+    // kod sayısı büyümüyorsa döngüyü bırak — kalan süre bütçesi tekil
+    // tamamlama geçidine kalsın, evren oradan taransın.
+    if (sayfaSayisi >= 1 && hamKodSeti.size - oncekiBenzersiz < 10) {
+      kirikOffsetSayaci++;
+      if (kirikOffsetSayaci >= 2) {
+        sonHata = "offset sayfalamasi kirik gorunuyor — tekil tamamlamaya gecildi";
+        break;
+      }
+    } else {
+      kirikOffsetSayaci = 0;
+    }
     sayfaSayisi++;
     offset += OFFSET_ADIM; // bindirmeli ilerleme — kayma emici
     if (items.length < PAGE_SIZE) break;
@@ -385,7 +401,7 @@ async function fonVerisiCek(parcaNo = null) {
   // emniyet ağıdır. Tek seferde en fazla EK_CEKIM_LIMITI fon tamamlanır
   // (maxDuration'ı zorlamamak için); artan olursa bir sonraki saatlik tarama
   // kaldığı yerden tamamlar.
-  const EK_CEKIM_LIMITI = 60;
+  const EK_CEKIM_LIMITI = 150; // gerçek sınır süre bütçesi — bu sadece tavan
   let kodListesiToplam = null;
   let kacakKodlar = [];
   let ekCekilenAdet = 0;

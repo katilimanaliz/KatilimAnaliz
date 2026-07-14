@@ -128,8 +128,14 @@ async function cronYaz(req, res) {
 
       let sonucData, sonucSayim;
       if (yeni.eksikGorunuyor && eski?.data?.length) {
-        sonucData = eski.data;
-        sonucSayim = eski.data.length;
+        // DÜZELTME (2026-07-14): eskiden yeni veri TAMAMEN atılıp eski
+        // korunuyordu — sayfalama kırılınca her tarama "şüpheli" sayıldı ve
+        // tekil çekimle kurtarılan fonlar (NSA vb.) dahil hiçbir yenilik
+        // KV'ye giremedi (count aylarca 142'de kaldı). Birleştirme zaten
+        // küçülmeye izin vermez: eski taban korunur, yeni görülenler eklenir
+        // ve değerleri tazelenir. "Koruma" amacı bozulmadan kayıp bitiyor.
+        sonucData = birlestir(eski.data, yeni.data);
+        sonucSayim = sonucData.length;
       } else if (parcaNo) {
         sonucData = birlestir(eski?.data, yeni.data);
         sonucSayim = sonucData.length;
