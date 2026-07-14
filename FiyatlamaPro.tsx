@@ -13446,6 +13446,7 @@ function PortfoyWidget({liste, gizli, onGizliToggle, onDetay, onEkle}:{
           </div>
           <div onClick={onDetay} style={{textAlign:"right",cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
             <div>
+              <div style={{fontSize:10,fontWeight:700,color:C.sub,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4,textAlign:"right"}}>Günlük</div>
               <div style={{fontSize:12,fontWeight:800,color:pozitif?C.green:C.red,background:pozitif?C.greenLight:"rgba(248,113,113,0.15)",borderRadius:8,padding:"4px 8px",marginBottom:4}}>
                 {pozitif?"+":""}{toplamYuzde.toFixed(2)}%
               </div>
@@ -13466,16 +13467,13 @@ function PortfoyWidget({liste, gizli, onGizliToggle, onDetay, onEkle}:{
           const izlemeModu = k.alis==null;
           return (
             <div key={k.id} onClick={onDetay} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:i<liste.length-1?`1px solid ${C.border}`:"none",cursor:"pointer"}}>
-              <div style={{width:28,height:28,borderRadius:8,background:meta.bg,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                <meta.Icon size={13} color={meta.renk}/>
-              </div>
               <div style={{flex:1,minWidth:0}}>
-                <span style={{fontSize:12.5,fontWeight:700,color:C.text}}>{k.kod}</span>
-                {izlemeModu ? (
-                  <span style={{fontSize:9,fontWeight:700,color:C.sub2,marginLeft:6,background:WA(0.06),borderRadius:4,padding:"1px 5px"}}>İzleniyor</span>
-                ) : (
-                  <span style={{fontSize:10.5,color:C.sub2,marginLeft:6}}>{gizli?"••":k.miktar!.toLocaleString("tr-TR")} {k.birim}</span>
-                )}
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{fontSize:12.5,fontWeight:700,color:C.text}}>{k.kod}</span>
+                  <span style={{fontSize:8.5,fontWeight:700,color:meta.renk,background:meta.bg,borderRadius:4,padding:"1px 5px"}}>{meta.label}</span>
+                  {izlemeModu && <span style={{fontSize:8.5,fontWeight:700,color:C.sub2,background:WA(0.06),borderRadius:4,padding:"1px 5px"}}>İzleniyor</span>}
+                </div>
+                <div style={{fontSize:10.5,color:C.sub2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{k.ad}</div>
               </div>
               <span style={{fontSize:13,fontWeight:700,color:C.text,marginRight:8,fontVariantNumeric:"tabular-nums"}}>
                 {gizli?"₺••••":portfoyFmtTL(izlemeModu ? (k.fiyat||0) : portfoyGuncelDeger(k))}
@@ -13968,20 +13966,25 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onKalem
         return (
           <div key={k.id} onClick={()=>onKalemTikla(k)} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:12,marginBottom:8,cursor:"pointer"}}>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-              <div style={{width:30,height:30,borderRadius:9,background:meta.bg,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                <meta.Icon size={14} color={meta.renk}/>
-              </div>
               <div style={{flex:1,minWidth:0}}>
                 {sekme==="takip" ? (
-                  <div style={{display:"flex",alignItems:"center",gap:6}}>
-                    <span style={{fontSize:13,fontWeight:800,color:C.text}}>{k.kod}</span>
-                    <span style={{flex:1}}/>
-                    <span style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:"tabular-nums"}}>{gizli?"₺••••":portfoyFmtTL(k.fiyat||0)}</span>
-                  </div>
+                  <>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <span style={{fontSize:13,fontWeight:800,color:C.text}}>{k.kod}</span>
+                      <span style={{fontSize:8.5,fontWeight:700,color:meta.renk,background:meta.bg,borderRadius:4,padding:"1px 5px"}}>{meta.label}</span>
+                      <span style={{flex:1}}/>
+                      <span style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:"tabular-nums"}}>{gizli?"₺••••":portfoyFmtTL(k.fiyat||0)}</span>
+                    </div>
+                    <div style={{fontSize:10.5,color:C.sub2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{k.ad}</div>
+                  </>
                 ) : (
                   <>
-                    <span style={{fontSize:13,fontWeight:800,color:C.text}}>{k.kod}</span>
-                    <div style={{fontSize:10.5,color:C.sub2}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <span style={{fontSize:13,fontWeight:800,color:C.text}}>{k.kod}</span>
+                      <span style={{fontSize:8.5,fontWeight:700,color:meta.renk,background:meta.bg,borderRadius:4,padding:"1px 5px"}}>{meta.label}</span>
+                    </div>
+                    <div style={{fontSize:10.5,color:C.sub2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{k.ad}</div>
+                    <div style={{fontSize:10.5,color:C.sub2,marginTop:1}}>
                       {gizli?"••":k.miktar!.toLocaleString("tr-TR")} {k.birim} · {gizli?"₺••••":portfoyFmtTL(portfoyGuncelDeger(k))}
                     </div>
                   </>
