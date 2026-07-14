@@ -790,6 +790,12 @@ function GetiriHesaplayici({ fon, settings, onKapat }) {
   const normOran = fon.gunlukNorm && fon.gunlukNorm !== 0 ? fon.gunlukNorm : fon.gunluk;
   const takasAraligi = fon.takasAraligi || 1;
 
+  // Hisse senedi yoğun fonlar (kategori adında "Hisse Senedi" geçen tüm
+  // fonlar — örn. "Hisse Senedi Şemsiye Fonu") güncel mevzuata göre STOPAJSIZ.
+  // Vade bazlı bireysel stopaj tablosu (deposit/mevduat mantığı) bu fonlar
+  // için hiç uygulanmaz — tüzel istisnasıyla AYNI önceliktedir.
+  const hisseSenediYogun = (fon.kategori || "").toLocaleUpperCase("tr-TR").includes("HİSSE SENEDİ");
+
   const [tutarStr, setTutarStr] = useState("");
   const [vade,     setVade]     = useState(String(takasAraligi));
   const [oran,     setOran]     = useState(String(Math.abs(normOran).toFixed(4)));
@@ -802,17 +808,18 @@ function GetiriHesaplayici({ fon, settings, onKapat }) {
     if(T<=0||V<=0||R<=0) return null;
     const r = R/100;
     const brutGetiri = V===1 ? T*r : T*(Math.pow(1+r,V)-1);
-    const sOran  = tuzel ? 0 : stopajOranSec(V, settings);
+    const sOran  = (tuzel || hisseSenediYogun) ? 0 : stopajOranSec(V, settings);
     const stopajTL   = brutGetiri*(sOran/100);
     const netGetiri  = brutGetiri-stopajTL;
     const netTutar   = T+netGetiri;
     const brutYillik = (Math.pow(1+r,365)-1)*100;
     const netYillik  = brutYillik*(1-sOran/100);
     return {T,V,R,brutGetiri,sOran,stopajTL,netGetiri,netTutar,brutYillik,netYillik};
-  },[tutarStr,vade,oran,tuzel,settings]);
+  },[tutarStr,vade,oran,tuzel,settings,hisseSenediYogun]);
 
   const vadeBracket = sonuc
     ? (tuzel ? "Tüzel — Stopaj Yok"
+      : hisseSenediYogun ? "Hisse Senedi Yoğun Fon — Stopaj Yok"
       : `Bireysel — %${sonuc.sOran.toFixed(1)} Stopaj (${sonuc.V}g)`)
     : "";
 
@@ -876,13 +883,13 @@ function GetiriHesaplayici({ fon, settings, onKapat }) {
               <div style={{...hs.kVal,color:FC.green}}>+{fmt(sonuc.brutGetiri)} ₺</div>
               <div style={hs.kAlt}>%{fmt(sonuc.brutYillik)} yıllık</div>
             </div>
-            <div style={{...hs.kart,opacity:tuzel?0.45:1}}>
+            <div style={{...hs.kart,opacity:(tuzel||hisseSenediYogun)?0.45:1}}>
               <div style={hs.kLbl}>{TR("Stopaj Kesintisi")}</div>
               <div style={{...hs.kVal,color:FC.red}}>
-                {tuzel?"—":`-${fmt(sonuc.stopajTL)} ₺`}
+                {(tuzel||hisseSenediYogun)?"—":`-${fmt(sonuc.stopajTL)} ₺`}
               </div>
               <div style={hs.kAlt}>
-                {tuzel?"Tüzel müşteri":`%${sonuc.sOran.toFixed(1)} oran`}
+                {tuzel?"Tüzel müşteri":hisseSenediYogun?"Hisse senedi yoğun fon":`%${sonuc.sOran.toFixed(1)} oran`}
               </div>
             </div>
             <div style={{...hs.kart,background:FC.greenL,border:`1.5px solid ${FC.green}22`}}>
@@ -1861,11 +1868,12 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
 }
 
 // ─── FON DETAY — grafik ekranı (HisseDetay ile aynı desen) ─────────────────
-function FonDetay({ fon, onGeri }: { fon: any, onGeri: () => void }) {
+function FonDetay({ fon, onGeri, settings }: { fon: any, onGeri: () => void, settings?: any }) {
   const [grafik, setGrafik] = useState<any[]>([]);
   const [grafikYukl, setGrafikYukl] = useState(true);
   const [donem, setDonem] = useState<"1a"|"3a"|"1y">("1a");
   const [tooltip, setTooltip] = useState<{x:number,y:number,p:any}|null>(null);
+  const [hesapAcik, setHesapAcik] = useState(false);
 
   useEffect(() => {
     if (!fon?.kod) return;
@@ -1994,6 +2002,16 @@ function FonDetay({ fon, onGeri }: { fon: any, onGeri: () => void }) {
         )}
       </div>
 
+      <div style={{padding:"0 14px",marginBottom:14}}>
+        <button onClick={()=>setHesapAcik(true)} style={{
+          width:"100%",padding:"12px 0",borderRadius:12,border:"none",
+          background:C.blue,color:C.bg,fontWeight:800,fontSize:14,cursor:"pointer",fontFamily:"inherit",
+          display:"flex",alignItems:"center",justifyContent:"center",gap:8,
+        }}>
+          <Calculator size={16}/> Getiri Hesapla
+        </button>
+      </div>
+
       <div style={{margin:"0 0 10px",padding:"0 14px"}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
           {[
@@ -2026,6 +2044,19 @@ function FonDetay({ fon, onGeri }: { fon: any, onGeri: () => void }) {
           ))}
         </div>
       </div>
+
+      {hesapAcik && (
+        <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.5)",zIndex:800,display:"flex",alignItems:"flex-end",...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}}
+          onClick={()=>setHesapAcik(false)}>
+          <div style={{background:C.bg,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",maxHeight:"90vh",overflowY:"auto",padding:"0 0 32px"}}
+            onClick={e=>e.stopPropagation()}>
+            <div style={{display:"flex",justifyContent:"center",padding:"10px 0 0"}}>
+              <div style={{width:40,height:4,borderRadius:2,background:C.border}}/>
+            </div>
+            <GetiriHesaplayici fon={fon} settings={settings} onKapat={()=>setHesapAcik(false)}/>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -15837,7 +15868,7 @@ function App(){
         )}
 
         {/* ── FON DETAY (grafik ekranı — Portföyüm'den açılır) ── */}
-        {screen==="fonDetay"&&pendingFonDetay&&<FonDetay fon={pendingFonDetay} onGeri={back}/>}
+        {screen==="fonDetay"&&pendingFonDetay&&<FonDetay fon={pendingFonDetay} onGeri={back} settings={settings}/>}
 
         {/* ── PROFİL (alt bar sekmesi) ── */}
         {screen==="profil"&&(
