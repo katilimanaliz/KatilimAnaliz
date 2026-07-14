@@ -1280,7 +1280,7 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
     // D=azalan(büyükten küçüğe), D yok=artan
     const azalan = sirala?.endsWith("D");
     const key = sirala?.replace("D","") as string;
-    const keyMap: Record<string,string> = {gunluk:"gunluk",aylik:"aylik",yillik:"yillik",portfoy:"portfoy",yatirimci:"yatirimci"};
+    const keyMap: Record<string,string> = {gunluk:"gunluk",haftalik:"haftalik",aylik:"aylik",uc_aylik:"uc_aylik",ytd:"ytd",yillik:"yillik",portfoy:"portfoy",yatirimci:"yatirimci"};
     const field = keyMap[key] || "yillik";
     return [...(fonlar)].sort((a,b)=>{
       const av = fonDeger(a,field) ?? (azalan?-Infinity:Infinity);
@@ -13639,13 +13639,83 @@ function PortfoyDegisimEtiket({deger, boyut=11}:{deger:number|null; boyut?:numbe
   );
 }
 
-function PortfoyWidget({liste, gizli, onGizliToggle, onDetay, onEkle}:{
-  liste: PortfoyKalemi[]; gizli: boolean; onGizliToggle: ()=>void; onDetay: ()=>void; onEkle: ()=>void;
+// Ana sayfa Portföyüm kartındaki tek satır — sola kaydırınca kırmızı silme
+// butonu açılır (iOS listelerindeki standart davranış). Satır açıkken
+// tıklamak grafiğe gitmez, sadece kapatır; kapalıyken normal tıklama grafiği
+// açar. SIL_GENISLIK: açık haldeyken görünen kırmızı alanın piksel genişliği.
+const PORTFOY_SATIR_SIL_GENISLIK = 72;
+function PortfoyWidgetSatir({k, gizli, sonSatirMi, onTikla, onSil, acik, onAcikDegistir}:{
+  k: PortfoyKalemi; gizli: boolean; sonSatirMi: boolean; onTikla: ()=>void; onSil: (id:string)=>void; acik: boolean; onAcikDegistir: (acikMi:boolean)=>void;
+}){
+  const [dx, setDx] = useState(0);
+  const basXRef = useRef(0);
+  const suruklemeBasladiRef = useRef(false);
+  const suruklemedeMi = useRef(false);
+
+  useEffect(()=>{ setDx(acik ? -PORTFOY_SATIR_SIL_GENISLIK : 0); }, [acik]);
+
+  const meta = PORTFOY_TUR_META[k.tur];
+  const izlemeModu = k.alis==null;
+
+  return (
+    <div style={{position:"relative",overflow:"hidden",borderBottom:sonSatirMi?"none":`1px solid ${C.border}`}}>
+      <div onClick={()=>{onSil(k.id);onAcikDegistir(false);}} style={{
+        position:"absolute",top:0,right:0,bottom:0,width:PORTFOY_SATIR_SIL_GENISLIK,
+        background:C.red,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",
+      }}>
+        <Trash2 size={18} color="#fff"/>
+      </div>
+      <div
+        onTouchStart={(e)=>{ basXRef.current=e.touches[0].clientX; suruklemeBasladiRef.current=true; suruklemedeMi.current=false; }}
+        onTouchMove={(e)=>{
+          if(!suruklemeBasladiRef.current) return;
+          const delta = e.touches[0].clientX - basXRef.current;
+          if (Math.abs(delta) > 4) suruklemedeMi.current = true;
+          const taban = acik ? -PORTFOY_SATIR_SIL_GENISLIK : 0;
+          setDx(Math.min(0, Math.max(-PORTFOY_SATIR_SIL_GENISLIK, taban + delta)));
+        }}
+        onTouchEnd={()=>{
+          suruklemeBasladiRef.current=false;
+          const acilsinMi = dx < -PORTFOY_SATIR_SIL_GENISLIK/2;
+          setDx(acilsinMi ? -PORTFOY_SATIR_SIL_GENISLIK : 0);
+          onAcikDegistir(acilsinMi);
+        }}
+        onClick={()=>{
+          if (suruklemedeMi.current) return; // sürükleme bitişindeki tıklamayı yok say
+          if (acik) { setDx(0); onAcikDegistir(false); }
+          else { onTikla(); }
+        }}
+        style={{
+          display:"flex",alignItems:"center",gap:10,padding:"10px 16px",
+          background:C.card,cursor:"pointer",position:"relative",
+          transform:`translateX(${dx}px)`,
+          transition:suruklemeBasladiRef.current?"none":"transform 0.2s ease",
+        }}
+      >
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:6}}>
+            <span style={{fontSize:12.5,fontWeight:700,color:C.text}}>{k.kod}</span>
+            <span style={{fontSize:8.5,fontWeight:700,color:meta.renk,background:meta.bg,borderRadius:4,padding:"1px 5px"}}>{meta.label}</span>
+            {izlemeModu && <span style={{fontSize:8.5,fontWeight:700,color:C.sub2,background:WA(0.06),borderRadius:4,padding:"1px 5px"}}>İzleniyor</span>}
+          </div>
+          <div style={{fontSize:10.5,color:C.sub2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{k.ad}</div>
+        </div>
+        <span style={{fontSize:13,fontWeight:700,color:C.text,marginRight:8,fontVariantNumeric:"tabular-nums"}}>
+          {izlemeModu && k.fiyat==null ? "—" : (gizli?"₺••••":(izlemeModu ? portfoyFmtFiyat(k.fiyat||0, k.tur) : portfoyFmtTL(portfoyGuncelDeger(k))))}
+        </span>
+        <PortfoyDegisimEtiket deger={k.g} boyut={13}/>
+      </div>
+    </div>
+  );
+}
+function PortfoyWidget({liste, gizli, onGizliToggle, onDetay, onEkle, onSil}:{
+  liste: PortfoyKalemi[]; gizli: boolean; onGizliToggle: ()=>void; onDetay: (k?: PortfoyKalemi)=>void; onEkle: ()=>void; onSil: (id:string)=>void;
 }){
   const toplamDeger = useMemo(()=>liste.reduce((t,k)=>t+portfoyGuncelDeger(k),0), [liste]);
   const toplamKatki = useMemo(()=>liste.reduce((t,k)=>t+portfoyBugunkuKatki(k),0), [liste]);
   const toplamYuzde = toplamDeger>0 ? (toplamKatki/toplamDeger)*100 : 0;
   const pozitif = toplamKatki>=0;
+  const [acikSwipeId, setAcikSwipeId] = useState<string|null>(null);
 
   if (liste.length===0) {
     return (
@@ -13679,7 +13749,7 @@ function PortfoyWidget({liste, gizli, onGizliToggle, onDetay, onEkle}:{
               {gizli ? "₺••••••" : portfoyFmtTL(toplamDeger)}
             </div>
           </div>
-          <div onClick={onDetay} style={{textAlign:"right",cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+          <div onClick={()=>onDetay()} style={{textAlign:"right",cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
             <div>
               <div style={{fontSize:10,fontWeight:700,color:C.sub,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4,textAlign:"right"}}>Günlük</div>
               <div style={{fontSize:12,fontWeight:800,color:pozitif?C.green:C.red,background:pozitif?C.greenLight:"rgba(248,113,113,0.15)",borderRadius:8,padding:"4px 8px",marginBottom:4}}>
@@ -13697,26 +13767,18 @@ function PortfoyWidget({liste, gizli, onGizliToggle, onDetay, onEkle}:{
       <div style={{height:1,background:C.border}}/>
 
       <div>
-        {liste.map((k,i)=>{
-          const meta = PORTFOY_TUR_META[k.tur];
-          const izlemeModu = k.alis==null;
-          return (
-            <div key={k.id} onClick={onDetay} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:i<liste.length-1?`1px solid ${C.border}`:"none",cursor:"pointer"}}>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{display:"flex",alignItems:"center",gap:6}}>
-                  <span style={{fontSize:12.5,fontWeight:700,color:C.text}}>{k.kod}</span>
-                  <span style={{fontSize:8.5,fontWeight:700,color:meta.renk,background:meta.bg,borderRadius:4,padding:"1px 5px"}}>{meta.label}</span>
-                  {izlemeModu && <span style={{fontSize:8.5,fontWeight:700,color:C.sub2,background:WA(0.06),borderRadius:4,padding:"1px 5px"}}>İzleniyor</span>}
-                </div>
-                <div style={{fontSize:10.5,color:C.sub2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{k.ad}</div>
-              </div>
-              <span style={{fontSize:13,fontWeight:700,color:C.text,marginRight:8,fontVariantNumeric:"tabular-nums"}}>
-                {izlemeModu && k.fiyat==null ? "—" : (gizli?"₺••••":(izlemeModu ? portfoyFmtFiyat(k.fiyat||0, k.tur) : portfoyFmtTL(portfoyGuncelDeger(k))))}
-              </span>
-              <PortfoyDegisimEtiket deger={k.g} boyut={13}/>
-            </div>
-          );
-        })}
+        {liste.map((k,i)=>(
+          <PortfoyWidgetSatir
+            key={k.id}
+            k={k}
+            gizli={gizli}
+            sonSatirMi={i===liste.length-1}
+            onTikla={()=>onDetay(k)}
+            onSil={onSil}
+            acik={acikSwipeId===k.id}
+            onAcikDegistir={(acikMi:boolean)=>setAcikSwipeId(acikMi?k.id:null)}
+          />
+        ))}
       </div>
 
       <div onClick={onEkle} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"11px 0",borderTop:`1px solid ${C.border}`,cursor:"pointer"}}>
@@ -14088,10 +14150,10 @@ function PortfoyEkleModal({onKapat, onEklendi}:{onKapat:()=>void; onEklendi:(k:P
 }
 
 // ─── PORTFÖYÜM — Piyasa & Veriler altındaki tam detay ekranı ──────────────
-function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onKalemTikla}:{
-  liste: PortfoyKalemi[]; gizli: boolean; onGizliToggle: ()=>void; onEkle: ()=>void; onSil: (id:string)=>void; onKalemTikla: (k:PortfoyKalemi)=>void;
+function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onKalemTikla, initialSekme}:{
+  liste: PortfoyKalemi[]; gizli: boolean; onGizliToggle: ()=>void; onEkle: ()=>void; onSil: (id:string)=>void; onKalemTikla: (k:PortfoyKalemi)=>void; initialSekme?: "portfoy"|"takip";
 }){
-  const [sekme, setSekme] = useState<"portfoy"|"takip">("portfoy");
+  const [sekme, setSekme] = useState<"portfoy"|"takip">(initialSekme || "portfoy");
   const [filtre, setFiltre] = useState<"tumu"|PortfoyKalemi["tur"]>("tumu");
 
   // Ayrım artık ALIŞ BİLGİSİNE göre: fiyat/tarih girilmişse Portföyüm,
@@ -14534,6 +14596,7 @@ function App(){
     try{ return localStorage.getItem(PORTFOY_GIZLI_LS_KEY)==="1"; }catch{ return false; }
   });
   const [portfoyEkleAcik,setPortfoyEkleAcik]=useState(false);
+  const [portfoyBaslangicSekme,setPortfoyBaslangicSekme]=useState<"portfoy"|"takip">("portfoy");
   const portfoyGizliDegistir=()=>{
     setPortfoyGizli(g=>{
       const yeni=!g;
@@ -15271,8 +15334,9 @@ function App(){
               liste={portfoy}
               gizli={portfoyGizli}
               onGizliToggle={portfoyGizliDegistir}
-              onDetay={()=>nav("portfoyum")}
+              onDetay={(k?:PortfoyKalemi)=>{ setPortfoyBaslangicSekme(k && k.alis==null ? "takip" : "portfoy"); nav("portfoyum"); }}
               onEkle={()=>setPortfoyEkleAcik(true)}
+              onSil={portfoySil}
             />
 
             {/* Katılım Endeksi Top Hareketliler */}
@@ -15887,6 +15951,7 @@ function App(){
               onEkle={()=>setPortfoyEkleAcik(true)}
               onSil={portfoySil}
               onKalemTikla={portfoyKalemTikla}
+              initialSekme={portfoyBaslangicSekme}
             />
           </div>
         )}
