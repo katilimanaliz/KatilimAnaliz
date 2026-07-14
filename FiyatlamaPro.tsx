@@ -1134,7 +1134,7 @@ function KarPayiOranlari({nav}:{nav:any}){
 }
 
 
-function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran: genisEkranProp }: { settings?: any; initialKod?: string | null; onInitialTuketildi?: () => void; genisEkran?: boolean } = {}) {
+function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran: genisEkranProp, onFonGrafikAc }: { settings?: any; initialKod?: string | null; onInitialTuketildi?: () => void; genisEkran?: boolean; onFonGrafikAc?: (fon:any)=>void } = {}) {
   // Eğer prop gelmezse localStorage'dan oku (standalone kullanım)
   const [localSettings, setLocalSettings] = useState(null);
   useEffect(()=>{
@@ -1455,8 +1455,8 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
                       </span>
 
                     </div>
-                    <div style={{flex:1,minWidth:0,paddingRight:2,textAlign:"left"}}>
-                      <div style={{fontSize:11,fontWeight:800,color:FC.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",lineHeight:1.3}}>{fon.ad}</div>
+                    <div onClick={(e)=>{ if(onFonGrafikAc){ e.stopPropagation(); onFonGrafikAc(fon); } }} style={{flex:1,minWidth:0,paddingRight:2,textAlign:"left",cursor:onFonGrafikAc?"pointer":"default"}}>
+                      <div style={{fontSize:11,fontWeight:800,color:FC.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",lineHeight:1.3,textDecoration:onFonGrafikAc?"underline":"none",textDecorationColor:FC.border}}>{fon.ad}</div>
                       <div style={{fontSize:9,color:FC.sub2,marginTop:1}}>
                         {typeof fon.fiyat==="number" ? `${fon.fiyat.toLocaleString("tr-TR",{minimumFractionDigits:4,maximumFractionDigits:6})} ₺` : "—"}
                       </div>
@@ -15972,7 +15972,7 @@ function App(){
         {screen==="kasaOranAnalizi"&&<KasaOranAnalizi/>}
         {screen==="verimlilikAnalizi"&&<VerimlilikAnalizi s={settings} evdsMakro={evdsMakro}/>
         }
-        {screen==="fonGetiriIzleme"&&<FonGetiriIzleme settings={settings} initialKod={pendingFonSecim} onInitialTuketildi={()=>setPendingFonSecim(null)} genisEkran={genisEkran}/>}
+        {screen==="fonGetiriIzleme"&&<FonGetiriIzleme settings={settings} initialKod={pendingFonSecim} onInitialTuketildi={()=>setPendingFonSecim(null)} genisEkran={genisEkran} onFonGrafikAc={(fon:any)=>{setPendingFonDetay(fon); nav("fonDetay","fonGetiriIzleme");}}/>}
         {screen==="karPayiOranlari"&&<KarPayiOranlari nav={nav}/>}
         {screen==="fiyatAlarmlarim"&&<FiyatAlarmlarim/>}
         {screen==="bistHisseTarayici"&&<BistHisseTarayici initialTicker={pendingHisseSecim} onInitialTuketildi={()=>setPendingHisseSecim(null)} onDisaridanGeri={back}/>}
