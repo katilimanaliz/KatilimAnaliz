@@ -6,35 +6,39 @@
 // NOT: Dosya adı "_lib" ile başladığı için Vercel bunu bir API route olarak
 // görmez, sadece import edilebilir bir modüldür.
 //
+// DEĞİŞİKLİK (2026-07-14 öğleden sonra) — SAYFALAMANIN KIRIK OLDUĞU KESİNLEŞTİ.
+// 13:51 TR taraması kanıtı: 39 sayfa, hamAdet:3900, hamBenzersiz:134,
+// mukerrer:3766 → Fonoloji `offset` parametresini tamamen YOK SAYIYOR, her
+// istek aynı ilk sayfayı döndürüyor. Filtre suçlu DEĞİL (DNP/EP1/FTL'in ham
+// verisi aranilanKayipFonlar'da görüldü: isimlerinde "KATILIM" var, yani
+// mapFon.katilimUygun görüldükleri anda geçiriyor — sorun HİÇ görülmemeleri).
+// ÜÇ KATMANLI YENİ MİMARİ:
+//   FAZ 1 — UYARLANIR LİSTE TARAMASI: önce limit=2000 denenir (API büyük
+//     sayfaya izin veriyorsa 2 istekte tüm evren biter). API limit'i 100'e
+//     kırparsa klasik akışa düşülür. Sayfalama ilerlemiyorsa (yeni benzersiz
+//     kod gelmiyorsa) offset yerine bir kez `page` parametresi denenir —
+//     birçok API offset değil page ile sayfalar. O da ilerlemezse liste
+//     taraması "kırık" ilan edilip 3-4 istekte terk edilir (eskiden 39 istek
+//     çöpe gidiyordu).
+//   FAZ 3 — BİLİNEN KATILIM FONLARINI TAZELEME: bilinen katılım fon kodları
+//     KV'de tutulur (katilim:bilinen-kodlar). Liste taraması evreni
+//     kapsayamadıysa, süre bütçesinin %70'i ÖNCE bu bilinen fonların tekil
+//     (/funds/:kod) tazelenmesine harcanır — ekranın umursadığı ~150 fonun
+//     TAZELİĞİ garanti altına alınır. Dönen imleç (katilim:tazeleme-imleci)
+//     her taramada kaldığı yerden devam eder; ~2-3 taramada tüm bilinenler
+//     bir tur tazelenir.
+//   FAZ 4 — KEŞİF: kalan bütçe /funds/codes diff'inden rastgele tekil çekime
+//     harcanır — henüz bilinmeyen katılım fonları (NSA gibi) zamanla bulunur
+//     ve bilinen listesine eklenir. Aranan teşhis kodları her zaman öncelikli.
+//
 // DEĞİŞİKLİK (2026-07-13) — "bizde olmayan fonlar var" raporu (NSA, FTL, MPE,
-// DNP, EP1 Fonoloji'de görünüp uygulamada yoktu). İki düzeltme:
-//   0) TAM TARAMA MİMARİSİ (2026-07-13 akşam, kullanıcı önerisi): kategori
-//      bazlı çekim TAMAMEN KALDIRILDI. Kök sorun: kategori adları Fonoloji
-//      ile birebir tutmak zorundaydı (yanlış ad = sessizce 0 fon, ör. "Endeks
-//      Şemsiye Fonu"), kalabalık kategorilerde sayfa kayıpları oluyordu ve
-//      NSA/DNP gibi fonlar günlerce listeye giremedi. Artık /v1/funds TÜM
-//      liste olarak taranıyor (~3.450 fon, ~35 sayfa, sefer başı ~35 istek,
-//      8 sefer/gün ≈ ayda ~6.300 istek — 15.000 kotanın içinde) ve katılım
-//      filtresi (isim/kategori "KATILIM" + is_participation bayrağı) BİZDE
-//      uygulanıyor. Kategori ne olursa olsun hiçbir katılım fonu kaçamaz.
-//      `parcaNo` parametresi geriye dönük uyum için duruyor (cron URL'leri
-//      ?parca=N gönderiyor) ama artık yok sayılıyor — her çağrı tam tarama.
-//      tefas-proxy'nin parça birleştirmesi (kod bazlı merge) bilerek korundu:
-//      taramada sayfa kaybı olursa eski fonlar silinmez, sadece güncellenen
-//      güncellenir.
-//   1) SAYFALAMA DİRENCİ: pagination döngüsü bir sayfada hata (özellikle
-//      hızlı-vazgeçilen 429) alınca `break` ile kategorinin KALAN TÜM
-//      sayfalarını o günlük kaybediyordu — kuyruktaki fonlar hiç çekilmiyordu.
-//      Artık başarısız sayfa, 5sn ek bekleme sonrası BİR kez daha denenir;
-//      yine olmazsa o zaman vazgeçilir (eski davranış). Tek seferlik geçici
-//      429'lar artık kuyruk kaybına yol açmaz.
-//   2) ADAY KATEGORİLER: bazı katılım fonlarının Fonoloji kategorisi mevcut
-//      21'lik listede olmayabilir. İki muhtemel TEFAS şemsiye adı eklendi
-//      ("Katılım Şemsiye Fonu", "Para Piyasası Katılım Şemsiye Fonu").
-//      Kategori Fonoloji'de yoksa maliyeti 1 boş istek (~2sn) — ucuz.
-//      Hangi kategorinin gerçekte kaç fon getirdiği artık kategoriTeshis ile
-//      KV'ye yazılıp /api/tefas-proxy yanıtında görülebiliyor (bkz.
-//      tefas-proxy.js) — bir sonraki teşhis turu kör tahmin gerektirmez.
+// DNP, EP1 Fonoloji'de görünüp uygulamada yoktu): kategori bazlı çekim
+// kaldırılıp tam tarama gelmişti; katılım filtresi (isim/kategori "KATILIM" +
+// is_participation bayrağı) bizde uygulanıyor. `parcaNo` geriye dönük uyum
+// için duruyor (cron URL'leri ?parca=N gönderiyor) ama yok sayılıyor.
+// tefas-proxy'nin kod bazlı merge'ü bilerek korunuyor: kısmi tarama eski
+// fonları SİLMEZ, sadece bu sefer çekilenleri günceller — FAZ 3/4'ün kısmi
+// sonuçları bu sayede güvenle yazılabiliyor.
 
 import { Redis } from "@upstash/redis";
 
@@ -83,26 +87,16 @@ function fetchZamanAsimli(url, opts, msTimeout) {
   return fetch(url, { ...opts, signal: controller.signal }).finally(() => clearTimeout(zamanlayici));
 }
 
-// ── Global hız sınırlayıcı — DÜZELTME (2026-07): Redis tabanlı, GERÇEKTEN
-// paylaşılan sıra ──────────────────────────────────────────────────────────
-// KÖK NEDEN (gerçek log'la doğrulandı — "Katılım Değişken Fon" tek başına
-// izole edilmiş bir parça olduğu hâlde yine 280sn'de zaman aşımına uğradı):
-// eski MIN_ARALIK_MS/sonIstekZamaniMs/kuyrukKilidi mekanizması sadece BELLEKTE
-// tutuluyordu — yani sadece TEK bir fonksiyon çalıştırması (invocation)
-// içinde geçerliydi. Aynı anda birden fazla çalıştırma olduğunda (örn. cron
-// tetiklemesiyle aynı sırada manuel "Run" testi, ya da Vercel'in aynı anda
-// birden fazla instance başlatması), her biri kendi başına "dakikada 27
-// istek hakkım var" sanıp gönderiyordu — Fonoloji'nin sunucusunda GERÇEKTE
-// bunların TOPLAMI dakikada 30'u kolayca aşıyordu. Sonuç: art arda 429'lar,
-// her 429 sonrası yeniden deneme, bu da toplam süreyi 280sn sınırına kadar
-// şişiriyordu.
+// ── Global hız sınırlayıcı — Redis tabanlı, GERÇEKTEN paylaşılan sıra ──────
+// KÖK NEDEN (gerçek log'la doğrulandı): eski MIN_ARALIK_MS/sonIstekZamaniMs
+// mekanizması sadece BELLEKTE tutuluyordu — yani sadece TEK bir fonksiyon
+// çalıştırması (invocation) içinde geçerliydi. Aynı anda birden fazla
+// çalıştırma olduğunda her biri kendi başına "dakikada 27 istek hakkım var"
+// sanıp gönderiyordu — Fonoloji tarafında TOPLAM dakikada 30'u aşıyordu.
 //
-// ÇÖZÜM: "Bir sonraki uygun istek zamanı" artık Redis'te TEK bir anahtarda
-// tutuluyor ve bir Lua script ile ATOMİK olarak okunup güncelleniyor (EVAL,
-// Redis'te tek seferde, bölünmeden çalışır — aynı anda 100 çağrı gelse bile
-// hepsi FARKLI, çakışmayan zaman dilimleri alır). Böylece kaç eşzamanlı
-// fonksiyon çalıştırması olursa olsun (cron + manuel test bir arada dahi),
-// Fonoloji'ye giden istekler gerçekten TEK bir ortak sıradan geçiyor.
+// ÇÖZÜM: "Bir sonraki uygun istek zamanı" Redis'te TEK bir anahtarda tutulur
+// ve bir Lua script ile ATOMİK olarak okunup güncellenir — kaç eşzamanlı
+// çalıştırma olursa olsun istekler tek ortak sıradan geçer.
 const MIN_ARALIK_MS = 2250; // 60000/2250 ≈ 26.7 istek/dakika (30 sınırının altında güvenli pay)
 const HIZ_SINIRLAYICI_ANAHTAR = "tefas:hiz-sinirlayici:sonraki-uygun-slot-ms";
 
@@ -144,10 +138,8 @@ async function siraliBekle() {
 }
 
 // 429 alındığında paylaşılan sırayı (Redis'teki ortak anahtarı) ekstraMs kadar
-// ileri iter — böylece bu invocation'da değil, TÜM eşzamanlı çalıştırmalarda
-// bir sonraki istek daha geç gönderilir. Eskiden bu sadece yerel bir değişkeni
-// güncelliyordu (sonIstekZamaniMs += 3000), bu yüzden başka bir eşzamanlı
-// invocation bundan habersiz kalıp hemen yeni istek gönderebiliyordu.
+// ileri iter — böylece TÜM eşzamanlı çalıştırmalarda bir sonraki istek daha
+// geç gönderilir.
 async function ekstraGecikmeEkle(ekstraMs) {
   try {
     await hizRedis.eval(
@@ -174,14 +166,9 @@ async function fetchTekrarli(url, opts, deneme = 2, msTimeout = 8000) {
       const r = await fetchZamanAsimli(url, opts, msTimeout);
       if (r.ok) return r;
       if (r.status === 429) {
-        // ARTIK UZUN BEKLEMİYORUZ: önceki sürüm Fonoloji'nin bildirdiği
-        // retryAfterSec'i (53-65sn) HER başarısız istek için ayrı ayrı
-        // bekliyordu. Bu, art arda birkaç istek 429 alırsa tek bir çağrının
-        // dakikalarca (hatta hiç bitmeyecekmiş gibi) asılı kalmasına yol
-        // açtı — çünkü bizim iç sayacımız (sonIstekZamaniMs) sadece BU
-        // invocation'a özel, Fonoloji'nin hesap bazlı gerçek kotasından
-        // habersiz. Artık 429 gelirse HEMEN vazgeçiyoruz (hızlı başarısız);
-        // paylaşılan sıraya biraz ekstra boşluk ekleyip devam ediyoruz.
+        // 429 gelirse HEMEN vazgeçiyoruz (hızlı başarısız); paylaşılan sıraya
+        // biraz ekstra boşluk ekleyip devam ediyoruz. Uzun retryAfter
+        // beklemeleri tek bir çağrıyı dakikalarca asılı bırakıyordu.
         await ekstraGecikmeEkle(3000);
         return null;
       }
@@ -194,8 +181,7 @@ async function fetchTekrarli(url, opts, deneme = 2, msTimeout = 8000) {
 }
 
 // Teşhis amaçlı: fetchTekrarli gibi ama başarısızlıkta SESSİZCE null dönmek yerine
-// gerçek HTTP durum kodunu / hata mesajını da bildiriyor. "kategoriTeshis"teki
-// agHatasi:true'nun ARDINDAKİ gerçek sebebi (400/404/429/500/timeout) görmek için.
+// gerçek HTTP durum kodunu / hata mesajını da bildiriyor.
 async function fetchTeshisli(url, opts, deneme = 2, msTimeout = 8000) {
   let sonHata = null;
   for (let i = 0; i < deneme; i++) {
@@ -204,7 +190,6 @@ async function fetchTeshisli(url, opts, deneme = 2, msTimeout = 8000) {
       const r = await fetchZamanAsimli(url, opts, msTimeout);
       if (r.ok) return { res: r, hata: null };
       if (r.status === 429) {
-        // Bkz. fetchTekrarli'deki not — uzun beklemek yerine hızlı vazgeçiyoruz.
         await ekstraGecikmeEkle(3000);
         return { res: null, hata: "HTTP 429 — dakikalık istek sınırı (hemen vazgeçildi, uzun beklenmedi)" };
       }
@@ -248,22 +233,24 @@ function mapFon(f, vakif, takasAraligi) {
 }
 
 const VAKIF_KODLARI = ["VPA","VLT","VHS","VKK","VKV"];
-// TEŞHİS (2026-07-13 akşam): tam tarama artık sayfa kaybetmiyor (kanıtlandı:
-// hamAdet~3500, kayipSayfalar:[]) ama count hâlâ 142'de sabit kaldı — yani
-// NSA/DNP/FTL/MPE/EP1 ham taramanın İÇİNDE görülüyor ama katılım filtresi
-// (mapFon.katilimUygun) onları eliyor. Bu kodları görürse HAM halini (filtre
-// sonucundan bağımsız) rapora düşür — API'nin gerçek name/category/
-// is_participation alanlarını görüp filtreyi buna göre düzeltebilelim.
+// Aranan fonların ham verisi filtre kararından ÖNCE rapora düşürülür — API'nin
+// gerçek name/category/is_participation alanları /api/tefas-proxy yanıtındaki
+// aranilanKayipFonlar altında görülür (14 Tem 13:51'de DNP/EP1/FTL YAKALANDI:
+// is_participation:null ama isimde "KATILIM" var → filtre onları geçiriyor).
 const ARANAN_TESHIS_KODLARI = ["NSA", "FTL", "MPE", "DNP", "EP1", "KLU", "PPG"];
 const PAGE_SIZE = 100;
+const BUYUK_SAYFA_LIMITI = 2000; // FAZ 1'in ilk denemesi — API izin verirse evren 2 istekte biter
 const ŞÜPHELİ_EŞİK = 100; // normal günde 150+ katılım fonu beklenir
 const MAKS_SAYFA = 60;    // emniyet: 6.000 fon üstü beklenmiyor (bugün ~3.450)
+const EK_CEKIM_LIMITI = 150; // gerçek sınır süre bütçesi — bu sadece tavan
+const BILINEN_KODLAR_KV = "katilim:bilinen-kodlar";     // JSON dizi: bilinen katılım fon kodları
+const TAZELEME_IMLECI_KV = "katilim:tazeleme-imleci";   // FAZ 3'ün dönen imleci
 
-// ESKİ MİMARİDEN KALAN: PARCALAR artık kullanılmıyor (tam tarama). Başka bir
-// modül import ediyorsa kırılmasın diye boş dizi olarak export ediliyor.
+// ESKİ MİMARİDEN KALAN: PARCALAR artık kullanılmıyor. Başka bir modül import
+// ediyorsa kırılmasın diye boş dizi olarak export ediliyor.
 const PARCALAR = [];
 
-// Fonoloji'den TÜM fon listesini tarar, katılım filtresini yerelde uygular.
+// Fonoloji'den fon verisini çeker, katılım filtresini yerelde uygular.
 // `parcaNo` yok sayılır (geriye dönük uyum — cron URL'leri ?parca=N gönderiyor).
 async function fonVerisiCek(parcaNo = null) {
   const API_KEY = process.env.FONOLOJI_KEY;
@@ -273,53 +260,21 @@ async function fonVerisiCek(parcaNo = null) {
 
   const gorulmuKodlar = new Set();
   const katilimFonlar = [];
-  let hamToplam = 0;        // taranan (aktif+pasif dahil sayfadan gelen) ham kayıt
-  let hedefToplam = null;   // API total bildiriyorsa: kayıp sayfa atlarken pusula
-  const kayipSayfalar = []; // tekrarlara rağmen alınamayan offset'ler
+  const hamKodSeti = new Set(); // görülen TÜM ham kodlar (filtre öncesi)
+  const kayipFonlarHamVeri = {}; // ARANAN_TESHIS_KODLARI'ndan görülenlerin ham içeriği
+  const kayipSayfalar = [];
+  let hamToplam = 0;
+  let hedefToplam = null;
   let sonHata = null;
-  // SÜRE BÜTÇESİ (2026-07-14): maxDuration 280 sn; 2.25 sn/istek hızla
-  // 39 sayfa + kod listesi + 60 tekil çekim ≈ 104 istek ≈ 235 sn bekleme
-  // + yanıt süreleri = sınır AŞILIYOR ve Vercel fonksiyonu KV'ye YAZAMADAN
-  // öldürüyordu (12:17 taraması kanıtı: guncelleme 09:07'de çakılı kaldı).
-  // Çare: 190. saniyede eldeki sonuçla durup HER KOŞULDA yazmak. Artan
-  // kaçaklar bir sonraki saatlik taramada kaldığı yerden tamamlanır.
+
+  // SÜRE BÜTÇESİ: maxDuration 280 sn; 190. saniyede eldeki sonuçla durup HER
+  // KOŞULDA KV'ye yazılır (12:17 taraması kanıtı: bütçesiz akış fonksiyonu
+  // KV'ye yazamadan öldürüyordu). Artanlar sonraki taramada tamamlanır.
   const taramaBaslangicMs = Date.now();
   const SURE_BUTCESI_MS = 190000;
   const butceDoldu = () => Date.now() - taramaBaslangicMs > SURE_BUTCESI_MS;
 
-  let sayfaTekrarKaldi = 3; // tarama genelinde toplam 3 ek deneme hakkı
-  let offset = 0;
-  let sayfaSayisi = 0;
-  const kayipFonlarHamVeri = {}; // ARANAN_TESHIS_KODLARI'ndan görülenlerin ham içeriği
-
-  // MÜKERRERLİK/KAÇAK DÜZELTMESİ (2026-07-14): Kanıt — tarama hamAdet:3500
-  // okurken hedefToplam:3422 idi (78+ kayıt MÜKERRER okundu, buna karşılık
-  // NSA/FTL/MPE/DNP/EP1 gibi fonlar HİÇ görünmedi; aranilanKayipFonlar boş
-  // döndü ama aynı fonlar Fonoloji sitesinde 3.422'lik evrenin içinde).
-  // KÖK NEDEN: varsayılan liste sıralaması tarama sürerken (≈80 sn) değişiyor;
-  // sayfalar kayınca bazı fonlar iki sayfada birden gelir, bazıları hiçbir
-  // sayfaya denk gelmez. ÜÇ KATMANLI çözüm:
-  //   1) &sort=code — sabit alfabetik sıralama, kayma ihtimalini kökten keser
-  //      (ilk sayfada başarısız olursa otomatik sort'suz düşer, tarama sürer);
-  //   2) tarama sonrası /funds/codes'tan tam kod listesi alınıp taramada hiç
-  //      görülmeyenler tespit edilir ve /funds/:kod ile TEK TEK tamamlanır
-  //      (kampanya: fon başına sınır kalktı; codes ucu saatte 5 — saatlik
-  //      cron'la uyumlu);
-  //   3) hamBenzersiz/mukerrer/kacak sayıları teşhise yazılır — sorun bir
-  //      daha nüksederse tek bakışta görünür.
-  const hamKodSeti = new Set(); // taramada görülen TÜM ham kodlar (filtre öncesi)
-  let kirikOffsetSayaci = 0; // ardışık "büyümeyen" sayfa sayısı
-  // sort=code DENENDİ ve GERİ ALINDI (12:07 taraması kanıtı): sort verilince
-  // Fonoloji offset'i yok sayıp aynı sayfayı döndürüyor — 3500 kayıtta yalnız
-  // 140 benzersiz kod kaldı. Varsayılan sıralamaya dönüldü; kayma riskine
-  // karşı iki önlem: (a) sayfalar %10 BİNDİRMELİ okunur (offset 90'ar artar,
-  // sınırda kayan kayıtlar komşu sayfada yakalanır), (b) yine kaçan olursa
-  // aşağıdaki kod-listesi diff geçidi tek tek tamamlar.
-  let sortParam = "";
-  const OFFSET_ADIM = PAGE_SIZE - 10; // %10 bindirme
-
-  // Tek bir ham fon kaydını işler — hem sayfa döngüsü hem eksik-tamamlama
-  // geçidi AYNI mantığı kullansın diye fonksiyona çıkarıldı.
+  // Tek bir ham fon kaydını işler — tüm fazlar AYNI mantığı kullanır.
   const itemIsle = (f) => {
     const kodHam = f.code || "";
     if (kodHam) hamKodSeti.add(kodHam);
@@ -340,31 +295,61 @@ async function fonVerisiCek(parcaNo = null) {
     katilimFonlar.push(mapped);
   };
 
+  // Bilinen katılım kodlarını KV'den yükle (yoksa boş — birkaç taramada dolar).
+  let bilinenKodlar = [];
+  try {
+    const v = await hizRedis.get(BILINEN_KODLAR_KV);
+    if (Array.isArray(v)) {
+      bilinenKodlar = v.filter((x) => typeof x === "string");
+    } else if (typeof v === "string") {
+      const p = JSON.parse(v);
+      if (Array.isArray(p)) bilinenKodlar = p.filter((x) => typeof x === "string");
+    }
+  } catch {}
+
+  // ── FAZ 1: UYARLANIR LİSTE TARAMASI ────────────────────────────────────
+  // Önce limit=2000 denenir; API kırparsa gelen gerçek sayfa boyu esas alınır.
+  // Sayfalama ilerlemiyorsa: offset → page parametresine BİR kez geçilir,
+  // o da ilerlemezse "kırık" ilan edilip döngü 3-4 istekte terk edilir.
+  let sayfalamaModu = "offset"; // "offset" | "page" | "kirik" | "tek-sayfa"
+  let pageParamDenendi = false;
+  let etkinSayfaBoyu = null;    // API'nin GERÇEKTE döndürdüğü sayfa boyu
+  let istekLimiti = BUYUK_SAYFA_LIMITI;
+  let buyukSayfadanGeriDusuldu = false;
+  let offset = 0;
+  let sayfaNo = 1;
+  let sayfaSayisi = 0;
+  let sayfaTekrarKaldi = 3; // tarama genelinde toplam 3 ek deneme hakkı
+
   while (sayfaSayisi < MAKS_SAYFA) {
-    if (butceDoldu()) { sonHata = "süre bütçesi doldu (sayfa döngüsü)"; break; }
-    const url = `https://fonoloji.com/v1/funds?limit=${PAGE_SIZE}&offset=${offset}${sortParam}`;
-    const { res, hata } = await fetchTeshisli(url, { headers }, 2);
+    if (butceDoldu()) { sonHata = "süre bütçesi doldu (liste taraması)"; break; }
+    const url = sayfalamaModu === "page"
+      ? `https://fonoloji.com/v1/funds?limit=${istekLimiti}&page=${sayfaNo}`
+      : `https://fonoloji.com/v1/funds?limit=${istekLimiti}&offset=${offset}`;
+    const buyukIstek = istekLimiti > PAGE_SIZE;
+    // Büyük sayfa yanıtı MB mertebesinde olabilir → daha geniş zaman aşımı.
+    const { res, hata } = await fetchTeshisli(url, { headers }, 2, buyukIstek ? 20000 : 8000);
     if (!res) {
-      // Geçici hata: önce tarama genel tekrar hakkını kullan (5sn nefes)
+      if (buyukIstek && !buyukSayfadanGeriDusuldu && sayfaSayisi === 0) {
+        // limit=2000 reddedildi (400) ya da zaman aşımı → klasik 100'e düş.
+        buyukSayfadanGeriDusuldu = true;
+        istekLimiti = PAGE_SIZE;
+        continue;
+      }
       if (sayfaTekrarKaldi > 0) {
         sayfaTekrarKaldi--;
         await new Promise(r => setTimeout(r, 5000));
-        continue; // aynı offset'i tekrar dene
+        continue; // aynı sayfayı tekrar dene
       }
-      // Haklar bitti: bu sayfayı kayıp say, mümkünse taramaya devam et.
-      kayipSayfalar.push(offset);
+      kayipSayfalar.push(sayfalamaModu === "page" ? `page:${sayfaNo}` : offset);
       sonHata = hata;
-      if (hedefToplam === null) break; // toplamı bilmeden körlemesine ilerlenmez
-      offset += OFFSET_ADIM; sayfaSayisi++;
-      if (offset >= hedefToplam) break;
-      continue;
+      break; // liste güvenilmez → tekil fazlar devralsın
     }
     const d = await res.json().catch(() => null);
     if (!d) {
-      kayipSayfalar.push(offset); sonHata = "JSON parse hatası";
-      offset += OFFSET_ADIM; sayfaSayisi++;
-      if (hedefToplam !== null && offset >= hedefToplam) break;
-      continue;
+      kayipSayfalar.push(sayfalamaModu === "page" ? `page:${sayfaNo}` : offset);
+      sonHata = "JSON parse hatası";
+      break;
     }
     if (hedefToplam === null) {
       const t = d.total ?? d.count ?? d.meta?.total;
@@ -372,72 +357,128 @@ async function fonVerisiCek(parcaNo = null) {
     }
     const items = d.items ?? d.funds ?? d.data ?? (Array.isArray(d) ? d : []);
     if (!items.length) break;
+    if (etkinSayfaBoyu === null) etkinSayfaBoyu = items.length;
     hamToplam += items.length;
     const oncekiBenzersiz = hamKodSeti.size;
     for (const f of items) itemIsle(f);
-    // KIRIK OFFSET DEDEKTÖRÜ (2026-07-14): Fonoloji offset'i yok sayıp aynı
-    // sayfayı döndürürse (kanıt: 39 sayfada 110 benzersiz kod) sayfalarda
-    // ısrar etmek 90+ saniye çöpe atmaktır. 2. sayfadan itibaren benzersiz
-    // kod sayısı büyümüyorsa döngüyü bırak — kalan süre bütçesi tekil
-    // tamamlama geçidine kalsın, evren oradan taransın.
-    if (sayfaSayisi >= 1 && hamKodSeti.size - oncekiBenzersiz < 10) {
-      kirikOffsetSayaci++;
-      if (kirikOffsetSayaci >= 2) {
-        sonHata = "offset sayfalamasi kirik gorunuyor — tekil tamamlamaya gecildi";
-        break;
-      }
-    } else {
-      kirikOffsetSayaci = 0;
-    }
+    const yeniBenzersiz = hamKodSeti.size - oncekiBenzersiz;
     sayfaSayisi++;
-    offset += OFFSET_ADIM; // bindirmeli ilerleme — kayma emici
-    if (items.length < PAGE_SIZE) break;
-    if (hedefToplam !== null && offset >= hedefToplam) break;
+
+    // Evren kapandıysa bitir.
+    if (hedefToplam !== null && hamKodSeti.size >= hedefToplam) {
+      if (sayfaSayisi === 1) sayfalamaModu = "tek-sayfa";
+      break;
+    }
+    if (items.length < etkinSayfaBoyu) break; // gerçek son sayfa
+
+    // KIRIK SAYFALAMA DEDEKTÖRÜ: 2. istekten itibaren benzersiz kod sayısı
+    // büyümüyorsa (14 Tem kanıtı: 39 sayfada 134 benzersiz) ısrar etme.
+    const buyumeEsigi = Math.max(10, Math.floor(etkinSayfaBoyu * 0.1));
+    if (sayfaSayisi >= 2 && yeniBenzersiz < buyumeEsigi) {
+      if (sayfalamaModu === "offset" && !pageParamDenendi) {
+        // offset yok sayılıyor — bir kez de `page` parametresini dene.
+        pageParamDenendi = true;
+        sayfalamaModu = "page";
+        sayfaNo = Math.max(2, Math.floor(hamKodSeti.size / etkinSayfaBoyu) + 1);
+        continue;
+      }
+      sayfalamaModu = "kirik";
+      sonHata = "sayfalama ilerlemiyor (offset ve page denendi) — tekil çekim devrede";
+      break;
+    }
+
+    if (sayfalamaModu === "page") sayfaNo++;
+    else offset += Math.max(1, etkinSayfaBoyu - 10); // %10 bindirme — kayma emici
   }
 
-  // KAÇAK TAMAMLAMA GEÇİDİ: /funds/codes'tan tam evren alınır, taramada hiç
-  // görülmeyen kodlar tek tek /funds/:kod ile çekilir. sort=code işliyorsa bu
-  // liste normalde BOŞ kalır — bu geçit, sıralama yine kayarsa devreye giren
-  // emniyet ağıdır. Tek seferde en fazla EK_CEKIM_LIMITI fon tamamlanır
-  // (maxDuration'ı zorlamamak için); artan olursa bir sonraki saatlik tarama
-  // kaldığı yerden tamamlar.
-  const EK_CEKIM_LIMITI = 150; // gerçek sınır süre bütçesi — bu sadece tavan
+  // Liste taraması evreni kapsadı mı? (hedefToplam bilinmiyorsa kaba eşik)
+  const taramaKapsayici = hedefToplam !== null
+    ? hamKodSeti.size >= Math.floor(hedefToplam * 0.95)
+    : hamKodSeti.size > 1000;
+
+  // ── FAZ 2: TAM KOD LİSTESİ (/funds/codes — saatte 5 sınırlı, seferde 1) ──
   let kodListesiToplam = null;
-  let kacakKodlar = [];
-  let ekCekilenAdet = 0;
+  let tumKodlar = [];
   try {
     const { res: kodRes } = await fetchTeshisli("https://fonoloji.com/v1/funds/codes", { headers }, 1);
     if (kodRes) {
       const kd = await kodRes.json().catch(() => null);
       const hamListe = kd?.codes ?? kd?.items ?? kd?.data ?? (Array.isArray(kd) ? kd : []);
-      const tumKodlar = hamListe.map((x) => (typeof x === "string" ? x : x?.code)).filter(Boolean);
-      if (tumKodlar.length > 0) {
-        kodListesiToplam = tumKodlar.length;
-        kacakKodlar = tumKodlar.filter((k) => !hamKodSeti.has(k));
-        // SIRALAMA DÜZELTMESİ: liste alfabetikti; limit yüzünden her tarama
-        // hep AAJ-ABZ bandında takılıyor, N harfindeki NSA gibi fonlara hiç
-        // sıra gelmiyordu. Şimdi: (a) aranan teşhis kodları EN BAŞA, (b) kalanı
-        // rastgele karıştır — her tarama farklı bir dilimi tamamlasın, birkaç
-        // saatte tüm evren kapansın.
-        const oncelikli = kacakKodlar.filter((k) => ARANAN_TESHIS_KODLARI.includes(k));
-        const kalan = kacakKodlar.filter((k) => !ARANAN_TESHIS_KODLARI.includes(k));
-        for (let i = kalan.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [kalan[i], kalan[j]] = [kalan[j], kalan[i]];
-        }
-        const cekimSirasi = oncelikli.concat(kalan);
-        for (const kod of cekimSirasi.slice(0, EK_CEKIM_LIMITI)) {
-          if (butceDoldu()) break; // kalanlar sonraki taramada
-          const { res: tekRes } = await fetchTeshisli(
-            `https://fonoloji.com/v1/funds/${encodeURIComponent(kod)}`, { headers }, 1);
-          if (!tekRes) continue;
-          const td = await tekRes.json().catch(() => null);
-          const fon = td?.fund ?? td; // tekil yanıt {fund:{...}} sarmalında geliyor
-          if (fon && fon.code) { itemIsle(fon); ekCekilenAdet++; }
-        }
-      }
+      tumKodlar = hamListe.map((x) => (typeof x === "string" ? x : x?.code)).filter(Boolean);
+      if (tumKodlar.length > 0) kodListesiToplam = tumKodlar.length;
     }
-  } catch {} // codes ucu saatlik sınırına takılırsa sessizce geç — tarama yine geçerli
+  } catch {} // codes ucu sınıra takılırsa sessizce geç — tarama yine geçerli
+
+  // ── FAZ 3: BİLİNEN KATILIM FONLARINI TAZELE (liste kapsayıcı DEĞİLSE) ───
+  // Ekranın gösterdiği fonların tazeliği keşiften ÖNCE gelir: bütçenin %70'i
+  // buraya. Dönen imleç sayesinde her tarama kaldığı yerden sürer.
+  let imlecOnce = 0;
+  let imlecSonra = 0;
+  let tazelenenAdet = 0;
+  if (!taramaKapsayici && bilinenKodlar.length > 0) {
+    try {
+      const v = await hizRedis.get(TAZELEME_IMLECI_KV);
+      const n = Number(v);
+      if (Number.isFinite(n) && n >= 0) imlecOnce = Math.floor(n) % bilinenKodlar.length;
+    } catch {}
+    imlecSonra = imlecOnce;
+    const bilinenButceSonuMs = taramaBaslangicMs + Math.floor(SURE_BUTCESI_MS * 0.7);
+    let ilerleme = 0;
+    for (let i = 0; i < bilinenKodlar.length; i++) {
+      const kod = bilinenKodlar[(imlecOnce + i) % bilinenKodlar.length];
+      if (hamKodSeti.has(kod)) { ilerleme = i + 1; continue; } // bu tarama zaten taze
+      if (Date.now() > bilinenButceSonuMs || butceDoldu()) break;
+      const { res: tekRes } = await fetchTeshisli(
+        `https://fonoloji.com/v1/funds/${encodeURIComponent(kod)}`, { headers }, 1);
+      ilerleme = i + 1;
+      if (!tekRes) continue;
+      const td = await tekRes.json().catch(() => null);
+      const fon = td?.fund ?? td; // tekil yanıt {fund:{...}} sarmalında geliyor
+      if (fon && fon.code) { itemIsle(fon); tazelenenAdet++; }
+    }
+    imlecSonra = bilinenKodlar.length > 0 ? (imlecOnce + ilerleme) % bilinenKodlar.length : 0;
+    try { await hizRedis.set(TAZELEME_IMLECI_KV, String(imlecSonra), { ex: 60 * 60 * 24 * 7 }); } catch {}
+  }
+
+  // ── FAZ 4: KEŞİF — taramada görülmeyen kodlardan tekil tamamlama ─────────
+  // Aranan teşhis kodları EN BAŞA, kalanı rastgele karışık — her tarama farklı
+  // bir dilimi tamamlar, birkaç taramada tüm evren en az bir kez görülür ve
+  // katılım olanlar bilinen listesine katılır.
+  let kacakKodlar = [];
+  let ekCekilenAdet = 0;
+  if (tumKodlar.length > 0) {
+    kacakKodlar = tumKodlar.filter((k) => !hamKodSeti.has(k));
+    const oncelikli = kacakKodlar.filter((k) => ARANAN_TESHIS_KODLARI.includes(k));
+    const kalan = kacakKodlar.filter((k) => !ARANAN_TESHIS_KODLARI.includes(k));
+    for (let i = kalan.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [kalan[i], kalan[j]] = [kalan[j], kalan[i]];
+    }
+    const cekimSirasi = oncelikli.concat(kalan);
+    for (const kod of cekimSirasi.slice(0, EK_CEKIM_LIMITI)) {
+      if (butceDoldu()) break; // kalanlar sonraki taramada
+      const { res: tekRes } = await fetchTeshisli(
+        `https://fonoloji.com/v1/funds/${encodeURIComponent(kod)}`, { headers }, 1);
+      if (!tekRes) continue;
+      const td = await tekRes.json().catch(() => null);
+      const fon = td?.fund ?? td;
+      if (fon && fon.code) { itemIsle(fon); ekCekilenAdet++; }
+    }
+  }
+
+  // ── Bilinen katılım kodlarını KV'de güncelle ─────────────────────────────
+  // Bu taramada katılım filtresini geçen HER kod bilinen listesine eklenir;
+  // kod listesi elde varsa borsadan kalkmış (evrende olmayan) kodlar ayıklanır.
+  try {
+    const birlesik = new Set(bilinenKodlar);
+    for (const f of katilimFonlar) if (f.kod) birlesik.add(f.kod);
+    let kayit = Array.from(birlesik);
+    if (tumKodlar.length > 500) {
+      const evren = new Set(tumKodlar);
+      kayit = kayit.filter((k) => evren.has(k));
+    }
+    await hizRedis.set(BILINEN_KODLAR_KV, JSON.stringify(kayit), { ex: 60 * 60 * 24 * 30 });
+  } catch {}
 
   const kategoriSayac = {};
   for (const f of katilimFonlar) {
@@ -457,20 +498,31 @@ async function fonVerisiCek(parcaNo = null) {
       kayipSayfalar,
       hamBenzersiz: hamKodSeti.size,
       mukerrer: hamToplam - hamKodSeti.size,
-      sortKullanildi: sortParam !== "",
+      sayfalamaModu,           // "offset" | "page" | "kirik" | "tek-sayfa"
+      etkinSayfaBoyu,          // API'nin gerçekte döndürdüğü sayfa boyu (limit kırpması burada görülür)
+      istenenLimit: istekLimiti,
+      taramaKapsayici,         // liste taraması evrenin %95'ini gördü mü
       kodListesiToplam,
       kacakAdet: kacakKodlar.length,
       kacakIlkOrnekler: kacakKodlar.slice(0, 15),
       ekCekilenAdet,
-      // Aranan 5 fon taramada hiç görülmediyse burada eksik kalır — bu da
+      bilinenAdet: bilinenKodlar.length, // FAZ 3'ün çalıştığı bilinen kod sayısı (tarama başındaki)
+      tazelenenAdet,
+      tazelemeImleci: { once: imlecOnce, sonra: imlecSonra },
+      // Aranan fonlar hiçbir fazda görülmediyse burada eksik kalır — bu da
       // kendi başına bir bulgu (Fonoloji'nin tam listesinde yoklar demektir).
       aranilanKayipFonlar: kayipFonlarHamVeri,
     },
   };
 
-  // Katılım fonu sayısı eşiğin altındaysa VEYA 3'ten fazla sayfa kaybolduysa
-  // "eksik görünüyor" — tefas-proxy bu durumda eski veriyi korur.
-  const eksikGorunuyor = katilimFonlar.length < ŞÜPHELİ_EŞİK || kayipSayfalar.length > 3;
+  // eksikGorunuyor: tefas-proxy bu bayrağı "yeni veriyi şüpheyle karşıla"
+  // sinyali olarak kullanır. Kırık sayfalamada KISMİ sonuç NORMALDİR (kod
+  // bazlı merge eski fonları zaten korur) — bu yüzden yalnız liste taraması
+  // kapsayıcıyken eski eşikler uygulanır; kısmi modda sadece "hiçbir şey
+  // çekilemedi" durumu şüphelidir.
+  const eksikGorunuyor = taramaKapsayici
+    ? (katilimFonlar.length < ŞÜPHELİ_EŞİK || kayipSayfalar.length > 3)
+    : katilimFonlar.length === 0;
 
   return {
     success: true,
