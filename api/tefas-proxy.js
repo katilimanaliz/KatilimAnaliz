@@ -244,7 +244,7 @@ async function herkesOku(req, res) {
     }
 
     if (!kayit) {
-      res.setHeader("Cache-Control", "s-maxage=30, stale-while-revalidate=30");
+      res.setHeader("Cache-Control", "max-age=0, s-maxage=30, stale-while-revalidate=30");
       return res.status(200).json({
         success: false,
         error: "Veri henüz mevcut değil. Cron parçalarının (?cron=1&parca=1..8) en az bir kez çalıştığını kontrol edin.",
@@ -259,7 +259,7 @@ async function herkesOku(req, res) {
     // ve Fonoloji'den geride veriler gösteriyordu. Yanıt zaten KV'den okunuyor
     // (Fonoloji'ye istek YOK), uzun CDN önbelleğinin koruduğu bir maliyet yok.
     // 60 sn: ani trafik patlamasına karşı yeterli, tazelik kaybı ihmal edilir.
-    res.setHeader("Cache-Control", "s-maxage=60, stale-while-revalidate=120");
+    res.setHeader("Cache-Control", "max-age=0, s-maxage=60, stale-while-revalidate=120");
     return res.status(200).json({
       success: true,
       count: kayit.count,
