@@ -1915,7 +1915,7 @@ function HisseAvatar({ticker, boyut=42}:{ticker:string, boyut?:number}){
   );
 }
 
-function BistHisseTarayici({ initialTicker, onInitialTuketildi }: { initialTicker?: string | null; onInitialTuketildi?: () => void } = {}) {
+function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri }: { initialTicker?: string | null; onInitialTuketildi?: () => void; onDisaridanGeri?: () => void } = {}) {
   const [hisseler, setHisseler]         = useState<any[]>([]);
   const [yukleniyor, setYukleniyor]     = useState(true);
   const [hata, setHata]                 = useState<string|null>(null);
@@ -1926,6 +1926,10 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi }: { initialTicke
   const [siraDir, setSiraDir]           = useState<1|-1>(-1); // Değişim için azalan başlasın
   const [secilen, setSecilen]           = useState<any>(null);
   const [detayHisse, setDetayHisse]     = useState<any>(null);
+  // detayHisse başka bir ekrandan (ör. Portföyüm) "pending" seçimle mi açıldı,
+  // yoksa kullanıcı bu ekrandaki listeden mi tıkladı — Geri davranışı buna göre
+  // değişiyor (bkz. aşağıdaki HisseDetay onGeri).
+  const detayPendingKaynakli = useRef(false);
 
   const [sonGuncelleme, setSonGuncelleme] = useState<Date|null>(null);
   const [siraGorunum, setSiraGorunum]   = useState<"tumu"|"yukselen"|"dusen"|"hacim">("tumu");
@@ -1963,7 +1967,7 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi }: { initialTicke
   useEffect(() => {
     if (initialTicker && hisseler.length > 0) {
       const bulunan = hisseler.find((h: any) => h.ticker === initialTicker);
-      if (bulunan) { setDetayHisse(bulunan); onInitialTuketildi?.(); }
+      if (bulunan) { detayPendingKaynakli.current = true; setDetayHisse(bulunan); onInitialTuketildi?.(); }
     }
   }, [initialTicker, hisseler]);
 
@@ -2080,7 +2084,10 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi }: { initialTicke
     (siraBy==="degisim1h"||siraBy==="degisim1a"||siraBy==="degisim1y") ? siraBy : "degisim1g";
   const perEtiket = perKol==="degisim1h" ? "1H" : perKol==="degisim1a" ? "1A" : perKol==="degisim1y" ? "1Y" : "";
 
-  if (detayHisse) return <HisseDetay hisse={detayHisse} onGeri={() => setDetayHisse(null)} />;
+  if (detayHisse) return <HisseDetay hisse={detayHisse} onGeri={() => {
+    if (detayPendingKaynakli.current && onDisaridanGeri) { detayPendingKaynakli.current = false; onDisaridanGeri(); }
+    else { setDetayHisse(null); }
+  }} />;
 
   return (
     <div style={{background:C.bg, padding:"12px 14px 80px", minHeight:"100%"}}>
@@ -2241,7 +2248,7 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi }: { initialTicke
           </div>
           <div className="piyasa-scroll" style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:2}}>
             {top10.map(h=>(
-              <div key={h.ticker} onClick={()=>setDetayHisse(h)} className="press-card" style={{
+              <div key={h.ticker} onClick={()=>{detayPendingKaynakli.current=false;setDetayHisse(h);}} className="press-card" style={{
                 flex:"0 0 auto",minWidth:104,background:C.card,border:`1px solid ${C.border}`,
                 borderRadius:12,padding:"10px 12px",cursor:"pointer",
               }}>
@@ -2304,7 +2311,7 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi }: { initialTicke
           {filtreli.map((h, i) => (
             <div key={h.ticker}>
               <div
-                onClick={() => setDetayHisse(h)}
+                onClick={() => {detayPendingKaynakli.current=false; setDetayHisse(h);}}
                 style={{
                   display:"flex",alignItems:"center",gap:10,
                   padding:"10px 12px",
@@ -14483,17 +14490,19 @@ function App(){
   // aynı araç Hesaplamalar menüsünden açılırsa normal menüsüne döner.
   const backHedefOzel=useRef<string|null>(null);
   const nav=(sc,geriHedefi?:string)=>{backHedefOzel.current=geriHedefi||null;setScreen(sc);};
-  const irHisseFonDetay=(tur:"hisse"|"fon", sembol:string)=>{
-    if(tur==="hisse"){ setPendingHisseSecim(sembol); nav("bistHisseTarayici"); }
-    else { setPendingFonSecim(sembol); nav("fonGetiriIzleme"); }
+  const irHisseFonDetay=(tur:"hisse"|"fon", sembol:string, geriHedefi?:string)=>{
+    if(tur==="hisse"){ setPendingHisseSecim(sembol); nav("bistHisseTarayici", geriHedefi); }
+    else { setPendingFonSecim(sembol); nav("fonGetiriIzleme", geriHedefi); }
   };
   // Portföyüm/Takip Listem'de bir ürüne tıklanınca ilgili grafik ekranını açar.
   // Altın alt türlerinin (Çeyrek/Ayar vb.) kendi geçmiş verisi yok — hepsi
   // Gram Altın'dan türetildiği için grafik her zaman GRAM_ALTIN sembolüyle
   // açılıyor (ürün adı yine de doğru gösteriliyor).
+  // "portfoyum" geri hedefi olarak veriliyor ki hisse/fon detayından Geri'ye
+  // basınca BİST/Fon ekranına değil, Portföyüm'e dönsün.
   const portfoyKalemTikla=(k: PortfoyKalemi)=>{
-    if(k.tur==="hisse"){ irHisseFonDetay("hisse", k.kod); }
-    else if(k.tur==="fon"){ irHisseFonDetay("fon", k.kod); }
+    if(k.tur==="hisse"){ irHisseFonDetay("hisse", k.kod, "portfoyum"); }
+    else if(k.tur==="fon"){ irHisseFonDetay("fon", k.kod, "portfoyum"); }
     else if(k.tur==="altin"){ setSeciliKur({kod:k.ad, ad:k.ad, sembol:"GRAM_ALTIN", birim:"₺"}); }
     else { setSeciliKur({kod:k.ad, ad:k.ad, sembol:k.kod, birim: k.tur==="kripto"?"$":"$"}); }
   };
@@ -15779,7 +15788,7 @@ function App(){
         {screen==="fonGetiriIzleme"&&<FonGetiriIzleme settings={settings} initialKod={pendingFonSecim} onInitialTuketildi={()=>setPendingFonSecim(null)} genisEkran={genisEkran}/>}
         {screen==="karPayiOranlari"&&<KarPayiOranlari nav={nav}/>}
         {screen==="fiyatAlarmlarim"&&<FiyatAlarmlarim/>}
-        {screen==="bistHisseTarayici"&&<BistHisseTarayici initialTicker={pendingHisseSecim} onInitialTuketildi={()=>setPendingHisseSecim(null)}/>}
+        {screen==="bistHisseTarayici"&&<BistHisseTarayici initialTicker={pendingHisseSecim} onInitialTuketildi={()=>setPendingHisseSecim(null)} onDisaridanGeri={back}/>}
         {screen==="getiridenAnapara"&&<GetiridenAnapara s={settings}/>}
         {screen==="oranAnalizi"&&<OranAnalizi s={settings}/>}
         {screen==="tahvilBono"&&<TahvilBono s={settings} onGecmis={k=>gecmisKaydet(gecmis,setGecmis,k)}/>}
