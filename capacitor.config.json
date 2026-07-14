@@ -5,6 +5,10 @@
   "plugins": {
     "CapacitorHttp": {
       "enabled": true
+    },
+    "LiveUpdate": {
+      "appId": "a3fbb004-3e3f-4a60-904a-729860d39edc",
+      "autoUpdateStrategy": "background"
     }
   }
 }

@@ -178,7 +178,7 @@ let DIL: "tr" | "en" = (() => { try { return localStorage.getItem("kp_dil") === 
 // Yer tutucu; Colab push hücresi build öncesi bunu gerçek "data:image/png;base64,..."
 // QR görseliyle değiştirir (qrcode kütüphanesi, https://apps.apple.com/app/id6788268835).
 // Yer tutucu dolmadıysa popup QR sütununu göstermez, kart yine çalışır.
-const KP_QR_B64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQgAAAEIAQAAAACLjVdSAAABkklEQVR4nO2ZsY7DMAxDH4P8/y+zg2TXPuDQqapQN0OSOhxYgZYoWebFdb0C/BBfjLhB8WZhEEbEDcBtmJbFA8MaFSwvq12Y1sUjBIFBlpFJqeBGTAvjEZdCHRmVYh4NEQZs5H8RNTw+irghUwUAcmQPea52YVoXj0ylsohIyJqrbZjWIJbdoZQGrIppw7QMISQkOWtKlpr80IlpDcKrF4uISIpc0otpESJdh9KZIhz7RXIvpu9HyLAYdIsteeg0v34NOSg04ZFRI3scqY/06KNhcchlOPYuTAv1MSIiYZxKKefRBRFasDAzrUbb7/P2ywUYKR26lrKbeaQT0xrEbFo04uDMKt2YliBi+iPhKDKjAp/qx+L/27O0hEBGZ9OIaQEi29kw7CkLza/n6WPrb7Oo7I1uF6Zl8485SZ+TdSsnQuf1L+t8PfeMGdunkEcXxDZfF7Ke/iPGyl2YliOUHiyU4Tx46Mj0jYh7/RGC0HhwoD6W+bq15Y1RZrowrYvHnK9vvd2Z5w1/T58+xeOH6Il4AOjrsxVxqTNmAAAAAElFTkSuQmCC";
+const KP_QR_B64 = "KP_QR_PLACEHOLDER";
 
 // ── SAFE AREA GARANTİSİ (native/Capacitor) ──
 // env(safe-area-inset-top/bottom) değerlerinin dolması için viewport meta'sında
@@ -12323,7 +12323,12 @@ function KurGrafikModal({kur, onClose}:{kur:any, onClose:()=>void}){
                       }}>Vazgeç</button>
                       <button onClick={()=>{
                           const token=pushTokenAl();
-                          if(!token){ setAlarmHata("Bildirim izni gerekiyor — cihaz Ayarlar'dan izin verip tekrar deneyin."); return; }
+                          if(!token){
+                            let neden="";
+                            try{ neden=localStorage.getItem("kp_push_hata")||""; }catch{}
+                            setAlarmHata(neden ? `Bildirim kaydı başarısız: ${neden}` : "Bildirim izni gerekiyor — cihaz Ayarlar'dan izin verip tekrar deneyin.");
+                            return;
+                          }
                           const degerNum=parseFloat(alarmDeger.replace(",","."));
                           if(!degerNum||degerNum<=0){ setAlarmHata("Geçerli bir değer girin."); return; }
                           setAlarmDurum("gonderiliyor"); setAlarmHata("");
@@ -12454,6 +12459,7 @@ function HakkindaModal({onClose}){
           {/* Sürüm Notları */}
           <p style={{margin:"0 0 10px",fontSize:13,fontWeight:800,color:C.label}}>📋 Sürüm Notları</p>
           {[
+            {v:"v1.4.0",t:"14 Temmuz 2026",notlar:["Yatırım fonları veri hattı: artık TEFAS'taki tüm fonlar taranıyor, hiçbir katılım fonu gözden kaçmıyor","Katılım Hesabı Getiri Hesaplama'da USD/EUR sonuçları doğru para birimi sembolüyle gösteriliyor","\"Çek Teminatlı Finansman Hesaplama\" (önceki adıyla Çek Arkası)","Açık temada masaüstü menü okunabilirliği iyileştirildi","Yapay Zeka Asistanı'nın katılım bankaları bilgisi güncellendi","Masaüstünde uygulamayı tanıtan yeni bir kart eklendi"]},
             {v:"v1.3.0",t:"28 Haziran 2026",notlar:["Esnek ödeme planlarına USD/EUR/komisyon eklendi","Hata & Öneri bildirim sistemi","Vercel Analytics","Geçmiş paylaş aksiyonu","Hakkında ekranı"]},
             {v:"v1.2.0",t:"21 Haziran 2026",notlar:["Ara ödemeli plan bisection algoritması","Canlı altın/gümüş kurları","6 esnek ödeme planı modülü","PDF rapor & Apple Share"]},
             {v:"v1.1.0",t:"15 Haziran 2026",notlar:["Döviz finansmanı (USD/EUR)","POS kârlılık analizi","TM & Akreditif komisyon","Son hesaplamalar geçmişi"]},
@@ -13340,6 +13346,24 @@ function App(){
     document.body.scrollTop=0;
   },[screen]);
 
+  // ── Live Update hazır bildirimi (Capawesome) ──
+  // Bir sonraki bundle bozuksa otomatik eski sürüme dönebilmesi için Live
+  // Update eklentisine "bu sürüm sağlıklı açıldı" sinyali göndermek ZORUNLU.
+  // ready() çağrılmazsa Capawesome birkaç saniye sonra güvenlik amacıyla
+  // uygulamayı kendiliğinden bir önceki bundle'a geri alır.
+  useEffect(()=>{
+    const gercekIsNative = (window as any).Capacitor?.isNativePlatform?.() ?? false;
+    if(!gercekIsNative) return;
+    (async () => {
+      try {
+        const mod = await import("@capawesome/capacitor-live-update");
+        await mod.LiveUpdate.ready();
+      } catch (e) {
+        console.error("LiveUpdate.ready() hatası:", e);
+      }
+    })();
+  },[]);
+
   // ── Push Notifications (bildirim servisi) kaydı ──
   // Sadece native (iOS/Android) uygulamada çalışır, web'de atlanır.
   useEffect(()=>{
@@ -13360,7 +13384,7 @@ function App(){
 
         PN.addListener("registration", (token: any) => {
           console.log("Push registration token:", token.value);
-          try{ localStorage.setItem("kp_push_token", token.value); }catch{}
+          try{ localStorage.setItem("kp_push_token", token.value); localStorage.removeItem("kp_push_hata"); }catch{}
           fetch(`${API_BASE}/api/bildirim?islem=kaydet`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -13375,6 +13399,13 @@ function App(){
 
         PN.addListener("registrationError", (err: any) => {
           console.error("Push registration error:", err.error);
+          // DÜZELTME (2026-07-14): eskiden bu hata sadece konsola yazılıyordu,
+          // kullanıcı "Bildirim izni gerekiyor" gibi genel/yanıltıcı bir mesaj
+          // görüyordu — OS izni açık olsa bile APNs kayıt hatası (ör. eksik
+          // Push Notifications entitlement) aynı genel mesajın arkasına
+          // gizleniyordu. Artık gerçek native hata metni saklanıyor ki alarm
+          // ekranı kullanıcıya asıl sebebi gösterebilsin.
+          try{ localStorage.setItem("kp_push_hata", String(err?.error||"bilinmeyen native hata")); }catch{}
         });
 
         PN.addListener("pushNotificationReceived", (notification: any) => {
@@ -13392,7 +13423,10 @@ function App(){
         if (izin.receive === "prompt") {
           izin = await PN.requestPermissions();
         }
-        if (izin.receive !== "granted") return;
+        if (izin.receive !== "granted") {
+          try{ localStorage.setItem("kp_push_hata", `OS izni verilmedi (durum: ${izin.receive})`); }catch{}
+          return;
+        }
         await PN.register();
       } catch (e) {
         console.error("Push notification kayıt hatası:", e);
@@ -14850,7 +14884,7 @@ function App(){
               </div>
             </a>
 
-            <p style={{margin:"16px 0 0",fontSize:10,color:WA(0.15),textAlign:"center"}}>Katılım Plus · v1.3.0</p>
+            <p style={{margin:"16px 0 0",fontSize:10,color:WA(0.15),textAlign:"center"}}>Katılım Plus · v1.4.0</p>
           </div>
         )}
 
