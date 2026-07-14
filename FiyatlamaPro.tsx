@@ -1457,7 +1457,9 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
                     </div>
                     <div style={{flex:1,minWidth:0,paddingRight:2,textAlign:"left"}}>
                       <div style={{fontSize:11,fontWeight:800,color:FC.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",lineHeight:1.3}}>{fon.ad}</div>
-
+                      <div style={{fontSize:9,color:FC.sub2,marginTop:1}}>
+                        {typeof fon.fiyat==="number" ? `${fon.fiyat.toLocaleString("tr-TR",{minimumFractionDigits:4,maximumFractionDigits:6})} ₺` : "—"}
+                      </div>
                     </div>
                     <span style={{width:58,textAlign:"right",flexShrink:0,fontSize:8,color:FC.sub2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                       {(fon.kategori||"—").length>10?(fon.kategori||"").slice(0,10)+"…":(fon.kategori||"—")}
@@ -1850,6 +1852,176 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
             <div key={lbl as string} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"11px 14px",borderBottom:i<arr.length-1?`1px solid ${C.border}`:"none"}}>
               <span style={{fontSize:13,color:C.sub}}>{lbl}</span>
               <span style={{fontSize:13,fontWeight:600,color:C.text}}>{val}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── FON DETAY — grafik ekranı (HisseDetay ile aynı desen) ─────────────────
+function FonDetay({ fon, onGeri }: { fon: any, onGeri: () => void }) {
+  const [grafik, setGrafik] = useState<any[]>([]);
+  const [grafikYukl, setGrafikYukl] = useState(true);
+  const [donem, setDonem] = useState<"1a"|"3a"|"1y">("1a");
+  const [tooltip, setTooltip] = useState<{x:number,y:number,p:any}|null>(null);
+
+  useEffect(() => {
+    if (!fon?.kod) return;
+    setGrafikYukl(true);
+    fetch(`${API_BASE}/api/tefas-proxy?gecmis=1&kod=${encodeURIComponent(fon.kod)}&donem=${donem}`)
+      .then(r => r.json())
+      .then(d => setGrafik((d.noktalar || []).filter((p:any)=>p.fiyat>0)))
+      .catch(() => setGrafik([]))
+      .finally(() => setGrafikYukl(false));
+  }, [fon?.kod, donem]);
+
+  const renk = (fon.gunluk ?? 0) >= 0 ? C.green : C.red;
+  const donemEtiket = donem === "1a" ? "1 Ay" : donem === "3a" ? "3 Ay" : "1 Yıl";
+  const donemGetiri = grafik.length > 1 && grafik[0]?.fiyat > 0
+    ? ((grafik[grafik.length-1].fiyat / grafik[0].fiyat) - 1) * 100
+    : null;
+  const degStr = (v: number | null | undefined) => v != null ? (v > 0 ? "+" : "") + v.toFixed(2) + "%" : "—";
+
+  const SVGGrafik = () => {
+    if (grafik.length < 2) return <div style={{height:160,display:"flex",alignItems:"center",justifyContent:"center",color:C.sub,fontSize:12}}>Veri yüklenemedi</div>;
+    const w = 320, h = 130, pad = 4;
+    const fiyatlar = grafik.map(p => p.fiyat);
+    const min = Math.min(...fiyatlar) * 0.999;
+    const max = Math.max(...fiyatlar) * 1.001;
+    const scaleY = (v: number) => h - ((v - min) / (max - min)) * h;
+    const stepX = (w - pad*2) / (grafik.length - 1 || 1);
+    const cizgiRenk = (grafik[grafik.length-1]?.fiyat >= grafik[0]?.fiyat) ? "#4ade80" : "#f87171";
+    const pathPuanlari = grafik.map((p, i) => `${pad + i * stepX},${scaleY(p.fiyat)}`).join(" L ");
+    const linePath = `M ${pathPuanlari}`;
+    const areaPath = `M ${pad},${h} L ${pathPuanlari} L ${pad + (grafik.length-1)*stepX},${h} Z`;
+
+    return (
+      <div style={{position:"relative"}}>
+        {tooltip && (
+          <div style={{position:"absolute",top:0,left:0,right:0,background:"rgba(0,0,0,0.75)",borderRadius:6,padding:"4px 8px",fontSize:10,color:"#fff",display:"flex",gap:10,justifyContent:"center",zIndex:10}}>
+            <span style={{color:"#aaa"}}>{tooltip.p.tarih}</span>
+            <span style={{fontWeight:700,color:"#4ade80"}}>{tooltip.p.fiyat?.toLocaleString("tr-TR",{minimumFractionDigits:4,maximumFractionDigits:6})} ₺</span>
+          </div>
+        )}
+        <svg viewBox={`0 0 ${w} ${h}`} style={{width:"100%",height:160,overflow:"visible",cursor:"crosshair"}}
+          onMouseLeave={()=>setTooltip(null)}
+          onClick={(e)=>{
+            const rect = (e.target as SVGElement).closest("svg")!.getBoundingClientRect();
+            const xRel = (e.clientX - rect.left) / rect.width * w;
+            const idx = Math.min(grafik.length-1, Math.max(0, Math.round((xRel - pad) / stepX)));
+            setTooltip({x:xRel, y:0, p:grafik[idx]});
+          }}
+          onTouchEnd={(e)=>{
+            const rect = (e.target as SVGElement).closest("svg")!.getBoundingClientRect();
+            const touch = e.changedTouches[0];
+            const xRel = (touch.clientX - rect.left) / rect.width * w;
+            const idx = Math.min(grafik.length-1, Math.max(0, Math.round((xRel - pad) / stepX)));
+            setTooltip({x:xRel, y:0, p:grafik[idx]});
+          }}
+        >
+          {[0.25,0.5,0.75].map(r=>(
+            <line key={r} x1={0} x2={w} y1={h*r} y2={h*r} stroke={TEMA==="acik"?"#16222E1A":"#ffffff11"} strokeWidth="1"/>
+          ))}
+          <defs>
+            <linearGradient id="fonAlanGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={cizgiRenk} stopOpacity="0.25"/>
+              <stop offset="100%" stopColor={cizgiRenk} stopOpacity="0"/>
+            </linearGradient>
+          </defs>
+          <path d={areaPath} fill="url(#fonAlanGradient)" stroke="none"/>
+          <path d={linePath} fill="none" stroke={cizgiRenk} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round"/>
+          {tooltip && (() => {
+            const idx = grafik.findIndex(p => p.tarih === tooltip.p.tarih);
+            if (idx < 0) return null;
+            const x = pad + idx * stepX;
+            const y = scaleY(grafik[idx].fiyat);
+            return (
+              <g>
+                <line x1={x} x2={x} y1={0} y2={h} stroke={TEMA==="acik"?"#16222E4D":"#ffffff33"} strokeWidth="1" strokeDasharray="2,2"/>
+                <circle cx={x} cy={y} r={3.5} fill={cizgiRenk} stroke="#fff" strokeWidth="1"/>
+              </g>
+            );
+          })()}
+        </svg>
+      </div>
+    );
+  };
+
+  return (
+    <div style={{background:C.bg,minHeight:"100%",paddingBottom:80}}>
+      <div style={{background:C.card,padding:"12px 16px 16px",borderBottom:`1px solid ${C.border}`}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+          <div style={{minWidth:0}}>
+            <div style={{fontSize:20,fontWeight:900,color:C.text}}>{fon.kod}</div>
+            <div style={{fontSize:12,color:C.sub,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{fon.ad}</div>
+            {fon.yonetici && <div style={{fontSize:10.5,color:C.sub2,marginTop:1}}>{fon.yonetici}</div>}
+          </div>
+          <div style={{textAlign:"right",flexShrink:0}}>
+            <div style={{fontSize:20,fontWeight:800,color:C.text}}>
+              {typeof fon.fiyat==="number" ? fon.fiyat.toLocaleString("tr-TR",{minimumFractionDigits:4,maximumFractionDigits:6}) : "—"} <span style={{fontSize:11,color:C.sub}}>₺</span>
+            </div>
+            <div style={{fontSize:13,fontWeight:700,color:renk}}>{degStr(fon.gunluk)}</div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{background:C.card,margin:"10px 0",padding:"12px 16px"}}>
+        <div style={{display:"flex",gap:6,marginBottom:10}}>
+          {([["1a","1 Ay"],["3a","3 Ay"],["1y","1 Yıl"]] as ["1a"|"3a"|"1y",string][]).map(([k,l]) => (
+            <button key={k} onClick={() => setDonem(k)} style={{
+              padding:"4px 12px",borderRadius:6,border:`1px solid ${C.border}`,
+              background:donem===k?C.blue:"none",color:donem===k?"#fff":C.sub,
+              fontSize:11,fontWeight:donem===k?700:400,cursor:"pointer",fontFamily:"inherit"
+            }}>{l}</button>
+          ))}
+          <div style={{flex:1}}/>
+          <div style={{textAlign:"right"}}>
+            <div style={{fontSize:9,color:C.sub2}}>{donemEtiket} Getiri</div>
+            <div style={{fontSize:12,fontWeight:800,color:donemGetiri!=null?(donemGetiri>=0?C.green:C.red):C.sub}}>{degStr(donemGetiri)}</div>
+          </div>
+        </div>
+        {grafikYukl
+          ? <div style={{height:120,display:"flex",alignItems:"center",justifyContent:"center",color:C.sub,fontSize:12}}>⟳ Yükleniyor…</div>
+          : <SVGGrafik/>
+        }
+        {grafik.length > 1 && (
+          <div style={{display:"flex",justifyContent:"space-between",marginTop:4,fontSize:10,color:C.sub}}>
+            <span>{grafik[0]?.tarih}</span>
+            <span>{grafik[grafik.length-1]?.tarih}</span>
+          </div>
+        )}
+      </div>
+
+      <div style={{margin:"0 0 10px",padding:"0 14px"}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          {[
+            ["Günlük", fon.gunluk],
+            ["Haftalık", fon.haftalik],
+            ["Aylık", fon.aylik],
+            ["Yıllık", fon.yillik],
+          ].map(([lbl, val]: any) => (
+            <div key={lbl} style={{background:C.card,borderRadius:10,padding:"10px 12px",border:`1px solid ${C.border}`}}>
+              <div style={{fontSize:10,color:C.sub,marginBottom:4}}>{lbl} Değişim</div>
+              <div style={{fontSize:16,fontWeight:800,color:val > 0 ? C.green : val < 0 ? C.red : C.sub}}>{degStr(val)}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{padding:"0 14px"}}>
+        <div style={{fontSize:11,fontWeight:700,color:C.sub,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Temel Bilgiler</div>
+        <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,overflow:"hidden"}}>
+          {[
+            ["Kategori", fon.kategori || "—"],
+            ["Yönetici", fon.yonetici || "—"],
+            ["Yatırımcı Sayısı", fon.yatirimci ? fon.yatirimci.toLocaleString("tr-TR") : "—"],
+            ["Fon Büyüklüğü", fon.portfoy ? fon.portfoy.toLocaleString("tr-TR",{maximumFractionDigits:0}) + " ₺" : "—"],
+          ].map(([lbl, val], i, arr) => (
+            <div key={lbl as string} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"11px 14px",borderBottom:i<arr.length-1?`1px solid ${C.border}`:"none"}}>
+              <span style={{fontSize:13,color:C.sub}}>{lbl}</span>
+              <span style={{fontSize:13,fontWeight:600,color:C.text,textAlign:"right",marginLeft:12}}>{val}</span>
             </div>
           ))}
         </div>
@@ -10439,6 +10611,7 @@ const MENU = {
   haftalikOzet:{title:"Haftalık Piyasa Özeti",back:"home"},
   katilimBankalari:{title:"Katılım Bankaları",back:"araclarMenu"},
   portfoyum:{title:"Portföyüm",back:"araclarMenu"},
+  fonDetay:{title:"Fon Detay",back:"portfoyum"},
   hazineDoviz:{title:"Döviz Dönüştürücü",back:"hesaplaMenu"},
   hazineForward:{title:"Forward Hesaplama",back:"hesaplaMenu"},
   hazineSwap:{title:"Swap Hesaplama",back:"hesaplaMenu"},
@@ -10466,7 +10639,7 @@ const TAB_OF_SCREEN:any = {
   hazineDoviz:"hesapla", hazineForward:"hesapla", hazineSwap:"hesapla",
   hazineBono:"hesapla", hazineSenaryo:"hesapla",
   piyasaHaberleri:"piyasa", finansalGostergeler:"piyasa",
-  araclarMenu:"araclar", sozluk:"araclar", vadeTakibi:"araclar", katilimBankalari:"araclar", getiriKarsilastirma:"araclar", haftalikOzet:"araclar", portfoyum:"araclar",
+  araclarMenu:"araclar", sozluk:"araclar", vadeTakibi:"araclar", katilimBankalari:"araclar", getiriKarsilastirma:"araclar", haftalikOzet:"araclar", portfoyum:"araclar", fonDetay:"araclar",
   asistan:"yapayzeka",
   profil:"profil",
 };
@@ -13394,6 +13567,13 @@ function portfoyFmtTL(n: number): string {
   const isaret = n < 0 ? "-" : "";
   return isaret + "₺" + Math.abs(n).toLocaleString("tr-TR", { maximumFractionDigits: 0 });
 }
+// Fon birim pay fiyatları genelde küçük ondalıklı sayılar (örn. 2,816142 ₺) —
+// portfoyFmtTL'nin 0 ondalıklı formatı bunları "₺0"/"₺3" gibi anlamsız
+// yuvarlıyordu. Fon fiyatı gösterilirken bunun yerine bu kullanılmalı.
+function portfoyFmtFiyat(n: number, tur: PortfoyKalemi["tur"]): string {
+  if (tur === "fon") return n.toLocaleString("tr-TR", { minimumFractionDigits: 4, maximumFractionDigits: 6 }) + " ₺";
+  return portfoyFmtTL(n);
+}
 function PortfoyDegisimEtiket({deger, boyut=11}:{deger:number|null; boyut?:number}){
   if (deger == null) return <span style={{fontSize:boyut,color:C.sub2}}>—</span>;
   const pozitif = deger > 0;
@@ -13476,7 +13656,7 @@ function PortfoyWidget({liste, gizli, onGizliToggle, onDetay, onEkle}:{
                 <div style={{fontSize:10.5,color:C.sub2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{k.ad}</div>
               </div>
               <span style={{fontSize:13,fontWeight:700,color:C.text,marginRight:8,fontVariantNumeric:"tabular-nums"}}>
-                {izlemeModu && k.fiyat==null ? "—" : (gizli?"₺••••":portfoyFmtTL(izlemeModu ? (k.fiyat||0) : portfoyGuncelDeger(k)))}
+                {izlemeModu && k.fiyat==null ? "—" : (gizli?"₺••••":(izlemeModu ? portfoyFmtFiyat(k.fiyat||0, k.tur) : portfoyFmtTL(portfoyGuncelDeger(k))))}
               </span>
               <PortfoyDegisimEtiket deger={k.g} boyut={13}/>
             </div>
@@ -13973,7 +14153,7 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onKalem
                       <span style={{fontSize:13,fontWeight:800,color:C.text}}>{k.kod}</span>
                       <span style={{fontSize:8.5,fontWeight:700,color:meta.renk,background:meta.bg,borderRadius:4,padding:"1px 5px"}}>{meta.label}</span>
                       <span style={{flex:1}}/>
-                      <span style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:"tabular-nums"}}>{k.fiyat==null?"—":(gizli?"₺••••":portfoyFmtTL(k.fiyat||0))}</span>
+                      <span style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:"tabular-nums"}}>{k.fiyat==null?"—":(gizli?"₺••••":portfoyFmtFiyat(k.fiyat||0, k.tur))}</span>
                     </div>
                     <div style={{fontSize:10.5,color:C.sub2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{k.ad}</div>
                   </>
@@ -14270,6 +14450,7 @@ function App(){
 
   const [pendingHisseSecim,setPendingHisseSecim]=useState<string|null>(null);
   const [pendingFonSecim,setPendingFonSecim]=useState<string|null>(null);
+  const [pendingFonDetay,setPendingFonDetay]=useState<any>(null);
   const [menuAramaQ,setMenuAramaQ]=useState("");
   // App Store banner'ı (yalnızca web'de görünür) kullanıcı kapattıysa bir daha gösterilmez
   const [appBannerKapali,setAppBannerKapali]=useState<boolean>(()=>{
@@ -14505,7 +14686,7 @@ function App(){
   // basınca BİST/Fon ekranına değil, Portföyüm'e dönsün.
   const portfoyKalemTikla=(k: PortfoyKalemi)=>{
     if(k.tur==="hisse"){ irHisseFonDetay("hisse", k.kod, "portfoyum"); }
-    else if(k.tur==="fon"){ irHisseFonDetay("fon", k.kod, "portfoyum"); }
+    else if(k.tur==="fon"){ setPendingFonDetay(k); nav("fonDetay", "portfoyum"); }
     else if(k.tur==="altin"){ setSeciliKur({kod:k.ad, ad:k.ad, sembol:"GRAM_ALTIN", birim:"₺"}); }
     else { setSeciliKur({kod:k.ad, ad:k.ad, sembol:k.kod, birim: k.tur==="kripto"?"$":"$"}); }
   };
@@ -15654,6 +15835,9 @@ function App(){
             />
           </div>
         )}
+
+        {/* ── FON DETAY (grafik ekranı — Portföyüm'den açılır) ── */}
+        {screen==="fonDetay"&&pendingFonDetay&&<FonDetay fon={pendingFonDetay} onGeri={back}/>}
 
         {/* ── PROFİL (alt bar sekmesi) ── */}
         {screen==="profil"&&(

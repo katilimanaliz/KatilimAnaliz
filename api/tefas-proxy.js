@@ -1,9 +1,15 @@
 // api/tefas-proxy.js
-// TEK fonksiyon, İKİ rol:
+// TEK fonksiyon, ÜÇ rol:
 //  1) Normal kullanıcı isteği (GET, header/param yok) → KV'den okur, hızlı yanıt verir
 //  2) Vercel Cron tetiklemesi (?cron=1&parca=1|2|3) → Fonoloji'den O PARÇANIN
 //     kategorilerini çekip KV'deki mevcut veriyle BİRLEŞTİRİR (üzerine tamamen
 //     yazmaz — fon kodu bazında upsert yapar)
+//  3) Tek fon geçmiş fiyat isteği (?gecmis=1&kod=XXX&donem=1a|3a|1y) → fon
+//     detay grafiği (Yatırım Fonları Getiri İzleme + Portföyüm'den açılan
+//     grafik ekranı) için Fonoloji'nin /funds/:code/history ucundan geçmiş
+//     fiyat serisi çeker. AYRI BİR api/ DOSYASI AÇILMADI — Vercel Hobby plan
+//     12 Serverless Function sınırına zaten yakınız (bkz. aşağıdaki not),
+//     bu yüzden üçüncü rol de bu dosyaya eklendi.
 //
 // NEDEN PARÇALARA BÖLÜNDÜ: Fonoloji "dakikada en fazla 30 istek" sınırı
 // uyguluyor (kendi hata mesajından doğrulandı: "Dakikada 30 istek sınırı
@@ -14,9 +20,10 @@
 // PARCALAR'a bkz), her parçaya vercel.json'da bir cron saati tanımlandı.
 // Her çağrı ~20-45sn sürer, güvenli. Son parça bittiğinde tam liste oluşur.
 //
-// NEDEN TEK DOSYA (ayrı bir cron-*.js değil): Vercel Hobby plan deployment
-// başına en fazla 12 Serverless Function'a izin veriyor (bu repo zaten
-// sınırda). Cron mantığını buraya taşıyarak fonksiyon sayısı artmıyor.
+// NEDEN TEK DOSYA (ayrı bir cron-*.js/fon-gecmis.js değil): Vercel Hobby plan
+// deployment başına en fazla 12 Serverless Function'a izin veriyor (bu repo
+// zaten sınırda). Cron mantığını VE tek-fon geçmiş ucunu buraya taşıyarak
+// fonksiyon sayısı artmıyor.
 //
 // KİLİT KORUMASI (2026-07 eklendi, sonra ortak modüle taşındı): İki ayrı
 // yarış durumu tespit edildi:
@@ -61,7 +68,7 @@
 export const config = { maxDuration: 280 };
 
 import { Redis } from "@upstash/redis";
-import { fonVerisiCek, ŞÜPHELİ_EŞİK } from "./_lib/fonFetch.js";
+import { fonVerisiCek, ŞÜPHELİ_EŞİK, siraliBekle } from "./_lib/fonFetch.js";
 import { kilitliCalistir } from "./_lib/kilitliOnbellek.js";
 
 // Vercel'in enjekte ettiği env var adı entegrasyon şekline göre değişebiliyor,
@@ -80,6 +87,60 @@ const KILIT_ANAHTARI = `lock:${KV_ANAHTAR}`;
 // Bootstrap soğuma anahtarı — bkz. dosya başındaki "BOOTSTRAP DÜZELTMESİ" notu.
 const BOOTSTRAP_SOGUMA_ANAHTAR = "tefas:bootstrap-son-deneme";
 const BOOTSTRAP_SOGUMA_SANIYE = 600; // 10 dakika
+
+// ── Tek fon geçmiş fiyat serisi (2026-07-14 akşam eklendi) ─────────────────
+// Fon detay grafiği için: /api/tefas-proxy?gecmis=1&kod=VPA&donem=1a
+// donem: "1a"|"3a"|"1y" (uygulamanın hisse tarafındaki dönem sözleşmesiyle
+// AYNI — HisseDetay'daki 1 Ay/3 Ay/1 Yıl sekmeleriyle tutarlı).
+const FON_GECMIS_DONEM_MAP = { "1a": "1m", "3a": "3m", "1y": "1y" };
+const FON_GECMIS_CACHE_TTL_SANIYE = 600; // 10 dk — aynı fon+dönem sık sorulursa Fonoloji'ye tekrar gitmesin
+
+async function fonGecmisGetir(req, res) {
+  const kod = String(req.query?.kod || "").toUpperCase().trim();
+  const donemGiris = String(req.query?.donem || "1a");
+  const fonolojiPeriod = FON_GECMIS_DONEM_MAP[donemGiris] || "1m";
+
+  if (!kod) return res.status(400).json({ success: false, error: "kod parametresi gerekli" });
+
+  const cacheAnahtar = `fon:gecmis:${kod}:${fonolojiPeriod}`;
+  try {
+    const onbellek = await kv.get(cacheAnahtar).catch(() => null);
+    if (onbellek) {
+      res.setHeader("Cache-Control", "max-age=0, s-maxage=300, stale-while-revalidate=300");
+      return res.status(200).json(onbellek);
+    }
+  } catch {}
+
+  const API_KEY = process.env.FONOLOJI_KEY;
+  if (!API_KEY) return res.status(500).json({ success: false, error: "FONOLOJI_KEY tanımlı değil" });
+
+  try {
+    // fonFetch.js'deki cron taramasıyla AYNI paylaşılan sıraya girer — toplam
+    // istek hızı Fonoloji'nin dakikalık sınırının altında kalır.
+    await siraliBekle();
+    const r = await fetch(
+      `https://fonoloji.com/v1/funds/${encodeURIComponent(kod)}/history?period=${fonolojiPeriod}`,
+      { headers: { "X-API-Key": API_KEY, "Accept": "application/json" } }
+    );
+    if (!r.ok) {
+      return res.status(r.status).json({ success: false, error: `Fonoloji ${r.status}` });
+    }
+    const d = await r.json().catch(() => null);
+    const noktalar = (d?.points || [])
+      .filter((p) => typeof p.price === "number")
+      .map((p) => ({ tarih: p.date, fiyat: p.price }));
+    const guncelFiyat = noktalar.length ? noktalar[noktalar.length - 1].fiyat : null;
+    const oncekiKapanis = noktalar.length > 1 ? noktalar[noktalar.length - 2].fiyat : null;
+
+    const paket = { success: true, kod, donem: donemGiris, noktalar, guncelFiyat, oncekiKapanis };
+    try { await kv.set(cacheAnahtar, paket, { ex: FON_GECMIS_CACHE_TTL_SANIYE }); } catch {}
+
+    res.setHeader("Cache-Control", "max-age=0, s-maxage=300, stale-while-revalidate=300");
+    return res.status(200).json(paket);
+  } catch (e) {
+    return res.status(500).json({ success: false, error: String(e.message || e) });
+  }
+}
 
 // Yeni parçanın fonlarını mevcut kayıtla birleştirir: aynı `kod`a sahip fon
 // varsa taze veriyle DEĞİŞTİRİLİR, yoksa eklenir. Diğer parçalardan gelen
@@ -283,6 +344,8 @@ async function herkesOku(req, res) {
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
+
+  if (req.query?.gecmis === "1") return fonGecmisGetir(req, res);
 
   const cronIstegi = req.headers["x-vercel-cron"] === "1" || req.query?.cron === "1";
   if (cronIstegi) return cronYaz(req, res);

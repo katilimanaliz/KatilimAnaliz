@@ -436,15 +436,31 @@ async function fonVerisiCek(parcaNo = null) {
   // 5 fon oldukları için (pazarlama materyallerinde birebir öne çıkıyorlar)
   // maliyeti göz ardı edilebilir 5 istek karşılığında SIFIR kayıp riski
   // sağlanıyor — bu sefer taramada zaten görülmüşlerse tekrar çekilmez.
+  //
+  // DÜZELTME (2026-07-14 akşam, fiyat eklenince ortaya çıktı): "zaten
+  // görüldüyse atla" kontrolü hamKodSeti'ye bakıyordu — ama FAZ 1'in toplu
+  // liste taraması bir fonu YAKALAYIP `fiyat:null` ile kaydedebiliyor (bulk
+  // /funds yanıtında current_price her satırda garanti değil). Bu durumda
+  // "zaten görüldü" sayılıp tekil (fiyatlı) çekim hiç tetiklenmiyordu — VPA
+  // kalıcı olarak fiyatsız kalıyordu. Artık sadece "görüldü" değil, "fiyatlı
+  // görüldü" olması aranıyor; fiyatsızsa tekil çekimle ÜZERİNE YAZILIYOR.
   for (const kod of VAKIF_KODLARI) {
-    if (hamKodSeti.has(kod)) continue; // bu taramada zaten görüldü, taze
+    const mevcutIndex = katilimFonlar.findIndex((f) => f.kod === kod);
+    if (mevcutIndex >= 0 && katilimFonlar[mevcutIndex].fiyat != null) continue; // zaten fiyatlı, taze
     if (butceDoldu()) break;
     const { res: vRes } = await fetchTeshisli(
       `https://fonoloji.com/v1/funds/${encodeURIComponent(kod)}`, { headers }, 2);
     if (!vRes) continue;
     const vd = await vRes.json().catch(() => null);
     const vFon = vd?.fund ?? vd;
-    if (vFon && vFon.code) itemIsle(vFon);
+    if (!vFon || !vFon.code) continue;
+    if (mevcutIndex >= 0) {
+      // Fiyatsız kaydın üzerine, bu sefer fiyatlı geleni yaz.
+      const guncellenmis = mapFon(vFon, true, takasAraligi);
+      if (guncellenmis.katilimUygun) katilimFonlar[mevcutIndex] = guncellenmis;
+    } else {
+      itemIsle(vFon);
+    }
   }
 
   // ── FAZ 3: BİLİNEN KATILIM FONLARINI TAZELE (liste kapsayıcı DEĞİLSE) ───
@@ -464,7 +480,11 @@ async function fonVerisiCek(parcaNo = null) {
     let ilerleme = 0;
     for (let i = 0; i < bilinenKodlar.length; i++) {
       const kod = bilinenKodlar[(imlecOnce + i) % bilinenKodlar.length];
-      if (hamKodSeti.has(kod)) { ilerleme = i + 1; continue; } // bu tarama zaten taze
+      const mevcutIndex = katilimFonlar.findIndex((f) => f.kod === kod);
+      // DÜZELTME: "hamKodSeti.has(kod)" tek başına yeterli değildi — FAZ 1
+      // fiyatsız yakalamış olabilir. Fiyatlıysa gerçekten atla, değilse
+      // tekil çekimle tazele (bkz. FAZ 2.5'teki aynı düzeltme notu).
+      if (mevcutIndex >= 0 && katilimFonlar[mevcutIndex].fiyat != null) { ilerleme = i + 1; continue; }
       if (Date.now() > bilinenButceSonuMs || butceDoldu()) break;
       const { res: tekRes } = await fetchTeshisli(
         `https://fonoloji.com/v1/funds/${encodeURIComponent(kod)}`, { headers }, 1);
@@ -472,7 +492,15 @@ async function fonVerisiCek(parcaNo = null) {
       if (!tekRes) continue;
       const td = await tekRes.json().catch(() => null);
       const fon = td?.fund ?? td; // tekil yanıt {fund:{...}} sarmalında geliyor
-      if (fon && fon.code) { itemIsle(fon); tazelenenAdet++; }
+      if (fon && fon.code) {
+        if (mevcutIndex >= 0) {
+          const guncellenmis = mapFon(fon, VAKIF_KODLARI.includes(kod), takasAraligi);
+          if (guncellenmis.katilimUygun) katilimFonlar[mevcutIndex] = guncellenmis;
+        } else {
+          itemIsle(fon);
+        }
+        tazelenenAdet++;
+      }
     }
     imlecSonra = bilinenKodlar.length > 0 ? (imlecOnce + ilerleme) % bilinenKodlar.length : 0;
     try { await hizRedis.set(TAZELEME_IMLECI_KV, String(imlecSonra), { ex: 60 * 60 * 24 * 7 }); } catch {}
@@ -587,4 +615,4 @@ async function fonVerisiCek(parcaNo = null) {
   };
 }
 
-export { fonVerisiCek, ŞÜPHELİ_EŞİK, PARCALAR };
+export { fonVerisiCek, ŞÜPHELİ_EŞİK, PARCALAR, siraliBekle };
