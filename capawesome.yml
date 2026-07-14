@@ -10,10 +10,19 @@
 # build.gradle) otomatik günceller — Xcode'da elle değiştirmenize gerek kalmaz.
 #
 # Kaynak: https://capawesome.io/cloud/native-builds/guides/auto-incrementing-build-numbers/
+#
+# DÜZELTME (2026-07-14): 14 Temmuz build denemesi App Store Connect'e
+# "bundle version 8 zaten kullanılmış" hatasıyla reddedildi (önceki onaylanan
+# 1.2 build'i tam olarak 8 numarasını taşıyordu — bkz. Apple hata detayı:
+# previousBundleVersion:8). CI_BUILD_NUMBER'ın otomatik artan değeri bu
+# denemede beklenenden düşük geldi. Varsayılan taban 20'ye çekildi — hem 8'in
+# kesin üstünde hem birkaç deneme için pay bırakıyor. Capawesome kendi
+# sayacından daha yüksek bir değer sağlarsa bu varsayılan zaten devreye
+# girmez; yalnızca sayaç beklenenden düşük/aynı gelirse emniyet görevi görür.
 
 vars:
   CI_BUILD_NUMBER:
-    default: 1
+    default: 20
 
 platforms:
   android:
