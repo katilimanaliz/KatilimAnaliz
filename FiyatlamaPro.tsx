@@ -13428,7 +13428,7 @@ function PortfoyWidget({liste, gizli, onGizliToggle, onDetay, onEkle}:{
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
           <div>
             <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
-              <span style={{fontSize:11,fontWeight:700,color:C.sub,textTransform:"uppercase",letterSpacing:0.5}}>Portföyüm</span>
+              <span style={{fontSize:11,fontWeight:700,color:C.text,textTransform:"uppercase",letterSpacing:0.5}}>Portföyüm</span>
               <div onClick={(e)=>{e.stopPropagation();onGizliToggle();}} style={{cursor:"pointer",padding:2,display:"flex"}}>
                 {gizli ? <EyeOff size={13} color={C.sub2}/> : <Eye size={13} color={C.sub2}/>}
               </div>
@@ -13470,7 +13470,7 @@ function PortfoyWidget({liste, gizli, onGizliToggle, onDetay, onEkle}:{
                   <span style={{fontSize:10.5,color:C.sub2,marginLeft:6}}>{gizli?"••":k.miktar!.toLocaleString("tr-TR")} {k.birim}</span>
                 )}
               </div>
-              <span style={{fontSize:13,fontWeight:700,color:C.sub,marginRight:8,fontVariantNumeric:"tabular-nums"}}>
+              <span style={{fontSize:13,fontWeight:700,color:C.text,marginRight:8,fontVariantNumeric:"tabular-nums"}}>
                 {gizli?"₺••••":portfoyFmtTL(izlemeModu ? (k.fiyat||0) : portfoyGuncelDeger(k))}
               </span>
               <PortfoyDegisimEtiket deger={k.g} boyut={13}/>
@@ -13848,8 +13848,8 @@ function PortfoyEkleModal({onKapat, onEklendi}:{onKapat:()=>void; onEklendi:(k:P
 }
 
 // ─── PORTFÖYÜM — Piyasa & Veriler altındaki tam detay ekranı ──────────────
-function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil}:{
-  liste: PortfoyKalemi[]; gizli: boolean; onGizliToggle: ()=>void; onEkle: ()=>void; onSil: (id:string)=>void;
+function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onKalemTikla}:{
+  liste: PortfoyKalemi[]; gizli: boolean; onGizliToggle: ()=>void; onEkle: ()=>void; onSil: (id:string)=>void; onKalemTikla: (k:PortfoyKalemi)=>void;
 }){
   const [sekme, setSekme] = useState<"portfoy"|"takip">("portfoy");
   const [filtre, setFiltre] = useState<"tumu"|PortfoyKalemi["tur"]>("tumu");
@@ -13959,7 +13959,7 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil}:{
         const m = portfoyMaliyet(k);
         const kzYuzde = m && m>0 ? (kz!/m)*100 : null;
         return (
-          <div key={k.id} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:12,marginBottom:8}}>
+          <div key={k.id} onClick={()=>onKalemTikla(k)} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:12,marginBottom:8,cursor:"pointer"}}>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
               <div style={{width:30,height:30,borderRadius:9,background:meta.bg,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                 <meta.Icon size={14} color={meta.renk}/>
@@ -13969,7 +13969,7 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil}:{
                   <div style={{display:"flex",alignItems:"center",gap:6}}>
                     <span style={{fontSize:13,fontWeight:800,color:C.text}}>{k.kod}</span>
                     <span style={{flex:1}}/>
-                    <span style={{fontSize:13,fontWeight:700,color:C.sub,fontVariantNumeric:"tabular-nums"}}>{gizli?"₺••••":portfoyFmtTL(k.fiyat||0)}</span>
+                    <span style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:"tabular-nums"}}>{gizli?"₺••••":portfoyFmtTL(k.fiyat||0)}</span>
                   </div>
                 ) : (
                   <>
@@ -13980,7 +13980,7 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil}:{
                   </>
                 )}
               </div>
-              <Trash2 size={13} color={C.sub2} style={{cursor:"pointer"}} onClick={()=>onSil(k.id)}/>
+              <Trash2 size={13} color={C.sub2} style={{cursor:"pointer"}} onClick={(e)=>{e.stopPropagation();onSil(k.id);}}/>
             </div>
 
             <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
@@ -14486,6 +14486,16 @@ function App(){
   const irHisseFonDetay=(tur:"hisse"|"fon", sembol:string)=>{
     if(tur==="hisse"){ setPendingHisseSecim(sembol); nav("bistHisseTarayici"); }
     else { setPendingFonSecim(sembol); nav("fonGetiriIzleme"); }
+  };
+  // Portföyüm/Takip Listem'de bir ürüne tıklanınca ilgili grafik ekranını açar.
+  // Altın alt türlerinin (Çeyrek/Ayar vb.) kendi geçmiş verisi yok — hepsi
+  // Gram Altın'dan türetildiği için grafik her zaman GRAM_ALTIN sembolüyle
+  // açılıyor (ürün adı yine de doğru gösteriliyor).
+  const portfoyKalemTikla=(k: PortfoyKalemi)=>{
+    if(k.tur==="hisse"){ irHisseFonDetay("hisse", k.kod); }
+    else if(k.tur==="fon"){ irHisseFonDetay("fon", k.kod); }
+    else if(k.tur==="altin"){ setSeciliKur({kod:k.ad, ad:k.ad, sembol:"GRAM_ALTIN", birim:"₺"}); }
+    else { setSeciliKur({kod:k.ad, ad:k.ad, sembol:k.kod, birim: k.tur==="kripto"?"$":"$"}); }
   };
   const back=()=>{
     if(backHedefOzel.current){ const h=backHedefOzel.current; backHedefOzel.current=null; setScreen(h); return; }
@@ -15628,6 +15638,7 @@ function App(){
               onGizliToggle={portfoyGizliDegistir}
               onEkle={()=>setPortfoyEkleAcik(true)}
               onSil={portfoySil}
+              onKalemTikla={portfoyKalemTikla}
             />
           </div>
         )}
