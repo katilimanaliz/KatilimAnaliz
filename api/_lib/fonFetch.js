@@ -277,6 +277,16 @@ async function fonVerisiCek(parcaNo = null) {
   let hedefToplam = null;   // API total bildiriyorsa: kayıp sayfa atlarken pusula
   const kayipSayfalar = []; // tekrarlara rağmen alınamayan offset'ler
   let sonHata = null;
+  // SÜRE BÜTÇESİ (2026-07-14): maxDuration 280 sn; 2.25 sn/istek hızla
+  // 39 sayfa + kod listesi + 60 tekil çekim ≈ 104 istek ≈ 235 sn bekleme
+  // + yanıt süreleri = sınır AŞILIYOR ve Vercel fonksiyonu KV'ye YAZAMADAN
+  // öldürüyordu (12:17 taraması kanıtı: guncelleme 09:07'de çakılı kaldı).
+  // Çare: 190. saniyede eldeki sonuçla durup HER KOŞULDA yazmak. Artan
+  // kaçaklar bir sonraki saatlik taramada kaldığı yerden tamamlanır.
+  const taramaBaslangicMs = Date.now();
+  const SURE_BUTCESI_MS = 190000;
+  const butceDoldu = () => Date.now() - taramaBaslangicMs > SURE_BUTCESI_MS;
+
   let sayfaTekrarKaldi = 3; // tarama genelinde toplam 3 ek deneme hakkı
   let offset = 0;
   let sayfaSayisi = 0;
@@ -330,6 +340,7 @@ async function fonVerisiCek(parcaNo = null) {
   };
 
   while (sayfaSayisi < MAKS_SAYFA) {
+    if (butceDoldu()) { sonHata = "süre bütçesi doldu (sayfa döngüsü)"; break; }
     const url = `https://fonoloji.com/v1/funds?limit=${PAGE_SIZE}&offset=${offset}${sortParam}`;
     const { res, hata } = await fetchTeshisli(url, { headers }, 2);
     if (!res) {
@@ -387,7 +398,20 @@ async function fonVerisiCek(parcaNo = null) {
       if (tumKodlar.length > 0) {
         kodListesiToplam = tumKodlar.length;
         kacakKodlar = tumKodlar.filter((k) => !hamKodSeti.has(k));
-        for (const kod of kacakKodlar.slice(0, EK_CEKIM_LIMITI)) {
+        // SIRALAMA DÜZELTMESİ: liste alfabetikti; limit yüzünden her tarama
+        // hep AAJ-ABZ bandında takılıyor, N harfindeki NSA gibi fonlara hiç
+        // sıra gelmiyordu. Şimdi: (a) aranan teşhis kodları EN BAŞA, (b) kalanı
+        // rastgele karıştır — her tarama farklı bir dilimi tamamlasın, birkaç
+        // saatte tüm evren kapansın.
+        const oncelikli = kacakKodlar.filter((k) => ARANAN_TESHIS_KODLARI.includes(k));
+        const kalan = kacakKodlar.filter((k) => !ARANAN_TESHIS_KODLARI.includes(k));
+        for (let i = kalan.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [kalan[i], kalan[j]] = [kalan[j], kalan[i]];
+        }
+        const cekimSirasi = oncelikli.concat(kalan);
+        for (const kod of cekimSirasi.slice(0, EK_CEKIM_LIMITI)) {
+          if (butceDoldu()) break; // kalanlar sonraki taramada
           const { res: tekRes } = await fetchTeshisli(
             `https://fonoloji.com/v1/funds/${encodeURIComponent(kod)}`, { headers }, 1);
           if (!tekRes) continue;
