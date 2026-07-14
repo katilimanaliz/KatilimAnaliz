@@ -282,10 +282,56 @@ async function fonVerisiCek(parcaNo = null) {
   let sayfaSayisi = 0;
   const kayipFonlarHamVeri = {}; // ARANAN_TESHIS_KODLARI'ndan görülenlerin ham içeriği
 
+  // MÜKERRERLİK/KAÇAK DÜZELTMESİ (2026-07-14): Kanıt — tarama hamAdet:3500
+  // okurken hedefToplam:3422 idi (78+ kayıt MÜKERRER okundu, buna karşılık
+  // NSA/FTL/MPE/DNP/EP1 gibi fonlar HİÇ görünmedi; aranilanKayipFonlar boş
+  // döndü ama aynı fonlar Fonoloji sitesinde 3.422'lik evrenin içinde).
+  // KÖK NEDEN: varsayılan liste sıralaması tarama sürerken (≈80 sn) değişiyor;
+  // sayfalar kayınca bazı fonlar iki sayfada birden gelir, bazıları hiçbir
+  // sayfaya denk gelmez. ÜÇ KATMANLI çözüm:
+  //   1) &sort=code — sabit alfabetik sıralama, kayma ihtimalini kökten keser
+  //      (ilk sayfada başarısız olursa otomatik sort'suz düşer, tarama sürer);
+  //   2) tarama sonrası /funds/codes'tan tam kod listesi alınıp taramada hiç
+  //      görülmeyenler tespit edilir ve /funds/:kod ile TEK TEK tamamlanır
+  //      (kampanya: fon başına sınır kalktı; codes ucu saatte 5 — saatlik
+  //      cron'la uyumlu);
+  //   3) hamBenzersiz/mukerrer/kacak sayıları teşhise yazılır — sorun bir
+  //      daha nüksederse tek bakışta görünür.
+  const hamKodSeti = new Set(); // taramada görülen TÜM ham kodlar (filtre öncesi)
+  let sortParam = "&sort=code";
+
+  // Tek bir ham fon kaydını işler — hem sayfa döngüsü hem eksik-tamamlama
+  // geçidi AYNI mantığı kullansın diye fonksiyona çıkarıldı.
+  const itemIsle = (f) => {
+    const kodHam = f.code || "";
+    if (kodHam) hamKodSeti.add(kodHam);
+    if (ARANAN_TESHIS_KODLARI.includes(kodHam) && !kayipFonlarHamVeri[kodHam]) {
+      kayipFonlarHamVeri[kodHam] = {
+        name: f.name ?? null,
+        category: f.category ?? f.fund_type ?? null,
+        is_participation: f.is_participation ?? null,
+        participation: f.participation ?? null,
+        trading_status: f.trading_status ?? null,
+      };
+    }
+    if (f.trading_status && f.trading_status !== "AKTİF") return;
+    if (!kodHam || gorulmuKodlar.has(kodHam)) return;
+    const mapped = mapFon(f, VAKIF_KODLARI.includes(kodHam), takasAraligi);
+    if (!mapped.katilimUygun) return;
+    gorulmuKodlar.add(kodHam);
+    katilimFonlar.push(mapped);
+  };
+
   while (sayfaSayisi < MAKS_SAYFA) {
-    const url = `https://fonoloji.com/v1/funds?limit=${PAGE_SIZE}&offset=${offset}`;
+    const url = `https://fonoloji.com/v1/funds?limit=${PAGE_SIZE}&offset=${offset}${sortParam}`;
     const { res, hata } = await fetchTeshisli(url, { headers }, 2);
     if (!res) {
+      // sort=code parametresini API tanımıyorsa İLK sayfada anlaşılır —
+      // parametreyi bırak, tekrar hakkı HARCAMADAN aynı offset'i sort'suz dene.
+      if (sayfaSayisi === 0 && offset === 0 && sortParam) {
+        sortParam = "";
+        continue;
+      }
       // Geçici hata: önce tarama genel tekrar hakkını kullan (5sn nefes)
       if (sayfaTekrarKaldi > 0) {
         sayfaTekrarKaldi--;
@@ -314,32 +360,43 @@ async function fonVerisiCek(parcaNo = null) {
     const items = d.items ?? d.funds ?? d.data ?? (Array.isArray(d) ? d : []);
     if (!items.length) break;
     hamToplam += items.length;
-    for (const f of items) {
-      const kodHam = f.code || "";
-      if (ARANAN_TESHIS_KODLARI.includes(kodHam) && !kayipFonlarHamVeri[kodHam]) {
-        // Filtre kararından ÖNCE ham veriyi kaydet — trading_status'a takılsa
-        // bile görünsün, gerçek sebep tam olarak anlaşılsın.
-        kayipFonlarHamVeri[kodHam] = {
-          name: f.name ?? null,
-          category: f.category ?? f.fund_type ?? null,
-          is_participation: f.is_participation ?? null,
-          participation: f.participation ?? null,
-          trading_status: f.trading_status ?? null,
-        };
-      }
-      if (f.trading_status && f.trading_status !== "AKTİF") continue;
-      const kod = f.code || "";
-      if (!kod || gorulmuKodlar.has(kod)) continue;
-      const mapped = mapFon(f, VAKIF_KODLARI.includes(kod), takasAraligi);
-      if (!mapped.katilimUygun) continue;
-      gorulmuKodlar.add(kod);
-      katilimFonlar.push(mapped);
-    }
+    for (const f of items) itemIsle(f);
     sayfaSayisi++;
     offset += PAGE_SIZE;
     if (items.length < PAGE_SIZE) break;
     if (hedefToplam !== null && offset >= hedefToplam) break;
   }
+
+  // KAÇAK TAMAMLAMA GEÇİDİ: /funds/codes'tan tam evren alınır, taramada hiç
+  // görülmeyen kodlar tek tek /funds/:kod ile çekilir. sort=code işliyorsa bu
+  // liste normalde BOŞ kalır — bu geçit, sıralama yine kayarsa devreye giren
+  // emniyet ağıdır. Tek seferde en fazla EK_CEKIM_LIMITI fon tamamlanır
+  // (maxDuration'ı zorlamamak için); artan olursa bir sonraki saatlik tarama
+  // kaldığı yerden tamamlar.
+  const EK_CEKIM_LIMITI = 40;
+  let kodListesiToplam = null;
+  let kacakKodlar = [];
+  let ekCekilenAdet = 0;
+  try {
+    const { res: kodRes } = await fetchTeshisli("https://fonoloji.com/v1/funds/codes", { headers }, 1);
+    if (kodRes) {
+      const kd = await kodRes.json().catch(() => null);
+      const hamListe = kd?.codes ?? kd?.items ?? kd?.data ?? (Array.isArray(kd) ? kd : []);
+      const tumKodlar = hamListe.map((x) => (typeof x === "string" ? x : x?.code)).filter(Boolean);
+      if (tumKodlar.length > 0) {
+        kodListesiToplam = tumKodlar.length;
+        kacakKodlar = tumKodlar.filter((k) => !hamKodSeti.has(k));
+        for (const kod of kacakKodlar.slice(0, EK_CEKIM_LIMITI)) {
+          const { res: tekRes } = await fetchTeshisli(
+            `https://fonoloji.com/v1/funds/${encodeURIComponent(kod)}`, { headers }, 1);
+          if (!tekRes) continue;
+          const td = await tekRes.json().catch(() => null);
+          const fon = td?.fund ?? td; // tekil yanıt {fund:{...}} sarmalında geliyor
+          if (fon && fon.code) { itemIsle(fon); ekCekilenAdet++; }
+        }
+      }
+    }
+  } catch {} // codes ucu saatlik sınırına takılırsa sessizce geç — tarama yine geçerli
 
   const kategoriSayac = {};
   for (const f of katilimFonlar) {
@@ -357,6 +414,13 @@ async function fonVerisiCek(parcaNo = null) {
       sayfaSayisi,
       hedefToplam,
       kayipSayfalar,
+      hamBenzersiz: hamKodSeti.size,
+      mukerrer: hamToplam - hamKodSeti.size,
+      sortKullanildi: sortParam !== "",
+      kodListesiToplam,
+      kacakAdet: kacakKodlar.length,
+      kacakIlkOrnekler: kacakKodlar.slice(0, 15),
+      ekCekilenAdet,
       // Aranan 5 fon taramada hiç görülmediyse burada eksik kalır — bu da
       // kendi başına bir bulgu (Fonoloji'nin tam listesinde yoklar demektir).
       aranilanKayipFonlar: kayipFonlarHamVeri,
