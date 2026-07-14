@@ -6331,7 +6331,7 @@ function Asistan({nav, settings}:{nav:any, settings?:any}){
             </div>
             <p style={{margin:"0 0 4px",fontSize:17,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff")}}>Merhaba 👋</p>
             <p style={{margin:"0 0 16px",fontSize:13,color:(TEMA==="acik"?"#2E4256":WA(0.55))}}>Bugün ne öğrenmek istiyorsunuz?</p>
-            <div style={{display:"flex",alignItems:"center",gap:6,background:WA(0.06),border:`1px solid ${WA(0.14)}`,borderRadius:18,padding:"5px 5px 5px 16px"}}>
+            <div style={{display:"flex",alignItems:"center",gap:6,background:(TEMA==="acik"?"#FFFFFF":WA(0.06)),border:(TEMA==="acik"?"1px solid #C7D2DE":`1px solid ${WA(0.14)}`),borderRadius:18,padding:"5px 5px 5px 16px"}}>
               <input
                 value={input}
                 onChange={e=>setInput(e.target.value)}
@@ -6340,7 +6340,7 @@ function Asistan({nav, settings}:{nav:any, settings?:any}){
                 style={{flex:1,minWidth:0,background:"transparent",border:"none",outline:"none",color:(TEMA==="acik"?C.label:"#fff"),fontSize:13,padding:"10px 0"} as any}/>
               <button onClick={sesliGirisBaslat} style={{
                 width:38,height:38,borderRadius:19,border:"none",flexShrink:0,cursor:"pointer",
-                background:dinliyor?"#EF4444":WA(0.1),color:"#fff",fontSize:15,
+                background:dinliyor?"#EF4444":(TEMA==="acik"?"#E2E8F0":WA(0.1)),color:(dinliyor?"#fff":(TEMA==="acik"?"#334155":"#fff")),fontSize:15,
                 display:"flex",alignItems:"center",justifyContent:"center",
               }}>🎙️</button>
               {input.trim()&&(
@@ -6428,16 +6428,16 @@ function Asistan({nav, settings}:{nav:any, settings?:any}){
             )}
             <div ref={endRef}/>
           </div>
-          <div style={{padding:"10px 14px 20px",background:"#15212E",borderTop:`1px solid ${WA(0.08)}`,flexShrink:0}}>
+          <div style={{padding:"10px 14px 20px",background:(TEMA==="acik"?"#FFFFFF":"#15212E"),borderTop:(TEMA==="acik"?"1px solid #D8E0EA":`1px solid ${WA(0.08)}`),flexShrink:0}}>
             <div style={{display:"flex",gap:8,alignItems:"flex-end"}}>
               <textarea value={input} onChange={e=>setInput(e.target.value)}
                 onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}}}
                 placeholder="Mesajınızı yazın veya sesle sorun…"
                 rows={1}
-                style={{flex:1,padding:"12px 14px",borderRadius:14,border:`1px solid ${WA(0.14)}`,fontSize:14,background:WA(0.06),color:(TEMA==="acik"?C.label:"#fff"),outline:"none",resize:"none",fontFamily:"-apple-system,sans-serif",lineHeight:1.4} as any}/>
-              <button onClick={sesliGirisBaslat} style={{width:42,height:42,borderRadius:21,border:"none",flexShrink:0,cursor:"pointer",background:dinliyor?"#EF4444":WA(0.1),color:"#fff",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>🎙️</button>
+                style={{flex:1,padding:"12px 14px",borderRadius:14,border:(TEMA==="acik"?"1px solid #C7D2DE":`1px solid ${WA(0.14)}`),fontSize:14,background:(TEMA==="acik"?"#EEF3F8":WA(0.06)),color:(TEMA==="acik"?C.label:"#fff"),outline:"none",resize:"none",fontFamily:"-apple-system,sans-serif",lineHeight:1.4} as any}/>
+              <button onClick={sesliGirisBaslat} style={{width:42,height:42,borderRadius:21,border:"none",flexShrink:0,cursor:"pointer",background:dinliyor?"#EF4444":(TEMA==="acik"?"#E2E8F0":WA(0.1)),color:(dinliyor?"#fff":(TEMA==="acik"?"#334155":"#fff")),fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>🎙️</button>
               <button onClick={()=>send()} disabled={loading||!input.trim()}
-                style={{width:42,height:42,borderRadius:21,border:"none",background:input.trim()&&!loading?"#3B82F6":WA(0.1),color:"#fff",fontSize:18,cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>↑</button>
+                style={{width:42,height:42,borderRadius:21,border:"none",background:input.trim()&&!loading?"#3B82F6":(TEMA==="acik"?"#CBD5E1":WA(0.1)),color:"#fff",fontSize:18,cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>↑</button>
             </div>
           </div>
         </>
