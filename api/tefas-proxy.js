@@ -68,7 +68,7 @@
 export const config = { maxDuration: 280 };
 
 import { Redis } from "@upstash/redis";
-import { fonVerisiCek, ŞÜPHELİ_EŞİK, siraliBekle } from "./_lib/fonFetch.js";
+import { fonVerisiCek, ŞÜPHELİ_EŞİK, siraliBekle, mapFon, sonTakasGunuAralik, VAKIF_KODLARI } from "./_lib/fonFetch.js";
 import { kilitliCalistir } from "./_lib/kilitliOnbellek.js";
 
 // Vercel'in enjekte ettiği env var adı entegrasyon şekline göre değişebiliyor,
@@ -94,6 +94,54 @@ const BOOTSTRAP_SOGUMA_SANIYE = 600; // 10 dakika
 // AYNI — HisseDetay'daki 1 Ay/3 Ay/1 Yıl sekmeleriyle tutarlı).
 const FON_GECMIS_DONEM_MAP = { "1a": "1m", "3a": "3m", "1y": "1y" };
 const FON_GECMIS_CACHE_TTL_SANIYE = 600; // 10 dk — aynı fon+dönem sık sorulursa Fonoloji'ye tekrar gitmesin
+
+// ── Tek fon TAM DETAY (kategori/yönetici/yatırımcı/büyüklük dahil) ─────────
+// Fon detay grafiği Portföyüm'den açıldığında (sadece fiyat/getiri saklayan
+// PortfoyKalemi ile), eksik metadata'yı tamamlamak için:
+// /api/tefas-proxy?detay=1&kod=VPA
+// mapFon() ile aynı normalize edilmiş şekli döndürür (kod/ad/yonetici/
+// kategori/yatirimci/portfoy/fiyat/gunluk/gunlukNorm/haftalik/aylik/yillik/
+// takasAraligi) — böylece FonDetay/GetiriHesaplayici hangi ekrandan açıldığına
+// bakmaksızın hep aynı alan adlarını bulur.
+const FON_DETAY_CACHE_TTL_SANIYE = 900; // 15 dk
+
+async function fonDetayGetir(req, res) {
+  const kod = String(req.query?.kod || "").toUpperCase().trim();
+  if (!kod) return res.status(400).json({ success: false, error: "kod parametresi gerekli" });
+
+  const cacheAnahtar = `fon:detay:${kod}`;
+  try {
+    const onbellek = await kv.get(cacheAnahtar).catch(() => null);
+    if (onbellek) {
+      res.setHeader("Cache-Control", "max-age=0, s-maxage=300, stale-while-revalidate=300");
+      return res.status(200).json(onbellek);
+    }
+  } catch {}
+
+  const API_KEY = process.env.FONOLOJI_KEY;
+  if (!API_KEY) return res.status(500).json({ success: false, error: "FONOLOJI_KEY tanımlı değil" });
+
+  try {
+    await siraliBekle();
+    const r = await fetch(`https://fonoloji.com/v1/funds/${encodeURIComponent(kod)}`, {
+      headers: { "X-API-Key": API_KEY, "Accept": "application/json" },
+    });
+    if (!r.ok) return res.status(r.status).json({ success: false, error: `Fonoloji ${r.status}` });
+    const d = await r.json().catch(() => null);
+    const ham = d?.fund ?? d;
+    if (!ham || !ham.code) return res.status(404).json({ success: false, error: "Fon bulunamadı" });
+
+    const takasAraligi = sonTakasGunuAralik();
+    const fon = mapFon(ham, VAKIF_KODLARI.includes(ham.code), takasAraligi);
+    const paket = { success: true, ...fon };
+    try { await kv.set(cacheAnahtar, paket, { ex: FON_DETAY_CACHE_TTL_SANIYE }); } catch {}
+
+    res.setHeader("Cache-Control", "max-age=0, s-maxage=300, stale-while-revalidate=300");
+    return res.status(200).json(paket);
+  } catch (e) {
+    return res.status(500).json({ success: false, error: String(e.message || e) });
+  }
+}
 
 async function fonGecmisGetir(req, res) {
   const kod = String(req.query?.kod || "").toUpperCase().trim();
@@ -346,6 +394,7 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
 
   if (req.query?.gecmis === "1") return fonGecmisGetir(req, res);
+  if (req.query?.detay === "1") return fonDetayGetir(req, res);
 
   const cronIstegi = req.headers["x-vercel-cron"] === "1" || req.query?.cron === "1";
   if (cronIstegi) return cronYaz(req, res);

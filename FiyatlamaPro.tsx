@@ -1868,12 +1868,36 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
 }
 
 // ─── FON DETAY — grafik ekranı (HisseDetay ile aynı desen) ─────────────────
-function FonDetay({ fon, onGeri, settings }: { fon: any, onGeri: () => void, settings?: any }) {
+function FonDetay({ fon: fonProp, onGeri, settings }: { fon: any, onGeri: () => void, settings?: any }) {
   const [grafik, setGrafik] = useState<any[]>([]);
   const [grafikYukl, setGrafikYukl] = useState(true);
   const [donem, setDonem] = useState<"1a"|"3a"|"1y">("1a");
   const [tooltip, setTooltip] = useState<{x:number,y:number,p:any}|null>(null);
   const [hesapAcik, setHesapAcik] = useState(false);
+
+  // "fon" iki farklı şekilde gelebilir: Yatırım Fonları Getiri İzleme listesinden
+  // (gunluk/haftalik/aylik/yillik/kategori/yonetici alan adlarıyla, tam metadata)
+  // YA DA Portföyüm'den (PortfoyKalemi — g/h/a/y kısaltmalı, kategori/yönetici/
+  // yatırımcı/büyüklük hiç yok). Portföyüm'den geldiyse (kategori eksikse)
+  // backend'den tam fon detayını çekip üzerine yazıyoruz — böylece iki
+  // ekrandan açılan Fon Detay da aynı zengin bilgiyi gösteriyor.
+  const [fonTam, setFonTam] = useState<any>(fonProp);
+  useEffect(() => {
+    setFonTam(fonProp);
+    if (!fonProp?.kod || fonProp.kategori) return; // zaten tam veri (listeden geldi)
+    fetch(`${API_BASE}/api/tefas-proxy?detay=1&kod=${encodeURIComponent(fonProp.kod)}`)
+      .then(r => r.json())
+      .then(d => { if (d?.success) setFonTam((prev:any) => ({...prev, ...d})); })
+      .catch(() => {});
+  }, [fonProp?.kod]);
+
+  const fon = fonTam;
+  const gunlukDeger = fon.gunluk ?? fon.g ?? null;
+  const haftalikDeger = fon.haftalik ?? fon.h ?? null;
+  const aylikDeger = fon.aylik ?? fon.a ?? null;
+  const yillikDeger = fon.yillik ?? fon.y ?? null;
+  const gunlukNormDeger = fon.gunlukNorm ?? gunlukDeger ?? null;
+  const takasAraligiDeger = fon.takasAraligi ?? 1;
 
   useEffect(() => {
     if (!fon?.kod) return;
@@ -1885,7 +1909,7 @@ function FonDetay({ fon, onGeri, settings }: { fon: any, onGeri: () => void, set
       .finally(() => setGrafikYukl(false));
   }, [fon?.kod, donem]);
 
-  const renk = (fon.gunluk ?? 0) >= 0 ? C.green : C.red;
+  const renk = (gunlukDeger ?? 0) >= 0 ? C.green : C.red;
   const donemEtiket = donem === "1a" ? "1 Ay" : donem === "3a" ? "3 Ay" : "1 Yıl";
   const donemGetiri = grafik.length > 1 && grafik[0]?.fiyat > 0
     ? ((grafik[grafik.length-1].fiyat / grafik[0].fiyat) - 1) * 100
@@ -1970,7 +1994,7 @@ function FonDetay({ fon, onGeri, settings }: { fon: any, onGeri: () => void, set
             <div style={{fontSize:20,fontWeight:800,color:C.text}}>
               {typeof fon.fiyat==="number" ? fon.fiyat.toLocaleString("tr-TR",{minimumFractionDigits:4,maximumFractionDigits:6}) : "—"} <span style={{fontSize:11,color:C.sub}}>₺</span>
             </div>
-            <div style={{fontSize:13,fontWeight:700,color:renk}}>{degStr(fon.gunluk)}</div>
+            <div style={{fontSize:13,fontWeight:700,color:renk}}>{degStr(gunlukDeger)}</div>
           </div>
         </div>
       </div>
@@ -2015,10 +2039,10 @@ function FonDetay({ fon, onGeri, settings }: { fon: any, onGeri: () => void, set
       <div style={{margin:"0 0 10px",padding:"0 14px"}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
           {[
-            ["Günlük", fon.gunluk],
-            ["Haftalık", fon.haftalik],
-            ["Aylık", fon.aylik],
-            ["Yıllık", fon.yillik],
+            ["Günlük", gunlukDeger],
+            ["Haftalık", haftalikDeger],
+            ["Aylık", aylikDeger],
+            ["Yıllık", yillikDeger],
           ].map(([lbl, val]: any) => (
             <div key={lbl} style={{background:C.card,borderRadius:10,padding:"10px 12px",border:`1px solid ${C.border}`}}>
               <div style={{fontSize:10,color:C.sub,marginBottom:4}}>{lbl} Değişim</div>
@@ -2053,7 +2077,7 @@ function FonDetay({ fon, onGeri, settings }: { fon: any, onGeri: () => void, set
             <div style={{display:"flex",justifyContent:"center",padding:"10px 0 0"}}>
               <div style={{width:40,height:4,borderRadius:2,background:C.border}}/>
             </div>
-            <GetiriHesaplayici fon={fon} settings={settings} onKapat={()=>setHesapAcik(false)}/>
+            <GetiriHesaplayici fon={{...fon, gunluk:gunlukDeger, gunlukNorm:gunlukNormDeger, takasAraligi:takasAraligiDeger}} settings={settings} onKapat={()=>setHesapAcik(false)}/>
           </div>
         </div>
       )}

@@ -615,4 +615,4 @@ async function fonVerisiCek(parcaNo = null) {
   };
 }
 
-export { fonVerisiCek, ŞÜPHELİ_EŞİK, PARCALAR, siraliBekle };
+export { fonVerisiCek, ŞÜPHELİ_EŞİK, PARCALAR, siraliBekle, mapFon, sonTakasGunuAralik, VAKIF_KODLARI };
