@@ -253,7 +253,13 @@ async function herkesOku(req, res) {
       });
     }
 
-    res.setHeader("Cache-Control", "s-maxage=1800, stale-while-revalidate=900");
+    // DÜZELTME (2026-07-14): s-maxage=1800 (30 dk) KALDIRILDI. Kök sorun:
+    // taze tarama KV'ye yazsa bile CDN 30-45 dk boyunca ESKİ yanıtı sunuyordu;
+    // uygulama/masaüstü/iOS web farklı CDN kopyalarına düşüp birbirinden farklı
+    // ve Fonoloji'den geride veriler gösteriyordu. Yanıt zaten KV'den okunuyor
+    // (Fonoloji'ye istek YOK), uzun CDN önbelleğinin koruduğu bir maliyet yok.
+    // 60 sn: ani trafik patlamasına karşı yeterli, tazelik kaybı ihmal edilir.
+    res.setHeader("Cache-Control", "s-maxage=60, stale-while-revalidate=120");
     return res.status(200).json({
       success: true,
       count: kayit.count,
