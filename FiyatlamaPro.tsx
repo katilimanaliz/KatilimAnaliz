@@ -1133,7 +1133,7 @@ function KarPayiOranlari({nav}:{nav:any}){
 }
 
 
-function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi }: { settings?: any; initialKod?: string | null; onInitialTuketildi?: () => void } = {}) {
+function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran: genisEkranProp }: { settings?: any; initialKod?: string | null; onInitialTuketildi?: () => void; genisEkran?: boolean } = {}) {
   // Eğer prop gelmezse localStorage'dan oku (standalone kullanım)
   const [localSettings, setLocalSettings] = useState(null);
   useEffect(()=>{
@@ -1145,6 +1145,20 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi }: { setting
     }
   },[settings]);
   const effectiveSettings = settings ?? localSettings;
+
+  // Masaüstü/geniş ekran algısı: prop verilmemişse (bağımsız kullanım)
+  // kendi başına pencere genişliğine bakar — ana uygulamadaki genisEkran
+  // eşiğiyle (1024px) birebir aynı.
+  const [localGenisEkran, setLocalGenisEkran] = useState(
+    () => typeof window !== "undefined" && window.innerWidth >= 1024
+  );
+  useEffect(() => {
+    if (genisEkranProp !== undefined) return;
+    const guncelle = () => setLocalGenisEkran(window.innerWidth >= 1024);
+    window.addEventListener("resize", guncelle);
+    return () => window.removeEventListener("resize", guncelle);
+  }, [genisEkranProp]);
+  const genisEkran = genisEkranProp ?? localGenisEkran;
 
   const [aktifPeriod, setAktifPeriod] = useState("gunluk");
   const [arama,       setArama]       = useState("");
@@ -1375,10 +1389,30 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi }: { setting
         <span style={{width:38,flexShrink:0,fontSize:9,fontWeight:700,color:FC.sub,letterSpacing:0.5}}>KOD</span>
         <span style={{flex:1,fontSize:9,fontWeight:700,color:FC.sub,letterSpacing:0.5,textAlign:"center"}}>FON ADI</span>
         <span style={{width:58,textAlign:"right",flexShrink:0,fontSize:9,fontWeight:700,color:FC.sub,letterSpacing:0.5}}>KATEGORİ</span>
-        <span onClick={()=>setSirala((ss:string)=>ss===aktifPeriod?aktifPeriod+"D":aktifPeriod)}
-          style={{width:56,textAlign:"right",flexShrink:0,fontSize:9,fontWeight:700,cursor:"pointer",color:FC.green,letterSpacing:0.5}}>
-          {periodLabel}{sirala===aktifPeriod+"D"?"↑":"↓"}
-        </span>
+        {genisEkran ? (
+          <>
+            <span onClick={()=>setSirala((ss:string)=>ss==="gunluk"?"gunlukD":"gunluk")}
+              style={{width:56,textAlign:"right",flexShrink:0,fontSize:9,fontWeight:700,cursor:"pointer",
+                color:sirala?.replace("D","")==="gunluk"?FC.green:FC.sub,letterSpacing:0.5}}>
+              GÜNLÜK{sirala==="gunluk"?"↓":sirala==="gunlukD"?"↑":""}
+            </span>
+            <span onClick={()=>setSirala((ss:string)=>ss==="aylik"?"aylikD":"aylik")}
+              style={{width:56,textAlign:"right",flexShrink:0,fontSize:9,fontWeight:700,cursor:"pointer",
+                color:sirala?.replace("D","")==="aylik"?FC.green:FC.sub,letterSpacing:0.5}}>
+              1 AY{sirala==="aylik"?"↓":sirala==="aylikD"?"↑":""}
+            </span>
+            <span onClick={()=>setSirala((ss:string)=>ss==="yillik"?"yillikD":"yillik")}
+              style={{width:56,textAlign:"right",flexShrink:0,fontSize:9,fontWeight:700,cursor:"pointer",
+                color:sirala?.replace("D","")==="yillik"?FC.green:FC.sub,letterSpacing:0.5}}>
+              1 YIL{sirala==="yillik"?"↓":sirala==="yillikD"?"↑":""}
+            </span>
+          </>
+        ) : (
+          <span onClick={()=>setSirala((ss:string)=>ss===aktifPeriod?aktifPeriod+"D":aktifPeriod)}
+            style={{width:56,textAlign:"right",flexShrink:0,fontSize:9,fontWeight:700,cursor:"pointer",color:FC.green,letterSpacing:0.5}}>
+            {periodLabel}{sirala===aktifPeriod+"D"?"↑":"↓"}
+          </span>
+        )}
         <span onClick={()=>setSirala((ss:string)=>ss==="portfoy"?"portfoyD":"portfoy")}
           style={{width:60,textAlign:"right",flexShrink:0,fontSize:9,fontWeight:700,cursor:"pointer",
             color:sirala?.replace("D","")==="portfoy"?FC.green:FC.sub,letterSpacing:0.5}}>
@@ -1427,9 +1461,23 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi }: { setting
                     <span style={{width:58,textAlign:"right",flexShrink:0,fontSize:8,color:FC.sub2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                       {(fon.kategori||"—").length>10?(fon.kategori||"").slice(0,10)+"…":(fon.kategori||"—")}
                     </span>
-                    <span style={{width:56,textAlign:"right",flexShrink:0,fontSize:11,fontWeight:700,color:pctCol(g)}}>
-                      {g==null?"—":(g>0?"+":"")+g.toFixed(aktifPeriod==="gunluk"?4:2)+"%"}
-                    </span>
+                    {genisEkran ? (
+                      <>
+                        <span style={{width:56,textAlign:"right",flexShrink:0,fontSize:11,fontWeight:700,color:pctCol(fon.gunluk)}}>
+                          {fon.gunluk==null?"—":(fon.gunluk>0?"+":"")+fon.gunluk.toFixed(4)+"%"}
+                        </span>
+                        <span style={{width:56,textAlign:"right",flexShrink:0,fontSize:11,fontWeight:700,color:pctCol(fon.aylik)}}>
+                          {fon.aylik==null?"—":(fon.aylik>0?"+":"")+fon.aylik.toFixed(2)+"%"}
+                        </span>
+                        <span style={{width:56,textAlign:"right",flexShrink:0,fontSize:11,fontWeight:700,color:pctCol(fon.yillik)}}>
+                          {fon.yillik==null?"—":(fon.yillik>0?"+":"")+fon.yillik.toFixed(2)+"%"}
+                        </span>
+                      </>
+                    ) : (
+                      <span style={{width:56,textAlign:"right",flexShrink:0,fontSize:11,fontWeight:700,color:pctCol(g)}}>
+                        {g==null?"—":(g>0?"+":"")+g.toFixed(aktifPeriod==="gunluk"?4:2)+"%"}
+                      </span>
+                    )}
                     <span style={{width:60,textAlign:"right",flexShrink:0,fontSize:10,color:FC.sub}}>{fmtPF(fon.portfoy)}</span>
                   </div>
 
@@ -14893,7 +14941,7 @@ function App(){
         {screen==="kasaOranAnalizi"&&<KasaOranAnalizi/>}
         {screen==="verimlilikAnalizi"&&<VerimlilikAnalizi s={settings} evdsMakro={evdsMakro}/>
         }
-        {screen==="fonGetiriIzleme"&&<FonGetiriIzleme settings={settings} initialKod={pendingFonSecim} onInitialTuketildi={()=>setPendingFonSecim(null)}/>}
+        {screen==="fonGetiriIzleme"&&<FonGetiriIzleme settings={settings} initialKod={pendingFonSecim} onInitialTuketildi={()=>setPendingFonSecim(null)} genisEkran={genisEkran}/>}
         {screen==="karPayiOranlari"&&<KarPayiOranlari nav={nav}/>}
         {screen==="fiyatAlarmlarim"&&<FiyatAlarmlarim/>}
         {screen==="bistHisseTarayici"&&<BistHisseTarayici initialTicker={pendingHisseSecim} onInitialTuketildi={()=>setPendingHisseSecim(null)}/>}
