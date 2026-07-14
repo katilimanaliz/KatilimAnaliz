@@ -409,6 +409,27 @@ async function fonVerisiCek(parcaNo = null) {
     }
   } catch {} // codes ucu sınıra takılırsa sessizce geç — tarama yine geçerli
 
+  // ── FAZ 2.5: 5 VAKIF FONU GARANTİLİ ÇEKİM (2026-07-14, üçüncü tur) ──────
+  // KÖK NEDEN (canlıda yakalandı): VLT arama ekranından tamamen kayboldu.
+  // Eski mimaride (13 Temmuz öncesi) bu 5 fon HER taramada doğrudan ayrı
+  // istekle çekiliyordu ("5 Vakıf + 21 kategori"); tam-tarama mimarisine
+  // geçilirken bu garanti sessizce düştü — artık varlıkları tamamen liste
+  // taramasının şansına (hangi sayfaya denk geldiklerine) kalmıştı. Kırık
+  // sayfalamada bu şans sık sık ters gidiyor. Marka görünürlüğü en yüksek
+  // 5 fon oldukları için (pazarlama materyallerinde birebir öne çıkıyorlar)
+  // maliyeti göz ardı edilebilir 5 istek karşılığında SIFIR kayıp riski
+  // sağlanıyor — bu sefer taramada zaten görülmüşlerse tekrar çekilmez.
+  for (const kod of VAKIF_KODLARI) {
+    if (hamKodSeti.has(kod)) continue; // bu taramada zaten görüldü, taze
+    if (butceDoldu()) break;
+    const { res: vRes } = await fetchTeshisli(
+      `https://fonoloji.com/v1/funds/${encodeURIComponent(kod)}`, { headers }, 2);
+    if (!vRes) continue;
+    const vd = await vRes.json().catch(() => null);
+    const vFon = vd?.fund ?? vd;
+    if (vFon && vFon.code) itemIsle(vFon);
+  }
+
   // ── FAZ 3: BİLİNEN KATILIM FONLARINI TAZELE (liste kapsayıcı DEĞİLSE) ───
   // Ekranın gösterdiği fonların tazeliği keşiften ÖNCE gelir: bütçenin %70'i
   // buraya. Dönen imleç sayesinde her tarama kaldığı yerden sürer.
@@ -515,14 +536,27 @@ async function fonVerisiCek(parcaNo = null) {
     },
   };
 
-  // eksikGorunuyor: tefas-proxy bu bayrağı "yeni veriyi şüpheyle karşıla"
-  // sinyali olarak kullanır. Kırık sayfalamada KISMİ sonuç NORMALDİR (kod
-  // bazlı merge eski fonları zaten korur) — bu yüzden yalnız liste taraması
-  // kapsayıcıyken eski eşikler uygulanır; kısmi modda sadece "hiçbir şey
-  // çekilemedi" durumu şüphelidir.
+  // eksikGorunuyor: tefas-proxy bu bayrağı "eski veriyle BİRLEŞTİR (true) /
+  // TAMAMEN DEĞİŞTİR (false)" kararı için kullanıyor (bkz. cronYaz).
+  // DÜZELTME (2026-07-14, ikinci tur — canlıda VLT'nin kaybolmasıyla
+  // yakalandı): önceki sürümde taramaKapsayici=false iken bile sadece
+  // "hiç fon bulunamadıysa" true oluyordu — yani sayfalama kırıkken bile
+  // (ki bugün HEP kırık) her kısmi tarama önceki KV verisinin TAMAMINI
+  // silip yerine o seferin bulduğu az sayıda fonu yazıyordu. Keşif fazı
+  // sadece ARANAN_TESHIS_KODLARI'nı öncelikli aradığı için VLT gibi
+  // Vakıf fonları ilk büyük sayfaya denk gelmeyince tamamen kaybolabildi
+  // (142→193 büyüme aslında bir "değiştirme" idi, "birleştirme" değil —
+  // şans eseri net büyüme oldu ama VLT gibi tekil fonlar düşebildi).
+  // ARTIK: liste taraması evreni kapsamadığı sürece (taramaKapsayici=false,
+  // ki kırık sayfalamada HER ZAMAN böyledir) eksikGorunuyor HER DURUMDA
+  // true — tefas-proxy bu yüzden HER kısmi taramada birleştirir, önceden
+  // bilinen hiçbir fon bir daha sessizce kaybolamaz. Sadece liste taraması
+  // gerçekten tüm evreni kapsadığında (taramaKapsayici=true, sayfalama
+  // düzelirse) eski eşik bazlı mantığa dönülüp doğrudan değiştirme
+  // güvenle yapılabilir.
   const eksikGorunuyor = taramaKapsayici
     ? (katilimFonlar.length < ŞÜPHELİ_EŞİK || kayipSayfalar.length > 3)
-    : katilimFonlar.length === 0;
+    : true;
 
   return {
     success: true,

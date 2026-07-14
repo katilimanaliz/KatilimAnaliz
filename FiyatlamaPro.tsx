@@ -1311,7 +1311,7 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi }: { setting
       <style>{`@keyframes fi{from{opacity:0}to{opacity:1}}`}</style>
 
       {/* Uyarı banner */}
-      <div style={{background:"#1a1f2e",borderBottom:`1px solid ${FC.border}`,padding:"6px 12px",display:"flex",alignItems:"center",gap:6}}>
+      <div style={{background:(TEMA==="acik"?FC.cardAlt:"#1a1f2e"),borderBottom:`1px solid ${FC.border}`,padding:"6px 12px",display:"flex",alignItems:"center",gap:6}}>
         <span style={{fontSize:11,color:(TEMA==="acik"?"#5A6B7C":"#8b949e")}}>⚠️</span>
         <span style={{fontSize:10,color:(TEMA==="acik"?"#5A6B7C":"#8b949e"),lineHeight:1.4}}>
           <strong style={{color:(TEMA==="acik"?"#2E4256":"#cdd9e5")}}>Yatırım tavsiyesi değildir.</strong> Tüm rakamlar TEFAS'ın halka açık verisinden üretilmiştir; kararların sorumluluğu size aittir.
@@ -1371,7 +1371,7 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi }: { setting
       </div>
 
       {/* Tablo başlığı */}
-      <div style={{display:"flex",alignItems:"center",padding:"6px 10px",background:"#0d1520",borderBottom:`1px solid ${FC.border}`,borderTop:`1px solid ${FC.border}`}}>
+      <div style={{display:"flex",alignItems:"center",padding:"6px 10px",background:FC.cardAlt,borderBottom:`1px solid ${FC.border}`,borderTop:`1px solid ${FC.border}`}}>
         <span style={{width:38,flexShrink:0,fontSize:9,fontWeight:700,color:FC.sub,letterSpacing:0.5}}>KOD</span>
         <span style={{flex:1,fontSize:9,fontWeight:700,color:FC.sub,letterSpacing:0.5,textAlign:"center"}}>FON ADI</span>
         <span style={{width:58,textAlign:"right",flexShrink:0,fontSize:9,fontWeight:700,color:FC.sub,letterSpacing:0.5}}>KATEGORİ</span>
@@ -1437,12 +1437,12 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi }: { setting
                   {sel&&(
                     <div style={s.detayWrap}>
                       {/* Tam fon adı */}
-                      <div style={{background:"#1a2535",borderRadius:10,padding:"10px 12px",marginBottom:10,border:`1px solid ${FC.border}`}}>
+                      <div style={{background:FC.card,borderRadius:10,padding:"10px 12px",marginBottom:10,border:`1px solid ${FC.border}`}}>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
                           <div style={{fontSize:11,color:FC.sub}}>Fon Adı</div>
 
                         </div>
-                        <div style={{fontSize:13,fontWeight:800,color:"#FFFFFF",lineHeight:1.4}}>{fon.ad}</div>
+                        <div style={{fontSize:13,fontWeight:800,color:FC.text,lineHeight:1.4}}>{fon.ad}</div>
 
                       </div>
                       {/* Dönem grid */}
@@ -13649,7 +13649,7 @@ function App(){
     <>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@700;800;900&display=swap');
-        html, body, #root { margin:0; padding:0; background:#0F1923; min-height:100dvh; min-height:100vh; }
+        html, body, #root { margin:0; padding:0; background:${TEMA==="acik"?"#F2F5F8":"#0F1923"}; min-height:100dvh; min-height:100vh; }
         body { overscroll-behavior-y: none; }
         input:focus, textarea:focus, select:focus {
           border-color: #5B9BD8 !important;
