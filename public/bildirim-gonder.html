@@ -179,7 +179,7 @@ async function bildirimGonder() {
       sonucEl.className = 'hata';
     }
   } catch (e) {
-    sonucEl.textContent = `❌ İstek başarısız: ${e.message}`;
+    sonucEl.textContent = `❌ İstek başarısız: ${e.name}: ${e.message}\n\nURL: https://www.katilimplus.com/api/bildirim?islem=gonder\nAnahtar uzunluğu: ${anahtar.length}`;
     sonucEl.className = 'hata';
   } finally {
     btn.disabled = false;
