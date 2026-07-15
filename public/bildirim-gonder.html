@@ -180,13 +180,13 @@ async function bildirimGonder() {
   btn.textContent = 'Gönderiliyor...';
 
   try {
-    const url = 'https://www.katilimplus.com/api/bildirim?islem=gonder&anahtar=' + encodeURIComponent(anahtar);
+    const url = 'https://www.katilimplus.com/api/bildirim?islem=gonder';
     const res = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ baslik, govde }),
+      body: JSON.stringify({ baslik, govde, anahtar }),
     });
 
     const veri = await res.json();

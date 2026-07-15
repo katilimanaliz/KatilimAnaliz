@@ -103,9 +103,12 @@ async function tekTokeneGonder(token, baslik, govde, veri) {
 async function bildirimGonder(req, res) {
   const gelenAnahtarHeader = req.headers["x-admin-key"];
   const gelenAnahtarQuery = req.query?.anahtar;
+  const gelenAnahtarBody = req.body?.anahtar;
   if (
     !process.env.ADMIN_GIZLI_ANAHTAR ||
-    (gelenAnahtarHeader !== process.env.ADMIN_GIZLI_ANAHTAR && gelenAnahtarQuery !== process.env.ADMIN_GIZLI_ANAHTAR)
+    (gelenAnahtarHeader !== process.env.ADMIN_GIZLI_ANAHTAR &&
+      gelenAnahtarQuery !== process.env.ADMIN_GIZLI_ANAHTAR &&
+      gelenAnahtarBody !== process.env.ADMIN_GIZLI_ANAHTAR)
   ) {
     res.status(401).json({ hata: "Yetkisiz istek" });
     return;
