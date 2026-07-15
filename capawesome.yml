@@ -4,22 +4,18 @@
 # Capawesome Cloud'un Trapeze entegrasyonu bu dosyadan okuyup native proje
 # dosyalarına yazıyor.
 #
-# DÜZELTME (2026-07-14, ikinci deneme): $CI_BUILD_NUMBER değişkenine dayalı
-# yaklaşım İKİ ayrı build denemesinde de Apple'a hâlâ "8" olarak gitti —
-# demek ki Capawesome bu değişkeni kendi tarafından enjekte ediyor ve
-# buradaki "default" değerimiz hiç devreye girmiyor; kendi sayaçları da bir
-# nedenle 8'de donmuş görünüyor. Değişkene güvenmek yerine sayı DOĞRUDAN
-# SABİTLENDİ — artık hiçbir dış enjeksiyona bağımlı değil, ne yazarsak o
-# gider. 8'den kesin yüksek, birkaç deneme için pay bırakan bir taban: 20.
+# 2026-07-15: Marketing version 1.3 -> 1.4 yapıldı. Build number önceki
+# denemede 20'ydi, bu sefer 21'e çıkarıldı (Apple her yeni build'de daha
+# yüksek bir build number zorunlu tutuyor, aynı sayı ile ikinci kez
+# yüklenemiyor).
 #
-# İLERİDE YENİ BUILD GÖNDERİRKEN: bu sayıyı bir öncekinden yüksek bir
-# değerle elle güncelleyip push edin (ör. bir sonraki sefer 21, 22...).
-# Capawesome'un kendi otomatik artan sayacı güvenilir çalışmaya başlarsa
-# (ör. panel ayarlarında bulunursa) o zaman $CI_BUILD_NUMBER'a geri
-# dönülebilir.
+# İLERİDE YENİ BUILD GÖNDERİRKEN: buildNumber/versionCode'u bir öncekinden
+# yüksek bir değerle elle güncelleyip push edin.
 
 platforms:
   android:
-    versionCode: 20
+    versionCode: 21
+    versionName: "1.4"
   ios:
-    buildNumber: 20
+    buildNumber: 21
+    version: "1.4"
