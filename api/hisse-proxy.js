@@ -7,20 +7,59 @@
 // Türkiye Sigorta (konvansiyonel/faizli sigorta), Anadolu Efes (bira/alkol
 // üretimi) sehven eklenmişti — çıkarıldı. Albaraka Türk (ALBRK) gerçek bir
 // katılım bankası olduğu için doğru şekilde listede kalıyor.
+//
+// 2026-07 GÜNCELLEMESİ: Kullanıcı geri bildirimiyle 4 büyük/tanınmış şirketin
+// daha sehven listede olduğu tespit edildi — bunlar sektör yasağına değil,
+// FİNANSAL KRİTERLERE (faizli iştirak/borç oranı) takılıyor, bu yüzden ilk
+// bakışta "yasaklı sektör" listesiyle fark edilmiyordu:
+//   - KCHOL (Koç Holding): bağlı ortaklığı Yapı Kredi Bankası (konvansiyonel
+//     banka) nedeniyle KAP'ta yayınlanan KAFİF formuna göre XKTUM'da değil.
+//   - SAHOL (Sabancı Holding): bağlı ortaklığı Akbank (konvansiyonel banka)
+//     nedeniyle aynı şekilde endeks dışı.
+//   - THYAO (Türk Hava Yolları): yüksek faizli borç oranı nedeniyle endekste
+//     değil.
+//   - TCELL (Turkcell): yüksek faizli borç oranı nedeniyle endekte değil.
+// NOT: Bu şirketlerin kendi bağlı ortaklıkları (örn. SAHOL'a bağlı ENJSA,
+// BRISA, TKNSA — hepsi ayrı işlem gören, kendi mali tablosu olan şirketler)
+// bu kuraldan ETKİLENMİYOR, çünkü tarama her şirketin KENDİ konsolide mali
+// tablosuna bakıyor — bu yüzden onlar listede kalmaya devam ediyor.
+//
 // NOT: Bu yine de elle tutulan/tahmini bir liste — resmi XK100 bileşen listesini
 // gerçek zamanlı veren ücretsiz bir API yok (bkz. hisse-proxy.js'deki genel not).
 // Üç ayda bir gerçek endeks bileşenleriyle karşılaştırılıp güncellenmelidir.
+// 2026-07 GÜNCELLEMESİ 4: Kullanıcının açık isteğiyle liste, Kuveyt Türk
+// Yatırım'ın katılım hisseleri sayfasıyla SIKI şekilde eşleştirildi — o
+// sayfada bulunmayan 67 şirket çıkarıldı (aralarında daha önce başka
+// kaynaklarla "uygun" olarak doğrulanmış MGROS, ULKER, ARCLK, PGSUS, TAVHL,
+// SASA, TOASO, TTRAK, SISE gibi büyük şirketler de var — kullanıcı bunu
+// bilerek onayladı). Bu Kuveyt Türk sayfası küçük/orta ölçekli ağırlıklı
+// görünüyor; büyük şirketlerin de gerçekten güncel katılım listesinde olup
+// olmadığı ayrıca resmi bir kaynakla teyit edilirse liste tekrar
+// güncellenmelidir.
 const XK100_KODLARI = new Set([
-  "ASELS","TUPRS","BIMAS","EREGL","KTLEV","GUBRF","MAGEN","ISDMR","ENJSA",
-  "SASA","KCHOL","TOASO","FROTO","TTRAK","SAHOL","SISE",
-  "ALARK","ARCLK","THYAO",
-  "PGSUS","TCELL","TAVHL","PETKM","BRISA","CCOLA","DOHOL","EKGYO","ENKAI",
-  "GESAN","SARKY","SELEC","MGROS","OTKAR","RYSAS","TKFEN","TKNSA",
-  "ULKER","YEOTK","ZOREN","AGHOL","AKSA","ATATP","BSOKE","CEMTS","DAPGM",
-  "DARDL","DCTTR","FORMT","GENIL","GENTS","GRSEL","IDGYO","KBORU","OBAMS",
-  "PAGYO","PNLSN","POLHO","RGYAS","RNPOL","SANEL","SURGY","TARKM","TUREX",
-  "TUKAS","ULAS","VRGYO","BIENY","CIMSA","DENGE","HEKTS","IHLGM","KRDMD",
-  "ASUZU","ALBRK","CLEBI",
+  "AAGYO","ACSEL","AHGAZ","AHSGY","AKFYE","AKHAN","ALBRK","ALCTL","ALFAS",
+  "ALKA","ALKIM","ALKLC","ALTNY","ALVES","ARASE","ARDYZ","ARENA","ASELS",
+  "ATAKP","ATATP","AVPGY","AYEN","BAHKM","BAKAB","BASGZ","BAYRK","BEGYO",
+  "BERA","BESTE","BIENY","BIMAS","BINBN","BINHO","BORSK","BOSSA","BRISA",
+  "BRKSN","BSOKE","BUCIM","BURCE","BURVA","BYDNR","CANTE","CATES","CELHA",
+  "CEMTS","CEMZY","CIMSA","CMBTN","COSMO","CVKMD","CWENE","DAPGM","DARDL",
+  "DCTTR","DENGE","DESPC","DGATE","DITAS","DMSAS","DNISI","DOFER","DOFRB",
+  "DOGUB","DYOBY","EBEBK","EDIP","EFOR","EGGUB","EGPRO","EKGYO","EKSUN",
+  "ENJSA","EREGL","ESCOM","EUPWR","EYGYO","FADE","FONET","FORMT","FORTE",
+  "FZLGY","GEDZA","GENIL","GENKM","GENTS","GEREL","GESAN","GLRMK","GOKNR",
+  "GOLTS","GOODY","GRSEL","GRTHO","GUBRF","GUNDG","HATSN","HKTM","HOROZ",
+  "HRKET","IDGYO","IHEVA","IHLAS","IHLGM","IHYAY","IMASM","INGRM","INTEM",
+  "ISDMR","IZFAS","JANTS","KARSN","KATMR","KBORU","KCAER","KLSER","KMPUR",
+  "KNFRT","KOCMT","KONYA","KOPOL","KOTON","KRDMA","KRDMB","KRDMD","KRGYO",
+  "KRONT","KRSTL","KRVGD","KTLEV","KUTPO","KZBGY","LKMNH","LMKDC","LOGO",
+  "LXGYO","MAGEN","MARBL","MAVI","MCARD","MEGMT","MEKAG","MERKO","MOPAS",
+  "MPARK","NETAS","NETCD","NTGAZ","OBAMS","ONCSM","ORGE","OSTIM","OZATD",
+  "OZGYO","OZRDN","OZYSR","PAGYO","PARSN","PASEU","PENGD","PENTA","PETKM",
+  "PKART","PNSUT","POLHO","PRKME","QUAGR","RALYH","RGYAS","RODRG","SAFKR",
+  "SAMAT","SANEL","SANKO","SARKY","SAYAS","SDTTR","SEKUR","SELEC","SILVR",
+  "SMART","SNGYO","SOKE","SRVGY","SURGY","TARKM","TKFEN","TKNSA","TMPOL",
+  "TUCLK","TUKAS","TUPRS","TUREX","TURGG","UCAYM","UFUK","ULUSE","USAK",
+  "VAKKO","VANGD","YATAS","YEOTK","YIGIT","YKSLN","YUNSA","ZERGY",
 ]);
 
 // ─── STATİK ŞİRKET İSİM HARİTASI ────────────────────────────────────────────
