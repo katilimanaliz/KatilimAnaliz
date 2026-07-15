@@ -14185,16 +14185,14 @@ function PortfoyWidget({liste, gizli, onGizliToggle, onDetay, onEkle, onSil, onG
 
       <div style={{height:1,background:C.border}}/>
 
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"9px 16px 3px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"9px 16px 1px"}}>
         <span style={{fontSize:9.5,fontWeight:700,color:C.sub2,textTransform:"uppercase",letterSpacing:0.5}}>Ürünler ({aktifListe.length})</span>
-        {sekme==="portfoy" && (
-          <div onClick={()=>onDetay(undefined,"portfoy")} style={{textAlign:"right",cursor:"pointer"}}>
-            <div style={{fontSize:11,fontWeight:700,color:C.blue,whiteSpace:"nowrap"}}>Tümü ›</div>
-            <div style={{fontSize:10.5,fontWeight:800,color:pozitif?C.green:C.red,marginTop:2}}>
-              Günlük {pozitif?"+":""}{toplamYuzde.toFixed(2)}%
-            </div>
+        <div onClick={()=>onDetay(undefined,sekme)} style={{textAlign:"right",cursor:"pointer"}}>
+          <div style={{fontSize:11,fontWeight:700,color:C.blue,whiteSpace:"nowrap"}}>Tümü ›</div>
+          <div style={{fontSize:9.5,fontWeight:700,color:C.sub2,marginTop:1}}>
+            Günlük %
           </div>
-        )}
+        </div>
       </div>
 
       {aktifListe.length===0 ? (
