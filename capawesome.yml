@@ -1,21 +1,11 @@
-# capawesome.yml
-#
-# 2026-07-15 (dorduncu duzeltme): buildNumber 30 -> 31. 30 zaten Internal
-# testing track'ine yuklenmisti (Play, versionCode'un uygulama genelinde
-# benzersiz olmasini istiyor, track'e ozel degil) -- Closed testing -
-# Alpha'ya aynı build 30 ile yukleme denenince "sürüm kodu daha önce
-# kullanıldı" hatası alindi. Bundan sonra her yeni build icin bu numarayi
-# bir onceki BASARIYLA herhangi bir track'e yuklenen numaradan yuksek
-# tutmak gerekiyor.
-
 platforms:
   android:
     versionCode: 31
-    versionName: "1.4"
+    versionName: "1.4.1"
   ios:
     targets:
       App:
-        version: "1.4"
+        version: "1.4.1"
         buildNumber: 31
         entitlements:
           - aps-environment: production
