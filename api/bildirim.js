@@ -129,6 +129,7 @@ async function bildirimGonder(req, res) {
   const GRUP_BOYU = 500;
   let gonderilenToplam = 0;
   let gecersizTokenlar = [];
+  let ornekHatalar = [];
 
   for (let i = 0; i < tokenlar.length; i += GRUP_BOYU) {
     const grup = tokenlar.slice(i, i + GRUP_BOYU);
@@ -145,6 +146,10 @@ async function bildirimGonder(req, res) {
     sonuc.responses.forEach((r, idx) => {
       if (!r.success) {
         const kod = r.error?.code || "";
+        console.error("FCM gonderim hatasi:", kod, "-", r.error?.message, "- token(ilk10):", grup[idx]?.slice(0, 10));
+        if (ornekHatalar.length < 5) {
+          ornekHatalar.push({ kod, mesaj: r.error?.message || null });
+        }
         if (
           kod.includes("registration-token-not-registered") ||
           kod.includes("invalid-argument")
@@ -165,6 +170,7 @@ async function bildirimGonder(req, res) {
     hedefTokenSayisi: tokenlar.length,
     basariylaGonderilen: gonderilenToplam,
     temizlenenGecersizToken: gecersizTokenlar.length,
+    ornekHatalar,
   });
 }
 
