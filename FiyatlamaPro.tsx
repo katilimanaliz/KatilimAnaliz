@@ -15101,6 +15101,15 @@ function App(){
         await PN.register();
       } catch (e) {
         console.error("Push notification kayıt hatası:", e);
+        // DÜZELTME (2026-07-15): bu catch bloğu daha önce hatayı sadece konsola
+        // yazıyordu — kullanıcı Safari uzaktan hata ayıklama olmadan hiçbir
+        // zaman gerçek native hatayı göremiyordu, hep "izin gerekiyor" gibi
+        // yanıltıcı genel mesajla karşılaşıyordu. Artık gerçek hata da
+        // kaydedilip alarm ekranında görünür hale geliyor.
+        try{
+          const mesaj = (e as any)?.message || String(e) || "bilinmeyen hata (dış catch)";
+          localStorage.setItem("kp_push_hata", mesaj);
+        }catch{}
       }
     })();
 
