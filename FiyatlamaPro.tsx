@@ -13741,10 +13741,26 @@ async function portfoyTarihselFiyat(k: PortfoyKalemi, hedefIso: string): Promise
   } catch { return null; }
 }
 
+// Bazı eski kayıtlarda (bir önceki sürümdeki hatadan dolayı) alış tarihi
+// ISO (YYYY-MM-DD) yerine "GG.AA.YYYY" olarak saklanmış olabilir — bu, tarih
+// karşılaştırmalarını (sıralama, "N gün önce" vb.) bozar. Nerede tarih
+// okunuyorsa önce bu normalizasyondan geçirilir.
+function portfoyTarihISO(tarih: string): string {
+  if (!tarih) return tarih;
+  const m = tarih.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+  return tarih;
+}
+function portfoyTarihGoster(tarih: string): string {
+  const d = new Date(portfoyTarihISO(tarih));
+  if (isNaN(d.getTime())) return tarih || "";
+  return d.toLocaleDateString("tr-TR");
+}
 // Bir kalemin en eski alış (lot) tarihi.
 function portfoyKalemIlkAlisTarihi(k: PortfoyKalemi): string {
   const lotlar = k.alisKalemleri && k.alisKalemleri.length>0 ? k.alisKalemleri : [{tarih:k.alis!.tarih}];
-  return lotlar.reduce((en,l)=> l.tarih < en ? l.tarih : en, lotlar[0].tarih);
+  const isoListe = lotlar.map(l=>portfoyTarihISO(l.tarih));
+  return isoListe.reduce((en,t)=> t<en?t:en, isoListe[0]);
 }
 
 type PortfoyKZSonuc = {
@@ -13828,7 +13844,7 @@ function PortfoyKarZararModal({liste, onClose}:{liste: PortfoyKalemi[]; onClose:
   const PERIYOTLAR: {key:PortfoyKZPeriyot; label:string}[] = [
     {key:"1G",label:"1G"},{key:"1A",label:"1A"},{key:"3A",label:"3A"},{key:"6A",label:"6A"},{key:"1Y",label:"1Y"},{key:"baslangic",label:"Başlangıç"}
   ];
-  const fmtTarih = (iso:string)=> iso ? new Date(iso).toLocaleDateString("tr-TR",{day:"2-digit",month:"short",year:"numeric"}) : "";
+  const fmtTarih = (iso:string)=> iso ? new Date(portfoyTarihISO(iso)).toLocaleDateString("tr-TR",{day:"2-digit",month:"short",year:"numeric"}) : "";
 
   return (
     <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.7)",zIndex:600,display:"flex",alignItems:"flex-end",...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}}>
@@ -14550,6 +14566,8 @@ function PortfoyEkleModal({onKapat, onEklendi}:{onKapat:()=>void; onEklendi:(k:P
               </>
             ) : (
               <>
+                <input type="date" value={alisTarihInput} onChange={e=>setAlisTarihInput(e.target.value)} max={new Date().toISOString().slice(0,10)} style={{width:"100%",boxSizing:"border-box",background:WA(0.04),border:`1px solid ${WA(0.08)}`,borderRadius:10,padding:"10px 12px",color:C.text,fontSize:14,fontFamily:"inherit",marginBottom:8}}/>
+                <div style={{fontSize:10,color:C.sub2,marginBottom:10}}>Boş bırakırsan bugünün tarihi kullanılır.</div>
                 <div style={{display:"flex",alignItems:"center",background:WA(0.04),border:`1px solid ${WA(0.08)}`,borderRadius:10,padding:"10px 12px",marginBottom:6}}>
                   <input value={alisFiyatInput} onChange={e=>setAlisFiyatInput(e.target.value)} placeholder="0" inputMode="decimal" style={{flex:1,background:"none",border:"none",outline:"none",color:C.text,fontSize:16,fontWeight:700,fontFamily:"inherit"}}/>
                   <span style={{fontSize:12,color:C.sub}}>₺ / {secilenEnstruman.birim==="lot"?"hisse":secilenEnstruman.birim}</span>
@@ -14560,7 +14578,11 @@ function PortfoyEkleModal({onKapat, onEklendi}:{onKapat:()=>void; onEklendi:(k:P
                 <button disabled={!alisFiyatInput} onClick={()=>{
                   const f = parseFloat(alisFiyatInput.replace(",","."));
                   if (isNaN(f)) return;
-                  kaydetVeKapat({tarih:new Date().toLocaleDateString("tr-TR"), fiyat:f, kaynak:"elle"});
+                  // ISO (YYYY-MM-DD) formatında saklanır — kâr/zarar hesaplarında
+                  // tarih karşılaştırması (sıralama, "N gün önce" vb.) buna dayanıyor.
+                  // Kullanıcı "Alış tarihini gir"den buraya (otomatik bulunamadığı
+                  // için) düştüyse zaten girdiği tarih (alisTarihInput) korunur.
+                  kaydetVeKapat({tarih: alisTarihInput || new Date().toISOString().slice(0,10), fiyat:f, kaynak:"elle"});
                 }} style={{width:"100%",background:C.blue,color:C.bg,border:"none",borderRadius:10,padding:"11px 0",fontSize:13,fontWeight:800,cursor:alisFiyatInput?"pointer":"default",opacity:alisFiyatInput?1:0.5,fontFamily:"inherit"}}>
                   Portföyüme ekle
                 </button>
@@ -14770,7 +14792,7 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onKalem
                     <Calendar size={11}/>
                     <span>
                       {(k.alisKalemleri?.length||0)>1 ? "Ort. maliyet " : ""}
-                      {(k.alisKalemleri?.length||0)>1 ? "" : `${k.alis!.tarih} · `}
+                      {(k.alisKalemleri?.length||0)>1 ? "" : `${portfoyTarihGoster(k.alis!.tarih)} · `}
                       {gizli?"₺••••":portfoyFmtDeger(k.alis!.fiyat, k)}{k.tur!=="fon"?`/${k.birim==="lot"?"hisse":k.birim}`:""}
                     </span>
                     {(k.alisKalemleri?.length||0)>1 ? (
@@ -14793,7 +14815,7 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onKalem
                   <div style={{marginTop:6,display:"flex",flexDirection:"column",gap:3}}>
                     {k.alisKalemleri!.map((l,li)=>(
                       <div key={li} style={{display:"flex",justifyContent:"space-between",fontSize:9.5,color:C.sub2}}>
-                        <span>{l.tarih} · {gizli?"••":l.miktar.toLocaleString("tr-TR")} {k.birim==="lot"?"hisse":k.birim}</span>
+                        <span>{portfoyTarihGoster(l.tarih)} · {gizli?"••":l.miktar.toLocaleString("tr-TR")} {k.birim==="lot"?"hisse":k.birim}</span>
                         <span>{gizli?"₺••••":portfoyFmtDeger(l.fiyat, k)}{k.tur!=="fon"?`/${k.birim==="lot"?"hisse":k.birim}`:""}</span>
                       </div>
                     ))}
