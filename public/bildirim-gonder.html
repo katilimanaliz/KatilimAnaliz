@@ -131,7 +131,15 @@ function anahtarGoster() {
 }
 
 async function bildirimGonder() {
-  const anahtar = document.getElementById('anahtar').value.trim();
+  let anahtar = document.getElementById('anahtar').value.trim();
+  // iOS klavyesi/otomatik tamamlama görünmez karakter (satır sonu, kontrol
+  // karakteri, akıllı tırnak vb.) ekleyebiliyor; bunlar HTTP header'da
+  // "The string did not match the expected pattern" hatasına yol açıyor.
+  const temizAnahtar = anahtar.replace(/[^\x20-\x7E]/g, '');
+  if (temizAnahtar !== anahtar) {
+    console.warn('Admin anahtarında görünmez karakter temizlendi.');
+  }
+  anahtar = temizAnahtar;
   const baslik = document.getElementById('baslik').value.trim();
   const govde = document.getElementById('govde').value.trim();
   const sonucEl = document.getElementById('sonuc');
@@ -145,6 +153,8 @@ async function bildirimGonder() {
     sonucEl.className = 'hata';
     return;
   }
+
+  console.log('Admin anahtarı uzunluğu (debug):', anahtar.length);
 
   btn.disabled = true;
   btn.textContent = 'Gönderiliyor...';
