@@ -14098,6 +14098,16 @@ function PortfoyWidget({liste, gizli, onGizliToggle, onDetay, onEkle, onSil, onG
   const pozitif = toplamKatki>=0;
   const [acikSwipeId, setAcikSwipeId] = useState<string|null>(null);
 
+  // Takip Listem'de ₺ değeri yok (miktar girilmedi), o yüzden "günlük"
+  // burada kalemlerin kendi günlük % değişimlerinin ağırlıksız ortalaması —
+  // Portföyüm'deki ₺'ye göre ağırlıklı günlük yüzdeyle karıştırılmasın diye
+  // ayrı ve açık şekilde etiketleniyor ("Ort. günlük").
+  const takipGunlukOrt = useMemo(()=>{
+    const degerler = takipListesi.map(k=>k.g).filter((v):v is number=>v!=null);
+    if (degerler.length===0) return null;
+    return degerler.reduce((a,b)=>a+b,0)/degerler.length;
+  },[takipListesi]);
+
   if (liste.length===0) {
     return (
       <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"24px 18px",textAlign:"center",marginBottom:26}}>
@@ -14146,29 +14156,45 @@ function PortfoyWidget({liste, gizli, onGizliToggle, onDetay, onEkle, onSil, onG
             </div>
             <div onClick={()=>onDetay(undefined,"portfoy")} style={{textAlign:"right",cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
               <div>
-                <div style={{fontSize:10,fontWeight:700,color:C.sub,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4,textAlign:"right"}}>Günlük</div>
-                <div style={{fontSize:12,fontWeight:800,color:pozitif?C.green:C.red,background:pozitif?C.greenLight:"rgba(248,113,113,0.15)",borderRadius:8,padding:"4px 8px",marginBottom:4}}>
+                <div style={{fontSize:10,fontWeight:700,color:C.sub,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4,textAlign:"right"}}>Günlük %</div>
+                <div style={{fontSize:12,fontWeight:800,color:pozitif?C.green:C.red,background:pozitif?C.greenLight:"rgba(248,113,113,0.15)",borderRadius:8,padding:"4px 8px"}}>
                   {pozitif?"+":""}{toplamYuzde.toFixed(2)}%
-                </div>
-                <div style={{fontSize:11,color:C.sub,textAlign:"right"}}>
-                  Bugün {pozitif?"+":""}{gizli?"₺••••":portfoyFmtTL(toplamKatki)}
                 </div>
               </div>
               <span style={{fontSize:16,color:C.sub2}}>›</span>
             </div>
           </div>
         ) : (
-          <div style={{paddingBottom:14}}>
-            <div style={{fontSize:11,color:C.sub}}>Miktar/alış bilgisi girilmeden eklenen, sadece fiyatı takip edilen ürünler.</div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",paddingBottom:14}}>
+            <div>
+              <div style={{fontSize:10,fontWeight:700,color:C.sub,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Ort. Günlük Değişim</div>
+              <div style={{fontSize:24,fontWeight:800,color:takipGunlukOrt==null?C.text:(takipGunlukOrt>=0?C.green:C.red),fontVariantNumeric:"tabular-nums"}}>
+                {takipGunlukOrt==null ? "—" : `${takipGunlukOrt>=0?"+":""}${takipGunlukOrt.toFixed(2)}%`}
+              </div>
+              <div style={{fontSize:10.5,color:C.sub2,marginTop:4}}>
+                {takipListesi.length} üründeki fiyat değişiminin ortalaması
+              </div>
+            </div>
+            <div onClick={()=>onDetay(undefined,"takip")} style={{cursor:"pointer",display:"flex",alignItems:"center",gap:2,flexShrink:0}}>
+              <span style={{fontSize:11,fontWeight:700,color:C.blue,whiteSpace:"nowrap"}}>Tümü</span>
+              <span style={{fontSize:16,color:C.sub2}}>›</span>
+            </div>
           </div>
         )}
       </div>
 
       <div style={{height:1,background:C.border}}/>
 
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 16px 3px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"9px 16px 3px"}}>
         <span style={{fontSize:9.5,fontWeight:700,color:C.sub2,textTransform:"uppercase",letterSpacing:0.5}}>Ürünler ({aktifListe.length})</span>
-        <span onClick={()=>onDetay(undefined,sekme)} style={{fontSize:11,fontWeight:700,color:C.blue,cursor:"pointer"}}>Tümü ›</span>
+        {sekme==="portfoy" && (
+          <div onClick={()=>onDetay(undefined,"portfoy")} style={{textAlign:"right",cursor:"pointer"}}>
+            <div style={{fontSize:11,fontWeight:700,color:C.blue,whiteSpace:"nowrap"}}>Tümü ›</div>
+            <div style={{fontSize:10.5,fontWeight:800,color:pozitif?C.green:C.red,marginTop:2}}>
+              Günlük {pozitif?"+":""}{toplamYuzde.toFixed(2)}%
+            </div>
+          </div>
+        )}
       </div>
 
       {aktifListe.length===0 ? (
