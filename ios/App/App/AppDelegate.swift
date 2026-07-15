@@ -46,4 +46,20 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         return ApplicationDelegateProxy.shared.application(application, continue: userActivity, restorationHandler: restorationHandler)
     }
 
+    // DÜZELTME (2026-07-16) — KÖK SEBEP: Bu iki metod tamamen eksikti. iOS,
+    // push token'ı (veya hatasını) uygulamaya bu delegate metodları üzerinden
+    // bildirir. Bunlar olmadan @capacitor/push-notifications eklentisi
+    // Apple'dan gelen yanıtı HİÇBİR ZAMAN alamıyordu — register() çağrısı
+    // "döndü" ama ne 'registration' ne 'registrationError' JS event'i asla
+    // tetiklenmiyordu, çünkü native taraf bunu Capacitor köprüsüne hiç
+    // iletmiyordu. Entitlement, provisioning profile ve APNs key hepsi zaten
+    // doğruydu — eksik olan sadece bu standart Capacitor bağlantı koduydu.
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        NotificationCenter.default.post(name: .capacitorDidRegisterForRemoteNotifications, object: deviceToken)
+    }
+
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        NotificationCenter.default.post(name: .capacitorDidFailToRegisterForRemoteNotifications, object: error)
+    }
+
 }
