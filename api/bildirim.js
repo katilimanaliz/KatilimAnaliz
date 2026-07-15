@@ -12,12 +12,19 @@
 //     body: JSON.stringify({ token: token.value, platform: ... }),
 //   });
 //
-// ── 2) Bildirim gönderme (sadece admin, x-admin-key gerekli) ──
+// ── 2) Bildirim gönderme (sadece admin, x-admin-key veya ?anahtar= gerekli) ──
 //
 //   curl -X POST "https://www.katilimplus.com/api/bildirim?islem=gonder" \
 //     -H "Content-Type: application/json" \
 //     -H "x-admin-key: GIZLI_ANAHTARINIZ" \
 //     -d '{"baslik":"Yeni Kur!", "govde":"USD/TRY güncellendi."}'
+//
+//   NOT (2026-07): Bazı tarayıcı ortamlarında (özellikle Safari Gizli
+//   Sekme + Gelişmiş İzleme Koruması) özel HTTP header'lar ("x-admin-key"
+//   gibi) fetch() içinde "SyntaxError: The string did not match the
+//   expected pattern" hatasına yol açabiliyor. Bu yüzden admin anahtarı
+//   HEM header HEM query param (?anahtar=) ile kabul ediliyor — tıpkı
+//   alarm-kontrol uç noktasındaki gibi.
 //
 // ── 3) FİYAT ALARMLARI (2026-07 eklendi) ──
 //
@@ -94,8 +101,12 @@ async function tekTokeneGonder(token, baslik, govde, veri) {
 }
 
 async function bildirimGonder(req, res) {
-  const gelenAnahtar = req.headers["x-admin-key"];
-  if (!process.env.ADMIN_GIZLI_ANAHTAR || gelenAnahtar !== process.env.ADMIN_GIZLI_ANAHTAR) {
+  const gelenAnahtarHeader = req.headers["x-admin-key"];
+  const gelenAnahtarQuery = req.query?.anahtar;
+  if (
+    !process.env.ADMIN_GIZLI_ANAHTAR ||
+    (gelenAnahtarHeader !== process.env.ADMIN_GIZLI_ANAHTAR && gelenAnahtarQuery !== process.env.ADMIN_GIZLI_ANAHTAR)
+  ) {
     res.status(401).json({ hata: "Yetkisiz istek" });
     return;
   }
