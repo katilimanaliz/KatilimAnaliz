@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Katılım Plus - Bildirim Gönder</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+    margin: 0;
+    padding: 24px 16px;
+    min-height: 100vh;
+  }
+  .card {
+    max-width: 480px;
+    margin: 0 auto;
+    background: #1e293b;
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+  }
+  h1 {
+    font-size: 20px;
+    margin: 0 0 4px 0;
+    color: #f8fafc;
+  }
+  .subtitle {
+    font-size: 13px;
+    color: #94a3b8;
+    margin: 0 0 24px 0;
+  }
+  label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: #cbd5e1;
+    margin-bottom: 6px;
+    margin-top: 16px;
+  }
+  input, textarea {
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid #334155;
+    background: #0f172a;
+    color: #f8fafc;
+    font-size: 15px;
+    font-family: inherit;
+  }
+  input:focus, textarea:focus {
+    outline: none;
+    border-color: #3b82f6;
+  }
+  textarea {
+    resize: vertical;
+    min-height: 80px;
+  }
+  button {
+    width: 100%;
+    margin-top: 24px;
+    padding: 14px;
+    border-radius: 10px;
+    border: none;
+    background: #2563eb;
+    color: white;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:active { background: #1d4ed8; }
+  button:disabled { background: #475569; cursor: not-allowed; }
+  #sonuc {
+    margin-top: 16px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    display: none;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  #sonuc.basarili { display: block; background: #064e3b; color: #6ee7b7; }
+  #sonuc.hata { display: block; background: #7f1d1d; color: #fca5a5; }
+  .not {
+    font-size: 12px;
+    color: #64748b;
+    margin-top: 20px;
+    line-height: 1.5;
+  }
+  .toggle-key {
+    font-size: 12px;
+    color: #60a5fa;
+    text-align: right;
+    margin-top: 6px;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>📣 Bildirim Gönder</h1>
+    <p class="subtitle">Katılım Plus'ta kayıtlı TÜM cihazlara gider</p>
+
+    <label for="anahtar">Admin Anahtarı</label>
+    <input type="password" id="anahtar" placeholder="x-admin-key değeriniz" autocomplete="off">
+    <div class="toggle-key" onclick="anahtarGoster()">👁 göster/gizle</div>
+
+    <label for="baslik">Başlık</label>
+    <input type="text" id="baslik" placeholder="Örn: Yeni Kur!">
+
+    <label for="govde">Mesaj</label>
+    <textarea id="govde" placeholder="Örn: USD/TRY güncellendi."></textarea>
+
+    <button id="gonderBtn" onclick="bildirimGonder()">Gönder</button>
+
+    <div id="sonuc"></div>
+
+    <p class="not">
+      Bu form <code>https://www.katilimplus.com/api/bildirim?islem=gonder</code>
+      uç noktasını çağırır. Admin anahtarınız hiçbir yere kaydedilmez,
+      sadece bu istekte kullanılır.
+    </p>
+  </div>
+
+<script>
+function anahtarGoster() {
+  const el = document.getElementById('anahtar');
+  el.type = el.type === 'password' ? 'text' : 'password';
+}
+
+async function bildirimGonder() {
+  const anahtar = document.getElementById('anahtar').value.trim();
+  const baslik = document.getElementById('baslik').value.trim();
+  const govde = document.getElementById('govde').value.trim();
+  const sonucEl = document.getElementById('sonuc');
+  const btn = document.getElementById('gonderBtn');
+
+  sonucEl.className = '';
+  sonucEl.removeAttribute('style');
+
+  if (!anahtar || !baslik || !govde) {
+    sonucEl.textContent = 'Lütfen tüm alanları doldurun.';
+    sonucEl.className = 'hata';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Gönderiliyor...';
+
+  try {
+    const res = await fetch('https://www.katilimplus.com/api/bildirim?islem=gonder', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-key': anahtar,
+      },
+      body: JSON.stringify({ baslik, govde }),
+    });
+
+    const veri = await res.json();
+
+    if (res.ok && veri.basarili) {
+      sonucEl.textContent = `✅ Gönderildi!\nHedef cihaz: ${veri.hedefTokenSayisi}\nBaşarılı: ${veri.basariylaGonderilen}\nTemizlenen geçersiz token: ${veri.temizlenenGecersizToken}`;
+      sonucEl.className = 'basarili';
+    } else {
+      sonucEl.textContent = `❌ Hata: ${veri.hata || 'Bilinmeyen hata'}`;
+      sonucEl.className = 'hata';
+    }
+  } catch (e) {
+    sonucEl.textContent = `❌ İstek başarısız: ${e.message}`;
+    sonucEl.className = 'hata';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Gönder';
+  }
+}
+</script>
+</body>
+</html>
