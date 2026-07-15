@@ -1503,15 +1503,15 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
                           {fon.gunluk==null?"—":(fon.gunluk>0?"+":"")+fon.gunluk.toFixed(4)+"%"}
                         </span>
                         <span style={{width:56,textAlign:"right",flexShrink:0,fontSize:11,fontWeight:700,color:pctCol(fon.aylik)}}>
-                          {fon.aylik==null?"—":(fon.aylik>0?"+":"")+fon.aylik.toFixed(2)+"%"}
+                          {fon.aylik==null?"—":(fon.aylik>0?"+":"")+fon.aylik.toFixed(4)+"%"}
                         </span>
                         <span style={{width:56,textAlign:"right",flexShrink:0,fontSize:11,fontWeight:700,color:pctCol(fon.yillik)}}>
-                          {fon.yillik==null?"—":(fon.yillik>0?"+":"")+fon.yillik.toFixed(2)+"%"}
+                          {fon.yillik==null?"—":(fon.yillik>0?"+":"")+fon.yillik.toFixed(4)+"%"}
                         </span>
                       </>
                     ) : (
                       <span style={{width:56,textAlign:"right",flexShrink:0,fontSize:11,fontWeight:700,color:pctCol(g)}}>
-                        {g==null?"—":(g>0?"+":"")+g.toFixed(aktifPeriod==="gunluk"?4:2)+"%"}
+                        {g==null?"—":(g>0?"+":"")+g.toFixed(4)+"%"}
                       </span>
                     )}
                     <span style={{width:60,textAlign:"right",flexShrink:0,fontSize:10,color:FC.sub}}>{fmtPF(fon.portfoy)}</span>
@@ -13673,8 +13673,15 @@ function portfoyFmtTL(n: number): string {
 // portfoyFmtTL'nin 0 ondalıklı formatı bunları "₺0"/"₺3" gibi anlamsız
 // yuvarlıyordu. Fon fiyatı gösterilirken bunun yerine bu kullanılmalı.
 function portfoyFmtFiyat(n: number, tur: PortfoyKalemi["tur"]): string {
-  if (tur === "fon") return n.toLocaleString("tr-TR", { minimumFractionDigits: 4, maximumFractionDigits: 6 }) + " ₺";
+  if (tur === "fon") return n.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " ₺";
   return portfoyFmtTL(n);
+}
+// Döviz kalemlerinin sembolü Yahoo Finance formatı olan "USDTRY=X" şeklinde
+// saklanıyor (API çağrıları için gerekli) ama kullanıcıya "USDTRY" olarak
+// gösterilmeli — "=X" sadece dahili bir teknik detay.
+function portfoyKodGoster(k: PortfoyKalemi): string {
+  if (k.tur === "emtia") return k.ad;
+  return k.kod.replace(/=X$/, "");
 }
 // Her kalemin KENDİ para birimini (paraOnek) ve ondalık hassasiyetini (dec)
 // kullanan genel formatlayıcı — emtia/kripto/döviz gibi USD veya başka para
@@ -13769,7 +13776,7 @@ function PortfoyWidgetSatir({k, gizli, sonSatirMi, onTikla, onSil, acik, onAcikD
       >
         <div style={{flex:1,minWidth:0}}>
           <div style={{display:"flex",alignItems:"center",gap:6}}>
-            <span style={{fontSize:12.5,fontWeight:700,color:C.text}}>{k.tur==="emtia"?k.ad:k.kod}</span>
+            <span style={{fontSize:12.5,fontWeight:700,color:C.text}}>{portfoyKodGoster(k)}</span>
             <span style={{fontSize:8.5,fontWeight:700,color:meta.renk,background:meta.bg,borderRadius:4,padding:"1px 5px"}}>{meta.label}</span>
             {izlemeModu && <span style={{fontSize:8.5,fontWeight:700,color:C.sub2,background:WA(0.06),borderRadius:4,padding:"1px 5px"}}>İzleniyor</span>}
           </div>
@@ -14423,7 +14430,7 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onKalem
                 {sekme==="takip" ? (
                   <>
                     <div style={{display:"flex",alignItems:"center",gap:6}}>
-                      <span style={{fontSize:13,fontWeight:800,color:C.text}}>{k.tur==="emtia"?k.ad:k.kod}</span>
+                      <span style={{fontSize:13,fontWeight:800,color:C.text}}>{portfoyKodGoster(k)}</span>
                       <span style={{fontSize:8.5,fontWeight:700,color:meta.renk,background:meta.bg,borderRadius:4,padding:"1px 5px"}}>{meta.label}</span>
                       <span style={{flex:1}}/>
                       <span style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:"tabular-nums"}}>{k.fiyat==null?"—":(gizli?"₺••••":portfoyFmtDeger(k.fiyat||0, k))}</span>
@@ -14433,7 +14440,7 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onKalem
                 ) : (
                   <>
                     <div style={{display:"flex",alignItems:"center",gap:6}}>
-                      <span style={{fontSize:13,fontWeight:800,color:C.text}}>{k.tur==="emtia"?k.ad:k.kod}</span>
+                      <span style={{fontSize:13,fontWeight:800,color:C.text}}>{portfoyKodGoster(k)}</span>
                       <span style={{fontSize:8.5,fontWeight:700,color:meta.renk,background:meta.bg,borderRadius:4,padding:"1px 5px"}}>{meta.label}</span>
                     </div>
                     {k.tur!=="emtia" && <div style={{fontSize:10.5,color:C.sub2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{k.ad}</div>}
