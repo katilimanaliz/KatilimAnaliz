@@ -12804,7 +12804,7 @@ function HakkindaModal({onClose}){
             <p style={{margin:"0 0 4px",fontSize:12,fontWeight:800,color:WA(0.8)}}>📋 Yasal Uyarı</p>
             <p style={{margin:0,fontSize:11,color:WA(0.5),lineHeight:1.5}}>Bu uygulamadaki hesaplamalar bilgilendirme amaçlıdır; kesin teklif, resmi belge veya hukuki taahhüt niteliği taşımaz ve hukuki sonuç doğurmaz. Nihai oran ve koşullar için bankanız ile iletişime geçiniz.</p>
           </div>
-          <p style={{margin:"16px 0 0",fontSize:10,color:"#B0B8C8",textAlign:"center"}}>Katılım Plus © 2026 — Tüm hakları saklıdır.</p>
+          <p style={{margin:"16px 0 0",fontSize:10,color:WA(0.4),textAlign:"center"}}>Katılım Plus © 2026 — Tüm hakları saklıdır.</p>
         </div>
       </div>
     </div>
@@ -15025,9 +15025,39 @@ function App(){
     // Capacitor bridge o an henüz hazır değilse yanlışlıkla false kilitlenip
     // kalabilir. Bu yüzden burada tekrar, çalışma anında kontrol ediyoruz.
     const gercekIsNative = (window as any).Capacitor?.isNativePlatform?.() ?? false;
-    if(!gercekIsNative) return;
+
+    // DÜZELTME (2026-07-15): İlerleme izleme sistemi. Önceki sürümlerde süreç
+    // ne token ne hata üretmeden sessizce takılıyordu — hangi adımda
+    // kaldığını görmenin hiçbir yolu yoktu. Artık her adımdan HEMEN ÖNCE
+    // "şu an buradayım" bilgisini kp_push_hata'ya yazıyoruz; bir sonraki
+    // başarılı adım bunun üzerine yazıyor. Süreç bir yerde takılırsa, alarm
+    // ekranında kalan son "İLERLEME: ..." mesajı TAM olarak nerede
+    // durduğumuzu gösterir.
+    const ilerleme = (adim: string) => {
+      try{ localStorage.setItem("kp_push_hata", `İLERLEME: ${adim} (${new Date().toLocaleTimeString("tr-TR")})`); }catch{}
+    };
+
+    if(!gercekIsNative){
+      ilerleme("native ortam algılanamadı (Capacitor.isNativePlatform()=false) — kayıt hiç başlamadı");
+      return;
+    }
+    ilerleme("native algılandı, plugin yükleniyor");
 
     let PN: any = null; // cleanup'ta erişebilmek için dışarıda tutuluyor
+    let tamamlandi = false; // timeout sonrası gecikmeli event'lerin ilerleme yazmasını önlemek için
+
+    // Süreç 20 saniye içinde ne token ne hata üretmezse (register() çağrısı
+    // native tarafta hiç yanıt vermiyorsa), bunu açıkça yazıyoruz — sonsuza
+    // dek sessiz kalmak yerine.
+    const zamanAsimi = setTimeout(() => {
+      if(tamamlandi) return;
+      try{
+        const su = localStorage.getItem("kp_push_hata")||"";
+        if(su.startsWith("İLERLEME:")){
+          localStorage.setItem("kp_push_hata", `ZAMAN AŞIMI — son bilinen adım: ${su.replace("İLERLEME: ","")}`);
+        }
+      }catch{}
+    }, 20000);
 
     (async () => {
       try {
@@ -15035,8 +15065,10 @@ function App(){
         // önizlemelerinde bu satıra hiç gelinmez (yukarıda return edildi).
         const mod = await import("@capacitor/push-notifications");
         PN = mod.PushNotifications;
+        ilerleme("plugin yüklendi, dinleyiciler ekleniyor");
 
         PN.addListener("registration", (token: any) => {
+          tamamlandi = true;
           console.log("Push registration token:", token.value);
           try{ localStorage.setItem("kp_push_token", token.value); localStorage.removeItem("kp_push_hata"); }catch{}
           fetch(`${API_BASE}/api/bildirim?islem=kaydet`, {
@@ -15052,6 +15084,7 @@ function App(){
         });
 
         PN.addListener("registrationError", (err: any) => {
+          tamamlandi = true;
           console.error("Push registration error:", err.error);
           // DÜZELTME (2026-07-14): eskiden bu hata sadece konsola yazılıyordu,
           // kullanıcı "Bildirim izni gerekiyor" gibi genel/yanıltıcı bir mesaj
@@ -15059,7 +15092,7 @@ function App(){
           // Push Notifications entitlement) aynı genel mesajın arkasına
           // gizleniyordu. Artık gerçek native hata metni saklanıyor ki alarm
           // ekranı kullanıcıya asıl sebebi gösterebilsin.
-          try{ localStorage.setItem("kp_push_hata", String(err?.error||"bilinmeyen native hata")); }catch{}
+          try{ localStorage.setItem("kp_push_hata", `registrationError: ${String(err?.error||"bilinmeyen native hata")}`); }catch{}
         });
 
         PN.addListener("pushNotificationReceived", (notification: any) => {
@@ -15073,11 +15106,16 @@ function App(){
           bildirimEkle(n?.title||"Bildirim", n?.body||"");
         });
 
+        ilerleme("dinleyiciler eklendi, izin durumu kontrol ediliyor (checkPermissions)");
         let izin = await PN.checkPermissions();
+        ilerleme(`checkPermissions sonucu: ${izin.receive}`);
         if (izin.receive === "prompt") {
+          ilerleme("izin isteniyor (requestPermissions)");
           izin = await PN.requestPermissions();
+          ilerleme(`requestPermissions sonucu: ${izin.receive}`);
         }
         if (izin.receive !== "granted") {
+          tamamlandi = true;
           try{ localStorage.setItem("kp_push_hata", `OS izni verilmedi (durum: ${izin.receive})`); }catch{}
           return;
         }
@@ -15085,6 +15123,7 @@ function App(){
         // ile BİREBİR aynı "default" id'sini kullanıyor — kanal burada sesle
         // oluşturulmazsa sunucu "sound: default" gönderse bile Android bunu
         // uygulamaz ve bildirim sessiz gelir. iOS'ta bu çağrı no-op'tur, zararsız.
+        ilerleme("izin verildi, bildirim kanalı oluşturuluyor (createChannel)");
         try {
           await PN.createChannel({
             id: "default",
@@ -15095,11 +15134,15 @@ function App(){
             visibility: 1,
             vibration: true,
           });
+          ilerleme("kanal oluşturuldu, register() çağrılıyor");
         } catch (e) {
           console.error("Bildirim kanalı oluşturulamadı:", e);
+          ilerleme("kanal oluşturma hatası (yok sayıldı), register() çağrılıyor");
         }
         await PN.register();
+        ilerleme("register() döndü — şimdi 'registration' veya 'registrationError' event'i bekleniyor");
       } catch (e) {
+        tamamlandi = true;
         console.error("Push notification kayıt hatası:", e);
         // DÜZELTME (2026-07-15): bu catch bloğu daha önce hatayı sadece konsola
         // yazıyordu — kullanıcı Safari uzaktan hata ayıklama olmadan hiçbir
@@ -15108,12 +15151,13 @@ function App(){
         // kaydedilip alarm ekranında görünür hale geliyor.
         try{
           const mesaj = (e as any)?.message || String(e) || "bilinmeyen hata (dış catch)";
-          localStorage.setItem("kp_push_hata", mesaj);
+          localStorage.setItem("kp_push_hata", `dış catch: ${mesaj}`);
         }catch{}
       }
     })();
 
     return () => {
+      clearTimeout(zamanAsimi);
       if (PN) PN.removeAllListeners();
     };
   },[]);
@@ -16091,7 +16135,7 @@ function App(){
             </div>
 
             {/* Copyright — alt banda yapışık */}
-            <p style={{margin:"auto 0 0",padding:"10px 0 4px",fontSize:10,color:WA(0.15),textAlign:"center"}}>
+            <p style={{margin:"auto 0 0",padding:"10px 0 4px",fontSize:10,color:WA(0.4),textAlign:"center"}}>
               © 2026 Katılım Plus · Tüm hakları saklıdır.
             </p>
           </div>
@@ -16639,7 +16683,7 @@ function App(){
               </div>
             </a>
 
-            <p style={{margin:"16px 0 0",fontSize:10,color:WA(0.15),textAlign:"center"}}>Katılım Plus · v1.4.0</p>
+            <p style={{margin:"16px 0 0",fontSize:10,color:WA(0.4),textAlign:"center"}}>Katılım Plus · v1.4.0</p>
           </div>
         )}
 
@@ -16708,7 +16752,7 @@ function App(){
             <p style={{
               margin:0,
               fontSize:11,
-              color:"#6B7280",
+              color:WA(0.55),
               lineHeight:1.55,
               fontStyle:"italic"
             }}>
