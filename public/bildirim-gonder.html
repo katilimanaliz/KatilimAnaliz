@@ -114,6 +114,7 @@
     <textarea id="govde" placeholder="Örn: USD/TRY güncellendi."></textarea>
 
     <button id="gonderBtn" onclick="bildirimGonder()">Gönder</button>
+    <button id="testBtn" onclick="basitTest()" style="background:#475569; margin-top:10px;">🔧 Basit Bağlantı Testi (header'sız)</button>
 
     <div id="sonuc"></div>
 
@@ -128,6 +129,25 @@
 function anahtarGoster() {
   const el = document.getElementById('anahtar');
   el.type = el.type === 'password' ? 'text' : 'password';
+}
+
+async function basitTest() {
+  const sonucEl = document.getElementById('sonuc');
+  sonucEl.className = '';
+  sonucEl.removeAttribute('style');
+  try {
+    const res = await fetch('https://www.katilimplus.com/api/bildirim?islem=alarm-listele', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: 'test-teshis' }),
+    });
+    const metin = await res.text();
+    sonucEl.textContent = `✅ Basit istek TAMAMLANDI (header'sız)\nHTTP durum: ${res.status}\nYanıt: ${metin.slice(0, 300)}`;
+    sonucEl.className = 'basarili';
+  } catch (e) {
+    sonucEl.textContent = `❌ Basit istek de BAŞARISIZ: ${e.name}: ${e.message}\n\nSTACK:\n${e.stack || '(yok)'}`;
+    sonucEl.className = 'hata';
+  }
 }
 
 async function bildirimGonder() {
@@ -179,7 +199,7 @@ async function bildirimGonder() {
       sonucEl.className = 'hata';
     }
   } catch (e) {
-    sonucEl.textContent = `❌ İstek başarısız: ${e.name}: ${e.message}\n\nURL: https://www.katilimplus.com/api/bildirim?islem=gonder\nAnahtar uzunluğu: ${anahtar.length}`;
+    sonucEl.textContent = `❌ İstek başarısız: ${e.name}: ${e.message}\n\nURL: https://www.katilimplus.com/api/bildirim?islem=gonder\nAnahtar uzunluğu: ${anahtar.length}\n\nSTACK:\n${e.stack || '(yok)'}`;
     sonucEl.className = 'hata';
   } finally {
     btn.disabled = false;
