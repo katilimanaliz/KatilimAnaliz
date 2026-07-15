@@ -1,30 +1,28 @@
 # capawesome.yml
 #
-# Native build numarasını (iOS: CFBundleVersion, Android: versionCode)
-# Capawesome Cloud'un Trapeze entegrasyonu bu dosyadan okuyup native proje
-# dosyalarına yazıyor.
+# 2026-07-15 (ucuncu duzeltme): buildNumber ve version alanlarinin iOS icin
+# dogru yeri "ios:" altinda degil, "ios.targets.App" altinda oldugu
+# ortaya cikti (Trapeze dokumantasyonuna gore). Onceki yanlis yerlesim
+# yuzunden bizim yazdigimiz 20/21 hic uygulanmadi -- build App Store
+# Connect'e eski/varsayilan bir CFBundleVersion ile gitti ve "onceki
+# versiyon 9'dan yuksek olmali" hatasi aldi. Guvenli mesafe birakmak icin
+# build number simdi 30'a sicratildi.
 #
-# 2026-07-15: Marketing version 1.3 -> 1.4, build number 20 -> 21.
+# Android tarafinda versionCode/versionName zaten dogru yerdeydi (android:
+# altinda dogrudan), o kisimda sorun yoktu.
 #
-# 2026-07-15 (ikinci güncelleme): iOS entitlements'a aps-environment
-# eklendi. Capawesome Cloud her build'de native iOS projesini sıfırdan
-# oluşturduğu için, normalde Xcode'da elle "+ Capability > Push
-# Notifications" ile eklenen bu ayar hiç var olmuyordu -- push token'ın
-# hiç gelmemesinin sebebi muhtemelen buydu. App ID'de (developer.apple.com)
-# Push Notifications capability'si zaten açıktı, eksik olan sadece
-# build'e giden entitlements dosyasıydı.
-#
-# İLERİDE YENİ BUILD GÖNDERİRKEN: buildNumber/versionCode'u bir öncekinden
-# yüksek bir değerle elle güncelleyip push edin.
+# ILERIDE YENI BUILD GONDERIRKEN: buildNumber/versionCode'u bir onceki
+# BASARIYLA YUKLENEN (sadece "Succeeded" degil, App Store Connect'e
+# GERCEKTEN kabul edilen) build'den yuksek bir degerle guncelleyin.
 
 platforms:
   android:
-    versionCode: 21
+    versionCode: 30
     versionName: "1.4"
   ios:
-    buildNumber: 21
-    version: "1.4"
     targets:
       App:
+        version: "1.4"
+        buildNumber: 30
         entitlements:
           - aps-environment: production
