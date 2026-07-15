@@ -103,18 +103,23 @@
     <h1>📣 Bildirim Gönder</h1>
     <p class="subtitle">Katılım Plus'ta kayıtlı TÜM cihazlara gider</p>
 
-    <label for="anahtar">Admin Anahtarı</label>
-    <input type="password" id="anahtar" placeholder="x-admin-key değeriniz" autocomplete="off">
-    <div class="toggle-key" onclick="anahtarGoster()">👁 göster/gizle</div>
+    <form method="POST" action="https://www.katilimplus.com/api/bildirim?islem=gonder" target="_blank">
+      <label for="anahtar">Admin Anahtarı</label>
+      <input type="password" id="anahtar" name="anahtar" placeholder="x-admin-key değeriniz" autocomplete="off" required>
+      <div class="toggle-key" onclick="anahtarGoster()">👁 göster/gizle</div>
 
-    <label for="baslik">Başlık</label>
-    <input type="text" id="baslik" placeholder="Örn: Yeni Kur!">
+      <label for="baslik">Başlık</label>
+      <input type="text" id="baslik" name="baslik" placeholder="Örn: Yeni Kur!" required>
 
-    <label for="govde">Mesaj</label>
-    <textarea id="govde" placeholder="Örn: USD/TRY güncellendi."></textarea>
+      <label for="govde">Mesaj</label>
+      <textarea id="govde" name="govde" placeholder="Örn: USD/TRY güncellendi." required></textarea>
 
-    <button id="gonderBtn" onclick="bildirimGonder()">Gönder</button>
+      <button type="submit">Gönder</button>
+    </form>
     <button id="testBtn" onclick="basitTest()" style="background:#475569; margin-top:10px;">🔧 Basit Bağlantı Testi (header'sız)</button>
+    <p class="not" style="color:#94a3b8;">
+      ⓘ "Gönder" butonu artık klasik form gönderimi kullanıyor (Safari'deki fetch() sorununu atlatmak için) — sonuç yeni bir sekmede JSON olarak açılacak.
+    </p>
 
     <div id="sonuc"></div>
 
