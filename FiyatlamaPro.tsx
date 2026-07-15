@@ -491,13 +491,14 @@ function addMonthsSafe(baslangic: Date, adet: number): Date {
   hedef.setDate(Math.min(d, ayinSonGunu));
   return hedef;
 }
-// Hafta sonuna veya SABİT tarihli resmi tatile denk gelen taksit vadesini bir
-// sonraki iş gününe kaydırır — banka pratiğiyle uyumlu (2026-07-13 kullanıcı
-// isteği; tüm ödeme planlarında geçerli). Sabit ulusal tatiller yıldan yıla
-// değişmediği için bakım gerektirmeden 120 aylık plana kadar doğru çalışır.
-// Dini bayramlar (Ramazan/Kurban) bilinçli olarak kapsam DIŞI: her yıl ~11 gün
-// kaydıkları için ileri yıllara sabit listeyle güvenilir yazılamazlar (elle
-// bakım ister, unutulunca sessizce yanlış gösterir).
+// Hafta sonuna veya resmi/dini tatile denk gelen taksit vadesini bir sonraki
+// iş gününe kaydırır — banka pratiğiyle uyumlu (2026-07-13 kullanıcı isteği;
+// tüm ödeme planlarında geçerli). Sabit ulusal tatiller (SABIT_TATILLER)
+// yıldan yıla değişmediği için bakım gerektirmeden 120 aylık plana kadar
+// doğru çalışır. Dini bayramlar (Ramazan/Kurban) ARTIK DAHİL (2026-07-14
+// güncellemesi, Diyanet takvimine göre 2026-2030 elle girildi) — ama bunlar
+// hicri takvime göre kaydığı için yıl bazlı ayrı bir listede (aşağıda
+// DINI_BAYRAM_TATILLER) tutuluyor ve 2030 sonrası için elle bakım ister.
 // Not: 28 Ekim ve arefe günleri yarım gün — bankalar açık olduğu için tam
 // tatil sayılmadı.
 const SABIT_TATILLER = new Set([
@@ -509,15 +510,40 @@ const SABIT_TATILLER = new Set([
   "08-30", // Zafer Bayramı
   "10-29", // Cumhuriyet Bayramı
 ]);
+// Dini bayramlar (Ramazan/Kurban) — hicri takvime göre her yıl ~11 gün geri
+// kaydığı için SABIT_TATILLER'daki gibi tek bir "AA-GG" ile yazılamaz; yıl
+// bazlı tam tarih olarak giriliyor. Diyanet İşleri Başkanlığı'nın ilan ettiği
+// resmi tarihler kullanıldı (2026-07-14 kullanıcı isteğiyle 2026-2030 için
+// dolduruldu). Arife günleri SABIT_TATILLER'daki 28 Ekim ile AYNI mantıkla
+// dışarıda bırakıldı (yarım gün, bankalar açık — tam tatil sayılmadı).
+// BAKIM UYARISI: Diyanet tarihleri genelde ~1 yıl önceden ilan ediyor — bu
+// liste 2031'den itibaren güncellenmezse o tarihten sonraki taksitler bayram
+// günlerini SESSİZCE kaydırmadan gösterir (hata vermez, yanlış görünür).
+const DINI_BAYRAM_TATILLER = new Set([
+  // Ramazan Bayramı (3 gün)
+  "2026-03-20","2026-03-21","2026-03-22",
+  "2027-03-09","2027-03-10","2027-03-11",
+  "2028-02-27","2028-02-28","2028-02-29",
+  "2029-02-15","2029-02-16","2029-02-17",
+  "2030-02-04","2030-02-05","2030-02-06",
+  // Kurban Bayramı (4 gün)
+  "2026-05-27","2026-05-28","2026-05-29","2026-05-30",
+  "2027-05-16","2027-05-17","2027-05-18","2027-05-19",
+  "2028-05-05","2028-05-06","2028-05-07","2028-05-08",
+  "2029-04-24","2029-04-25","2029-04-26","2029-04-27",
+  "2030-04-13","2030-04-14","2030-04-15","2030-04-16",
+]);
 function isGununeKaydir(d: Date): Date {
   const k = new Date(d);
   const tatilMi = (t: Date) => {
     const ayGun = String(t.getMonth()+1).padStart(2,"0") + "-" + String(t.getDate()).padStart(2,"0");
-    return SABIT_TATILLER.has(ayGun);
+    if (SABIT_TATILLER.has(ayGun)) return true;
+    const tamTarih = t.getFullYear() + "-" + ayGun;
+    return DINI_BAYRAM_TATILLER.has(tamTarih);
   };
-  // Hafta sonu VEYA sabit tatil olduğu sürece ilerle — zincirleme durumlar da
-  // doğru çözülür (ör. pazara denk gelen vade pazartesiye kayar, pazartesi
-  // 1 Mayıs ise salıya devam eder).
+  // Hafta sonu VEYA sabit/dini tatil olduğu sürece ilerle — zincirleme
+  // durumlar da doğru çözülür (ör. pazara denk gelen vade pazartesiye kayar,
+  // pazartesi 1 Mayıs ise salıya devam eder).
   while (k.getDay() === 0 || k.getDay() === 6 || tatilMi(k)) k.setDate(k.getDate() + 1);
   return k;
 }
@@ -1914,7 +1940,7 @@ function FonDetay({ fon: fonProp, onGeri, settings }: { fon: any, onGeri: () => 
   const donemGetiri = grafik.length > 1 && grafik[0]?.fiyat > 0
     ? ((grafik[grafik.length-1].fiyat / grafik[0].fiyat) - 1) * 100
     : null;
-  const degStr = (v: number | null | undefined) => v != null ? (v > 0 ? "+" : "") + v.toFixed(2) + "%" : "—";
+  const degStr = (v: number | null | undefined, dec: number = 2) => v != null ? (v > 0 ? "+" : "") + v.toFixed(dec) + "%" : "—";
 
   const SVGGrafik = () => {
     if (grafik.length < 2) return <div style={{height:160,display:"flex",alignItems:"center",justifyContent:"center",color:C.sub,fontSize:12}}>Veri yüklenemedi</div>;
@@ -1994,7 +2020,7 @@ function FonDetay({ fon: fonProp, onGeri, settings }: { fon: any, onGeri: () => 
             <div style={{fontSize:20,fontWeight:800,color:C.text}}>
               {typeof fon.fiyat==="number" ? fon.fiyat.toLocaleString("tr-TR",{minimumFractionDigits:4,maximumFractionDigits:6}) : "—"} <span style={{fontSize:11,color:C.sub}}>₺</span>
             </div>
-            <div style={{fontSize:13,fontWeight:700,color:renk}}>{degStr(gunlukDeger)}</div>
+            <div style={{fontSize:13,fontWeight:700,color:renk}}>{degStr(gunlukDeger,4)}</div>
           </div>
         </div>
       </div>
@@ -2039,14 +2065,14 @@ function FonDetay({ fon: fonProp, onGeri, settings }: { fon: any, onGeri: () => 
       <div style={{margin:"0 0 10px",padding:"0 14px"}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
           {[
-            ["Günlük", gunlukDeger],
-            ["Haftalık", haftalikDeger],
-            ["Aylık", aylikDeger],
-            ["Yıllık", yillikDeger],
-          ].map(([lbl, val]: any) => (
+            ["Günlük", gunlukDeger, 4],
+            ["Haftalık", haftalikDeger, 2],
+            ["Aylık", aylikDeger, 2],
+            ["Yıllık", yillikDeger, 2],
+          ].map(([lbl, val, dec]: any) => (
             <div key={lbl} style={{background:C.card,borderRadius:10,padding:"10px 12px",border:`1px solid ${C.border}`}}>
               <div style={{fontSize:10,color:C.sub,marginBottom:4}}>{lbl} Değişim</div>
-              <div style={{fontSize:16,fontWeight:800,color:val > 0 ? C.green : val < 0 ? C.red : C.sub}}>{degStr(val)}</div>
+              <div style={{fontSize:16,fontWeight:800,color:val > 0 ? C.green : val < 0 ? C.red : C.sub}}>{degStr(val,dec)}</div>
             </div>
           ))}
         </div>
@@ -13243,6 +13269,24 @@ const PIYASA_TABLO_VERISI:any = {
     {ad:"GBP/TRY", sembol:"GBPTRY=X", dec:2},
     {ad:"CHF/TRY", sembol:"CHFTRY=X", dec:2},
     {ad:"CAD/TRY", sembol:"CADTRY=X", dec:2},
+    // 2026-07-15 kullanıcı isteğiyle eklendi — Yahoo Finance'in "XXXTRY=X"
+    // çapraz kur formatı (uygulamanın zaten kullandığı kaynak) ISO para birimi
+    // kodlarının çoğu için hesaplanmış kur döndürür. AED/KWD gibi Körfez
+    // paraları görece az işlem gördüğü için ilk pushtan sonra gerçekten veri
+    // gelip gelmediği kontrol edilmeli — gelmezse "—" gösterip zararsızca
+    // düşer, uygulamayı bozmaz.
+    {ad:"AUD/TRY", sembol:"AUDTRY=X", dec:2},
+    {ad:"JPY/TRY", sembol:"JPYTRY=X", dec:4},
+    {ad:"CNY/TRY", sembol:"CNYTRY=X", dec:2},
+    {ad:"RUB/TRY", sembol:"RUBTRY=X", dec:4},
+    {ad:"SAR/TRY", sembol:"SARTRY=X", dec:2},
+    {ad:"AED/TRY", sembol:"AEDTRY=X", dec:2},
+    {ad:"SEK/TRY", sembol:"SEKTRY=X", dec:2},
+    {ad:"NOK/TRY", sembol:"NOKTRY=X", dec:2},
+    {ad:"DKK/TRY", sembol:"DKKTRY=X", dec:2},
+    {ad:"ZAR/TRY", sembol:"ZARTRY=X", dec:2},
+    {ad:"AZN/TRY", sembol:"AZNTRY=X", dec:2},
+    {ad:"KWD/TRY", sembol:"KWDTRY=X", dec:2},
     {ad:"EUR/USD", sembol:"EURUSD=X", dec:4},
     {ad:"GBP/USD", sembol:"GBPUSD=X", dec:4},
     {ad:"AUD/USD", sembol:"AUDUSD=X", dec:4},
@@ -14080,7 +14124,8 @@ function PortfoyEkleModal({onKapat, onEklendi}:{onKapat:()=>void; onEklendi:(k:P
                 placeholder={
                   tur==="hisse"?"Kod veya şirket adı — THYAO…":
                   tur==="fon"?"Fon kodu veya adı — VPA…":
-                  tur==="kripto"?"BTC, ETH…":"Ons Altın, Petrol, Bakır…"
+                  tur==="kripto"?"BTC, ETH…":
+                  tur==="doviz"?"USD, EUR, GBP…":"Ons Altın, Petrol, Bakır…"
                 }
                 autoCapitalize="characters" autoCorrect="off" spellCheck={false}
                 style={{flex:1,background:"none",border:"none",outline:"none",color:C.text,fontSize:13,fontWeight:700,fontFamily:"inherit",textTransform:"uppercase"}}
@@ -14093,12 +14138,16 @@ function PortfoyEkleModal({onKapat, onEklendi}:{onKapat:()=>void; onEklendi:(k:P
 
             {!aramaYukleniyor && !enstrumanYukleniyor && (() => {
               const q = aramaMetni.trim().toLocaleUpperCase("tr-TR");
-              if (q.length<1) return null; // Getiri Karşılaştırma'daki gibi: yazmadan öneri gösterme
+              // Döviz/Emtia/Kripto/Hisse/Fon: tür seçilir seçilmez liste
+              // direkt gösterilir, aramaya gerek yok (kullanıcı isteği).
+              const yerelListeTuru = tur==="doviz" || tur==="emtia" || tur==="kripto" || tur==="hisse" || tur==="fon";
+              if (q.length<1 && !yerelListeTuru) return null;
+              const limit = (q.length<1 && yerelListeTuru) ? 20 : 6;
               let oneriler:any[] = [];
-              if (tur==="hisse") oneriler = hisseListesi.filter((h:any)=>h.ticker?.toLocaleUpperCase("tr-TR").startsWith(q)||h.sirket?.toLocaleUpperCase("tr-TR").includes(q)).slice(0,6);
-              else if (tur==="fon") oneriler = fonListesi.filter((f:any)=>f.kod?.toLocaleUpperCase("tr-TR").startsWith(q)||f.ad?.toLocaleUpperCase("tr-TR").includes(q)).slice(0,6);
-              else if (tur==="doviz") oneriler = (PIYASA_TABLO_VERISI["doviz"]||[]).filter((it:any)=>it.ad?.endsWith("/TRY") && it.ad?.toLocaleUpperCase("tr-TR").includes(q)).slice(0,6);
-              else oneriler = (PIYASA_TABLO_VERISI[tur as string]||[]).filter((it:any)=>it.ad?.toLocaleUpperCase("tr-TR").includes(q)).slice(0,6);
+              if (tur==="hisse") oneriler = hisseListesi.filter((h:any)=>h.ticker?.toLocaleUpperCase("tr-TR").startsWith(q)||h.sirket?.toLocaleUpperCase("tr-TR").includes(q)).slice(0,limit);
+              else if (tur==="fon") oneriler = fonListesi.filter((f:any)=>f.kod?.toLocaleUpperCase("tr-TR").startsWith(q)||f.ad?.toLocaleUpperCase("tr-TR").includes(q)).slice(0,limit);
+              else if (tur==="doviz") oneriler = (PIYASA_TABLO_VERISI["doviz"]||[]).filter((it:any)=>it.ad?.endsWith("/TRY") && it.ad?.toLocaleUpperCase("tr-TR").includes(q)).slice(0,limit);
+              else oneriler = (PIYASA_TABLO_VERISI[tur as string]||[]).filter((it:any)=>it.ad?.toLocaleUpperCase("tr-TR").includes(q)).slice(0,limit);
 
               if (oneriler.length===0) {
                 return <p style={{margin:"10px 2px 0",fontSize:11,color:C.sub2}}>Sonuç bulunamadı.</p>;
@@ -14108,6 +14157,7 @@ function PortfoyEkleModal({onKapat, onEklendi}:{onKapat:()=>void; onEklendi:(k:P
                   {oneriler.map((it:any,i:number)=>{
                     const kod = tur==="hisse"?it.ticker:tur==="fon"?it.kod:it.ad;
                     const ad = tur==="hisse"?(it.sirket||""):tur==="fon"?(it.ad||""):(it.sembol||"");
+                    const aciklamaGoster = tur==="hisse" || tur==="fon";
                     return (
                       <div key={kod+i} onClick={()=>enstrumanSec(it)} style={{
                         display:"flex",alignItems:"center",gap:10,padding:"10px 12px",cursor:"pointer",
@@ -14117,7 +14167,8 @@ function PortfoyEkleModal({onKapat, onEklendi}:{onKapat:()=>void; onEklendi:(k:P
                           {PORTFOY_TUR_META[tur!].label.toLocaleUpperCase("tr-TR")}
                         </span>
                         <span style={{flexShrink:0,fontSize:13,fontWeight:800,color:C.text}}>{kod}</span>
-                        <span style={{flex:1,minWidth:0,fontSize:11,color:C.sub2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ad}</span>
+                        {aciklamaGoster && <span style={{flex:1,minWidth:0,fontSize:11,color:C.sub2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ad}</span>}
+                        {!aciklamaGoster && <span style={{flex:1}}/>}
                         <span style={{flexShrink:0,fontSize:16,color:C.blue,fontWeight:800}}>+</span>
                       </div>
                     );
