@@ -1,28 +1,21 @@
 # capawesome.yml
 #
-# 2026-07-15 (ucuncu duzeltme): buildNumber ve version alanlarinin iOS icin
-# dogru yeri "ios:" altinda degil, "ios.targets.App" altinda oldugu
-# ortaya cikti (Trapeze dokumantasyonuna gore). Onceki yanlis yerlesim
-# yuzunden bizim yazdigimiz 20/21 hic uygulanmadi -- build App Store
-# Connect'e eski/varsayilan bir CFBundleVersion ile gitti ve "onceki
-# versiyon 9'dan yuksek olmali" hatasi aldi. Guvenli mesafe birakmak icin
-# build number simdi 30'a sicratildi.
-#
-# Android tarafinda versionCode/versionName zaten dogru yerdeydi (android:
-# altinda dogrudan), o kisimda sorun yoktu.
-#
-# ILERIDE YENI BUILD GONDERIRKEN: buildNumber/versionCode'u bir onceki
-# BASARIYLA YUKLENEN (sadece "Succeeded" degil, App Store Connect'e
-# GERCEKTEN kabul edilen) build'den yuksek bir degerle guncelleyin.
+# 2026-07-15 (dorduncu duzeltme): buildNumber 30 -> 31. 30 zaten Internal
+# testing track'ine yuklenmisti (Play, versionCode'un uygulama genelinde
+# benzersiz olmasini istiyor, track'e ozel degil) -- Closed testing -
+# Alpha'ya aynı build 30 ile yukleme denenince "sürüm kodu daha önce
+# kullanıldı" hatası alindi. Bundan sonra her yeni build icin bu numarayi
+# bir onceki BASARIYLA herhangi bir track'e yuklenen numaradan yuksek
+# tutmak gerekiyor.
 
 platforms:
   android:
-    versionCode: 30
+    versionCode: 31
     versionName: "1.4"
   ios:
     targets:
       App:
         version: "1.4"
-        buildNumber: 30
+        buildNumber: 31
         entitlements:
           - aps-environment: production
