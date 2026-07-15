@@ -14510,7 +14510,7 @@ function PortfoyEkleModal({onKapat, onEklendi}:{onKapat:()=>void; onEklendi:(k:P
           <>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
               <span onClick={()=>{setAlisModu(null);setAlisHata(null);setAsama("miktar");}} style={{fontSize:18,color:C.sub,cursor:"pointer"}}>‹</span>
-              <span style={{fontSize:16,fontWeight:800,color:C.text}}>Alış bilgisi (opsiyonel)</span>
+              <span style={{fontSize:16,fontWeight:800,color:C.text}}>Alış fiyat bilgisi (opsiyonel)</span>
               <div style={{flex:1}}/>
               <button onClick={onKapat} style={{background:WA(0.1),border:"none",width:30,height:30,borderRadius:15,fontSize:16,color:C.text,cursor:"pointer"}}>×</button>
             </div>
@@ -14529,7 +14529,7 @@ function PortfoyEkleModal({onKapat, onEklendi}:{onKapat:()=>void; onEklendi:(k:P
                     </div>
                   </div>
                 )}
-                <div onClick={()=>setAlisModu("fiyat")} style={{display:"flex",alignItems:"center",gap:10,background:WA(0.04),border:`1px solid ${WA(0.08)}`,borderRadius:10,padding:12,cursor:"pointer"}}>
+                <div onClick={()=>{setAlisModu("fiyat"); if(!alisFiyatInput && secilenEnstruman.fiyat!=null) setAlisFiyatInput(String(secilenEnstruman.fiyat).replace(".",","));}} style={{display:"flex",alignItems:"center",gap:10,background:WA(0.04),border:`1px solid ${WA(0.08)}`,borderRadius:10,padding:12,cursor:"pointer"}}>
                   <Tag size={16} color={C.blue}/>
                   <div style={{flex:1}}>
                     <div style={{fontSize:12.5,fontWeight:700,color:C.text}}>Fiyatı biliyorum, elle gireyim</div>
@@ -14550,10 +14550,13 @@ function PortfoyEkleModal({onKapat, onEklendi}:{onKapat:()=>void; onEklendi:(k:P
               </>
             ) : (
               <>
-                <div style={{display:"flex",alignItems:"center",background:WA(0.04),border:`1px solid ${WA(0.08)}`,borderRadius:10,padding:"10px 12px",marginBottom:12}}>
+                <div style={{display:"flex",alignItems:"center",background:WA(0.04),border:`1px solid ${WA(0.08)}`,borderRadius:10,padding:"10px 12px",marginBottom:6}}>
                   <input value={alisFiyatInput} onChange={e=>setAlisFiyatInput(e.target.value)} placeholder="0" inputMode="decimal" style={{flex:1,background:"none",border:"none",outline:"none",color:C.text,fontSize:16,fontWeight:700,fontFamily:"inherit"}}/>
                   <span style={{fontSize:12,color:C.sub}}>₺ / {secilenEnstruman.birim==="lot"?"hisse":secilenEnstruman.birim}</span>
                 </div>
+                {secilenEnstruman.fiyat!=null && (
+                  <div style={{fontSize:10,color:C.sub2,marginBottom:12}}>Güncel fiyatla dolduruldu — farklıysa üzerine yazabilirsin.</div>
+                )}
                 <button disabled={!alisFiyatInput} onClick={()=>{
                   const f = parseFloat(alisFiyatInput.replace(",","."));
                   if (isNaN(f)) return;
@@ -14576,6 +14579,7 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onKalem
 }){
   const [sekme, setSekme] = useState<"portfoy"|"takip">(initialSekme || "portfoy");
   const [filtre, setFiltre] = useState<"tumu"|PortfoyKalemi["tur"]>("tumu");
+  const [grafikAcik, setGrafikAcik] = useState(false);
 
   // Ayrım artık ALIŞ BİLGİSİNE göre: fiyat/tarih girilmişse Portföyüm,
   // girilmemişse (miktar girilmiş olsa bile) Takip Listem.
@@ -14677,7 +14681,7 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onKalem
               {gizli ? <EyeOff size={15} color={C.sub2}/> : <Eye size={15} color={C.sub2}/>}
             </div>
           </div>
-          <div style={{fontSize:26,fontWeight:800,color:C.text,marginBottom:10,fontVariantNumeric:"tabular-nums"}}>
+          <div onClick={()=>setGrafikAcik(true)} style={{cursor:"pointer",fontSize:26,fontWeight:800,color:C.text,marginBottom:10,fontVariantNumeric:"tabular-nums"}}>
             {gizli?"₺••••••":portfoyFmtTL(toplamDeger)}
           </div>
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
@@ -14805,6 +14809,7 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onKalem
         <Plus size={14} color={C.blue}/>
         <span style={{fontSize:12.5,fontWeight:700,color:C.blue}}>Ürün ekle</span>
       </div>
+      {grafikAcik && <PortfoyKarZararModal liste={liste} onClose={()=>setGrafikAcik(false)}/>}
     </div>
   );
 }
