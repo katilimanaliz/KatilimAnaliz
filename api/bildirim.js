@@ -92,6 +92,8 @@ async function tekTokeneGonder(token, baslik, govde, veri) {
       notification: { title: baslik, body: govde },
       data: veri || {},
       token,
+      android: { notification: { sound: "default", channelId: "default" } },
+      apns: { payload: { aps: { sound: "default" } } },
     });
     return true;
   } catch (e) {
@@ -138,6 +140,8 @@ async function bildirimGonder(req, res) {
       notification: { title: baslik, body: govde },
       data: veri || {},
       tokens: grup,
+      android: { notification: { sound: "default", channelId: "default" } },
+      apns: { payload: { aps: { sound: "default" } } },
     };
 
     const sonuc = await admin.messaging().sendEachForMulticast(mesaj);

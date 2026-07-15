@@ -12826,7 +12826,7 @@ function BildirimGecmisiModal({gecmis,onClose}:{gecmis:any[],onClose:()=>void}){
   };
   return(
     <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.6)",zIndex:500,display:"flex",alignItems:"flex-end",...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}} onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} style={{background:"#15212E",borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",maxHeight:"78vh",display:"flex",flexDirection:"column"}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:C.card,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",maxHeight:"78vh",display:"flex",flexDirection:"column"}}>
         <div style={{padding:"16px 18px",borderBottom:`1px solid ${WA(0.08)}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
           <span style={{fontSize:16,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff")}}>🔔 Bildirimler</span>
           <button onClick={onClose} style={{background:WA(0.1),border:"none",width:32,height:32,borderRadius:16,fontSize:18,color:(TEMA==="acik"?C.label:"#fff"),cursor:"pointer"}}>×</button>
@@ -15080,6 +15080,23 @@ function App(){
         if (izin.receive !== "granted") {
           try{ localStorage.setItem("kp_push_hata", `OS izni verilmedi (durum: ${izin.receive})`); }catch{}
           return;
+        }
+        // Android 8+ bildirim kanalı: sunucudaki (api/bildirim.js) android.notification.channelId
+        // ile BİREBİR aynı "default" id'sini kullanıyor — kanal burada sesle
+        // oluşturulmazsa sunucu "sound: default" gönderse bile Android bunu
+        // uygulamaz ve bildirim sessiz gelir. iOS'ta bu çağrı no-op'tur, zararsız.
+        try {
+          await PN.createChannel({
+            id: "default",
+            name: "Bildirimler",
+            description: "Katılım Plus bildirimleri ve fiyat alarmları",
+            importance: 5,
+            sound: "default",
+            visibility: 1,
+            vibration: true,
+          });
+        } catch (e) {
+          console.error("Bildirim kanalı oluşturulamadı:", e);
         }
         await PN.register();
       } catch (e) {
