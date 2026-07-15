@@ -15000,11 +15000,20 @@ function App(){
     document.body.scrollTop=0;
   },[screen]);
 
-  // ── Live Update hazır bildirimi (Capawesome) ──
+  // ── Live Update hazır bildirimi + güncelleme kontrolü (Capawesome) ──
   // Bir sonraki bundle bozuksa otomatik eski sürüme dönebilmesi için Live
   // Update eklentisine "bu sürüm sağlıklı açıldı" sinyali göndermek ZORUNLU.
   // ready() çağrılmazsa Capawesome birkaç saniye sonra güvenlik amacıyla
   // uygulamayı kendiliğinden bir önceki bundle'a geri alır.
+  //
+  // DÜZELTME (2026-07-15) — KÖK SEBEP: Bu useEffect eskiden SADECE ready()
+  // çağırıyordu. ready() yalnızca "mevcut bundle sağlıklı" der; Capawesome
+  // Cloud'daki YENİ bundle'ları asla kontrol ETMEZ. sync() çağrılmadığı
+  // sürece uygulama hiçbir zaman yeni Live Update'lerin varlığından haberdar
+  // olmuyordu — Capawesome'a başarıyla yüklenen build'ler cihaza hiç
+  // ulaşmıyordu, kapat/aç döngüleri bu yüzden hiçbir şey değiştirmiyordu.
+  // sync() indirir, nextBundleId dönerse reload() yeni bundle'ı HEMEN
+  // devreye alır (kullanıcı elle kapat/aç yapmasa bile).
   useEffect(()=>{
     const gercekIsNative = (window as any).Capacitor?.isNativePlatform?.() ?? false;
     if(!gercekIsNative) return;
@@ -15012,8 +15021,14 @@ function App(){
       try {
         const mod = await import("@capawesome/capacitor-live-update");
         await mod.LiveUpdate.ready();
+        const sonuc: any = await mod.LiveUpdate.sync();
+        console.log("LiveUpdate.sync() sonucu:", sonuc);
+        if (sonuc?.nextBundleId) {
+          console.log("Yeni bundle bulundu, uygulanıyor:", sonuc.nextBundleId);
+          await mod.LiveUpdate.reload();
+        }
       } catch (e) {
-        console.error("LiveUpdate.ready() hatası:", e);
+        console.error("LiveUpdate hatası:", e);
       }
     })();
   },[]);
