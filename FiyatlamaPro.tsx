@@ -1490,7 +1490,7 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
                     </div>
                     <div onClick={(e)=>{ if(onFonGrafikAc){ e.stopPropagation(); onFonGrafikAc(fon); } }} style={{flex:1,minWidth:0,paddingRight:2,textAlign:"left",cursor:onFonGrafikAc?"pointer":"default"}}>
                       <div style={{fontSize:11,fontWeight:800,color:FC.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",lineHeight:1.3,textDecoration:onFonGrafikAc?"underline":"none",textDecorationColor:FC.border}}>{fon.ad}</div>
-                      <div style={{fontSize:9,color:FC.sub2,marginTop:1}}>
+                      <div style={{fontSize:9,color:FC.sub,marginTop:1}}>
                         {typeof fon.fiyat==="number" ? `${fon.fiyat.toLocaleString("tr-TR",{minimumFractionDigits:4,maximumFractionDigits:6})} ₺` : "—"}
                       </div>
                     </div>
@@ -1749,7 +1749,7 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
             <span style={{fontWeight:700,color:"#4ade80"}}>K:{tooltip.p.kapanis?.toLocaleString("tr-TR")} ₺</span>
           </div>
         )}
-        <svg viewBox={`0 0 ${w} ${h}`} style={{width:"100%",height:160,overflow:"visible",cursor:"crosshair"}}
+        <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{width:"100%",height:160,overflow:"visible",cursor:"crosshair"}}
           onMouseLeave={()=>setTooltip(null)}
           onClick={(e)=>{
             const rect = (e.target as SVGElement).closest("svg")!.getBoundingClientRect();
@@ -1963,7 +1963,7 @@ function FonDetay({ fon: fonProp, onGeri, settings }: { fon: any, onGeri: () => 
             <span style={{fontWeight:700,color:"#4ade80"}}>{tooltip.p.fiyat?.toLocaleString("tr-TR",{minimumFractionDigits:4,maximumFractionDigits:6})} ₺</span>
           </div>
         )}
-        <svg viewBox={`0 0 ${w} ${h}`} style={{width:"100%",height:160,overflow:"visible",cursor:"crosshair"}}
+        <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{width:"100%",height:160,overflow:"visible",cursor:"crosshair"}}
           onMouseLeave={()=>setTooltip(null)}
           onClick={(e)=>{
             const rect = (e.target as SVGElement).closest("svg")!.getBoundingClientRect();
@@ -2067,7 +2067,12 @@ function FonDetay({ fon: fonProp, onGeri, settings }: { fon: any, onGeri: () => 
           {[
             ["Günlük", gunlukDeger, 4],
             ["Haftalık", haftalikDeger, 2],
-            ["Aylık", aylikDeger, 2],
+            // DÜZELTME (2026-07-16): Bu kutu artık sabit "Aylık" değil,
+            // grafiğin üstündeki dönem seçiciyle (1 Ay/3 Ay/1 Yıl) birlikte
+            // değişiyor — kullanıcı "3 Ay" seçtiğinde burada da 3 aylık
+            // getiri görünsün diye. Diğer üç kutu (Günlük/Haftalık/Yıllık)
+            // kasıtlı olarak sabit kalıyor.
+            [donemEtiket, donemGetiri, 2],
             ["Yıllık", yillikDeger, 2],
           ].map(([lbl, val, dec]: any) => (
             <div key={lbl} style={{background:C.card,borderRadius:10,padding:"10px 12px",border:`1px solid ${C.border}`}}>
@@ -10734,6 +10739,31 @@ const ALT_BAR_SEKMELERI = [
   {tab:"profil",    key:"profil",      tip:"profil",    label:"Profil"},
 ];
 
+// DÜZELTME (2026-07-16): Masaüstü web sürümünde menüler arasında gezinirken
+// adres çubuğu hiç değişmiyordu (SPA state ile yönetiliyordu, tarayıcı
+// geçmişi/yer imi/paylaşım linki desteklenmiyordu). Bu tablo, ana ekranları
+// gerçek URL yollarına eşliyor — nav() artık bu yolu history.pushState ile
+// adres çubuğuna yazıyor, sayfa ilk yüklendiğinde de bu yol okunup doğru
+// ekran açılıyor. Burada olmayan (parametre gerektiren, örn. fon/hisse
+// detay) ekranlar URL'i değiştirmez, eski davranış korunur.
+const SCREEN_TO_PATH: Record<string,string> = {
+  home: "/",
+  hesaplaMenu: "/hesapla",
+  piyasaMenu: "/piyasa",
+  araclarMenu: "/araclar",
+  asistan: "/asistan",
+  profil: "/profil",
+  getiriKarsilastirma: "/getiri-karsilastirma",
+  haftalikOzet: "/haftalik-ozet",
+  finansalTakvim: "/finansal-takvim",
+  fiyatAlarmlarim: "/fiyat-alarmlarim",
+  sozluk: "/finans-sozlugu",
+  ayarlar: "/ayarlar",
+};
+const PATH_TO_SCREEN: Record<string,string> = Object.fromEntries(
+  Object.entries(SCREEN_TO_PATH).map(([ekran,yol])=>[yol,ekran])
+);
+
 // Alt bar için düz (line) SVG ikonlar
 function AltBarIcon({tip,aktif}:{tip:string,aktif:boolean}){
   const renk = aktif ? "#4F8CFF" : (TEMA==="acik"?"#4A6E96":"#8FA8D8");
@@ -14867,6 +14897,14 @@ function App(){
   // yine ana menüden başlar; sadece yenileme aynı ekranda kalır.
   const [screen,setScreen]=useState(()=>{
     try{
+      // DÜZELTME (2026-07-16): Gerçek URL yolu (örn. /hesapla) varsa, ?ekran=
+      // parametresinden ve sessionStorage'dan ÖNCE bunu kullan — kullanıcı
+      // doğrudan bu adrese geldiyse (yer imi, paylaşılan link, adres çubuğuna
+      // yazma) kesinlikle o ekranda açılmalı.
+      const yol=window.location.pathname.replace(/\/+$/,"")||"/";
+      if(PATH_TO_SCREEN[yol]) return PATH_TO_SCREEN[yol];
+    }catch{}
+    try{
       // Blog/harici bağlantılardan derin link desteği: ?ekran=karPayiOranlari gibi
       // bir URL parametresi varsa ve MENU'de gerçekten tanımlıysa, sessionStorage'daki
       // kayıttan ÖNCE bunu kullan — kullanıcı bir blog yazısından "hesapla" linkine
@@ -14885,7 +14923,28 @@ function App(){
   });
   useEffect(()=>{
     try{sessionStorage.setItem("kp_screen",screen);}catch{}
+    // DÜZELTME (2026-07-16): SCREEN_TO_PATH'te tanımlı ekranlar için adres
+    // çubuğunu gerçek bir yolla güncelliyoruz (örn. /hesapla). Parametre
+    // gerektiren detay ekranları (fon/hisse detay vb.) bu tabloda yok, o
+    // ekranlarda adres çubuğu bilinçli olarak değiştirilmiyor.
+    try{
+      const hedefYol=SCREEN_TO_PATH[screen];
+      if(hedefYol && window.location.pathname.replace(/\/+$/,"")!==hedefYol.replace(/\/+$/,"")){
+        window.history.pushState({kpEkran:screen}, "", hedefYol);
+      }
+    }catch{}
   },[screen]);
+  useEffect(()=>{
+    // Tarayıcının geri/ileri butonlarını URL ile senkron tutuyor.
+    const onPopState=()=>{
+      try{
+        const yol=window.location.pathname.replace(/\/+$/,"")||"/";
+        if(PATH_TO_SCREEN[yol]) setScreen(PATH_TO_SCREEN[yol]);
+      }catch{}
+    };
+    window.addEventListener("popstate", onPopState);
+    return ()=>window.removeEventListener("popstate", onPopState);
+  },[]);
 
   // ── Masaüstü (geniş ekran) uyumu ──
   // ── Dil değişikliği dinleyicisi ──
@@ -15186,9 +15245,12 @@ function App(){
     try{ return localStorage.getItem("kp_appstore_banner")==="kapali"; }catch{ return false; }
   });
   // Masaüstü sağ alt App Store QR kartı (Fonoloji tarzı); kapatınca bir daha çıkmaz
-  const [qrPopupKapali,setQrPopupKapali]=useState<boolean>(()=>{
-    try{ return localStorage.getItem("kp_qr_popup_kapali")==="kapali"; }catch{ return false; }
-  });
+  const [qrPopupKapali,setQrPopupKapali]=useState<boolean>(false);
+  // DÜZELTME (2026-07-16): Eskiden bu tercih localStorage'a kalıcı
+  // yazılıyordu — kullanıcı bir kere kapatınca sayfa yenilense bile bir
+  // daha hiç görünmüyordu. Artık sadece o oturumda (React state) gizleniyor;
+  // sayfa yenilenince kutunun tekrar görünmesi istendiği için kalıcı
+  // saklama kaldırıldı.
   const [menuAramaOdakli,setMenuAramaOdakli]=useState(false);
   const [hesaplaAramaQ,setHesaplaAramaQ]=useState("");
   const [hesaplaAramaOdakli,setHesaplaAramaOdakli]=useState(false);
@@ -15524,7 +15586,7 @@ function App(){
               <span style={{width:20,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon k="ayarlar" size={15}/></span>
               <span style={{fontSize:12.5,fontWeight:600,color:screen==="ayarlar"?(TEMA==="acik"?"#0F3B66":"#DCE9F7"):(TEMA==="acik"?"#24384E":WA(0.55))}}>{CV("Ayarlar")}</span>
             </div>
-            <div style={{fontSize:9.5,color:WA(0.3),padding:"10px 12px 0",lineHeight:1.5}}>© {new Date().getFullYear()} Katılım Plus</div>
+            <div style={{fontSize:9.5,color:WA(0.4),padding:"10px 12px 0",lineHeight:1.5}}>© {new Date().getFullYear()} Katılım Plus</div>
           </div>
         </div>
       )}
@@ -15539,7 +15601,7 @@ function App(){
               <img src={KATILIM_LOGO_B64} alt="" style={{height:24,width:"auto",display:"block"}}/>
             </div>
             <div style={{flex:1,fontSize:15.5,fontWeight:800,letterSpacing:"-0.01em",color:TEMA==="acik"?"#16222E":"#EAF1FA"}}>{CV("Katılım Plus artık cebinde")}</div>
-            <button onClick={()=>{setQrPopupKapali(true);try{localStorage.setItem("kp_qr_popup_kapali","kapali");}catch{}}} style={{
+            <button onClick={()=>{setQrPopupKapali(true);}} style={{
               width:28,height:28,borderRadius:14,border:"none",cursor:"pointer",flexShrink:0,
               background:TEMA==="acik"?"rgba(22,34,46,0.07)":"rgba(255,255,255,0.08)",
               color:TEMA==="acik"?"#3A4E62":"rgba(255,255,255,0.6)",fontSize:14,fontWeight:700,lineHeight:"28px"}}>✕</button>
