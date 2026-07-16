@@ -40,5 +40,8 @@
       "path": "/api/tefas-proxy?cron=1&parca=8",
       "schedule": "0 15 * * 1-5"
     }
+  ],
+  "rewrites": [
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
