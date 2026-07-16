@@ -1,5 +1,6 @@
 import UIKit
 import Capacitor
+import FirebaseCore
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -7,6 +8,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        // DÜZELTME (2026-07-16): @capacitor-firebase/messaging ve
+        // @capacitor-firebase/app eklentileri, Firebase'in native SDK'sını
+        // KENDİLİĞİNDEN başlatmıyor — bu satır olmadan iOS'te "The default
+        // Firebase app has not yet been configured" hatasıyla push kaydı
+        // (ve GoogleService-Info.plist'in okunması) tamamen başarısız
+        // oluyordu. Bu çağrı GoogleService-Info.plist'i okuyup Firebase'i
+        // başlatan standart ve zorunlu adımdır; en geç return true'dan önce
+        // çağrılmalı.
+        FirebaseApp.configure()
         // Override point for customization after application launch.
         return true
     }
@@ -54,6 +64,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     // tetiklenmiyordu, çünkü native taraf bunu Capacitor köprüsüne hiç
     // iletmiyordu. Entitlement, provisioning profile ve APNs key hepsi zaten
     // doğruydu — eksik olan sadece bu standart Capacitor bağlantı koduydu.
+    // NOT: Artık @capacitor-firebase/messaging kullanılıyor olsa da bu iki
+    // metod zararsız ve genel amaçlı standart Capacitor köprü kodu olduğu
+    // için olduğu gibi bırakıldı.
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         NotificationCenter.default.post(name: .capacitorDidRegisterForRemoteNotifications, object: deviceToken)
     }
