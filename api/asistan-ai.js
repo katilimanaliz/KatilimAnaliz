@@ -40,6 +40,27 @@
 // "Türkiye'deki Katılım Bankaları (Temmuz 2026)" başlıklı BAĞLAYICI bir liste
 // eklendi (12 banka — uygulamanın Katılım Bankaları ekranı + kar-payi.json
 // birleşimi). Yeni banka kurulur/kapanırsa BU LİSTE elle güncellenecek.
+//
+// ZK TALİMATI GÜNCELLEMESİ (2026-07-16): 16.07.2026 tarihli TCMB ZK Uygulama
+// Talimatı revizyonu (kırmızı işaretli eklemeler/çıkarmalar) taranarak
+// PDF_BELGELER'e yansıtıldı:
+//   1) TL VE YP kredi büyümesi istisna listelerine "FYY (5411 sayılı Kanun
+//      geçici 32. madde kapsamında Finansal Yeniden Yapılandırma) ile
+//      sağlanan ilave finansmanlar" eklendi — bu istisna daha önce YOKTU,
+//      talimatta hem TL hem YP büyüme sınırı istisna bölümlerine yeni
+//      eklenmiş (kırmızı/altı çizili).
+//   2) "Kamusal amaçlı finansmanlar" tanımı genişletildi: Toplu Konut
+//      İdaresi Başkanlığının GYO niteliğindeki iştirakleri YANI SIRA bu
+//      iştiraklerin bağlı ortaklıkları da kapsama dahil edildi (talimatta
+//      "...iştirakleri, ile bu iştiraklerin bağlı ortaklıkları, özel
+//      kanunla..." şeklinde kırmızı eklenmiş).
+//   3) YP mevduat/katılım fonu ZK oranları (%30→32, %26→28) ve ilave ZK'nın
+//      (%2,5) 01.07.2026 itibarıyla kaldırılması zaten önceki sürümde
+//      doğruydu, bu güncellemede sadece teyit edildi, değişiklik yapılmadı.
+//   Not: Cetvel (ZK300H/KB400H) satır numaraları, hesap kodları gibi saf
+//   raporlama/muhasebe detaylarındaki değişiklikler chatbot'un müşteri/
+//   çalışan sorularına cevap kapsamı dışında olduğu için PDF_BELGELER'e
+//   bilerek dahil edilmedi.
 
 const SISTEM_PROMPTU = `Sen KatılımPlus uygulamasının resmi yapay zekâ bankacılık asistanısın.
 
@@ -126,7 +147,7 @@ Bilinen Formüller ve Oranlar
 Aşağıdakileri kesin bilgi olarak kullan, tahmin etme:
 
 - **POS azami komisyon:** Referans Oran + 0,45 puan (yıllık). Bloke/valör gün tavanı 40 gündür; komisyon ile bloke gün birlikte tebliğ formülüyle sınırlıdır: azami komisyon = Azami Oran × (1 − bloke gün/40).
-- **Erken ödeme ücreti (TCMB 2020/4 Tebliğ m.11/3), 01.06.2025 sonrası kullandırım:** Sabit kâr paylı TL'de azami ücret = yıllık bileşik oranın %5'i + kalan ağırlıklı ortalama vadenin (ay) %0,20'si. Sabit kâr paylı YP/dövize endekslide %3 + AOV×%0,10. Bireysel finansmanlarda kalan vade ≤36 ay ise azami %1, >36 ay ise azami %2 ceza. Ücrete ayrıca %5 BSMV eklenir.
+- **Erken ödeme ücreti (TCMB 2020/4 Tebliğ m.11/3), 01.06.2025 sonrası kullandırım:** Sabit kâr paylı TL'de azami ücret = yıllık bileşik oranın %5'i + kalan ağırlıklı ortalama vadenin (ay) %0,20'si. Sabit kâr paylı YP/dövize endeksli %3 + AOV×%0,10. Bireysel finansmanlarda kalan vade ≤36 ay ise azami %1, >36 ay ise azami %2 ceza. Ücrete ayrıca %5 BSMV eklenir.
 - **ZK Nema Oranı:** AOFM (Ağırlıklı Ortalama Fonlama Maliyeti) × %86 (TCMB Basın Duyurusu 2025-30). AOFM, TCMB politika faizinden farklı bir gösterge olduğu için ayrı tut.
 - **TLREF/TLREFK:** TLREF, BIST TLREF Endeksi'nin günlük değişiminden türetilen bir gecelik referans orandır (BIST'in kendi resmi endeks formülü: Endeks_t = Endeks_(t-1) × (1 + TLREF_t × g_t/365), g_t gerçek takvim günü farkıdır — hafta sonu/tatilde 1'den büyük olur). TLREFK (katılım bankacılığı karşılığı), TLREF'ten yaklaşık 0,096 puan daha düşüktür.
 - **TL Vadeli Katılım Hesabı stopaj dilimleri:** ≤180 gün %17,5; 181-365 gün %15; 365 gün üzeri %10. YP hesaplarda tek oran uygulanır.
@@ -271,12 +292,13 @@ TL İSTİSNA FİNANSMANLAR (büyüme dışı):
 ✅ Yatırım Teşvik Belgeli yatırım finansmanı (min 2 yıl)
 ✅ Esnaf finansmanları
 ✅ Tarımsal finansmanlar
-✅ Kamusal amaçlı finansmanlar (5018 sayılı Kanun)
+✅ Kamusal amaçlı finansmanlar (5018 sayılı Kanun kapsamındaki kurum/kuruluşlar, bunların bağlı ortaklıkları/iştirakleri VE bu iştiraklerin bağlı ortaklıkları dahil — kapsam 2026-07 güncellemesiyle genişletildi)
 ✅ Savunma sanayi firmaları
 ✅ KOSGEB destekli finansmanlar
 ✅ Elektrik dağıtım lisanslı firmalar
 ✅ Başka bankada yeniden yapılandırılan finansmanların kapatılması
 ✅ Merkez Bankasınca uygun KGF kefaletli programlar
+✅ FYY (Finansal Yeniden Yapılandırma, 5411 sayılı Bankacılık Kanunu geçici 32. madde) kapsamında borçluya sağlanan İLAVE finansmanlar — YENİ istisna (2026-07 güncellemesi). Not: FYY kapsamındaki mevcut bir finansmanın para biriminde değişiklik olursa, kapatılan/yeni açılan tutar o dönemin büyüme hesaplamasına değil, TAKİP EDEN dönemin başı stok bakiyesine yansıtılır.
 
 ## YP Finansman Büyüme Sınırı ve İstisnaları
 
@@ -289,7 +311,7 @@ YP İSTİSNA FİNANSMANLAR (büyüme dışı):
 ✅ Uluslararası kalkınma kuruluşlarından makine-teçhizat finansmanı
 ✅ Yurt içi bankalara kullandırılan finansmanlar
 ✅ Gayrikabili rücu akreditif iskontosu (yurt dışı banka riskinde)
-✅ Kamusal amaçlı finansmanlar
+✅ Kamusal amaçlı finansmanlar (5018 sayılı Kanun kapsamındaki kurum/kuruluşlar, bunların bağlı ortaklıkları/iştirakleri VE bu iştiraklerin bağlı ortaklıkları dahil — kapsam 2026-07 güncellemesiyle genişletildi)
 ✅ Savunma sanayi firmaları
 ✅ KGF kefaletli ihracat finansmanları
 ✅ Elektrik dağıtım lisanslı firmalar
@@ -297,6 +319,7 @@ YP İSTİSNA FİNANSMANLAR (büyüme dışı):
 ✅ Hazine garantili kalkınma/yatırım bankası finansmanları
 ✅ Borç üstlenim anlaşması kapsamı projeler (min 2 yıl)
 ✅ Özelleştirme ihalesi kazananlara kullandırılan finansmanlar
+✅ FYY (Finansal Yeniden Yapılandırma, 5411 sayılı Bankacılık Kanunu geçici 32. madde) kapsamında borçluya sağlanan İLAVE finansmanlar — YENİ istisna (2026-07 güncellemesi), aynı para birimi değişikliği mekanizması TL'deki gibi geçerlidir.
 
 ⚠️ ÖNEMLİ: YP finansmanlarda NET İHRACATÇI muafiyeti YOKTUR.
 Bu muafiyet SADECE TL finansmanlarda geçerlidir.
