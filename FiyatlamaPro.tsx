@@ -9,11 +9,14 @@ import {
   Settings, Headphones, BookOpen, Bot, User, Clock, Briefcase,
   Bitcoin, Banknote, Plus, Eye, EyeOff, Calendar, Tag, Info, Pencil, Trash2, Bookmark,
 } from "lucide-react";
-// NOT: @capacitor/push-notifications bilinçli olarak burada static import
+// NOT: @capacitor-firebase/messaging bilinçli olarak burada static import
 // EDİLMİYOR — modül, aşağıdaki push useEffect'i içinde dinamik import ile
 // yalnızca gerçek native cihazda yüklenir. Böylece kütüphanenin kurulu
 // olmadığı web önizleme ortamlarında (örn. artifact preview) dosya sorunsuz
 // yüklenir; native build'de Vite dinamik import'u yine pakete dahil eder.
+// (2026-07-16: eskiden @capacitor/push-notifications kullanılıyordu — iOS'te
+// FCM yerine ham APNs token'ı döndürdüğü için değiştirildi, bkz. push
+// useEffect'indeki DÜZELTME notu.)
 
 const IS_NATIVE = (window as any).Capacitor?.isNativePlatform?.() ?? false;
 
@@ -15094,19 +15097,40 @@ function App(){
 
   // ── Push Notifications (bildirim servisi) kaydı ──
   // Sadece native (iOS/Android) uygulamada çalışır, web'de atlanır.
+  //
+  // DÜZELTME (2026-07-16): @capacitor/push-notifications YERİNE
+  // @capacitor-firebase/messaging kullanılıyor.
+  // KÖK NEDEN: eski pakette "registration" event'inin döndürdüğü
+  // token.value alanı platforma göre FARKLI anlama geliyordu — Android'de
+  // gerçek bir FCM kayıt token'ı, ama iOS'te FCM'in hiç anlamadığı HAM bir
+  // APNs cihaz token'ıydı. Sunucu (api/bildirim.js) bunu doğrudan
+  // admin.messaging().send()'e FCM token'ı gibi geçiriyordu; Firebase iOS
+  // token'larını "messaging/invalid-argument: The registration token is not
+  // a valid FCM registration token" diyerek reddedip GEÇERSİZ token
+  // listesine ekliyordu (test: 33 token'dan 31'i Android'e gitti, 2'si —
+  // muhtemelen iOS cihazları — bu hatayla sessizce silindi; bildirim
+  // Android tablete düştü, iPhone'a hiç düşmedi). Firebase Console'daki APNs
+  // Authentication Key / FCM V1 API ayarları baştan doğruydu, sorun hiç
+  // sunucuda ya da Firebase yapılandırmasında değildi.
+  // ÇÖZÜM: @capacitor-firebase/messaging, iOS'te ham APNs token'ını
+  // Firebase'in kendi native SDK'sı üzerinden GERÇEK bir FCM token'ına
+  // çeviriyor — getToken() iki platformda da doğrudan kullanılabilir aynı
+  // tip FCM token'ı döndürüyor, sunucu tarafında (api/bildirim.js) HİÇBİR
+  // değişikliğe gerek yok.
+  //
+  // GEREKLİ NATIVE DOSYALAR (bu koddan bağımsız, AYRICA eklenmeli):
+  //  - ios/App/App/GoogleService-Info.plist  (Firebase Console → iOS app)
+  //  - android/app/google-services.json      (Firebase Console → Android app)
+  // Bu dosyalar olmadan @capacitor-firebase/messaging derleme zamanında
+  // Firebase'i başlatamaz.
   useEffect(()=>{
-    // NOT: IS_NATIVE dosya en tepesinde bir kere hesaplanıyor — eğer
-    // Capacitor bridge o an henüz hazır değilse yanlışlıkla false kilitlenip
-    // kalabilir. Bu yüzden burada tekrar, çalışma anında kontrol ediyoruz.
+    // NOT: Capacitor bridge o an henüz hazır değilse yanlışlıkla false
+    // kilitlenip kalabilir — bu yüzden çalışma anında tekrar kontrol
+    // ediyoruz (dosya tepesinde bir kere hesaplanan bir sabite güvenmiyoruz).
     const gercekIsNative = (window as any).Capacitor?.isNativePlatform?.() ?? false;
 
-    // DÜZELTME (2026-07-15): İlerleme izleme sistemi. Önceki sürümlerde süreç
-    // ne token ne hata üretmeden sessizce takılıyordu — hangi adımda
-    // kaldığını görmenin hiçbir yolu yoktu. Artık her adımdan HEMEN ÖNCE
-    // "şu an buradayım" bilgisini kp_push_hata'ya yazıyoruz; bir sonraki
-    // başarılı adım bunun üzerine yazıyor. Süreç bir yerde takılırsa, alarm
-    // ekranında kalan son "İLERLEME: ..." mesajı TAM olarak nerede
-    // durduğumuzu gösterir.
+    // İlerleme izleme sistemi: süreç bir yerde takılırsa, alarm ekranında
+    // kalan son "İLERLEME: ..." mesajı TAM olarak nerede durduğumuzu gösterir.
     const ilerleme = (adim: string) => {
       try{ localStorage.setItem("kp_push_hata", `İLERLEME: ${adim} (${new Date().toLocaleTimeString("tr-TR")})`); }catch{}
     };
@@ -15117,12 +15141,11 @@ function App(){
     }
     ilerleme("native algılandı, plugin yükleniyor");
 
-    let PN: any = null; // cleanup'ta erişebilmek için dışarıda tutuluyor
+    let FM: any = null; // cleanup'ta erişebilmek için dışarıda tutuluyor
     let tamamlandi = false; // timeout sonrası gecikmeli event'lerin ilerleme yazmasını önlemek için
 
-    // Süreç 20 saniye içinde ne token ne hata üretmezse (register() çağrısı
-    // native tarafta hiç yanıt vermiyorsa), bunu açıkça yazıyoruz — sonsuza
-    // dek sessiz kalmak yerine.
+    // Süreç 20 saniye içinde ne token ne hata üretmezse, bunu açıkça
+    // yazıyoruz — sonsuza dek sessiz kalmak yerine.
     const zamanAsimi = setTimeout(() => {
       if(tamamlandi) return;
       try{
@@ -15133,59 +15156,54 @@ function App(){
       }catch{}
     }, 20000);
 
+    const tokenIsle = (token: string) => {
+      tamamlandi = true;
+      console.log("FCM token alındı:", token);
+      try{ localStorage.setItem("kp_push_token", token); localStorage.removeItem("kp_push_hata"); }catch{}
+      fetch(`${API_BASE}/api/bildirim?islem=kaydet`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token,
+          platform: (window as any).Capacitor?.getPlatform?.() ?? "unknown",
+        }),
+      }).catch((e) => {
+        console.error("Token kaydedilemedi:", e);
+      });
+    };
+
     (async () => {
       try {
         // Dinamik import: modül yalnızca native cihazda yüklenir; web
         // önizlemelerinde bu satıra hiç gelinmez (yukarıda return edildi).
-        const mod = await import("@capacitor/push-notifications");
-        PN = mod.PushNotifications;
+        const mod = await import("@capacitor-firebase/messaging");
+        FM = mod.FirebaseMessaging;
         ilerleme("plugin yüklendi, dinleyiciler ekleniyor");
 
-        PN.addListener("registration", (token: any) => {
-          tamamlandi = true;
-          console.log("Push registration token:", token.value);
-          try{ localStorage.setItem("kp_push_token", token.value); localStorage.removeItem("kp_push_hata"); }catch{}
-          fetch(`${API_BASE}/api/bildirim?islem=kaydet`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              token: token.value,
-              platform: (window as any).Capacitor?.getPlatform?.() ?? "unknown",
-            }),
-          }).catch((e) => {
-            console.error("Token kaydedilemedi:", e);
-          });
+        // Bazı Android sürümlerinde token, getToken() dönmeden önce bu
+        // event ile de gelebiliyor — ikisini birden dinlemek güvenceyi artırıyor.
+        await FM.addListener("tokenReceived", (event: any) => {
+          if(event?.token) tokenIsle(event.token);
         });
 
-        PN.addListener("registrationError", (err: any) => {
-          tamamlandi = true;
-          console.error("Push registration error:", err.error);
-          // DÜZELTME (2026-07-14): eskiden bu hata sadece konsola yazılıyordu,
-          // kullanıcı "Bildirim izni gerekiyor" gibi genel/yanıltıcı bir mesaj
-          // görüyordu — OS izni açık olsa bile APNs kayıt hatası (ör. eksik
-          // Push Notifications entitlement) aynı genel mesajın arkasına
-          // gizleniyordu. Artık gerçek native hata metni saklanıyor ki alarm
-          // ekranı kullanıcıya asıl sebebi gösterebilsin.
-          try{ localStorage.setItem("kp_push_hata", `registrationError: ${String(err?.error||"bilinmeyen native hata")}`); }catch{}
+        await FM.addListener("notificationReceived", (event: any) => {
+          console.log("Bildirim alındı (uygulama açıkken):", event);
+          const n = event?.notification;
+          bildirimEkle(n?.title||"Bildirim", n?.body||"");
         });
 
-        PN.addListener("pushNotificationReceived", (notification: any) => {
-          console.log("Bildirim alındı (uygulama açıkken):", notification);
-          bildirimEkle(notification?.title||"Bildirim", notification?.body||"");
-        });
-
-        PN.addListener("pushNotificationActionPerformed", (notification: any) => {
-          console.log("Bildirime tıklandı:", notification.actionId);
-          const n=notification?.notification;
+        await FM.addListener("notificationActionPerformed", (event: any) => {
+          console.log("Bildirime tıklandı:", event);
+          const n = event?.notification?.notification || event?.notification;
           bildirimEkle(n?.title||"Bildirim", n?.body||"");
         });
 
         ilerleme("dinleyiciler eklendi, izin durumu kontrol ediliyor (checkPermissions)");
-        let izin = await PN.checkPermissions();
+        let izin = await FM.checkPermissions();
         ilerleme(`checkPermissions sonucu: ${izin.receive}`);
-        if (izin.receive === "prompt") {
+        if (izin.receive === "prompt" || izin.receive === "prompt-with-rationale") {
           ilerleme("izin isteniyor (requestPermissions)");
-          izin = await PN.requestPermissions();
+          izin = await FM.requestPermissions();
           ilerleme(`requestPermissions sonucu: ${izin.receive}`);
         }
         if (izin.receive !== "granted") {
@@ -15199,7 +15217,7 @@ function App(){
         // uygulamaz ve bildirim sessiz gelir. iOS'ta bu çağrı no-op'tur, zararsız.
         ilerleme("izin verildi, bildirim kanalı oluşturuluyor (createChannel)");
         try {
-          await PN.createChannel({
+          await FM.createChannel({
             id: "default",
             name: "Bildirimler",
             description: "Katılım Plus bildirimleri ve fiyat alarmları",
@@ -15208,21 +15226,23 @@ function App(){
             visibility: 1,
             vibration: true,
           });
-          ilerleme("kanal oluşturuldu, register() çağrılıyor");
+          ilerleme("kanal oluşturuldu, token isteniyor (getToken)");
         } catch (e) {
           console.error("Bildirim kanalı oluşturulamadı:", e);
-          ilerleme("kanal oluşturma hatası (yok sayıldı), register() çağrılıyor");
+          ilerleme("kanal oluşturma hatası (yok sayıldı), token isteniyor (getToken)");
         }
-        await PN.register();
-        ilerleme("register() döndü — şimdi 'registration' veya 'registrationError' event'i bekleniyor");
+
+        // getToken() iki platformda da AYNI TİP, doğrudan kullanılabilir
+        // FCM token'ı döndürür — eski pakette iOS'te bu ham APNs token'ıydı.
+        const sonuc = await FM.getToken();
+        ilerleme("getToken() döndü");
+        if (sonuc?.token) tokenIsle(sonuc.token);
       } catch (e) {
         tamamlandi = true;
         console.error("Push notification kayıt hatası:", e);
-        // DÜZELTME (2026-07-15): bu catch bloğu daha önce hatayı sadece konsola
-        // yazıyordu — kullanıcı Safari uzaktan hata ayıklama olmadan hiçbir
-        // zaman gerçek native hatayı göremiyordu, hep "izin gerekiyor" gibi
-        // yanıltıcı genel mesajla karşılaşıyordu. Artık gerçek hata da
-        // kaydedilip alarm ekranında görünür hale geliyor.
+        // Hata sadece konsola değil, kp_push_hata'ya da yazılıyor ki alarm
+        // ekranı kullanıcıya asıl sebebi (Safari uzaktan hata ayıklama
+        // olmadan) gösterebilsin.
         try{
           const mesaj = (e as any)?.message || String(e) || "bilinmeyen hata (dış catch)";
           localStorage.setItem("kp_push_hata", `dış catch: ${mesaj}`);
@@ -15232,7 +15252,7 @@ function App(){
 
     return () => {
       clearTimeout(zamanAsimi);
-      if (PN) PN.removeAllListeners();
+      if (FM) FM.removeAllListeners();
     };
   },[]);
 
