@@ -10,6 +10,8 @@
     "capawesome:build": "if [ \"$CI_PLATFORM\" = \"ios\" ] || [ \"$CI_PLATFORM\" = \"android\" ]; then npx trapeze run capawesome.yml -y --$CI_PLATFORM; fi && npm run build"
   },
   "dependencies": {
+    "@capacitor-firebase/app": "^7.4.0",
+    "@capacitor-firebase/messaging": "^7.4.0",
     "@capacitor/android": "^8.4.1",
     "@capacitor/cli": "^8.4.1",
     "@capacitor/core": "^8.4.1",
