@@ -1,3 +1,5 @@
+import { Redis } from "@upstash/redis";
+
 // api/asistan-ai.js
 // KatılımPlus — Gemini tabanlı bankacılık asistanı proxy'si.
 // NOT (2026-07): Maliyet nedeniyle Anthropic Claude yerine Google Gemini
@@ -654,6 +656,30 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") {
     return res.status(405).json({ success: false, error: "Sadece POST desteklenir" });
+  }
+
+  // --- HIZ SINIRI (2026-07-17): IP basina dakikada 10 istek.
+  // Amac: Gemini API'sinin botlarla dovulup kota/fatura sisirilmesini onlemek.
+  // Redis'e ulasilamazsa istek ENGELLENMEZ (fail-open) - asistan calismaya devam eder.
+  try {
+    const rlUrl = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+    const rlToken = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+    if (rlUrl && rlToken) {
+      const redisRL = new Redis({ url: rlUrl, token: rlToken });
+      const ip = (String(req.headers["x-forwarded-for"] || "").split(",")[0].trim())
+        || req.socket?.remoteAddress || "bilinmeyen";
+      const rlAnahtar = "rl:asistan:" + ip;
+      const sayi = await redisRL.incr(rlAnahtar);
+      if (sayi === 1) await redisRL.expire(rlAnahtar, 60);
+      if (sayi > 10) {
+        return res.status(429).json({
+          success: false,
+          error: "Kisa surede cok fazla istek gonderildi. Lutfen bir dakika sonra tekrar deneyin."
+        });
+      }
+    }
+  } catch (rlHata) {
+    // Rate limit altyapisi cokerse kullaniciyi cezalandirma - sessizce devam et.
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
