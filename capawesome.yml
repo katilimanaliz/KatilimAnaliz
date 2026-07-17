@@ -1,11 +1,11 @@
 platforms:
   android:
-    versionCode: 32
+    versionCode: 33
     versionName: "1.5"
   ios:
     targets:
       App:
         version: "1.5"
-        buildNumber: 32
+        buildNumber: 33
         entitlements:
           - aps-environment: production
