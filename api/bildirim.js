@@ -128,7 +128,7 @@ async function tekTokeneGonder(token, baslik, govde, veri) {
     return true;
   } catch (e) {
     console.error("Alarm bildirimi gönderilemedi:", token, e.message);
-    return false;
+    return { hata: e.code || e.message || "bilinmeyen" };
   }
 }
 
@@ -447,6 +447,7 @@ async function alarmKontrol(req, res) {
 
         let tetiklenen = 0;
         let gonderilenBildirim = 0;
+        const gonderimHatalari = [];
         const guncelListe = [];
 
         for (const alarm of alarmlar) {
@@ -488,7 +489,10 @@ async function alarmKontrol(req, res) {
               sembol: alarm.sembol,
               alarmId: alarm.id,
             });
-            if (gonderildi) gonderilenBildirim++;
+            if (gonderildi === true) gonderilenBildirim++;
+            else if (gonderildi && gonderildi.hata) {
+              gonderimHatalari.push({ alarm: alarm.ad, tokenIlk10: (alarm.token||"").slice(0,10), hata: gonderildi.hata });
+            }
             guncelListe.push({ ...alarm, aktif: false, tetiklenmeTs: Date.now(), tetiklenmeFiyat: guncelFiyat });
           } else {
             guncelListe.push(alarm);
@@ -501,6 +505,7 @@ async function alarmKontrol(req, res) {
           benzersizSembol: benzersizSemboller.length,
           tetiklenen,
           gonderilenBildirim,
+          gonderimHatalari,
         };
       },
       { denemeSayisi: 3, bekleMs: 1000 }
