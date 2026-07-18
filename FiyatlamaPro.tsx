@@ -12353,6 +12353,7 @@ function pushTokenAl():string|null{
 // ─── FİYAT ALARMLARIM EKRANI ─────────────────────────────────────────────────
 function FiyatAlarmlarim(){
   const token=pushTokenAl();
+  const webOrtami = !(((window as any).Capacitor?.isNativePlatform?.())??false);
   const [alarmlar,setAlarmlar]=useState<any[]|null>(null);
   const [siliniyor,setSiliniyor]=useState<string|null>(null);
   const [kurulan,setKurulan]=useState<string|null>(null);
@@ -12412,7 +12413,16 @@ function FiyatAlarmlarim(){
 
   return(
     <div style={{background:C.bg,minHeight:"100vh",padding:"0 16px 40px",boxSizing:"border-box"}}>
-      {!token&&(
+      {!token&&webOrtami&&(
+        <div style={{background:"rgba(59,130,246,0.08)",border:"1px solid rgba(59,130,246,0.3)",borderRadius:14,padding:"16px",marginBottom:14}}>
+          <p style={{margin:0,fontSize:13,fontWeight:700,color:(TEMA==="acik"?"#2E6DA8":"#7DB2FF")}}>📱 Fiyat alarmları mobil uygulamada</p>
+          <p style={{margin:"6px 0 0",fontSize:12,color:WA(0.6),lineHeight:1.5}}>
+            Alarmlar anlık bildirim gerektirdiği için Katılım Plus mobil uygulamasında kullanılabilir.
+          </p>
+          <a href="https://apps.apple.com/app/id6788268835" target="_blank" rel="noopener" style={{display:"inline-block",marginTop:10,padding:"9px 14px",borderRadius:10,background:"#3B82F6",color:"#fff",fontSize:12.5,fontWeight:700,textDecoration:"none"}}>App Store'dan İndir</a>
+        </div>
+      )}
+      {!token&&!webOrtami&&(
         <div style={{background:"rgba(248,113,113,0.1)",border:"1px solid rgba(248,113,113,0.3)",borderRadius:14,padding:"16px",marginBottom:14}}>
           <p style={{margin:0,fontSize:13,fontWeight:700,color:C.red}}>Bildirim izni gerekli</p>
           <p style={{margin:"6px 0 0",fontSize:12,color:WA(0.6),lineHeight:1.5}}>
@@ -12717,6 +12727,11 @@ function KurGrafikModal({kur, onClose}:{kur:any, onClose:()=>void}){
                       <button onClick={()=>{
                           const token=pushTokenAl();
                           if(!token){
+                            const nativeMi=((window as any).Capacitor?.isNativePlatform?.())??false;
+                            if(!nativeMi){
+                              setAlarmHata("Fiyat alarmları, anlık bildirim gerektirdiği için Katılım Plus mobil uygulamasında kullanılabilir. App Store'dan indirerek alarm kurabilirsiniz.");
+                              return;
+                            }
                             let neden="";
                             try{ neden=localStorage.getItem("kp_push_hata")||""; }catch{}
                             setAlarmHata(neden ? `Bildirim kaydı başarısız: ${neden}` : "Bildirim izni gerekiyor — cihaz Ayarlar'dan izin verip tekrar deneyin.");
