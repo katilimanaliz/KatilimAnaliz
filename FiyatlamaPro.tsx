@@ -12355,12 +12355,28 @@ function FiyatAlarmlarim(){
   const token=pushTokenAl();
   const [alarmlar,setAlarmlar]=useState<any[]|null>(null);
   const [siliniyor,setSiliniyor]=useState<string|null>(null);
+  const [kurulan,setKurulan]=useState<string|null>(null);
+
+  // Otomatik temizlik: 7 gunden eski TETIKLENMIS alarmlar sessizce silinir.
+  const ESKI_ALARM_MS = 7*24*60*60*1000;
 
   const yukle=()=>{
     if(!token){ setAlarmlar([]); return; }
     fetch(`${API_BASE}/api/bildirim?islem=alarm-listele`,{
       method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token}),
-    }).then(r=>r.ok?r.json():null).then(d=>setAlarmlar(d?.alarmlar||[])).catch(()=>setAlarmlar([]));
+    }).then(r=>r.ok?r.json():null).then(d=>{
+      const hepsi = d?.alarmlar||[];
+      const simdi = Date.now();
+      const eskiler = hepsi.filter((a:any)=>!a.aktif && a.tetiklenmeTs && (simdi - a.tetiklenmeTs) > ESKI_ALARM_MS);
+      // Eskileri arka planda sil (hata olsa da liste calismaya devam eder)
+      eskiler.forEach((a:any)=>{
+        fetch(`${API_BASE}/api/bildirim?islem=alarm-sil`,{
+          method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token,id:a.id}),
+        }).catch(()=>{});
+      });
+      const eskiIdler = new Set(eskiler.map((a:any)=>a.id));
+      setAlarmlar(hepsi.filter((a:any)=>!eskiIdler.has(a.id)));
+    }).catch(()=>setAlarmlar([]));
   };
   useEffect(()=>{ yukle(); },[]);
 
@@ -12370,6 +12386,21 @@ function FiyatAlarmlarim(){
     fetch(`${API_BASE}/api/bildirim?islem=alarm-sil`,{
       method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token,id}),
     }).then(()=>{ setSiliniyor(null); yukle(); }).catch(()=>setSiliniyor(null));
+  };
+
+  // Tetiklenmis bir alarmi ayni kosulla yeniden kurar.
+  const tekrarKur=(a:any)=>{
+    if(!token || !a.sembol) return;
+    setKurulan(a.id);
+    fetch(`${API_BASE}/api/bildirim?islem=alarm-ekle`,{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        token, sembol:a.sembol, ad:a.ad,
+        tip:a.tip, yon:a.yon,
+        hedefFiyat: a.tip==="hedef"?a.hedefFiyat:undefined,
+        yuzde: a.tip==="yuzde"?a.yuzde:undefined,
+      }),
+    }).then(()=>{ setKurulan(null); yukle(); }).catch(()=>setKurulan(null));
   };
 
   const kosulMetni=(a:any)=>{
@@ -12407,6 +12438,12 @@ function FiyatAlarmlarim(){
               {a.aktif?"İzleniyor":`Tetiklendi · ${new Date(a.tetiklenmeTs).toLocaleDateString("tr-TR",{day:"numeric",month:"long",hour:"2-digit",minute:"2-digit"})}`}
             </p>
           </div>
+          {!a.aktif && a.sembol && (
+            <button onClick={()=>tekrarKur(a)} disabled={kurulan===a.id} style={{
+              flexShrink:0,background:"rgba(59,130,246,0.12)",border:"1px solid rgba(59,130,246,0.35)",
+              borderRadius:8,padding:"7px 10px",color:(TEMA==="acik"?"#2E6DA8":"#7DB2FF"),fontSize:11,fontWeight:700,cursor:"pointer",
+            }}>{kurulan===a.id?"...":"Tekrar Kur"}</button>
+          )}
           <button onClick={()=>sil(a.id)} disabled={siliniyor===a.id} style={{
             flexShrink:0,background:"rgba(248,113,113,0.12)",border:"1px solid rgba(248,113,113,0.3)",
             borderRadius:8,padding:"7px 10px",color:C.red,fontSize:11,fontWeight:700,cursor:"pointer",
