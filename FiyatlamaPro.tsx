@@ -12357,6 +12357,15 @@ function FiyatAlarmlarim(){
   const [alarmlar,setAlarmlar]=useState<any[]|null>(null);
   const [siliniyor,setSiliniyor]=useState<string|null>(null);
   const [kurulan,setKurulan]=useState<string|null>(null);
+  const [temizleniyor,setTemizleniyor]=useState(false);
+
+  const tumunuTemizle=()=>{
+    if(!token) return;
+    setTemizleniyor(true);
+    fetch(`${API_BASE}/api/bildirim?islem=alarm-temizle`,{
+      method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token}),
+    }).then(()=>{ setTemizleniyor(false); yukle(); }).catch(()=>setTemizleniyor(false));
+  };
 
   // Otomatik temizlik: 7 gunden eski TETIKLENMIS alarmlar sessizce silinir.
   const ESKI_ALARM_MS = 7*24*60*60*1000;
@@ -12429,6 +12438,13 @@ function FiyatAlarmlarim(){
             Fiyat alarmı kurabilmek için önce bildirimlere izin vermeniz gerekiyor. Bu genelde uygulamayı ilk açtığınızda otomatik sorulur; izin vermediyseniz cihaz Ayarlar {'>'} Bildirimler'den açabilirsiniz.
           </p>
         </div>
+      )}
+      {alarmlar&&alarmlar.some((a:any)=>!a.aktif)&&(
+        <button onClick={tumunuTemizle} disabled={temizleniyor} style={{
+          width:"100%",marginBottom:12,padding:"11px",borderRadius:12,
+          border:"1px solid rgba(248,113,113,0.3)",background:"rgba(248,113,113,0.08)",
+          color:C.red,fontWeight:700,fontSize:12.5,cursor:"pointer",
+        }}>{temizleniyor?"Temizleniyor...":"🧹 Tetiklenen Alarmları Temizle"}</button>
       )}
       {alarmlar===null?(
         <p style={{textAlign:"center",color:WA(0.4),fontSize:13,padding:"40px 0"}}>Yükleniyor...</p>

@@ -379,6 +379,38 @@ async function alarmSil(req, res) {
   }
 }
 
+// Tetiklenmis (aktif olmayan) alarmlarin TUMUNU tek istekte siler.
+// Yalnizca istegi yapan token'in kendi alarmlarina dokunur.
+async function alarmTemizle(req, res) {
+  const { token } = req.body || {};
+  if (!token) {
+    res.status(400).json({ hata: "'token' alanı zorunlu" });
+    return;
+  }
+  try {
+    const { basarili, sonuc } = await kilitliCalistir(
+      redis,
+      ALARM_KILIT_ANAHTAR,
+      15,
+      async () => {
+        const alarmlar = await alarmlariOku();
+        const yeniListe = alarmlar.filter((a) => !(a.token === token && !a.aktif));
+        const silinen = alarmlar.length - yeniListe.length;
+        if (silinen > 0) await redis.set(ALARM_KV_ANAHTAR, yeniListe);
+        return { silinen };
+      },
+      { denemeSayisi: 10, bekleMs: 300 }
+    );
+    if (!basarili) {
+      res.status(409).json({ hata: "Şu anda başka bir alarm işlemi sürüyor, lütfen tekrar deneyin." });
+      return;
+    }
+    res.status(200).json({ basarili: true, silinen: sonuc.silinen });
+  } catch (e) {
+    res.status(500).json({ hata: "Temizlik başarısız", detay: e.message });
+  }
+}
+
 // Dış zamanlayıcının çağırdığı kontrol uç noktası. Tüm AKTİF alarmları
 // gruplanmış sembollerle tek seferde fiyatlandırır, koşulu sağlayanlara
 // SADECE KENDİ TOKEN'INA push gönderir ve alarmı "aktif:false" yapar.
@@ -525,6 +557,8 @@ export default async function handler(req, res) {
       await alarmListele(req, res);
     } else if (islem === "alarm-sil") {
       await alarmSil(req, res);
+    } else if (islem === "alarm-temizle") {
+      await alarmTemizle(req, res);
     } else {
       res.status(400).json({ hata: "Geçersiz 'islem'." });
     }
