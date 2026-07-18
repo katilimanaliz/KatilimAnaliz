@@ -12491,6 +12491,7 @@ function KurGrafikModal({kur, onClose}:{kur:any, onClose:()=>void}){
   const [alarmDeger,setAlarmDeger]=useState("");
   const [alarmDurum,setAlarmDurum]=useState<"bos"|"gonderiliyor"|"basarili"|"hata">("bos");
   const [alarmHata,setAlarmHata]=useState("");
+  const alarmPanelRef=useRef<HTMLDivElement>(null); // Alarm Kur basildiginda panele otomatik kaydirmak icin
   const fmt2=(n:any)=>n==null?"—":new Intl.NumberFormat("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}).format(n);
 
   // Sembol haritası
@@ -12657,7 +12658,7 @@ function KurGrafikModal({kur, onClose}:{kur:any, onClose:()=>void}){
               )}
 
               {/* ── Fiyat Alarmı ── */}
-              <div style={{marginTop:16,borderTop:`1px solid ${WA(0.08)}`,paddingTop:14}}>
+              <div ref={alarmPanelRef} style={{marginTop:16,borderTop:`1px solid ${WA(0.08)}`,paddingTop:14}}>
                 {!alarmAcik?(
                   <button onClick={()=>{
                       setAlarmAcik(true);
