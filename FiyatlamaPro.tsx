@@ -12664,6 +12664,7 @@ function KurGrafikModal({kur, onClose}:{kur:any, onClose:()=>void}){
                       setAlarmAcik(true);
                       setAlarmDurum("bos");
                       if(veri?.guncelFiyat!=null) setAlarmDeger(String(veri.guncelFiyat));
+                      setTimeout(()=>{ alarmPanelRef.current?.scrollIntoView({behavior:"smooth", block:"end"}); }, 60);
                     }} style={{
                     width:"100%",padding:"12px",borderRadius:12,border:"1.5px solid rgba(59,130,246,0.4)",
                     background:"rgba(59,130,246,0.1)",color:(TEMA==="acik"?"#2E6DA8":"#7DB2FF"),fontWeight:700,fontSize:13,cursor:"pointer",
