@@ -15211,12 +15211,22 @@ function App(){
     const tokenIsle = (token: string) => {
       tamamlandi = true;
       console.log("FCM token alındı:", token);
+      // TOKEN TASIMA (2026-07-18): FCM token'lari zamanla degisebilir
+      // (yeniden kurulum, surum guncellemesi, Firebase rotasyonu). Eski
+      // token'a bagli alarmlar aksi halde OLU token'a bildirim gondermeye
+      // calisir ve sessizce kaybolur. Bu yuzden onceki token farkliysa
+      // sunucuya "eskiToken" olarak bildiriyoruz; sunucu alarmlari yeni
+      // token'a tasiyip eskisini temizliyor.
+      let eskiToken: string | null = null;
+      try{ eskiToken = localStorage.getItem("kp_push_token"); }catch{}
+      if (eskiToken === token) eskiToken = null;
       try{ localStorage.setItem("kp_push_token", token); localStorage.removeItem("kp_push_hata"); }catch{}
       fetch(`${API_BASE}/api/bildirim?islem=kaydet`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           token,
+          eskiToken: eskiToken || undefined,
           platform: (window as any).Capacitor?.getPlatform?.() ?? "unknown",
         }),
       }).catch((e) => {

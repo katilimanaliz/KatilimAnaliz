@@ -69,7 +69,7 @@ const redis = new Redis({
 });
 
 async function tokenKaydet(req, res) {
-  const { token, platform } = req.body || {};
+  const { token, platform, eskiToken } = req.body || {};
 
   if (!token || typeof token !== "string") {
     res.status(400).json({ hata: "Geçerli bir 'token' alanı gerekli" });
@@ -81,7 +81,37 @@ async function tokenKaydet(req, res) {
     await redis.hset("pushTokenPlatform", { [token]: platform });
   }
 
-  res.status(200).json({ basarili: true });
+  // TOKEN TASIMA (2026-07-18): Cihazin token'i degistiyse eski token'a
+  // bagli ALARMLAR yeni token'a tasinir — aksi halde tetiklenen alarm olu
+  // token'a gonderilir ve bildirim sessizce kaybolur (yasanmis vaka).
+  let tasinanAlarm = 0;
+  if (eskiToken && typeof eskiToken === "string" && eskiToken !== token) {
+    try {
+      await redis.srem("pushTokens", eskiToken);
+      await redis.hdel("pushTokenPlatform", eskiToken);
+      const { basarili, sonuc } = await kilitliCalistir(
+        redis,
+        ALARM_KILIT_ANAHTAR,
+        15,
+        async () => {
+          const alarmlar = await alarmlariOku();
+          let sayi = 0;
+          const yeniListe = alarmlar.map((a) => {
+            if (a.token === eskiToken) { sayi++; return { ...a, token }; }
+            return a;
+          });
+          if (sayi > 0) await redis.set(ALARM_KV_ANAHTAR, yeniListe);
+          return { sayi };
+        },
+        { denemeSayisi: 5, bekleMs: 300 }
+      );
+      if (basarili) tasinanAlarm = sonuc?.sayi || 0;
+    } catch (e) {
+      console.error("Token tasima hatasi (kayit yine de basarili):", e.message);
+    }
+  }
+
+  res.status(200).json({ basarili: true, tasinanAlarm });
 }
 
 // Tek bir token'a push bildirimi gönderir (alarm bildirimleri için — tüm
