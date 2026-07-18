@@ -15230,6 +15230,11 @@ function App(){
     }, 20000);
 
     const tokenIsle = (token: string) => {
+      // Ham APNs hex token yok say (FCM bekleniyor) - 2026-07-18
+      if (/^[0-9a-fA-F]{64,200}$/.test(token)) {
+        console.log("Ham APNs token yok sayildi");
+        return;
+      }
       tamamlandi = true;
       console.log("FCM token alındı:", token);
       // TOKEN TASIMA (2026-07-18): FCM token'lari zamanla degisebilir

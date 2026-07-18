@@ -69,7 +69,16 @@ const redis = new Redis({
 });
 
 async function tokenKaydet(req, res) {
-  const { token, platform, eskiToken } = req.body || {};
+  let { token, platform, eskiToken } = req.body || {};
+
+  if (token && APNS_HEX_REGEX.test(token)) {
+    const cevrilen = await hamTokeniDonustur(token);
+    if (!cevrilen) {
+      res.status(400).json({ hata: "Token donusturulemedi" });
+      return;
+    }
+    token = cevrilen;
+  }
 
   if (!token || typeof token !== "string") {
     res.status(400).json({ hata: "Geçerli bir 'token' alanı gerekli" });
@@ -213,6 +222,42 @@ async function bildirimGonder(req, res) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 const ALARM_KV_ANAHTAR = "fiyatAlarmlari";
+// HAM APNs TOKEN DONUSUMU (2026-07-18): iOS tokenReceived bazen ham
+// APNs hex token verir; FCM reddeder (invalid-argument). Sunucu ham token
+// gorunce Firebase batchImport ile FCM tokenina cevirir.
+const APNS_HEX_REGEX = /^[0-9a-fA-F]{64,200}$/;
+
+async function hamTokeniDonustur(token) {
+  if (!token || !APNS_HEX_REGEX.test(token)) return token;
+  try {
+    const cred = admin.app().options.credential;
+    const erisim = await cred.getAccessToken();
+    const cevap = await fetch("https://iid.googleapis.com/iid/v1:batchImport", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + erisim.access_token,
+        access_token_auth: "true",
+      },
+      body: JSON.stringify({
+        application: "com.katilimplus.app",
+        sandbox: false,
+        apns_tokens: [token],
+      }),
+    });
+    const d = await cevap.json();
+    const kayit = d && d.results && d.results[0];
+    if (kayit && kayit.status === "OK" && kayit.registration_token) {
+      return kayit.registration_token;
+    }
+    console.error("APNs donusum red:", JSON.stringify(kayit || d).slice(0, 200));
+    return null;
+  } catch (e) {
+    console.error("APNs donusum hata:", e.message);
+    return null;
+  }
+}
+
 const ALARM_KILIT_ANAHTAR = `lock:${ALARM_KV_ANAHTAR}`;
 const MAKS_AKTIF_ALARM_TOKEN_BASINA = 20;
 const OZ = 31.1034768; // ons → gram dönüşüm sabiti
@@ -265,7 +310,11 @@ async function alarmlariOku() {
 }
 
 async function alarmEkle(req, res) {
-  const { token, sembol, ad, tip, yon, hedefFiyat, yuzde } = req.body || {};
+  let { token, sembol, ad, tip, yon, hedefFiyat, yuzde } = req.body || {};
+  if (token && APNS_HEX_REGEX.test(token)) {
+    const cevrilen = await hamTokeniDonustur(token);
+    if (cevrilen) token = cevrilen;
+  }
   if (!token || !sembol || !ad || !tip || !yon) {
     res.status(400).json({ hata: "token, sembol, ad, tip, yon alanları zorunlu" });
     return;
