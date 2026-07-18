@@ -12766,7 +12766,12 @@ function KurGrafikModal({kur, onClose}:{kur:any, onClose:()=>void}){
                             }),
                           }).then(r=>r.json().then(d=>({ok:r.ok,d})))
                             .then(({ok,d})=>{
-                              if(ok&&d?.basarili){ setAlarmDurum("basarili"); }
+                              if(ok&&d?.basarili){
+                                setAlarmDurum("basarili");
+                                // 2.5 sn onay goster, sonra paneli sifirla — kullanici
+                                // ekrani kapatmadan hemen yeni alarm kurabilsin.
+                                setTimeout(()=>{ setAlarmDurum("bos"); setAlarmAcik(false); }, 2500);
+                              }
                               else { setAlarmDurum("bos"); setAlarmHata(d?.hata||"Alarm kurulamadı."); }
                             })
                             .catch(()=>{ setAlarmDurum("bos"); setAlarmHata("Bağlantı hatası, tekrar deneyin."); });
