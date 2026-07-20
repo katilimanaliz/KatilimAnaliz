@@ -1,5 +1,5 @@
 {
-  "guncelleme": "2026-07-14",
+  "guncelleme": "2026-07-20",
   "bankalar": [
     {
       "ad": "Adil Katılım",
@@ -89,7 +89,7 @@
       {
         "ad": "Vakıf Katılım",
         "konut60": 2.94,
-        "konut120": 2.73,
+        "konut120": 2.89,
         "tasit12": 3.34,
         "tasit24": 3.24,
         "ihtiyac12": 3.85,
@@ -106,8 +106,8 @@
       },
       {
         "ad": "Kuveyt Türk",
-        "konut60": 2.8,
-        "konut120": 2.8,
+        "konut60": 2.91,
+        "konut120": 2.91,
         "tasit12": 3.78,
         "tasit24": 3.53,
         "ihtiyac12": 4.11,
