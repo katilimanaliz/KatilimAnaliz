@@ -14186,24 +14186,28 @@ function AltinUrunleriTablo(){
   const satirRender = (ad:string, sembol:string, i:number, birim:string="₺") => {
     const d = veri?.[sembol];
     return (
-      <div key={sembol} style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+      <div key={sembol} style={{
         padding:"11px 14px",borderRadius:12,marginBottom:8,
         ...(TEMA==="acik"
           ? {background:(i%2===1?"#F3F6FA":"#E9EEF4"),border:"1px solid rgba(22,34,46,0.08)"}
           : {background:(i%2===1?"#1A2633":"#16222E"),border:`1px solid ${WA(0.07)}`})}}>
-        <p style={{margin:0,fontSize:13,fontWeight:800,color:C.soft}}>{ad}</p>
-        <div style={{textAlign:"right"}}>
-          {yukleniyor?(
-            <span style={{fontSize:13,color:WA(0.4)}}>…</span>
-          ):(d&&d.ask!=null&&d.bid!=null)?(
-            <>
-              <p style={{margin:0,fontSize:12.5,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace",whiteSpace:"nowrap"}}>Satış {fmtPara(d.ask,birim)}</p>
-              <p style={{margin:"1px 0 0",fontSize:10.5,color:WA(0.45),fontFamily:"monospace",whiteSpace:"nowrap"}}>Alış {fmtPara(d.bid,birim)}</p>
-            </>
-          ):(
-            <span style={{fontSize:13,color:WA(0.4)}}>—</span>
-          )}
-        </div>
+        <p style={{margin:"0 0 8px",fontSize:13,fontWeight:800,color:C.soft}}>{ad}</p>
+        {yukleniyor?(
+          <span style={{fontSize:13,color:WA(0.4)}}>…</span>
+        ):(d&&d.ask!=null&&d.bid!=null)?(
+          <div style={{display:"flex",gap:12}}>
+            <div style={{flex:1}}>
+              <p style={{margin:0,fontSize:9.5,fontWeight:700,color:WA(0.45),textTransform:"uppercase",letterSpacing:0.3}}>Alış</p>
+              <p style={{margin:"2px 0 0",fontSize:13.5,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace",whiteSpace:"nowrap"}}>{fmtPara(d.bid,birim)}</p>
+            </div>
+            <div style={{flex:1}}>
+              <p style={{margin:0,fontSize:9.5,fontWeight:700,color:WA(0.45),textTransform:"uppercase",letterSpacing:0.3}}>Satış</p>
+              <p style={{margin:"2px 0 0",fontSize:13.5,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace",whiteSpace:"nowrap"}}>{fmtPara(d.ask,birim)}</p>
+            </div>
+          </div>
+        ):(
+          <span style={{fontSize:13,color:WA(0.4)}}>—</span>
+        )}
       </div>
     );
   };
