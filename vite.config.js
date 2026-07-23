@@ -7,4 +7,9 @@ export default defineConfig({
   define: {
     'window.__ANTHROPIC_KEY__': JSON.stringify(process.env.VITE_ANTHROPIC_KEY || ''),
   },
+  build: {
+    rollupOptions: {
+      external: ['@capacitor-firebase/analytics'],
+    },
+  },
 })
