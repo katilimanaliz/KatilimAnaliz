@@ -13190,13 +13190,18 @@ function OnboardingModal({ onClose, genisEkran }: { onClose: () => void; genisEk
       }}>
         {!done && (
           <>
-            <span style={{ position: "absolute", top: 22, left: 22, zIndex: 10, color: WA(0.38), fontSize: 11.5, fontWeight: 700, letterSpacing: 0.5 }}>
+            {/* ÖNEMLİ: top değerlerine env(safe-area-inset-top) eklendi — eklenmezse
+                native cihazda (çentik/Dynamic Island) bu üç eleman durum çubuğunun
+                altında kalıp hem görünmez hem dokunulamaz oluyordu ("Geç çok yukarıda
+                basılmıyor" hatası, 2026-07-23). Uygulamanın geri kalanında zaten
+                kullanılan aynı desen (bkz. calc(Npx + env(safe-area-inset-top,0px))). */}
+            <span style={{ position: "absolute", top: "calc(22px + env(safe-area-inset-top,0px))", left: 22, zIndex: 10, color: WA(0.38), fontSize: 11.5, fontWeight: 700, letterSpacing: 0.5 }}>
               {i + 1} / {ONBOARDING_SLAYTLAR.length}
             </span>
 
             {!last && !genisEkran && (
               <button className="kp-ob-skip" onClick={gec} style={{
-                position: "absolute", top: 18, right: 18, zIndex: 10,
+                position: "absolute", top: "calc(18px + env(safe-area-inset-top,0px))", right: 18, zIndex: 10,
                 background: "rgba(91,155,216,0.22)", border: "1.5px solid rgba(91,155,216,0.55)",
                 color: maviAksan, fontSize: 13, fontWeight: 800,
                 padding: "8px 16px", borderRadius: 999, cursor: "pointer",
@@ -13204,7 +13209,7 @@ function OnboardingModal({ onClose, genisEkran }: { onClose: () => void; genisEk
             )}
             {genisEkran && (
               <button className="kp-ob-close" onClick={gec} title={TR("Kapat")} style={{
-                position: "absolute", top: 16, right: 16, zIndex: 10,
+                position: "absolute", top: "calc(16px + env(safe-area-inset-top,0px))", right: 16, zIndex: 10,
                 width: 30, height: 30, borderRadius: 15,
                 background: WA(0.08), border: "none",
                 color: WA(0.55), fontSize: 16, cursor: "pointer",
@@ -16376,9 +16381,17 @@ function App(){
               // tek bir banner gösteriliyor — hem mobilde hem masaüstünde aynı, doğru
               // davranışı verir, cihaz/şerit genişliğinden bağımsızdır.
               const metin=parcalar.join("   •   ");
+              // Önceki renk çifti (açık pembe zemin + "#FF9999" soluk pembe yazı) neredeyse
+              // hiç kontrast oluşturmuyordu — özellikle açık temada okunmuyordu, koyu temada
+              // da zayıftı. Artık tema-duyarlı: açık temada koyu/doygun kırmızı yazı + biraz
+              // daha belirgin zemin, koyu temada parlak/açık kırmızı yazı. İkisi de WCAG AA
+              // kontrast eşiğini rahatça geçecek şekilde seçildi.
+              const banT = TEMA==="acik"
+                ? { bg:"rgba(220,38,38,0.10)", border:"rgba(220,38,38,0.35)", metin:"#9C1E1E" }
+                : { bg:"rgba(220,38,38,0.16)", border:"rgba(220,38,38,0.4)",  metin:"#FFB4B4" };
               return(
-                <div style={{marginTop:5,borderRadius:8,background:"rgba(184,50,50,0.15)",border:"1px solid rgba(184,50,50,0.35)",padding:"7px 12px",textAlign:"center"}}>
-                  <span style={{fontSize:11,fontWeight:700,color:"#FF9999",lineHeight:1.45}}>{metin}</span>
+                <div style={{marginTop:5,borderRadius:8,background:banT.bg,border:`1px solid ${banT.border}`,padding:"7px 12px",textAlign:"center"}}>
+                  <span style={{fontSize:11,fontWeight:700,color:banT.metin,lineHeight:1.45}}>{metin}</span>
                 </div>
               );
             })()}
