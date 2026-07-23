@@ -26,6 +26,19 @@ const IS_NATIVE = (window as any).Capacitor?.isNativePlatform?.() ?? false;
 // ağ trafiğinden kaçınmak için bilinçli tercih (web tarafında zaten Vercel
 // Analytics var). Tüm çağrılar sessizce başarısız olabilir (try/catch),
 // analytics hiçbir zaman kullanıcı deneyimini bloklamamalı/bozmamalı.
+// GEÇİCİ OLARAK DEVRE DIŞI (2026-07-23): Bu kod native'de her ekran değişiminde
+// kurulu OLMAYAN @capacitor-firebase/analytics paketini import etmeye çalışıyordu.
+// Teorik olarak try/catch bunu yakalamalıydı, ama tam bu değişiklikten sonra
+// native'de TÜM API çağrıları (piyasa verileri, TÜFE, TLREF vb.) yüklenmeyi
+// bırakıp sonsuza dek "yükleniyor" durumunda kaldı (web'de sorun yok — bu kod
+// zaten yalnızca IS_NATIVE=true iken çalışıyor, semptomla birebir örtüşüyor).
+// Kesin neden netleşene kadar en güvenli yol: paket gerçekten kurulup native
+// build alınana kadar bu üç fonksiyonu tamamen no-op yapmak. Analytics zaten
+// aktif edilmek istenmiyordu ("kalsın, uğraşmayalım").
+function analitikHazirla(): Promise<void> { return Promise.resolve(); }
+async function ekranGoruntulendi(ekranAdi: string){ /* devre dışı */ }
+async function olayGonder(ad: string, parametreler?: Record<string, any>){ /* devre dışı */ }
+/* ESKİ (paket npm install edilip native build alınınca geri getirilebilir):
 let FA: any = null;
 let _faYukleniyor: Promise<void> | null = null;
 function analitikHazirla(): Promise<void> {
@@ -34,17 +47,6 @@ function analitikHazirla(): Promise<void> {
   if(_faYukleniyor) return _faYukleniyor;
   _faYukleniyor = (async () => {
     try{
-      // Paket henüz npm'e eklenmediğinde (native build/npm install yapılana
-      // kadar) Rollup'ın bunu derleme zamanında çözümleyip build'i kırmasını
-      // engellemek için import hedefi BİLEREK sabit metin (literal string)
-      // olarak YAZILMIYOR — parça parça birleştirilen bir değişkenle
-      // oluşturuluyor. Rollup yalnızca doğrudan yazılmış sabit metinleri
-      // derleme zamanında çözümlemeye çalışır; değişkenle kurulan hedefleri
-      // analiz edemediği için build'i kırmadan atlar (denenmiş, tek başına
-      // "/* @vite-ignore */" yorumu Rollup'ın üretim derlemesinde YETERSİZ
-      // kaldı — yalnızca Vite'ın geliştirme-zamanı uyarısını bastırıyor).
-      // Yalnızca native'de, gerçekten çalışırken çözümlenir; kurulu değilse
-      // zaten aşağıdaki catch sessizce yutar.
       const faModulAdi = "@capacitor-firebase" + "/analytics";
       const mod = await import(faModulAdi);
       FA = mod.FirebaseAnalytics;
@@ -54,7 +56,6 @@ function analitikHazirla(): Promise<void> {
   })();
   return _faYukleniyor;
 }
-// Ekran görüntülemeyi bildirir (App bileşenindeki `screen` her değiştiğinde çağrılır).
 async function ekranGoruntulendi(ekranAdi: string){
   if(!IS_NATIVE) return;
   try{
@@ -62,7 +63,6 @@ async function ekranGoruntulendi(ekranAdi: string){
     if(FA) await FA.setCurrentScreen({ screenName: ekranAdi, screenClassOverride: ekranAdi });
   }catch(e){ console.warn("Analytics ekran görüntüleme hatası:", ekranAdi, e); }
 }
-// Genel amaçlı özel event gönderimi (alarm kuruldu, rapor paylaşıldı vb.)
 async function olayGonder(ad: string, parametreler?: Record<string, any>){
   if(!IS_NATIVE) return;
   try{
@@ -70,6 +70,7 @@ async function olayGonder(ad: string, parametreler?: Record<string, any>){
     if(FA) await FA.logEvent({ name: ad, params: parametreler });
   }catch(e){ console.warn("Analytics event hatası:", ad, e); }
 }
+*/
 
 // ── MASAÜSTÜ ZOOM DÜZELTMESİ (tam ekran modaller için) ──
 // Masaüstünde (genişEkran) içerik CSS "zoom" ile büyütülüyor (icerikOlcek,
