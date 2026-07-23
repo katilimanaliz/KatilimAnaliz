@@ -612,6 +612,24 @@ export default async function handler(req, res) {
 
   // alarm-kontrol dış zamanlayıcılardan GET olarak da çağrılabilmeli (bazı
   // ücretsiz servisler yalnızca GET destekler) — diğer tüm işlemler POST ister.
+  // GECICI DEBUG (silinecek) - altinapi:v3 redis okumasini test eder
+  if (islem === "debug-altinapi") {
+    try {
+      const veri = await redis.get("altinapi:v3");
+      res.status(200).json({
+        tip: typeof veri,
+        isArray: Array.isArray(veri),
+        veriVarMi: veri != null,
+        anahtarlar: veri && typeof veri === "object" ? Object.keys(veri) : null,
+        ayar22: veri ? veri["AYAR22"] : null,
+        ham: veri,
+      });
+    } catch (e) {
+      res.status(500).json({ hata: e.message, stack: e.stack });
+    }
+    return;
+  }
+
   if (islem === "alarm-kontrol") {
     try {
       await alarmKontrol(req, res);
