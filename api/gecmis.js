@@ -121,8 +121,36 @@ async function caprazKurHesapla(xxxKodu) {
   return { noktalar, guncelFiyat, oncekiKapanis };
 }
 
+async function alphaVantageBrentCek() {
+  const apiKey = process.env.ALPHA_VANTAGE_KEY;
+  if (!apiKey) throw new Error("ALPHA_VANTAGE_KEY tanimli degil");
+  const url = "https://www.alphavantage.co/query?function=BRENT&interval=daily&apikey=" + apiKey;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error("Alpha Vantage HTTP " + r.status);
+  const json = await r.json();
+  const veri = (json && json.data) || [];
+  const temiz = veri.filter(function(n) {
+    return n.value !== "." && n.value != null && !isNaN(parseFloat(n.value));
+  });
+  const noktalar = temiz.slice(0, 30).reverse().map(function(n) {
+    return { tarih: n.date, fiyat: parseFloat(n.value) };
+  });
+  const guncelFiyat = noktalar.length ? noktalar[noktalar.length - 1].fiyat : null;
+  const oncekiKapanis = noktalar.length > 1 ? noktalar[noktalar.length - 2].fiyat : null;
+  return { noktalar: noktalar, guncelFiyat: guncelFiyat, oncekiKapanis: oncekiKapanis };
+}
+
 async function veriHesapla(sembol) {
   const GRAM_ONS = 31.1034768;
+
+  if (sembol === "BZ=F") {
+    try {
+      const av = await alphaVantageBrentCek();
+      if (av.guncelFiyat != null) return av;
+    } catch (e) {
+      // Alpha Vantage basarisiz olursa asagidaki eski Yahoo yoluna dusulur
+    }
+  }
 
   if (sembol === "GRAM_ALTIN" || sembol === "GRAM_GUMUS") {
     const onsSembol = sembol === "GRAM_ALTIN" ? "GC=F" : "SI=F";

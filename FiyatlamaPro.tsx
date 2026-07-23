@@ -10670,7 +10670,7 @@ function FinansalGostergeler({onKurTikla}:any){
   const fmtFred=(v:any)=>v?.deger!=null?`%${v.deger.toFixed(2).replace(".",",")}`:null;
   const fmtFreT=(v:any)=>v?.tarih||"";
 
-  const rezerv =evdsMakro?.["TP.AB.TOPLAM"];
+  const rezerv =evdsMakro?.["TP.AB.B6"];
   const fmtRezerv=(v:any)=>v?.deger!=null?`$${(v.deger/1000).toFixed(2).replace(".",",")} Milyar`:"—";
 
   const SABIT=[
@@ -10724,7 +10724,7 @@ function FinansalGostergeler({onKurTikla}:any){
       // ayrı bir hesaplama gerektiriyor (bankaların ZK'ları ve swap yükümlülükleri
       // düşülerek), henüz eklenmedi.
       {ad:"TCMB Brüt Rezerv (Altın+Döviz)",deger:fmtRezerv(rezerv),tarih:rezerv?.tarih||"Haftalık",canli:rezerv!=null,
-       seri:evdsMakro?.["TP_AB_TOPLAM_SERI"],seriAd:"TCMB Brüt Rezerv (Milyon $)",seriBirim:"milyon$"},
+       seri:evdsMakro?.["TP_AB_B6_SERI"],seriAd:"TCMB Brüt Rezerv (Milyon $)",seriBirim:"milyon$"},
     ]},
     {kategori:"Dış Ticaret & Ödemeler Dengesi",icon:"🚢",color:"#0E7490",items:(()=>{
       // Seri kodları EVDS katalog keşfiyle doğrulandı (bkz. evds-proxy v10):
@@ -16629,7 +16629,7 @@ function App(){
                   ikon:Scale, renk:"#8B5CF6",
                   seri:tlrefkSeriTahmini(evdsMakro), seriAd:"TLREFK (Katılım)",
                 };})(),
-                {ad:"TCMB Brüt Rezerv", deger:evdsMakro?.["TP.AB.TOPLAM"]?.deger!=null?`$${(evdsMakro["TP.AB.TOPLAM"].deger/1000).toFixed(2).replace(".",",")} Mr`:"—", tarih:evdsMakro?.["TP.AB.TOPLAM"]?.tarih?`${evdsMakro["TP.AB.TOPLAM"].tarih} · canlı`:"", ikon:Wallet, renk:C.green, seri:evdsMakro?.["TP_AB_TOPLAM_SERI"], seriAd:"TCMB Brüt Rezerv (Milyon $)", seriBirim:"milyon$"},
+                {ad:"TCMB Brüt Rezerv", deger:evdsMakro?.["TP.AB.B6"]?.deger!=null?`$${(evdsMakro["TP.AB.B6"].deger/1000).toFixed(2).replace(".",",")} Mr`:"—", tarih:evdsMakro?.["TP.AB.B6"]?.tarih?`${evdsMakro["TP.AB.B6"].tarih} · canlı`:"", ikon:Wallet, renk:C.green, seri:evdsMakro?.["TP_AB_B6_SERI"], seriAd:"TCMB Brüt Rezerv (Milyon $)", seriBirim:"milyon$"},
               ].map((g:any,i,arr)=>{
                 const IkonBileseni=g.ikon;
                 const gecmisDestekli = !!g.seriAd; // bu gösterge kavramsal olarak geçmiş veri sunuyor mu
@@ -17042,7 +17042,12 @@ function App(){
               const tufY=evdsMakro?.["TUFE_YILLIK"];
               const tufA=evdsMakro?.["TUFE_AYLIK"];
               const aofm=evdsMakro?.["TP.APIFON4"];
-              const rezerv=evdsMakro?.["TP.AB.TOPLAM"];
+              // DÜZELTME (2026-07-23): eski "TP.AB.TOPLAM" kodu hiç veri
+              // döndürmüyordu (geçersiz/eski kod). Aynı EVDS grubundan (Toplam
+              // Uluslararası Rezervler) TP.AB.B6 kullanılıyor — B1(Altın)+
+              // B2(Döviz)+B3(Banka Muhabir Mevcudu) toplamıyla matematiksel
+              // olarak doğrulandı.
+              const rezerv=evdsMakro?.["TP.AB.B6"];
               const fmtPct=(v:any)=>v?.deger!=null?`%${parseFloat(v.deger).toFixed(2).replace(".",",")}`:"—";
               const fmtRezerv=(v:any)=>v?.deger!=null?`$${(v.deger/1000).toFixed(2).replace(".",",")} Milyar`:"—";
               const tlrefk=tlrefkTahmini(evdsMakro);
@@ -17087,8 +17092,8 @@ function App(){
                  seri:evdsMakro?.GOSTERGE_GIDA_YILLIK_SERI, seriAd:"Gıda Enflasyonu Yıllık Değişim"},
                 {ad:"Enerji Enflasyonu (Yıllık)", deger:fmtPct(gY("GOSTERGE_ENERJI_YILLIK")), tarih:gY("GOSTERGE_ENERJI_YILLIK")?.tarih||"", canli:gY("GOSTERGE_ENERJI_YILLIK")!=null,
                  seri:evdsMakro?.GOSTERGE_ENERJI_YILLIK_SERI, seriAd:"Enerji Enflasyonu Yıllık Değişim"},
-                {ad:"Yeni Kiracı Kira Endeksi (Yıllık)", deger:fmtPct(gY("GOSTERGE_KIRA_YILLIK")), tarih:gY("GOSTERGE_KIRA_YILLIK")?.tarih||"", canli:gY("GOSTERGE_KIRA_YILLIK")!=null,
-                 seri:evdsMakro?.GOSTERGE_KIRA_YILLIK_SERI, seriAd:"Yeni Kiracı Kira Endeksi Yıllık Değişim"},
+                {ad:"Kira Yenileme Referans Oranı (TÜFE 12 Ay Ort.)", deger:fmtPct(gY("TUFE_12AY_ORTALAMA")), tarih:gY("TUFE_12AY_ORTALAMA")?.tarih||"", canli:gY("TUFE_12AY_ORTALAMA")!=null,
+                 seri:evdsMakro?.TUFE_12AY_ORTALAMA_SERI, seriAd:"TÜFE On İki Aylık Ortalamalara Göre Değişim"},
               ];
 
               // ── Alt kategori 3: PARA POLİTİKASI VE FİNANSAL KOŞULLAR
@@ -17157,10 +17162,15 @@ function App(){
                 const v=evdsMakro?.[kod];
                 const bilesik=v?.deger!=null?parseFloat(v.deger):null;
                 const basit=bilesikTenBasiteCevir(bilesik);
+                // Aylık basit (2026-07-23 — YENİ): basit faiz/kâr oranları
+                // ORANTISAL olduğu için (bileşik gibi üstel değil), yıllık basit
+                // oranın aylık karşılığı basitçe 12'ye bölünerek elde edilir.
+                const basitAylik = basit!=null ? basit/12 : null;
                 return {
                   ad, kod,
                   bilesik: bilesik!=null?bilesik.toFixed(2).replace(".",","):null,
                   basit: basit!=null?basit.toFixed(2).replace(".",","):null,
+                  basitAylik: basitAylik!=null?basitAylik.toFixed(2).replace(".",","):null,
                   tarih: v?.tarih?`${v.tarih} · Haftalık Akım`:"TCMB EVDS",
                   canli: v!=null,
                 };
@@ -17176,13 +17186,13 @@ function App(){
 
               // ── Alt kategori 5: RİSK GÖSTERGELERİ / REZERVLER (2026-07-23 —
               // Döviz/Altın ayrımı doğrulanmış EVDS kodlarıyla bağlandı, aynı
-              // "Toplam Uluslararası Rezervler" grubundan (TP.AB.TOPLAM ile
+              // "Toplam Uluslararası Rezervler" grubundan (TP.AB.B6 ile
               // birlikte). Net Rezerv (Swap Hariç) için EVDS'te ayrı bir seri
               // bulunamadı — placeholder'da kalıyor. CDS/tahvil getirileri
               // BİLEREK eklenmedi — ücretli/harici kaynak gerektiriyor. ──
               const RISK:any[] = [
                 {ad:"TCMB Brüt Rezerv (Toplam)", deger:fmtRezerv(rezerv), tarih:rezerv?.tarih||"Haftalık", canli:rezerv!=null,
-                 seri:evdsMakro?.["TP_AB_TOPLAM_SERI"], seriAd:"TCMB Brüt Rezerv (Milyon $)", seriBirim:"milyon$"},
+                 seri:evdsMakro?.["TP_AB_B6_SERI"], seriAd:"TCMB Brüt Rezerv (Milyon $)", seriBirim:"milyon$"},
                 {ad:"TCMB Brüt Döviz Rezervleri", deger:fmtRezerv(gY("TP.AB.B2")), tarih:gY("TP.AB.B2")?.tarih||"Haftalık", canli:gY("TP.AB.B2")!=null,
                  seri:evdsMakro?.["TP_AB_B2_SERI"], seriAd:"TCMB Brüt Döviz Rezervleri (Milyon $)", seriBirim:"milyon$"},
                 {ad:"TCMB Brüt Altın Rezervleri", deger:fmtRezerv(gY("TP.AB.B1")), tarih:gY("TP.AB.B1")?.tarih||"Haftalık", canli:gY("TP.AB.B1")!=null,
@@ -17241,6 +17251,7 @@ function App(){
                           <div style={{textAlign:"right"}}>
                             <p style={{margin:0,fontSize:13,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace"}}>{g.bilesik!=null?`bileşik %${g.bilesik}`:"—"}</p>
                             {g.basit!=null&&<p style={{margin:"1px 0 0",fontSize:10.5,color:WA(0.45),fontFamily:"monospace"}}>≈ basit %{g.basit}</p>}
+                            {g.basitAylik!=null&&<p style={{margin:"1px 0 0",fontSize:10.5,color:WA(0.4),fontFamily:"monospace"}}>≈ aylık basit %{g.basitAylik}</p>}
                           </div>
                         </div>
                       ))

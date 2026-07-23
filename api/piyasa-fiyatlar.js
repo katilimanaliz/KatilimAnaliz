@@ -77,6 +77,32 @@ async function kriptoTaze() {
 
 // ─── PETROL (Kaynak: Yahoo Finance BZ=F) ───────────────────────────────────
 async function petrolTaze() {
+  const apiKey = process.env.ALPHA_VANTAGE_KEY;
+  if (apiKey) {
+    try {
+      const url = "https://www.alphavantage.co/query?function=BRENT&interval=daily&apikey=" + apiKey;
+      const r = await fetch(url);
+      if (r.ok) {
+        const json = await r.json();
+        const veri = ((json && json.data) || []).filter(function(n) {
+          return n.value !== "." && n.value != null && !isNaN(parseFloat(n.value));
+        });
+        if (veri.length >= 2) {
+          const price = parseFloat(veri[0].value);
+          const prev = parseFloat(veri[1].value);
+          return {
+            brent_usd: price,
+            prev_usd: prev,
+            change_pct: ((price - prev) / prev * 100).toFixed(2),
+            ts: new Date().toISOString(),
+          };
+        }
+      }
+    } catch (e) {
+      // Alpha Vantage basarisiz olursa asagidaki eski Yahoo yoluna dusulur
+    }
+  }
+
   const r = await fetch(
     "https://query1.finance.yahoo.com/v8/finance/chart/BZ=F?interval=1d&range=1d",
     { headers: { "User-Agent": "Mozilla/5.0" } }

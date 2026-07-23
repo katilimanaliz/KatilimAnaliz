@@ -74,8 +74,8 @@ const redis = new Redis({
 // NOT (2026-07-11): v9 → v10 sürüm değişikliği — Dış Ticaret & Ödemeler
 // Dengesi serileri (DT_* / CARI_* / REK_*) eklendiği için yapıldı. Aynı ders:
 // versiyon artırılmazsa eski önbellek yeni alanları 6 saat boyunca göstermez.
-const KV_ANLIK_KEY = "evds:anlik:v13";
-const KV_TARIHSEL_PREFIX = "evds:tarihsel:v13:";
+const KV_ANLIK_KEY = "evds:anlik:v14";
+const KV_TARIHSEL_PREFIX = "evds:tarihsel:v14:";
 
 // Vercel'in varsayılan fonksiyon süresi (Hobby planda genelde 10sn) artık 8 dış
 // isteğe (5 EVDS + 3 FRED) yetmiyor — bu yüzden ERR_CONNECTION_CLOSED alınıyordu
@@ -105,7 +105,7 @@ const HAFTALIK = [
   "TP.KTF17.TL","TP.KTF17.USD","TP.KTF17.EUR",
 ];
 
-const REZERV = ["TP.AB.TOPLAM", "TP.AB.B1", "TP.AB.B2"]; // B1=Altın, B2=Döviz
+const REZERV = ["TP.AB.B6", "TP.AB.B1", "TP.AB.B2"]; // B1=Altın, B2=Döviz
 
 // GÖSTERGELER (2026-07-23) — Ekonomik Aktivite + Enflasyon detayı, EVDS katalog
 // keşfiyle doğrulandı. KKO/RKGE/TGE/İşsizlik doğrudan oran/endeks puanı;
@@ -116,7 +116,7 @@ const GOSTERGE = [
   "TP.KKO2.IS.TOP",
   "TP.GY1.N2",
   "TP.TG2.Y01",
-  "TP.YISGUCU2.G8",
+  "TP.TIG08",
   "TP.TUFE1YI.T1",
   "TP.FE25.OKTG04",
   "TP.FE25.OKTG09",
@@ -329,6 +329,33 @@ function medyanTlrefOrani(gunlukOranlar, sonIndex, pencereNokta=9){
 }
 const TLREF_PENCERE_NOKTA = 9;
 
+function tufe12AyOrtalamaHesapla(dizi){
+  if(!dizi || dizi.length<24) return {son:null, seri:[]};
+  const ortalama=(dilim)=>dilim.reduce((t,n)=>t+n.deger,0)/dilim.length;
+  const hesapla=(i)=>{
+    if(i-23<0) return null;
+    const son12=dizi.slice(i-11,i+1);
+    const onceki12=dizi.slice(i-23,i-11);
+    if(son12.length<12||onceki12.length<12) return null;
+    const ortSon=ortalama(son12);
+    const ortOnceki=ortalama(onceki12);
+    return (ortSon/ortOnceki-1)*100;
+  };
+  const sonIdx=dizi.length-1;
+  const sonDegerHesap=hesapla(sonIdx);
+  const seri=[];
+  for(let i=sonIdx;i>=23;i--){
+    const oran=hesapla(i);
+    if(oran==null) break;
+    seri.unshift({tarih:tufeAcikilanmaTarihi(dizi[i].tarih), deger:oran});
+    if(seri.length>=24) break;
+  }
+  return {
+    son: sonDegerHesap!=null?{deger:sonDegerHesap, tarih:tufeAcikilanmaTarihi(dizi[sonIdx].tarih)}:null,
+    seri
+  };
+}
+
 // Endeks tipi GÖSTERGE serilerinden (Sanayi Üretimi, Yİ-ÜFE, Çekirdek TÜFE,
 // Enerji, Gıda, Kira Endeksi) yıllık/aylık % değişim hesaplar — TÜFE'deki
 // mantığın genelleştirilmiş hali; ham EVDS tarihi kullanılıyor.
@@ -527,7 +554,7 @@ export default async function handler(req,res){
       guvenliCek("aylik_kbk", `${BASE}/series=${AYLIK_KBK.join("-")}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
       guvenliCek("aylik_kkp", `${BASE}/series=${AYLIK_KKP.join("-")}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
       guvenliCek("gunluk_tlref", `${BASE}/series=${GUNLUK.join("-")}&startDate=${onceki(30)}&endDate=${tarihStr(new Date())}&type=json&frequency=1`),
-      guvenliCek("enflasyon", `${BASE}/series=${ENFLASYON.join("-")}&startDate=${onceki(730)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
+      guvenliCek("enflasyon", `${BASE}/series=${ENFLASYON.join("-")}&startDate=${onceki(820)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
       guvenliCek("politika_aofm", `${BASE}/series=${POLITIKA.join("-")}&startDate=${onceki(60)}&endDate=${tarihStr(new Date())}&type=json&frequency=1`),
       guvenliCek("rezerv", `${BASE}/series=${REZERV.join("-")}&startDate=${onceki(180)}&endDate=${tarihStr(new Date())}&type=json&frequency=3`),
       // Dış ticaret (v10): 12 aylık kümülatif serinin 24 noktası için ~36 ay
@@ -613,8 +640,8 @@ export default async function handler(req,res){
     sonuclar["GOSTERGE_RKGE_SERI"]=tumDegerler(gostItems, "TP.GY1.N2").slice(-24);
     sonuclar["GOSTERGE_TGE"]=sonDeger(gostItems, "TP.TG2.Y01");
     sonuclar["GOSTERGE_TGE_SERI"]=tumDegerler(gostItems, "TP.TG2.Y01").slice(-24);
-    sonuclar["GOSTERGE_ISSIZLIK"]=sonDeger(gostItems, "TP.YISGUCU2.G8");
-    sonuclar["GOSTERGE_ISSIZLIK_SERI"]=tumDegerler(gostItems, "TP.YISGUCU2.G8").slice(-24);
+    sonuclar["GOSTERGE_ISSIZLIK"]=sonDeger(gostItems, "TP.TIG08");
+    sonuclar["GOSTERGE_ISSIZLIK_SERI"]=tumDegerler(gostItems, "TP.TIG08").slice(-24);
 
     const sanayiDizi = tumDegerler(gostItems, "TP.TSANAYMT2021.Y1");
     const sanayiYoY = endeksYoYHesapla(sanayiDizi, false);
@@ -774,6 +801,10 @@ export default async function handler(req,res){
       sonuclar["TUFE_YILLIK_SERI"]=[];
       sonuclar["TUFE_AYLIK_SERI"]=[];
     }
+
+    const tufe12Ay = tufe12AyOrtalamaHesapla(tufeDizi);
+    sonuclar["TUFE_12AY_ORTALAMA"] = tufe12Ay.son;
+    sonuclar["TUFE_12AY_ORTALAMA_SERI"] = tufe12Ay.seri;
 
     const yanit={tarih:tarihStr(new Date()),seriler:sonuclar, _teshis: teshis};
     try{ await redis.set(KV_ANLIK_KEY, yanit, {ex: CACHE_TTL_SANIYE}); }catch{}
