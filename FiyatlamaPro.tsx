@@ -14146,45 +14146,74 @@ const ALTIN_URUN_TABLOSU = [
   {ad:"Ata Altın",      carpan:6.68459},
 ];
 
+// AltinUrunleriTablo — 2026-07-23: sabit çarpan/tahmin sisteminden gerçek
+// piyasa verisine (altinapi.com, Harem Altın ile aynı kaynak) geçirildi.
+// Artık her kalem için gerçek Alış/Satış (bid/ask) ayrı gösteriliyor —
+// eskisi gibi tek fiyattan türetilen yaklaşık değer değil. NOT: 18 Ayar
+// kullanıcı isteğiyle kaldırıldı (kaynakta bu ayar için sembol yok); Yeni/Eski
+// basım ayrımı (Çeyrek/Yarım/Tam/Ata) eklendi; Ons Altın eklendi (USD).
+// ALTIN_URUN_TABLOSU (carpan listesi, aşağıda duruyor) bu ekranda ARTIK
+// KULLANILMIYOR ama Portföy sistemi (altinCarpan alanı) hâlâ ona bağımlı
+// olduğu için SİLİNMEDİ — kasıtlı olarak dokunulmadı.
+const ALTIN_URUN_TABLOSU_V2 = [
+  {ad:"22 Ayar (Gram)", sembol:"AYAR22"},
+  {ad:"14 Ayar (Gram)", sembol:"AYAR14"},
+  {ad:"Çeyrek Altın (Yeni)", sembol:"CEYREK_YENI"},
+  {ad:"Çeyrek Altın (Eski)", sembol:"CEYREK_ESKI"},
+  {ad:"Yarım Altın (Yeni)", sembol:"YARIM_YENI"},
+  {ad:"Yarım Altın (Eski)", sembol:"YARIM_ESKI"},
+  {ad:"Tam Altın (Yeni)", sembol:"TEK_YENI"},
+  {ad:"Tam Altın (Eski)", sembol:"TEK_ESKI"},
+  {ad:"Ata Altın (Yeni)", sembol:"ATA_YENI"},
+  {ad:"Ata Altın (Eski)", sembol:"ATA_ESKI"},
+];
+
 function AltinUrunleriTablo(){
-  const [gramFiyat,setGramFiyat]=useState<number|null>(null);
+  const [veri,setVeri]=useState<any>(null);
   const [yukleniyor,setYukleniyor]=useState(true);
 
   useEffect(()=>{
     let iptal=false;
-    fetch(`${API_BASE}/api/gecmis?sembol=GRAM_ALTIN`)
+    fetch(`${API_BASE}/api/piyasa-fiyatlar?tip=altinapi`)
       .then(r=>r.ok?r.json():null)
-      .then(d=>{ if(!iptal){ setGramFiyat(d?.guncelFiyat??null); setYukleniyor(false); } })
+      .then(d=>{ if(!iptal){ setVeri(d); setYukleniyor(false); } })
       .catch(()=>{ if(!iptal) setYukleniyor(false); });
     return ()=>{iptal=true;};
   },[]);
 
-  const fmtTL=(v:number)=>`₺${new Intl.NumberFormat("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}).format(v)}`;
+  const fmtPara=(v:number, birim:string)=>`${birim}${new Intl.NumberFormat("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}).format(v)}`;
+
+  const satirRender = (ad:string, sembol:string, i:number, birim:string="₺") => {
+    const d = veri?.[sembol];
+    return (
+      <div key={sembol} style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+        padding:"11px 14px",borderRadius:12,marginBottom:8,
+        ...(TEMA==="acik"
+          ? {background:(i%2===1?"#F3F6FA":"#E9EEF4"),border:"1px solid rgba(22,34,46,0.08)"}
+          : {background:(i%2===1?"#1A2633":"#16222E"),border:`1px solid ${WA(0.07)}`})}}>
+        <p style={{margin:0,fontSize:13,fontWeight:800,color:C.soft}}>{ad}</p>
+        <div style={{textAlign:"right"}}>
+          {yukleniyor?(
+            <span style={{fontSize:13,color:WA(0.4)}}>…</span>
+          ):(d&&d.ask!=null&&d.bid!=null)?(
+            <>
+              <p style={{margin:0,fontSize:12.5,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace",whiteSpace:"nowrap"}}>Satış {fmtPara(d.ask,birim)}</p>
+              <p style={{margin:"1px 0 0",fontSize:10.5,color:WA(0.45),fontFamily:"monospace",whiteSpace:"nowrap"}}>Alış {fmtPara(d.bid,birim)}</p>
+            </>
+          ):(
+            <span style={{fontSize:13,color:WA(0.4)}}>—</span>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return(
     <div>
       <div style={{marginTop:8}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"11px 14px",borderRadius:12,marginBottom:8,
-          ...(TEMA==="acik"
-            ? {background:"#E9EEF4",border:"1px solid rgba(22,34,46,0.08)"}
-            : {background:"#16222E",border:`1px solid ${WA(0.07)}`})}}>
-          <p style={{margin:0,fontSize:13,fontWeight:800,color:C.soft}}>Gram Altın (Has · 24 Ayar)</p>
-          <span style={{fontSize:13,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace"}}>
-            {yukleniyor?"…":gramFiyat!=null?fmtTL(gramFiyat):"—"}
-          </span>
-        </div>
-        {ALTIN_URUN_TABLOSU.map((u,i)=>(
-          <div key={u.ad} style={{display:"flex",justifyContent:"space-between",alignItems:"center",
-            padding:"11px 14px",borderRadius:12,marginBottom:8,
-            ...(TEMA==="acik"
-              ? {background:((i+1)%2===1?"#F3F6FA":"#E9EEF4"),border:"1px solid rgba(22,34,46,0.08)"}
-              : {background:((i+1)%2===1?"#1A2633":"#16222E"),border:`1px solid ${WA(0.07)}`})}}>
-            <p style={{margin:0,fontSize:13,fontWeight:800,color:C.soft}}>{u.ad}</p>
-            <span style={{fontSize:13,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace"}}>
-              {yukleniyor?"…":gramFiyat!=null?fmtTL(gramFiyat*u.carpan):"—"}
-            </span>
-          </div>
-        ))}
+        {satirRender("Gram Altın (Has · 24 Ayar)", "ALTIN", 0)}
+        {satirRender("Ons Altın", "ONS", 1, "$")}
+        {ALTIN_URUN_TABLOSU_V2.map((u,i)=>satirRender(u.ad, u.sembol, i+2))}
       </div>
     </div>
   );
@@ -17350,12 +17379,12 @@ function App(){
                             : {padding:"11px 14px",borderRadius:12,marginBottom:8,
                                background:(i%2===1?"#1A2633":"#16222E"),
                                border:`1px solid ${WA(0.07)}`})}}>
-                          <div>
+                          <div style={{flex:1,minWidth:0,paddingRight:10}}>
                             <p style={{margin:0,fontSize:13,fontWeight:800,color:C.soft}}>{g.ad}</p>
                             {g.tarih&&<p style={{margin:"1px 0 0",fontSize:10,color:(TEMA==="acik"?"#4A6178":"rgba(255,255,255,0.55)")}}>{g.tarih}{g.canli?" · canlı":""}</p>}
                           </div>
-                          <div style={{display:"flex",alignItems:"center",gap:6}}>
-                            <span style={{fontSize:13,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace"}}>{g.deger}</span>
+                          <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                            <span style={{fontSize:13,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace",whiteSpace:"nowrap"}}>{g.deger}</span>
                             {tiklanabilir&&<span style={{color:WA(0.3),fontSize:16}}>›</span>}
                           </div>
                         </div>
