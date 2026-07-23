@@ -64,8 +64,8 @@ import { kilitliCalistir } from "./_lib/kilitliOnbellek.js";
 // isimlerini kullanıyor — bu yüzden Redis.fromEnv() yerine bunları
 // açıkça veriyoruz.
 const redis = new Redis({
-  url: process.env.KV_REST_API_URL,
-  token: process.env.KV_REST_API_TOKEN,
+  url: process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL,
+  token: process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN,
 });
 
 async function tokenKaydet(req, res) {
