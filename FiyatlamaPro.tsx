@@ -14166,6 +14166,9 @@ const ALTIN_URUN_TABLOSU_V2 = [
   {ad:"Tam Altın (Eski)", sembol:"TEK_ESKI"},
   {ad:"Ata Altın (Yeni)", sembol:"ATA_YENI"},
   {ad:"Ata Altın (Eski)", sembol:"ATA_ESKI"},
+  {ad:"Gram Gümüş", sembol:"GUMUSTRY"},
+  {ad:"Gram Platin", sembol:"PLATIN"},
+  {ad:"Gram Paladyum", sembol:"PALADYUM"},
 ];
 
 function AltinUrunleriTablo(){
@@ -14188,7 +14191,16 @@ function AltinUrunleriTablo(){
     // Değişim yüzdesi (2026-07-23): close = önceki kapanış (AltinAPI'nin
     // sağladığı referans). Orta fiyat (bid+ask ortalaması) ile karşılaştırılır
     // — Harem'in kendi ekranındaki tek yüzde gösterimiyle aynı mantık.
-    const degisimYuzde = (d && d.close && d.bid!=null && d.ask!=null) ? (((d.bid+d.ask)/2 - d.close) / d.close * 100) : null;
+    // Sağlamlık filtresi (2026-07-23): AltinAPI'nin bazı sembollerde (AYAR22,
+    // TEK_ESKI, XAGUSD, PLATIN, PALADYUM gibi) "close" alanı canlı fiyattan
+    // %15-25 uzak, mantıksız değerler verdiği canlı testte tespit edildi —
+    // muhtemelen kaynak tarafında bir veri hatası. Bu tutarsız close'lardan
+    // hesaplanan "değişim %" yanlış/yanıltıcı olurdu (örn. Platin için
+    // gerçekte olmayan %-20 gibi sahte bir düşüş). Bu yüzden %10'u aşan
+    // hesaplanan değişimler ANLAMSIZ kabul edilip GİZLENİYOR — yanlış bir
+    // rakam göstermektense hiç göstermemek tercih edildi.
+    const degisimYuzdeHam = (d && d.close && d.bid!=null && d.ask!=null) ? (((d.bid+d.ask)/2 - d.close) / d.close * 100) : null;
+    const degisimYuzde = (degisimYuzdeHam!=null && Math.abs(degisimYuzdeHam)<=10) ? degisimYuzdeHam : null;
     return (
       <div key={sembol} style={{display:"flex",alignItems:"center",gap:8,
         padding:"11px 14px",borderRadius:12,marginBottom:8,
@@ -14227,7 +14239,10 @@ function AltinUrunleriTablo(){
       <div>
         {satirRender("Gram Altın (Has · 24 Ayar)", "ALTIN", 0)}
         {satirRender("Ons Altın", "ONS", 1, "$")}
-        {ALTIN_URUN_TABLOSU_V2.map((u,i)=>satirRender(u.ad, u.sembol, i+2))}
+        {satirRender("Ons Gümüş", "XAGUSD", 2, "$")}
+        {satirRender("Ons Platin", "XPTUSD", 3, "$")}
+        {satirRender("Ons Paladyum", "XPDUSD", 4, "$")}
+        {ALTIN_URUN_TABLOSU_V2.map((u,i)=>satirRender(u.ad, u.sembol, i+5))}
       </div>
     </div>
   );
