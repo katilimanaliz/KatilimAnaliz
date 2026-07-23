@@ -182,6 +182,7 @@ const ICON_MAP: Record<string, any> = {
   getiriKarsilastirma: BarChart3,
   haftalikOzet: Newspaper,
   katilimBankalari: Landmark,
+  kfkNedir: ShieldCheck,
   sozluk: BookOpen,
   katilimBlog: Newspaper,
   asistan: Bot,
@@ -9622,6 +9623,75 @@ function GetiriKarsilastirma(){
   );
 }
 
+// KFK NEDİR? (2026-07-23) — Araçlar menüsüne eklenen bilgilendirme ekranı.
+// İçerik, kullanıcının paylaştığı banka web sitesi metinlerinden (Türkiye
+// Finans/Vakıf Katılım/Emlak Katılım — hepsi aynı KFK kurumsal metnini
+// kullanıyor) kendi cümlelerimle yeniden yazıldı; kullanıcının isteği
+// üzerine hiçbir banka adı geçmiyor, "katılım bankaları" genel ifadesi
+// kullanılıyor (hem telif hem tarafsızlık açısından doğru).
+function KfkNedir(){
+  const kimlerYararlanir=["Gerçek ve tüzel KOBİ'ler","Esnaf ve sanatkârlar","Tarım işletmeleri","Kadın ve genç girişimciler","KOBİ dışı firmalar"];
+  const paketler=[
+    {ad:"Özkaynak İşletme Giderleri Destek Paketi", aciklama:"İşletmelerin günlük faaliyetlerini sürdürebilmesi için gerekli nakit akışını desteklemeye yönelik finansman paketi."},
+    {ad:"Hazine İhracat Destek Paketi", aciklama:"İhracat yapan ya da döviz kazandırıcı hizmet sunan işletmelerin ihracat hacmini artırmasına yönelik destek paketi."},
+    {ad:"Hazine Yatırım Destek Paketi", aciklama:"Üretim kapasitesini artırmak ya da modernize etmek isteyen, Yatırım Teşvik Belgesi sahibi işletmelerin makine/ekipman yatırımlarına yönelik destek."},
+    {ad:"Hazine İşletme Giderleri Destek Paketi", aciklama:"Katılım bankacılığı ilke ve esaslarına uygun olmak koşuluyla, işletme harcamalarının karşılanmasına yönelik kefalet desteği."},
+  ];
+  const avantajlar=[
+    "Teminat yetersizliği nedeniyle finansmana erişemeyen KOBİ ve KOBİ dışı işletmelere kefalet desteği sağlar.",
+    "TL veya döviz cinsinden nakdi/gayrinakdi finansmanlara, katılım finans prensiplerine uygun şekilde kefalet verir.",
+    "Destek; işletme sermayesi ihtiyaçları, yatırım projeleri ve ihracat gibi farklı alanlarda kullanılabilir.",
+    "Başvuru ve değerlendirme süreci nispeten hızlı işler.",
+  ];
+
+  return (
+    <div style={{background:C.bg,padding:"12px 14px 92px",minHeight:"100%"}}>
+      <div style={{background:"rgba(44,203,154,0.08)",border:"1px solid rgba(44,203,154,0.25)",borderRadius:14,padding:"14px 15px",marginBottom:18}}>
+        <p style={{margin:0,fontSize:13,color:C.soft,lineHeight:1.65}}>
+          Katılım Finans Kefalet A.Ş. (KFK), 29 Mart 2023'te Hazine ve Maliye Bakanlığı, Türkiye Katılım Bankaları Birliği (TKBB) ve katılım bankalarının ortaklığıyla kurulan kurumsal bir kefalet kuruluşudur. Teminat yetersizliği nedeniyle finansman ihtiyacını karşılayamayan KOBİ'lerin ve KOBİ dışı işletmelerin finansmana erişimini kolaylaştırmayı amaçlar — kredi verilmesini uygun bulan bankanın kefalet talebini değerlendirip teminat açığını kapatır.
+        </p>
+      </div>
+
+      <p style={{margin:"0 0 8px",fontSize:11,fontWeight:800,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Kimler Yararlanabilir")}</p>
+      <div style={{background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,borderRadius:14,overflow:"hidden",marginBottom:18}}>
+        {kimlerYararlanir.map((k,i)=>(
+          <div key={i} style={{display:"flex",gap:10,padding:"11px 14px",borderBottom:i<kimlerYararlanir.length-1?`1px solid ${WA(0.06)}`:"none"}}>
+            <span style={{color:"#2CCB9A",fontSize:14,flexShrink:0,marginTop:1}}>◆</span>
+            <span style={{fontSize:12.5,color:C.soft,lineHeight:1.5}}>{k}</span>
+          </div>
+        ))}
+      </div>
+
+      <p style={{margin:"0 0 8px",fontSize:11,fontWeight:800,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Kefalet Paketleri")}</p>
+      <div style={{marginBottom:18}}>
+        {paketler.map((p,i)=>(
+          <div key={i} style={{background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,borderRadius:12,padding:"12px 14px",marginBottom:8}}>
+            <p style={{margin:0,fontSize:12.5,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff")}}>{p.ad}</p>
+            <p style={{margin:"4px 0 0",fontSize:11.5,color:WA(0.55),lineHeight:1.5}}>{p.aciklama}</p>
+          </div>
+        ))}
+      </div>
+
+      <p style={{margin:"0 0 8px",fontSize:11,fontWeight:800,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Avantajları")}</p>
+      <div style={{background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,borderRadius:14,overflow:"hidden",marginBottom:18}}>
+        {avantajlar.map((a,i)=>(
+          <div key={i} style={{display:"flex",gap:10,padding:"11px 14px",borderBottom:i<avantajlar.length-1?`1px solid ${WA(0.06)}`:"none"}}>
+            <span style={{color:"#2CCB9A",fontSize:14,flexShrink:0,marginTop:1}}>✓</span>
+            <span style={{fontSize:12.5,color:C.soft,lineHeight:1.5}}>{a}</span>
+          </div>
+        ))}
+      </div>
+
+      <p style={{margin:"0 0 8px",fontSize:11,fontWeight:800,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Nasıl Başvurulur")}</p>
+      <div style={{background:"rgba(91,155,216,0.08)",border:"1px solid rgba(91,155,216,0.2)",borderRadius:14,padding:"13px 15px"}}>
+        <p style={{margin:0,fontSize:12.5,color:C.soft,lineHeight:1.65}}>
+          KFK kefaleti doğrudan başvurulan bir ürün değildir — talep, işletmenin çalıştığı katılım bankası aracılığıyla iletilir. Banka önce kredi/finansman başvurunuzu değerlendirir; teminat yetersizliği varsa kefalet talebiniz KFK'ya iletilir, KFK onayının ardından finansmanı bankanız üzerinden kullanabilirsiniz. Kendi katılım bankanızdan "KFK destekli finansman" seçeneğinin uygunluğunu sorabilirsiniz.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function KatilimBankalari(){
   const [secili,setSecili]=useState<any>(null);
   const turRenk:any={Kamu:C.green,Özel:C.blue,Dijital:C.purple};
@@ -11018,6 +11088,7 @@ const MENU = {
   getiriKarsilastirma:{title:"Getiri Karşılaştırma",back:"home"},
   haftalikOzet:{title:"Haftalık Piyasa Özeti",back:"home"},
   katilimBankalari:{title:"Katılım Bankaları",back:"araclarMenu"},
+  kfkNedir:{title:"KFK Nedir?",back:"araclarMenu"},
   portfoyum:{title:"Portföyüm",back:"araclarMenu"},
   fonDetay:{title:"Fon Detay",back:"portfoyum"},
   hazineDoviz:{title:"Döviz Dönüştürücü",back:"hesaplaMenu"},
@@ -11047,7 +11118,7 @@ const TAB_OF_SCREEN:any = {
   hazineDoviz:"hesapla", hazineForward:"hesapla", hazineSwap:"hesapla",
   hazineBono:"hesapla", hazineSenaryo:"hesapla",
   piyasaHaberleri:"piyasa", finansalGostergeler:"piyasa",
-  araclarMenu:"araclar", sozluk:"araclar", vadeTakibi:"araclar", katilimBankalari:"araclar", getiriKarsilastirma:"araclar", haftalikOzet:"araclar", portfoyum:"araclar", fonDetay:"araclar",
+  araclarMenu:"araclar", sozluk:"araclar", vadeTakibi:"araclar", katilimBankalari:"araclar", kfkNedir:"araclar", getiriKarsilastirma:"araclar", haftalikOzet:"araclar", portfoyum:"araclar", fonDetay:"araclar",
   asistan:"yapayzeka",
   profil:"profil",
 };
@@ -11169,6 +11240,7 @@ const MENU_ARAMA_LIST=[
   {key:"getiriKarsilastirma",label:"Getiri Karşılaştırma",                        icon:"📊", grup:"Araçlar", alt:["getiri","karşılaştırma","dolar","euro","altın","gümüş","bist","katılım endeksi","performans"]},
   {key:"haftalikOzet",       label:"Haftalık Piyasa Özeti",                       icon:"📰", grup:"Araçlar", alt:["haftalık","bülten","özet","piyasa","hafta"]},
   {key:"katilimBankalari",   label:"Katılım Bankaları",                          icon:"🏛️", grup:"Araçlar"},
+  {key:"kfkNedir",           label:"KFK Nedir?",                                 icon:"🤝", grup:"Araçlar", alt:["kfk","kefalet","katılım finans kefalet","kgf","teminat","kobi"]},
   {key:"hazineDoviz",        label:"Döviz Dönüştürücü",                          icon:"💱", grup:"Hesaplama Araçları", alt:["kur","dolar","euro","dolar kaç tl"]},
   {key:"piyasaMenu",         label:"Piyasa & Veriler",                           icon:"📊", grup:"Piyasa & Veriler", alt:["tüfe","enflasyon","gösterge","politika faizi","sofr","euribor","tlref","tlrefk","aofm","rezerv","cds","borsa","bist","altın","gümüş","emtia","kripto"]},
   {key:"hazineForward",      label:"Forward Hesaplama",                          icon:"📅", grup:"Hesaplama Araçları"},
@@ -17355,6 +17427,7 @@ function App(){
               {key:"getiriKarsilastirma", icon:"📊", label:"Getiri Karşılaştırma", desc:"Döviz, altın, gümüş, endeks getirilerini dönemsel karşılaştır", renk:"#F59E0B", bg:"rgba(245,158,11,0.15)"},
               {key:"vadeTakibi", icon:"⏰", label:"Vade Takip & Hatırlatma Ajandam", desc:"Finansman ve ödeme vadelerini takip et, hatırlatma al", renk:C.green, bg:"rgba(74,222,128,0.15)"},
               {key:"katilimBankalari", icon:"🏛️", label:"Katılım Bankaları", desc:"Türkiye'deki katılım bankaları, kuruluş tarihleri ve bilgileri", renk:C.blue, bg:"rgba(91,155,216,0.15)"},
+              {key:"kfkNedir", icon:"🤝", label:"KFK Nedir?", desc:"Teminat yetersizliğinde işletmenize kefalet desteği — Katılım Finans Kefalet A.Ş.", renk:"#2CCB9A", bg:"rgba(44,203,154,0.15)"},
               {key:"sozluk",     icon:"📖", label:"Katılım Bankacılığı Sözlüğü",     desc:"Terim ve tanımları hızlıca ara", renk:"#60A5FA", bg:"rgba(96,165,250,0.15)"},
               {key:"katilimBlog", icon:"📝", label:"Katılım Blog", desc:"Kâr payı, murabaha, TLREF ve daha fazlası — anlaşılır rehberler", renk:"#2CCB9A", bg:"rgba(44,203,154,0.15)", harici:true},
             ].map(c=>(
@@ -17568,6 +17641,7 @@ function App(){
         {screen==="finansalTakvim"&&<FinansalTakvim/>}
         {screen==="vadeTakibi"&&<VadeTakibi/>}
         {screen==="katilimBankalari"&&<KatilimBankalari/>}
+        {screen==="kfkNedir"&&<KfkNedir/>}
         {screen==="getiriKarsilastirma"&&<GetiriKarsilastirma/>}
         {screen==="haftalikOzet"&&<HaftalikPiyasaOzeti/>}
         {screen==="hazineDoviz"&&<HtDovizDonusturucu/>}
