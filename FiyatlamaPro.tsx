@@ -14185,13 +14185,24 @@ function AltinUrunleriTablo(){
 
   const satirRender = (ad:string, sembol:string, i:number, birim:string="₺") => {
     const d = veri?.[sembol];
+    // Değişim yüzdesi (2026-07-23): close = önceki kapanış (AltinAPI'nin
+    // sağladığı referans). Orta fiyat (bid+ask ortalaması) ile karşılaştırılır
+    // — Harem'in kendi ekranındaki tek yüzde gösterimiyle aynı mantık.
+    const degisimYuzde = (d && d.close && d.bid!=null && d.ask!=null) ? (((d.bid+d.ask)/2 - d.close) / d.close * 100) : null;
     return (
       <div key={sembol} style={{display:"flex",alignItems:"center",gap:8,
         padding:"11px 14px",borderRadius:12,marginBottom:8,
         ...(TEMA==="acik"
           ? {background:(i%2===1?"#F3F6FA":"#E9EEF4"),border:"1px solid rgba(22,34,46,0.08)"}
           : {background:(i%2===1?"#1A2633":"#16222E"),border:`1px solid ${WA(0.07)}`})}}>
-        <p style={{flex:1,minWidth:0,margin:0,fontSize:12.5,fontWeight:800,color:C.soft}}>{ad}</p>
+        <div style={{flex:1,minWidth:0}}>
+          <p style={{margin:0,fontSize:12.5,fontWeight:800,color:C.soft}}>{ad}</p>
+          {degisimYuzde!=null&&(
+            <p style={{margin:"1px 0 0",fontSize:10,fontWeight:700,color:degisimYuzde>=0?"#22C55E":"#EF4444"}}>
+              {degisimYuzde>=0?"+":""}{degisimYuzde.toFixed(2).replace(".",",")}%
+            </p>
+          )}
+        </div>
         {yukleniyor?(
           <span style={{fontSize:12,color:WA(0.4)}}>…</span>
         ):(d&&d.ask!=null&&d.bid!=null)?(

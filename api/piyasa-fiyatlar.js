@@ -129,7 +129,7 @@ async function altinApiTaze() {
   if (!r.ok) throw new Error("AltinAPI HTTP " + r.status);
   const json = await r.json();
   const items = (json && json.data) || [];
-  const istenenler = ["ALTIN","ONS","AYAR22","AYAR14","CEYREK_YENI","CEYREK_ESKI","YARIM_YENI","YARIM_ESKI","TEK_YENI","TEK_ESKI","ATA_YENI","ATA_ESKI"];
+  const istenenler = ["ALTIN","ONS","AYAR22","AYAR14","CEYREK_YENI","CEYREK_ESKI","YARIM_YENI","YARIM_ESKI","TEK_YENI","TEK_ESKI","ATA_YENI","ATA_ESKI","XAGUSD","GUMUSTRY","XPTUSD","PLATIN","XPDUSD","PALADYUM"];
   const sonuc = {};
   for (const sembol of istenenler) {
     const item = items.find(function(i) { return i.symbol === sembol; });
@@ -198,7 +198,7 @@ const YAPILANDIRMA = {
   kripto: { anahtar: "kripto:v1", ttl: 300,   fn: kriptoTaze, cacheControl: "s-maxage=300" },
   petrol: { anahtar: "petrol:v1", ttl: 1800,  fn: petrolTaze, cacheControl: "s-maxage=1800" },
   kur:    { anahtar: "kur:v1",    ttl: 300,   fn: kurTaze,    cacheControl: "s-maxage=300" },
-  altinapi: { anahtar: "altinapi:v2", ttl: 3600, fn: altinApiTaze, cacheControl: "s-maxage=3600" },
+  altinapi: { anahtar: "altinapi:v3", ttl: 3600, fn: altinApiTaze, cacheControl: "s-maxage=3600" },
 };
 
 export default async function handler(req, res) {
