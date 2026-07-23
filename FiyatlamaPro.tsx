@@ -14186,27 +14186,21 @@ function AltinUrunleriTablo(){
   const satirRender = (ad:string, sembol:string, i:number, birim:string="₺") => {
     const d = veri?.[sembol];
     return (
-      <div key={sembol} style={{
+      <div key={sembol} style={{display:"flex",alignItems:"center",gap:8,
         padding:"11px 14px",borderRadius:12,marginBottom:8,
         ...(TEMA==="acik"
           ? {background:(i%2===1?"#F3F6FA":"#E9EEF4"),border:"1px solid rgba(22,34,46,0.08)"}
           : {background:(i%2===1?"#1A2633":"#16222E"),border:`1px solid ${WA(0.07)}`})}}>
-        <p style={{margin:"0 0 8px",fontSize:13,fontWeight:800,color:C.soft}}>{ad}</p>
+        <p style={{flex:1,minWidth:0,margin:0,fontSize:12.5,fontWeight:800,color:C.soft}}>{ad}</p>
         {yukleniyor?(
-          <span style={{fontSize:13,color:WA(0.4)}}>…</span>
+          <span style={{fontSize:12,color:WA(0.4)}}>…</span>
         ):(d&&d.ask!=null&&d.bid!=null)?(
-          <div style={{display:"flex",gap:12}}>
-            <div style={{flex:1}}>
-              <p style={{margin:0,fontSize:9.5,fontWeight:700,color:WA(0.45),textTransform:"uppercase",letterSpacing:0.3}}>Alış</p>
-              <p style={{margin:"2px 0 0",fontSize:13.5,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace",whiteSpace:"nowrap"}}>{fmtPara(d.bid,birim)}</p>
-            </div>
-            <div style={{flex:1}}>
-              <p style={{margin:0,fontSize:9.5,fontWeight:700,color:WA(0.45),textTransform:"uppercase",letterSpacing:0.3}}>Satış</p>
-              <p style={{margin:"2px 0 0",fontSize:13.5,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace",whiteSpace:"nowrap"}}>{fmtPara(d.ask,birim)}</p>
-            </div>
-          </div>
+          <>
+            <span style={{minWidth:80,flexShrink:0,textAlign:"right",fontSize:11.5,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace",whiteSpace:"nowrap"}}>{fmtPara(d.bid,birim)}</span>
+            <span style={{minWidth:80,flexShrink:0,textAlign:"right",fontSize:11.5,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace",whiteSpace:"nowrap"}}>{fmtPara(d.ask,birim)}</span>
+          </>
         ):(
-          <span style={{fontSize:13,color:WA(0.4)}}>—</span>
+          <span style={{fontSize:12,color:WA(0.4)}}>—</span>
         )}
       </div>
     );
@@ -14214,7 +14208,12 @@ function AltinUrunleriTablo(){
 
   return(
     <div>
-      <div style={{marginTop:8}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,padding:"0 14px 6px"}}>
+        <span style={{flex:1,minWidth:0,fontSize:10,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.4}}>Birim</span>
+        <span style={{minWidth:80,flexShrink:0,textAlign:"right",fontSize:10,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.4}}>Alış</span>
+        <span style={{minWidth:80,flexShrink:0,textAlign:"right",fontSize:10,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.4}}>Satış</span>
+      </div>
+      <div>
         {satirRender("Gram Altın (Has · 24 Ayar)", "ALTIN", 0)}
         {satirRender("Ons Altın", "ONS", 1, "$")}
         {ALTIN_URUN_TABLOSU_V2.map((u,i)=>satirRender(u.ad, u.sembol, i+2))}

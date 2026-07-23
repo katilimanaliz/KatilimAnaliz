@@ -133,7 +133,7 @@ async function altinApiTaze() {
   const sonuc = {};
   for (const sembol of istenenler) {
     const item = items.find(function(i) { return i.symbol === sembol; });
-    sonuc[sembol] = item ? { bid: item.bid, ask: item.ask } : null;
+    sonuc[sembol] = item ? { bid: item.bid, ask: item.ask, close: item.close } : null;
   }
   return sonuc;
 }
