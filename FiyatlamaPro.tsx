@@ -17185,11 +17185,16 @@ function App(){
               ];
 
               // ── Alt kategori 5: RİSK GÖSTERGELERİ / REZERVLER (2026-07-23 —
-              // Döviz/Altın ayrımı doğrulanmış EVDS kodlarıyla bağlandı, aynı
-              // "Toplam Uluslararası Rezervler" grubundan (TP.AB.B6 ile
-              // birlikte). Net Rezerv (Swap Hariç) için EVDS'te ayrı bir seri
-              // bulunamadı — placeholder'da kalıyor. CDS/tahvil getirileri
-              // BİLEREK eklenmedi — ücretli/harici kaynak gerektiriyor. ──
+              // Döviz/Altın/Banka Muhabir ayrımı doğrulanmış EVDS kodlarıyla
+              // bağlandı, aynı "Toplam Uluslararası Rezervler" grubundan
+              // (TP.AB.B6 ile birlikte). DÜZELTME: Banka Muhabir Mevcudu ve
+              // Efektif Kasası (TP.AB.B3) eklendi — bu olmadan Döviz+Altın
+              // toplamı Toplam Rezerv'den ~49 Milyar $ eksik görünüyordu
+              // (kullanıcı fark etti). Şimdi Döviz+Altın+Banka Muhabir=Toplam
+              // matematiksel olarak tutarlı. Net Rezerv (Swap Hariç) için
+              // EVDS'te ayrı bir seri bulunamadı — placeholder'da kalıyor.
+              // CDS/tahvil getirileri BİLEREK eklenmedi — ücretli/harici
+              // kaynak gerektiriyor. ──
               const RISK:any[] = [
                 {ad:"TCMB Brüt Rezerv (Toplam)", deger:fmtRezerv(rezerv), tarih:rezerv?.tarih||"Haftalık", canli:rezerv!=null,
                  seri:evdsMakro?.["TP_AB_B6_SERI"], seriAd:"TCMB Brüt Rezerv (Milyon $)", seriBirim:"milyon$"},
@@ -17197,6 +17202,8 @@ function App(){
                  seri:evdsMakro?.["TP_AB_B2_SERI"], seriAd:"TCMB Brüt Döviz Rezervleri (Milyon $)", seriBirim:"milyon$"},
                 {ad:"TCMB Brüt Altın Rezervleri", deger:fmtRezerv(gY("TP.AB.B1")), tarih:gY("TP.AB.B1")?.tarih||"Haftalık", canli:gY("TP.AB.B1")!=null,
                  seri:evdsMakro?.["TP_AB_B1_SERI"], seriAd:"TCMB Brüt Altın Rezervleri (Milyon $)", seriBirim:"milyon$"},
+                {ad:"TCMB Banka Muhabir Mevcudu ve Efektif Kasası", deger:fmtRezerv(gY("TP.AB.B3")), tarih:gY("TP.AB.B3")?.tarih||"Haftalık", canli:gY("TP.AB.B3")!=null,
+                 seri:evdsMakro?.["TP_AB_B3_SERI"], seriAd:"TCMB Banka Muhabir Mevcudu ve Efektif Kasası (Milyon $)", seriBirim:"milyon$"},
                 {ad:"TCMB Swap Hariç Net Rezervler", deger:"—", tarih:"TCMB · EVDS'te güncel seri bulunamadı"},
               ];
 

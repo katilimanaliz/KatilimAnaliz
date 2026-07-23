@@ -74,8 +74,8 @@ const redis = new Redis({
 // NOT (2026-07-11): v9 → v10 sürüm değişikliği — Dış Ticaret & Ödemeler
 // Dengesi serileri (DT_* / CARI_* / REK_*) eklendiği için yapıldı. Aynı ders:
 // versiyon artırılmazsa eski önbellek yeni alanları 6 saat boyunca göstermez.
-const KV_ANLIK_KEY = "evds:anlik:v14";
-const KV_TARIHSEL_PREFIX = "evds:tarihsel:v14:";
+const KV_ANLIK_KEY = "evds:anlik:v15";
+const KV_TARIHSEL_PREFIX = "evds:tarihsel:v15:";
 
 // Vercel'in varsayılan fonksiyon süresi (Hobby planda genelde 10sn) artık 8 dış
 // isteğe (5 EVDS + 3 FRED) yetmiyor — bu yüzden ERR_CONNECTION_CLOSED alınıyordu
@@ -105,7 +105,7 @@ const HAFTALIK = [
   "TP.KTF17.TL","TP.KTF17.USD","TP.KTF17.EUR",
 ];
 
-const REZERV = ["TP.AB.B6", "TP.AB.B1", "TP.AB.B2"]; // B1=Altın, B2=Döviz
+const REZERV = ["TP.AB.B6", "TP.AB.B1", "TP.AB.B2", "TP.AB.B3"]; // B1=Altın, B2=Döviz
 
 // GÖSTERGELER (2026-07-23) — Ekonomik Aktivite + Enflasyon detayı, EVDS katalog
 // keşfiyle doğrulandı. KKO/RKGE/TGE/İşsizlik doğrudan oran/endeks puanı;
@@ -628,6 +628,7 @@ export default async function handler(req,res){
     sonuclar["TP_AB_TOPLAM_SERI"]=tumDegerler(rezervJson?.items||[], "TP_AB_TOPLAM").slice(-24);
     sonuclar["TP_AB_B1_SERI"]=tumDegerler(rezervJson?.items||[], "TP.AB.B1").slice(-24);
     sonuclar["TP_AB_B2_SERI"]=tumDegerler(rezervJson?.items||[], "TP.AB.B2").slice(-24);
+    sonuclar["TP_AB_B3_SERI"]=tumDegerler(rezervJson?.items||[], "TP.AB.B3").slice(-24);
 
     // ── HAFTALIK AKIM KÂR PAYI (2026-07-23) ─────────────────────────────
     for(const s of HAFTALIK_KBK) sonuclar[s]=sonDeger(hkbkJson?.items||[],s);
