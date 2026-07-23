@@ -17059,7 +17059,8 @@ function App(){
               // backend'de TÜFE'dekine benzer yıllık-değişim hesabından geçiyor. ──
               const gY=(k:string)=>evdsMakro?.[k];
               const AKTIVITE:any[] = [
-                {ad:"GSYH Büyümesi (Yıllık)", deger:"—", tarih:"TÜİK · EVDS'te güncel seri bulunamadı"},
+                {ad:"GSYH Büyümesi (Yıllık)", deger:fmtPct(gY("GSYH_YILLIK")), tarih:gY("GSYH_YILLIK")?.tarih||"", canli:gY("GSYH_YILLIK")!=null,
+                 seri:evdsMakro?.GSYH_YILLIK_SERI, seriAd:"GSYH Büyümesi (Çeyreklik, Yıllık Değişim)"},
                 {ad:"Sanayi Üretimi (Yıllık)", deger:fmtPct(gY("GOSTERGE_SANAYI_YILLIK")), tarih:gY("GOSTERGE_SANAYI_YILLIK")?.tarih||"", canli:gY("GOSTERGE_SANAYI_YILLIK")!=null,
                  seri:evdsMakro?.GOSTERGE_SANAYI_YILLIK_SERI, seriAd:"Sanayi Üretimi Yıllık Değişim"},
                 {ad:"Kapasite Kullanım Oranı", deger:fmtPct(gY("GOSTERGE_KKO")), tarih:gY("GOSTERGE_KKO")?.tarih||"", canli:gY("GOSTERGE_KKO")!=null,
@@ -17204,7 +17205,10 @@ function App(){
                  seri:evdsMakro?.["TP_AB_B1_SERI"], seriAd:"TCMB Brüt Altın Rezervleri (Milyon $)", seriBirim:"milyon$"},
                 {ad:"TCMB Banka Muhabir Mevcudu ve Efektif Kasası", deger:fmtRezerv(gY("TP.AB.B3")), tarih:gY("TP.AB.B3")?.tarih||"Haftalık", canli:gY("TP.AB.B3")!=null,
                  seri:evdsMakro?.["TP_AB_B3_SERI"], seriAd:"TCMB Banka Muhabir Mevcudu ve Efektif Kasası (Milyon $)", seriBirim:"milyon$"},
-                {ad:"TCMB Swap Hariç Net Rezervler", deger:"—", tarih:"TCMB · EVDS'te güncel seri bulunamadı"},
+                // NOT (2026-07-23): "TCMB Swap Hariç Net Rezervler" placeholder'ı
+                // BİLEREK kaldırıldı — EVDS katalog aramasında ("NET REZERV,
+                // SWAP HARIC ULUSLARARASI") 0 grup çıktı, yani bu gösterge
+                // EVDS'te ayrı bir seri olarak hiç yayınlanmıyor.
               ];
 
               const ALT_SEKMELER=[

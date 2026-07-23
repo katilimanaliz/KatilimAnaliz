@@ -74,8 +74,8 @@ const redis = new Redis({
 // NOT (2026-07-11): v9 → v10 sürüm değişikliği — Dış Ticaret & Ödemeler
 // Dengesi serileri (DT_* / CARI_* / REK_*) eklendiği için yapıldı. Aynı ders:
 // versiyon artırılmazsa eski önbellek yeni alanları 6 saat boyunca göstermez.
-const KV_ANLIK_KEY = "evds:anlik:v15";
-const KV_TARIHSEL_PREFIX = "evds:tarihsel:v15:";
+const KV_ANLIK_KEY = "evds:anlik:v16";
+const KV_TARIHSEL_PREFIX = "evds:tarihsel:v16:";
 
 // Vercel'in varsayılan fonksiyon süresi (Hobby planda genelde 10sn) artık 8 dış
 // isteğe (5 EVDS + 3 FRED) yetmiyor — bu yüzden ERR_CONNECTION_CLOSED alınıyordu
@@ -331,6 +331,23 @@ function medyanTlrefOrani(gunlukOranlar, sonIndex, pencereNokta=9){
   return dilim.length%2 ? dilim[orta] : (dilim[orta-1]+dilim[orta])/2;
 }
 const TLREF_PENCERE_NOKTA = 9;
+
+function ceyrekYoYHesapla(dizi){
+  if(!dizi || dizi.length<5) return {son:null, seri:[]};
+  const son=dizi[dizi.length-1];
+  const oncekiYilAyniCeyrek=dizi[dizi.length-5];
+  const yillikDeger=(son.deger-oncekiYilAyniCeyrek.deger)/oncekiYilAyniCeyrek.deger*100;
+  const seri=[];
+  for(let i=dizi.length-1;i>=4;i--){
+    const s=dizi[i], oY=dizi[i-4];
+    seri.unshift({tarih:s.tarih, deger:(s.deger-oY.deger)/oY.deger*100});
+    if(seri.length>=16) break;
+  }
+  return {
+    son: {deger:yillikDeger, tarih:son.tarih},
+    seri
+  };
+}
 
 function tufe12AyOrtalamaHesapla(dizi){
   if(!dizi || dizi.length<24) return {son:null, seri:[]};
@@ -640,7 +657,6 @@ export default async function handler(req,res){
 
     // ── GÖSTERGELER (2026-07-23) ────────────────────────────────────────
     const gostItems = gostJson?.items||[];
-    teshis.gsyh_ham_ornek = (testGsyhCeyrekJson?.items||[]).slice(-1)[0] || null;
     sonuclar["GOSTERGE_KKO"]=sonDeger(gostItems, "TP.KKO2.IS.TOP");
     sonuclar["GOSTERGE_KKO_SERI"]=tumDegerler(gostItems, "TP.KKO2.IS.TOP").slice(-24);
     sonuclar["GOSTERGE_RKGE"]=sonDeger(gostItems, "TP.GY1.N2");
@@ -649,6 +665,12 @@ export default async function handler(req,res){
     sonuclar["GOSTERGE_TGE_SERI"]=tumDegerler(gostItems, "TP.TG2.Y01").slice(-24);
     sonuclar["GOSTERGE_ISSIZLIK"]=sonDeger(gostItems, "TP.TIG08");
     sonuclar["GOSTERGE_ISSIZLIK_SERI"]=tumDegerler(gostItems, "TP.TIG08").slice(-24);
+
+    const gsyhDizi = tumDegerler((testGsyhCeyrekJson?.items||[]), "TP.GSYIH30.HY.B1GQ");
+    const gsyhYoY = ceyrekYoYHesapla(gsyhDizi);
+    sonuclar["GSYH_YILLIK"] = gsyhYoY.son;
+    sonuclar["GSYH_YILLIK_SERI"] = gsyhYoY.seri;
+    teshis.gsyh_hesap = { nokta_sayisi: gsyhDizi.length, son_deger: gsyhYoY.son };
 
     const sanayiDizi = tumDegerler(gostItems, "TP.TSANAYMT2021.Y1");
     const sanayiYoY = endeksYoYHesapla(sanayiDizi, false);
