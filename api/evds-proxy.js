@@ -105,7 +105,10 @@ const HAFTALIK = [
   "TP.KTF17.TL","TP.KTF17.USD","TP.KTF17.EUR",
 ];
 
-const REZERV = ["TP.AB.B6", "TP.AB.B1", "TP.AB.B2", "TP.AB.B3"]; // B1=Altın, B2=Döviz
+const REZERV = ["TP.AB.B6", "TP.AB.B1", "TP.AB.B2", "TP.AB.B3"];
+
+// GECICI TEST (silinecek) - GSYH frekansini bulmak icin
+const TEST_GSYH = ["TP.GSYIH30.HY.B1GQ"]; // B1=Altın, B2=Döviz
 
 // GÖSTERGELER (2026-07-23) — Ekonomik Aktivite + Enflasyon detayı, EVDS katalog
 // keşfiyle doğrulandı. KKO/RKGE/TGE/İşsizlik doğrudan oran/endeks puanı;
@@ -562,6 +565,8 @@ export default async function handler(req,res){
       guvenliCek("disticaret", `${BASE}/series=${DISTICARET.join("-")}&startDate=${onceki(1150)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
       guvenliCek("gosterge", `${BASE}/series=${GOSTERGE.join("-")}&startDate=${onceki(760)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
       guvenliCek("haftalik_kbk", `${BASE}/series=${HAFTALIK_KBK.join("-")}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=3`),
+      guvenliCek("test_gsyh_ceyrek", `${BASE}/series=${TEST_GSYH.join("-")}&startDate=${onceki(2000)}&endDate=${tarihStr(new Date())}&type=json&frequency=6`),
+      guvenliCek("test_gsyh_aylik", `${BASE}/series=${TEST_GSYH.join("-")}&startDate=${onceki(2000)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
     ]);
 
     const [sofr,eur3m,us2y,us5y,us10y,fedFonlama,ecbMevduat,sofr3m,sofr6m,fedUst,fedAlt]=await Promise.all([
