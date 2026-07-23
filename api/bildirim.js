@@ -286,6 +286,30 @@ async function yahooGuncelFiyat(sembol) {
   }
 }
 
+// AltinAPI sembolleri (2026-07-23 eklendi) — Altın sekmesindeki yeni ürünler
+// (Ons/22-14 Ayar/Ceyrek-Yarim-Tam-Ata Yeni-Eski/Gumus/Platin/Paladyum) icin
+// alarm destegi. Bu semboller Yahoo Finance'te YOK; ayrica AltinAPI'nin
+// ucretsiz plani ayda 1000 istekle sinirli oldugu icin BURADA YENI BIR
+// ALTINAPI ISTEGI YAPILMIYOR — piyasa-fiyatlar.js'in zaten 1 saatte bir
+// doldurdugu Redis onbellegi (altinapi:v3) DOGRUDAN OKUNUYOR.
+const ALTINAPI_SEMBOLLERI = new Set([
+  "ALTIN","ONS","AYAR22","AYAR14","CEYREK_YENI","CEYREK_ESKI",
+  "YARIM_YENI","YARIM_ESKI","TEK_YENI","TEK_ESKI","ATA_YENI","ATA_ESKI",
+  "XAGUSD","GUMUSTRY","XPTUSD","PLATIN","XPDUSD","PALADYUM",
+]);
+
+async function altinApiOnbellektenOku(sembol) {
+  try {
+    const veri = await redis.get("altinapi:v3");
+    if (!veri || !veri[sembol]) return null;
+    const { bid, ask } = veri[sembol];
+    if (bid == null || ask == null) return null;
+    return (bid + ask) / 2; // orta fiyat, alarm karsilastirmasi icin
+  } catch {
+    return null;
+  }
+}
+
 // GRAM_ALTIN/GRAM_GUMUS gibi sentetik semboller dahil, herhangi bir alarm
 // sembolünün güncel fiyatını döner.
 async function alarmFiyatGetir(sembol) {
@@ -294,6 +318,9 @@ async function alarmFiyatGetir(sembol) {
     const [ons, usdTry] = await Promise.all([yahooGuncelFiyat(onsSembol), yahooGuncelFiyat("USDTRY=X")]);
     if (ons == null || usdTry == null) return null;
     return (ons * usdTry) / OZ;
+  }
+  if (ALTINAPI_SEMBOLLERI.has(sembol)) {
+    return altinApiOnbellektenOku(sembol);
   }
   return yahooGuncelFiyat(sembol);
 }

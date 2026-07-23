@@ -14171,9 +14171,162 @@ const ALTIN_URUN_TABLOSU_V2 = [
   {ad:"Gram Paladyum", sembol:"PALADYUM"},
 ];
 
+// ─── ALTIN ALARM MODAL (2026-07-23) ────────────────────────────────────────
+// KurGrafikModal'ın alarm panelinin BAĞIMSIZ bir kopyası — grafik/geçmiş
+// fiyat YOK (AltinAPI geçmiş veri sunmuyor, canlı testte tüm history/candles
+// endpoint denemeleri 404 döndü, doğrulandı), sadece zaten elde olan bid/ask
+// ile alarm kurma. KurGrafikModal'a BİLEREK dokunulmadı (riski izole etmek
+// için, kod tekrarı pahasına). Backend tarafı: api/bildirim.js'deki
+// alarmFiyatGetir() bu sembolleri (ALTIN, AYAR22 vb.) tanıyıp zaten dolu olan
+// altinapi:v3 Redis önbelleğinden okuyacak şekilde ayrıca güncellendi —
+// ekstra AltinAPI isteği YOK.
+function AltinAlarmModal({urun, onClose}:{urun:{ad:string, sembol:string, bid:number, ask:number, birim:string}, onClose:()=>void}){
+  const [alarmTip,setAlarmTip]=useState<"hedef"|"yuzde">("hedef");
+  const [alarmYon,setAlarmYon]=useState<"ustunde"|"altinda"|"artis"|"dusus">("ustunde");
+  const [alarmDeger,setAlarmDeger]=useState(String(urun.ask));
+  const [alarmDurum,setAlarmDurum]=useState<"bos"|"gonderiliyor"|"basarili"|"hata">("bos");
+  const [alarmHata,setAlarmHata]=useState("");
+  const fmt2=(n:any)=>n==null?"—":new Intl.NumberFormat("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}).format(n);
+  const fmtBirim=(n:any)=>n==null?"—":`${urun.birim}${fmt2(n)}`;
+
+  return(
+    <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.7)",zIndex:600,display:"flex",alignItems:"flex-end",...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}}>
+      <div style={{background:C.card,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",maxHeight:"80vh",display:"flex",flexDirection:"column"}}>
+        <div style={{padding:"16px 20px 12px",borderBottom:`1px solid ${WA(0.1)}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+          <p style={{margin:0,fontSize:18,fontWeight:800,color:C.label}}>{urun.ad}</p>
+          <button onClick={onClose} style={{background:WA(0.1),border:"none",width:32,height:32,borderRadius:16,fontSize:20,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+        </div>
+
+        <div style={{flex:1,overflowY:"auto",padding:"16px 20px 32px"}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
+            <div style={{background:WA(0.03),borderRadius:10,padding:"10px 12px"}}>
+              <p style={{margin:0,fontSize:10,color:WA(0.55),fontWeight:600}}>ALIŞ</p>
+              <p style={{margin:"4px 0 0",fontSize:16,fontWeight:800,color:C.label,fontFamily:"monospace"}}>{fmtBirim(urun.bid)}</p>
+            </div>
+            <div style={{background:WA(0.03),borderRadius:10,padding:"10px 12px"}}>
+              <p style={{margin:0,fontSize:10,color:WA(0.55),fontWeight:600}}>SATIŞ</p>
+              <p style={{margin:"4px 0 0",fontSize:16,fontWeight:800,color:C.label,fontFamily:"monospace"}}>{fmtBirim(urun.ask)}</p>
+            </div>
+          </div>
+
+          {alarmDurum==="basarili"?(
+            <div style={{textAlign:"center",padding:"10px 0"}}>
+              <p style={{margin:0,fontSize:24}}>✅</p>
+              <p style={{margin:"6px 0 0",fontSize:13,fontWeight:700,color:C.green}}>Alarm kuruldu!</p>
+              <p style={{margin:"3px 0 0",fontSize:11,color:WA(0.5)}}>Koşul sağlandığında bildirim alacaksınız.</p>
+            </div>
+          ):(
+            <div>
+              <div style={{display:"flex",gap:6,marginBottom:10}}>
+                <button onClick={()=>{setAlarmTip("hedef");setAlarmYon("ustunde");setAlarmDeger(String(urun.ask));}} style={{
+                  flex:1,padding:"8px",borderRadius:9,border:`1.5px solid ${alarmTip==="hedef"?"#3B82F6":WA(0.15)}`,
+                  background:alarmTip==="hedef"?"rgba(59,130,246,0.15)":"transparent",
+                  color:alarmTip==="hedef"?(TEMA==="acik"?"#2E6DA8":"#7DB2FF"):WA(0.6),fontWeight:700,fontSize:12,cursor:"pointer",
+                }}>Hedef Fiyat</button>
+                <button onClick={()=>{setAlarmTip("yuzde");setAlarmYon("artis");setAlarmDeger("5");}} style={{
+                  flex:1,padding:"8px",borderRadius:9,border:`1.5px solid ${alarmTip==="yuzde"?"#3B82F6":WA(0.15)}`,
+                  background:alarmTip==="yuzde"?"rgba(59,130,246,0.15)":"transparent",
+                  color:alarmTip==="yuzde"?(TEMA==="acik"?"#2E6DA8":"#7DB2FF"):WA(0.6),fontWeight:700,fontSize:12,cursor:"pointer",
+                }}>Yüzde Değişim</button>
+              </div>
+
+              {alarmTip==="hedef"?(
+                <>
+                  <div style={{display:"flex",gap:6,marginBottom:8}}>
+                    <button onClick={()=>setAlarmYon("ustunde")} style={{
+                      flex:1,padding:"7px",borderRadius:8,border:`1px solid ${alarmYon==="ustunde"?C.green:WA(0.15)}`,
+                      background:alarmYon==="ustunde"?"rgba(74,222,128,0.12)":"transparent",
+                      color:alarmYon==="ustunde"?C.green:WA(0.6),fontWeight:700,fontSize:11.5,cursor:"pointer",
+                    }}>▲ Üstüne çıkarsa</button>
+                    <button onClick={()=>setAlarmYon("altinda")} style={{
+                      flex:1,padding:"7px",borderRadius:8,border:`1px solid ${alarmYon==="altinda"?C.red:WA(0.15)}`,
+                      background:alarmYon==="altinda"?"rgba(248,113,113,0.12)":"transparent",
+                      color:alarmYon==="altinda"?C.red:WA(0.6),fontWeight:700,fontSize:11.5,cursor:"pointer",
+                    }}>▼ Altına inerse</button>
+                  </div>
+                  <div style={{position:"relative"}}>
+                    <input type="number" inputMode="decimal" value={alarmDeger} onChange={e=>setAlarmDeger(e.target.value)}
+                      placeholder="Hedef fiyat"
+                      style={{width:"100%",boxSizing:"border-box",padding:"11px 40px 11px 13px",fontSize:15,fontWeight:600,fontFamily:"monospace",background:WA(0.06),border:`1.5px solid ${WA(0.15)}`,borderRadius:10,color:C.label,outline:"none"}}/>
+                    <span style={{position:"absolute",right:11,top:"50%",transform:"translateY(-50%)",color:"#3B82F6",fontWeight:700,fontSize:13}}>{urun.birim}</span>
+                  </div>
+                </>
+              ):(
+                <>
+                  <div style={{display:"flex",gap:6,marginBottom:8}}>
+                    <button onClick={()=>setAlarmYon("artis")} style={{
+                      flex:1,padding:"7px",borderRadius:8,border:`1px solid ${alarmYon==="artis"?C.green:WA(0.15)}`,
+                      background:alarmYon==="artis"?"rgba(74,222,128,0.12)":"transparent",
+                      color:alarmYon==="artis"?C.green:WA(0.6),fontWeight:700,fontSize:11.5,cursor:"pointer",
+                    }}>▲ Yükselirse</button>
+                    <button onClick={()=>setAlarmYon("dusus")} style={{
+                      flex:1,padding:"7px",borderRadius:8,border:`1px solid ${alarmYon==="dusus"?C.red:WA(0.15)}`,
+                      background:alarmYon==="dusus"?"rgba(248,113,113,0.12)":"transparent",
+                      color:alarmYon==="dusus"?C.red:WA(0.6),fontWeight:700,fontSize:11.5,cursor:"pointer",
+                    }}>▼ Düşerse</button>
+                  </div>
+                  <div style={{position:"relative"}}>
+                    <input type="number" inputMode="decimal" value={alarmDeger} onChange={e=>setAlarmDeger(e.target.value)}
+                      placeholder="Yüzde"
+                      style={{width:"100%",boxSizing:"border-box",padding:"11px 40px 11px 13px",fontSize:15,fontWeight:600,fontFamily:"monospace",background:WA(0.06),border:`1.5px solid ${WA(0.15)}`,borderRadius:10,color:C.label,outline:"none"}}/>
+                    <span style={{position:"absolute",right:11,top:"50%",transform:"translateY(-50%)",color:"#3B82F6",fontWeight:700,fontSize:13}}>%</span>
+                  </div>
+                  <p style={{margin:"5px 2px 0",fontSize:10.5,color:WA(0.4)}}>Şu anki satış fiyatına ({fmtBirim(urun.ask)}) göre hesaplanır.</p>
+                </>
+              )}
+
+              {alarmHata&&<p style={{margin:"8px 2px 0",fontSize:11.5,color:C.red}}>{alarmHata}</p>}
+
+              <div style={{display:"flex",gap:8,marginTop:12}}>
+                <button onClick={onClose} style={{
+                  flex:1,padding:"11px",borderRadius:10,border:`1px solid ${WA(0.15)}`,
+                  background:"transparent",color:WA(0.6),fontWeight:700,fontSize:13,cursor:"pointer",
+                }}>Vazgeç</button>
+                <button onClick={()=>{
+                    const token=pushTokenAl();
+                    if(!token){
+                      let neden="";
+                      try{ neden=localStorage.getItem("kp_push_hata")||""; }catch{}
+                      setAlarmHata(neden ? `Bildirim kaydı başarısız: ${neden}` : "Bildirim izni gerekiyor — cihaz Ayarlar'dan izin verip tekrar deneyin.");
+                      return;
+                    }
+                    const degerNum=parseFloat(alarmDeger.replace(",","."));
+                    if(!degerNum||degerNum<=0){ setAlarmHata("Geçerli bir değer girin."); return; }
+                    setAlarmDurum("gonderiliyor"); setAlarmHata("");
+                    fetch(`${API_BASE}/api/bildirim?islem=alarm-ekle`,{
+                      method:"POST",headers:{"Content-Type":"application/json"},
+                      body:JSON.stringify({
+                        token, sembol: urun.sembol, ad: urun.ad,
+                        tip:alarmTip, yon:alarmYon,
+                        hedefFiyat: alarmTip==="hedef"?degerNum:undefined,
+                        yuzde: alarmTip==="yuzde"?degerNum:undefined,
+                      }),
+                    }).then(r=>r.json().then(d=>({ok:r.ok,d})))
+                      .then(({ok,d})=>{
+                        if(ok&&d?.basarili){
+                          setAlarmDurum("basarili");
+                          olayGonder("alarm_kuruldu", { sembol: urun.sembol, tip: alarmTip, yon: alarmYon });
+                        }
+                        else { setAlarmDurum("bos"); setAlarmHata(d?.hata||"Alarm kurulamadı."); }
+                      })
+                      .catch(()=>{ setAlarmDurum("bos"); setAlarmHata("Bağlantı hatası, tekrar deneyin."); });
+                  }} disabled={alarmDurum==="gonderiliyor"} style={{
+                  flex:1,padding:"11px",borderRadius:10,border:"none",
+                  background:"#3B82F6",color:"#fff",fontWeight:800,fontSize:13,cursor:"pointer",
+                }}>{alarmDurum==="gonderiliyor"?"Kuruluyor...":"Alarm Kur"}</button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AltinUrunleriTablo(){
   const [veri,setVeri]=useState<any>(null);
   const [yukleniyor,setYukleniyor]=useState(true);
+  const [altinAlarmSecili,setAltinAlarmSecili]=useState<any>(null);
 
   useEffect(()=>{
     let iptal=false;
@@ -14201,9 +14354,10 @@ function AltinUrunleriTablo(){
     // rakam göstermektense hiç göstermemek tercih edildi.
     const degisimYuzdeHam = (d && d.close && d.bid!=null && d.ask!=null) ? (((d.bid+d.ask)/2 - d.close) / d.close * 100) : null;
     const degisimYuzde = (degisimYuzdeHam!=null && Math.abs(degisimYuzdeHam)<=10) ? degisimYuzdeHam : null;
+    const tiklanabilir = d && d.bid!=null && d.ask!=null;
     return (
-      <div key={sembol} style={{display:"flex",alignItems:"center",gap:8,
-        padding:"11px 14px",borderRadius:12,marginBottom:8,
+      <div key={sembol} onClick={()=>tiklanabilir&&setAltinAlarmSecili({ad,sembol,bid:d.bid,ask:d.ask,birim})} style={{display:"flex",alignItems:"center",gap:8,
+        padding:"11px 14px",borderRadius:12,marginBottom:8,cursor:tiklanabilir?"pointer":"default",
         ...(TEMA==="acik"
           ? {background:(i%2===1?"#F3F6FA":"#E9EEF4"),border:"1px solid rgba(22,34,46,0.08)"}
           : {background:(i%2===1?"#1A2633":"#16222E"),border:`1px solid ${WA(0.07)}`})}}>
@@ -14221,6 +14375,7 @@ function AltinUrunleriTablo(){
           <>
             <span style={{minWidth:80,flexShrink:0,textAlign:"right",fontSize:11.5,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace",whiteSpace:"nowrap"}}>{fmtPara(d.bid,birim)}</span>
             <span style={{minWidth:80,flexShrink:0,textAlign:"right",fontSize:11.5,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace",whiteSpace:"nowrap"}}>{fmtPara(d.ask,birim)}</span>
+            {tiklanabilir&&<span style={{color:WA(0.3),fontSize:16,flexShrink:0}}>›</span>}
           </>
         ):(
           <span style={{fontSize:12,color:WA(0.4)}}>—</span>
@@ -14231,6 +14386,7 @@ function AltinUrunleriTablo(){
 
   return(
     <div>
+      {altinAlarmSecili&&<AltinAlarmModal urun={altinAlarmSecili} onClose={()=>setAltinAlarmSecili(null)}/>}
       <div style={{display:"flex",alignItems:"center",gap:8,padding:"0 14px 6px"}}>
         <span style={{flex:1,minWidth:0,fontSize:10,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.4}}>Birim</span>
         <span style={{minWidth:80,flexShrink:0,textAlign:"right",fontSize:10,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.4}}>Alış</span>
