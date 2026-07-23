@@ -150,6 +150,12 @@ async function sirketIsimleriniGetir() {
 function originIzinliMi(origin) {
   if (!origin) return false;
   if (/^https:\/\/katilim-analiz(-[a-z0-9-]+)?\.vercel\.app$/i.test(origin)) return true;
+  if (/^https:\/\/(www\.)?katilimplus\.com$/i.test(origin)) return true;
+  // Native uygulama (Capacitor iOS/Android) origin'leri — 2026-07-23:
+  // native WebView istekleri capacitor://localhost veya ionic://localhost
+  // origin'iyle gelir; beyaz listede olmadıklari için BIST/haber/grafik
+  // verileri native'de "Load failed" veriyordu.
+  if (/^(capacitor|ionic):\/\/localhost$/i.test(origin)) return true;
   if (/^https?:\/\/localhost(:\d+)?$/i.test(origin)) return true;
   return false;
 }
