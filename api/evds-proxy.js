@@ -74,8 +74,8 @@ const redis = new Redis({
 // NOT (2026-07-11): v9 → v10 sürüm değişikliği — Dış Ticaret & Ödemeler
 // Dengesi serileri (DT_* / CARI_* / REK_*) eklendiği için yapıldı. Aynı ders:
 // versiyon artırılmazsa eski önbellek yeni alanları 6 saat boyunca göstermez.
-const KV_ANLIK_KEY = "evds:anlik:v12";
-const KV_TARIHSEL_PREFIX = "evds:tarihsel:v12:";
+const KV_ANLIK_KEY = "evds:anlik:v13";
+const KV_TARIHSEL_PREFIX = "evds:tarihsel:v13:";
 
 // Vercel'in varsayılan fonksiyon süresi (Hobby planda genelde 10sn) artık 8 dış
 // isteğe (5 EVDS + 3 FRED) yetmiyor — bu yüzden ERR_CONNECTION_CLOSED alınıyordu
@@ -105,7 +105,39 @@ const HAFTALIK = [
   "TP.KTF17.TL","TP.KTF17.USD","TP.KTF17.EUR",
 ];
 
-const REZERV = ["TP.AB.TOPLAM"];
+const REZERV = ["TP.AB.TOPLAM", "TP.AB.B1", "TP.AB.B2"]; // B1=Altın, B2=Döviz
+
+// GÖSTERGELER (2026-07-23) — Ekonomik Aktivite + Enflasyon detayı, EVDS katalog
+// keşfiyle doğrulandı. KKO/RKGE/TGE/İşsizlik doğrudan oran/endeks puanı;
+// Sanayi/Yİ-ÜFE/Çekirdek TÜFE/Enerji/Gıda/Kira birer ENDEKS olduğu için
+// backend'de yıllık(+aylık) % değişime çevriliyor (endeksYoYHesapla ile).
+const GOSTERGE = [
+  "TP.TSANAYMT2021.Y1",
+  "TP.KKO2.IS.TOP",
+  "TP.GY1.N2",
+  "TP.TG2.Y01",
+  "TP.YISGUCU2.G8",
+  "TP.TUFE1YI.T1",
+  "TP.FE25.OKTG04",
+  "TP.FE25.OKTG09",
+  "TP.FE25.OKTG10",
+  "TP.YKKE.TR",
+];
+
+// KÂR PAYI — HAFTALIK AKIM (2026-07-23) — EVDS menü keşfiyle doğrulandı:
+// "Kredi Kâr Oranları (Akım)" = gerçek katılım bankaları haftalık akım verisi
+// (kod öneki KBK = Katılım Bankaları Kredi). Kullanıcının EVDS3 ekranındaki
+// 10 seçili seri + Excel export sütun başlıkları birebir sırayla eşleşerek
+// doğrulandı. Önceki "TP.KTF17" (HAFTALIK dizisi) katılıma özel DEĞİLDİ —
+// genel/konvansiyonel bankacılık verisiydi, hiç canlıya alınmamıştı.
+const HAFTALIK_KBK = [
+  "TP.KBK.TRY.18",       // Konut
+  "TP.KBK.TRY.17",       // Taşıt
+  "TP.KBK.TRY.KBTF10",   // İhtiyaç
+  "TP.KBK.TRY.1",        // Ticari TL
+  "TP.KBK.USD.KBTF17",   // Ticari USD
+  "TP.KBK.EUR.KBTF17",   // Ticari EUR
+];
 
 const AYLIK_BKR = [
   "TP.BKR.TRY.KTF10","TP.BKR.TRY.17","TP.BKR.TRY.18",
@@ -297,6 +329,26 @@ function medyanTlrefOrani(gunlukOranlar, sonIndex, pencereNokta=9){
 }
 const TLREF_PENCERE_NOKTA = 9;
 
+// Endeks tipi GÖSTERGE serilerinden (Sanayi Üretimi, Yİ-ÜFE, Çekirdek TÜFE,
+// Enerji, Gıda, Kira Endeksi) yıllık/aylık % değişim hesaplar — TÜFE'deki
+// mantığın genelleştirilmiş hali; ham EVDS tarihi kullanılıyor.
+function endeksYoYHesapla(dizi, aylikDaHesapla){
+  if(!dizi || dizi.length<13) return {yillik:null, aylik:null, yillikSeri:[], aylikSeri:[]};
+  const son=dizi[dizi.length-1];
+  const oncekiAy=dizi[dizi.length-2];
+  const oncekiYil=dizi[dizi.length-13];
+  const yillik={deger:(son.deger-oncekiYil.deger)/oncekiYil.deger*100, tarih:son.tarih};
+  const aylik=aylikDaHesapla?{deger:(son.deger-oncekiAy.deger)/oncekiAy.deger*100, tarih:son.tarih}:null;
+  const yillikSeri=[], aylikSeri=[];
+  for(let i=dizi.length-1;i>=12;i--){
+    const s=dizi[i], oA=dizi[i-1], oY=dizi[i-12];
+    yillikSeri.unshift({tarih:s.tarih, deger:(s.deger-oY.deger)/oY.deger*100});
+    if(aylikDaHesapla) aylikSeri.unshift({tarih:s.tarih, deger:(s.deger-oA.deger)/oA.deger*100});
+    if(yillikSeri.length>=24) break;
+  }
+  return {yillik, aylik, yillikSeri, aylikSeri};
+}
+
 async function evdsFetch(url,apiKey){
   const r=await fetchZamanli(url,{headers:{"key":apiKey,"Accept":"application/json"}},10000);
   const text=await r.text();
@@ -469,7 +521,7 @@ export default async function handler(req,res){
   }
 
   try{
-    const [hafJson,bkrJson,kbkJson,kkpJson,gunJson,enfJson,polJson,rezervJson,dtJson]=await Promise.all([
+    const [hafJson,bkrJson,kbkJson,kkpJson,gunJson,enfJson,polJson,rezervJson,dtJson,gostJson,hkbkJson]=await Promise.all([
       guvenliCek("haftalik", `${BASE}/series=${HAFTALIK.join("-")}&startDate=${onceki(60)}&endDate=${tarihStr(new Date())}&type=json&frequency=3`),
       guvenliCek("aylik_bkr", `${BASE}/series=${AYLIK_BKR.join("-")}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
       guvenliCek("aylik_kbk", `${BASE}/series=${AYLIK_KBK.join("-")}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
@@ -481,6 +533,8 @@ export default async function handler(req,res){
       // Dış ticaret (v10): 12 aylık kümülatif serinin 24 noktası için ~36 ay
       // ham aylık veri gerekir → 1150 günlük pencere (~38 ay), tek istek.
       guvenliCek("disticaret", `${BASE}/series=${DISTICARET.join("-")}&startDate=${onceki(1150)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
+      guvenliCek("gosterge", `${BASE}/series=${GOSTERGE.join("-")}&startDate=${onceki(760)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
+      guvenliCek("haftalik_kbk", `${BASE}/series=${HAFTALIK_KBK.join("-")}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=3`),
     ]);
 
     const [sofr,eur3m,us2y,us5y,us10y,fedFonlama,ecbMevduat,sofr3m,sofr6m,fedUst,fedAlt]=await Promise.all([
@@ -545,6 +599,60 @@ export default async function handler(req,res){
 
     sonuclar["TP.APIFON4_SERI"]=tumDegerler(polJson?.items||[], "TP.APIFON4").slice(-24);
     sonuclar["TP_AB_TOPLAM_SERI"]=tumDegerler(rezervJson?.items||[], "TP_AB_TOPLAM").slice(-24);
+    sonuclar["TP_AB_B1_SERI"]=tumDegerler(rezervJson?.items||[], "TP.AB.B1").slice(-24);
+    sonuclar["TP_AB_B2_SERI"]=tumDegerler(rezervJson?.items||[], "TP.AB.B2").slice(-24);
+
+    // ── HAFTALIK AKIM KÂR PAYI (2026-07-23) ─────────────────────────────
+    for(const s of HAFTALIK_KBK) sonuclar[s]=sonDeger(hkbkJson?.items||[],s);
+
+    // ── GÖSTERGELER (2026-07-23) ────────────────────────────────────────
+    const gostItems = gostJson?.items||[];
+    sonuclar["GOSTERGE_KKO"]=sonDeger(gostItems, "TP.KKO2.IS.TOP");
+    sonuclar["GOSTERGE_KKO_SERI"]=tumDegerler(gostItems, "TP.KKO2.IS.TOP").slice(-24);
+    sonuclar["GOSTERGE_RKGE"]=sonDeger(gostItems, "TP.GY1.N2");
+    sonuclar["GOSTERGE_RKGE_SERI"]=tumDegerler(gostItems, "TP.GY1.N2").slice(-24);
+    sonuclar["GOSTERGE_TGE"]=sonDeger(gostItems, "TP.TG2.Y01");
+    sonuclar["GOSTERGE_TGE_SERI"]=tumDegerler(gostItems, "TP.TG2.Y01").slice(-24);
+    sonuclar["GOSTERGE_ISSIZLIK"]=sonDeger(gostItems, "TP.YISGUCU2.G8");
+    sonuclar["GOSTERGE_ISSIZLIK_SERI"]=tumDegerler(gostItems, "TP.YISGUCU2.G8").slice(-24);
+
+    const sanayiDizi = tumDegerler(gostItems, "TP.TSANAYMT2021.Y1");
+    const sanayiYoY = endeksYoYHesapla(sanayiDizi, false);
+    sonuclar["GOSTERGE_SANAYI_YILLIK"]=sanayiYoY.yillik;
+    sonuclar["GOSTERGE_SANAYI_YILLIK_SERI"]=sanayiYoY.yillikSeri;
+
+    const yiufeDizi = tumDegerler(gostItems, "TP.TUFE1YI.T1");
+    const yiufeYoY = endeksYoYHesapla(yiufeDizi, true);
+    sonuclar["GOSTERGE_YIUFE_YILLIK"]=yiufeYoY.yillik;
+    sonuclar["GOSTERGE_YIUFE_YILLIK_SERI"]=yiufeYoY.yillikSeri;
+    sonuclar["GOSTERGE_YIUFE_AYLIK"]=yiufeYoY.aylik;
+    sonuclar["GOSTERGE_YIUFE_AYLIK_SERI"]=yiufeYoY.aylikSeri;
+
+    const cekirdekDizi = tumDegerler(gostItems, "TP.FE25.OKTG04");
+    const cekirdekYoY = endeksYoYHesapla(cekirdekDizi, false);
+    sonuclar["GOSTERGE_CEKIRDEK_YILLIK"]=cekirdekYoY.yillik;
+    sonuclar["GOSTERGE_CEKIRDEK_YILLIK_SERI"]=cekirdekYoY.yillikSeri;
+
+    const enerjiDizi = tumDegerler(gostItems, "TP.FE25.OKTG09");
+    const enerjiYoY = endeksYoYHesapla(enerjiDizi, false);
+    sonuclar["GOSTERGE_ENERJI_YILLIK"]=enerjiYoY.yillik;
+    sonuclar["GOSTERGE_ENERJI_YILLIK_SERI"]=enerjiYoY.yillikSeri;
+
+    const gidaDizi = tumDegerler(gostItems, "TP.FE25.OKTG10");
+    const gidaYoY = endeksYoYHesapla(gidaDizi, false);
+    sonuclar["GOSTERGE_GIDA_YILLIK"]=gidaYoY.yillik;
+    sonuclar["GOSTERGE_GIDA_YILLIK_SERI"]=gidaYoY.yillikSeri;
+
+    const kiraDizi = tumDegerler(gostItems, "TP.YKKE.TR");
+    const kiraYoY = endeksYoYHesapla(kiraDizi, false);
+    sonuclar["GOSTERGE_KIRA_YILLIK"]=kiraYoY.yillik;
+    sonuclar["GOSTERGE_KIRA_YILLIK_SERI"]=kiraYoY.yillikSeri;
+
+    teshis.gosterge_hesap = {
+      sanayi_nokta: sanayiDizi.length, yiufe_nokta: yiufeDizi.length,
+      cekirdek_nokta: cekirdekDizi.length, enerji_nokta: enerjiDizi.length,
+      gida_nokta: gidaDizi.length, kira_nokta: kiraDizi.length,
+    };
 
     // ── DIŞ TİCARET & ÖDEMELER DENGESİ (v10) ──────────────────────────────
     // Tüm parasal değerler milyonUSDNormalize ile MİLYON USD'a normalize

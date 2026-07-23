@@ -17047,30 +17047,48 @@ function App(){
               const fmtRezerv=(v:any)=>v?.deger!=null?`$${(v.deger/1000).toFixed(2).replace(".",",")} Milyar`:"—";
               const tlrefk=tlrefkTahmini(evdsMakro);
 
-              // ── Alt kategori 1: EKONOMİK AKTİVİTE (2026-07-23 — YENİ, henüz
-              // EVDS'e eklenmedi; evdsMakro'da karşılığı yok, "—" gösterilir) ──
+              // ── Alt kategori 1: EKONOMİK AKTİVİTE (2026-07-23 — GSYH hariç
+              // hepsi EVDS katalog keşfiyle doğrulanmış gerçek kodlarla bağlandı).
+              // KKO/RKGE/TGE/İşsizlik zaten oran/endeks puanı olarak yayınlanıyor
+              // (ek hesaplama gerekmiyor); Sanayi Üretimi bir ENDEKS olduğu için
+              // backend'de TÜFE'dekine benzer yıllık-değişim hesabından geçiyor. ──
+              const gY=(k:string)=>evdsMakro?.[k];
               const AKTIVITE:any[] = [
-                {ad:"GSYH Büyümesi (Yıllık)", deger:"—", tarih:"TÜİK · henüz eklenmedi"},
-                {ad:"Sanayi Üretimi (Yıllık)", deger:"—", tarih:"TÜİK · henüz eklenmedi"},
-                {ad:"Kapasite Kullanım Oranı", deger:"—", tarih:"TCMB · henüz eklenmedi"},
-                {ad:"Reel Kesim Güven Endeksi", deger:"—", tarih:"TCMB · henüz eklenmedi"},
-                {ad:"Tüketici Güven Endeksi", deger:"—", tarih:"TÜİK · henüz eklenmedi"},
-                {ad:"İşsizlik Oranı", deger:"—", tarih:"TÜİK · henüz eklenmedi"},
+                {ad:"GSYH Büyümesi (Yıllık)", deger:"—", tarih:"TÜİK · EVDS'te güncel seri bulunamadı"},
+                {ad:"Sanayi Üretimi (Yıllık)", deger:fmtPct(gY("GOSTERGE_SANAYI_YILLIK")), tarih:gY("GOSTERGE_SANAYI_YILLIK")?.tarih||"", canli:gY("GOSTERGE_SANAYI_YILLIK")!=null,
+                 seri:evdsMakro?.GOSTERGE_SANAYI_YILLIK_SERI, seriAd:"Sanayi Üretimi Yıllık Değişim"},
+                {ad:"Kapasite Kullanım Oranı", deger:fmtPct(gY("GOSTERGE_KKO")), tarih:gY("GOSTERGE_KKO")?.tarih||"", canli:gY("GOSTERGE_KKO")!=null,
+                 seri:evdsMakro?.GOSTERGE_KKO_SERI, seriAd:"Kapasite Kullanım Oranı"},
+                {ad:"Reel Kesim Güven Endeksi", deger:gY("GOSTERGE_RKGE")?.deger!=null?gY("GOSTERGE_RKGE").deger.toFixed(1).replace(".",","):"—", tarih:gY("GOSTERGE_RKGE")?.tarih||"", canli:gY("GOSTERGE_RKGE")!=null,
+                 seri:evdsMakro?.GOSTERGE_RKGE_SERI, seriAd:"Reel Kesim Güven Endeksi"},
+                {ad:"Tüketici Güven Endeksi", deger:gY("GOSTERGE_TGE")?.deger!=null?gY("GOSTERGE_TGE").deger.toFixed(1).replace(".",","):"—", tarih:gY("GOSTERGE_TGE")?.tarih||"", canli:gY("GOSTERGE_TGE")!=null,
+                 seri:evdsMakro?.GOSTERGE_TGE_SERI, seriAd:"Tüketici Güven Endeksi"},
+                {ad:"İşsizlik Oranı", deger:fmtPct(gY("GOSTERGE_ISSIZLIK")), tarih:gY("GOSTERGE_ISSIZLIK")?.tarih||"", canli:gY("GOSTERGE_ISSIZLIK")!=null,
+                 seri:evdsMakro?.GOSTERGE_ISSIZLIK_SERI, seriAd:"İşsizlik Oranı"},
               ];
 
-              // ── Alt kategori 2: ENFLASYON VE FİYAT DENGESİ (TÜFE Y/A mevcut,
-              // alt kalemler 2026-07-23 YENİ — henüz EVDS'e eklenmedi) ──
+              // ── Alt kategori 2: ENFLASYON VE FİYAT DENGESİ (2026-07-23 — Kira
+              // hariç hepsi doğrulanmış EVDS kodlarıyla bağlandı; "Kira Enflasyonu"
+              // yerine TCMB'nin kendi güncel göstergesi olan "Yeni Kiracı Kira
+              // Endeksi" kullanıldı — TÜFE'nin kira alt kalemi EVDS'te ayrı
+              // yayınlanmıyor, bu en yakın resmi TCMB kira göstergesi). ──
               const ENFLASYON_LISTE:any[] = [
                 {ad:"TÜFE (Yıllık)",       deger:fmtPct(tufY), tarih:tufY?.tarih||"", canli:tufY!=null,
                  seri:evdsMakro?.TUFE_YILLIK_SERI, seriAd:"TÜFE Yıllık Değişim"},
                 {ad:"TÜFE (Aylık)",        deger:fmtPct(tufA), tarih:tufA?.tarih||"", canli:tufA!=null,
                  seri:evdsMakro?.TUFE_AYLIK_SERI, seriAd:"TÜFE Aylık Değişim"},
-                {ad:"Çekirdek TÜFE (C Endeksi)", deger:"—", tarih:"TCMB · henüz eklenmedi"},
-                {ad:"Yİ-ÜFE (Yıllık)", deger:"—", tarih:"TÜİK · henüz eklenmedi"},
-                {ad:"Yİ-ÜFE (Aylık)", deger:"—", tarih:"TÜİK · henüz eklenmedi"},
-                {ad:"Gıda Enflasyonu (Yıllık)", deger:"—", tarih:"TÜİK · henüz eklenmedi"},
-                {ad:"Enerji Enflasyonu (Yıllık)", deger:"—", tarih:"TÜİK · henüz eklenmedi"},
-                {ad:"Kira Enflasyonu (Yıllık)", deger:"—", tarih:"TÜİK · henüz eklenmedi"},
+                {ad:"Çekirdek TÜFE (C Endeksi, Yıllık)", deger:fmtPct(gY("GOSTERGE_CEKIRDEK_YILLIK")), tarih:gY("GOSTERGE_CEKIRDEK_YILLIK")?.tarih||"", canli:gY("GOSTERGE_CEKIRDEK_YILLIK")!=null,
+                 seri:evdsMakro?.GOSTERGE_CEKIRDEK_YILLIK_SERI, seriAd:"Çekirdek TÜFE (C) Yıllık Değişim"},
+                {ad:"Yİ-ÜFE (Yıllık)", deger:fmtPct(gY("GOSTERGE_YIUFE_YILLIK")), tarih:gY("GOSTERGE_YIUFE_YILLIK")?.tarih||"", canli:gY("GOSTERGE_YIUFE_YILLIK")!=null,
+                 seri:evdsMakro?.GOSTERGE_YIUFE_YILLIK_SERI, seriAd:"Yİ-ÜFE Yıllık Değişim"},
+                {ad:"Yİ-ÜFE (Aylık)", deger:fmtPct(gY("GOSTERGE_YIUFE_AYLIK")), tarih:gY("GOSTERGE_YIUFE_AYLIK")?.tarih||"", canli:gY("GOSTERGE_YIUFE_AYLIK")!=null,
+                 seri:evdsMakro?.GOSTERGE_YIUFE_AYLIK_SERI, seriAd:"Yİ-ÜFE Aylık Değişim"},
+                {ad:"Gıda Enflasyonu (Yıllık)", deger:fmtPct(gY("GOSTERGE_GIDA_YILLIK")), tarih:gY("GOSTERGE_GIDA_YILLIK")?.tarih||"", canli:gY("GOSTERGE_GIDA_YILLIK")!=null,
+                 seri:evdsMakro?.GOSTERGE_GIDA_YILLIK_SERI, seriAd:"Gıda Enflasyonu Yıllık Değişim"},
+                {ad:"Enerji Enflasyonu (Yıllık)", deger:fmtPct(gY("GOSTERGE_ENERJI_YILLIK")), tarih:gY("GOSTERGE_ENERJI_YILLIK")?.tarih||"", canli:gY("GOSTERGE_ENERJI_YILLIK")!=null,
+                 seri:evdsMakro?.GOSTERGE_ENERJI_YILLIK_SERI, seriAd:"Enerji Enflasyonu Yıllık Değişim"},
+                {ad:"Yeni Kiracı Kira Endeksi (Yıllık)", deger:fmtPct(gY("GOSTERGE_KIRA_YILLIK")), tarih:gY("GOSTERGE_KIRA_YILLIK")?.tarih||"", canli:gY("GOSTERGE_KIRA_YILLIK")!=null,
+                 seri:evdsMakro?.GOSTERGE_KIRA_YILLIK_SERI, seriAd:"Yeni Kiracı Kira Endeksi Yıllık Değişim"},
               ];
 
               // ── Alt kategori 3: PARA POLİTİKASI VE FİNANSAL KOŞULLAR
@@ -17127,6 +17145,14 @@ function App(){
               // ORAN KARŞILAŞTIRMA bölümü). Her satırda hem TCMB'nin yayınladığı
               // BİLEŞİK oran hem haftalık-bileşiklemeye dayalı ≈BASİT karşılığı
               // (bilesikTenBasiteCevir fonksiyonu) birlikte gösterilir. ──
+              // ── Alt kategori 4: KÂR PAYI ORANLARI (2026-07-23 — HAFTALIK AKIM'a
+              // geçildi. EVDS menü keşfiyle netleşti: "Kredi Kâr Oranları (Akım)"
+              // gerçek katılım bankaları haftalık akım verisi (kod öneki KBK =
+              // Katılım Bankaları Kredi); önceki "Kredi Faiz Oranları (Akım)"
+              // (TP.KTF17 vb, hiç canlıya alınmamıştı) aslında GENEL/konvansiyonel
+              // bankacılık verisiydi — katılıma özel değildi. Kullanıcının EVDS3
+              // ekran görüntüsündeki 10 seçili seri ile Excel export'undaki
+              // TP_KBK_... sütun başlıkları birebir sırayla eşleşerek doğrulandı. ──
               const karPayiSatir=(ad:string, kod:string)=>{
                 const v=evdsMakro?.[kod];
                 const bilesik=v?.deger!=null?parseFloat(v.deger):null;
@@ -17135,36 +17161,33 @@ function App(){
                   ad, kod,
                   bilesik: bilesik!=null?bilesik.toFixed(2).replace(".",","):null,
                   basit: basit!=null?basit.toFixed(2).replace(".",","):null,
-                  tarih: v?.tarih?`${v.tarih} · Aylık Stok`:"TCMB EVDS",
+                  tarih: v?.tarih?`${v.tarih} · Haftalık Akım`:"TCMB EVDS",
                   canli: v!=null,
                 };
               };
               const KAR_PAYI:any[] = [
-                // DÜZELTME (2026-07-23): Anahtarlar "TP_KKP_..." (alt çizgi) değil
-                // "TP.KKP..." (nokta) olmalı — kullanıcının EVDS export dosyası
-                // sütun başlıklarında nokta alt çizgiye çevrilmiş görünüyordu (Excel/
-                // CSV exportlarında yaygın), ama EVDS API'nin series= parametresi
-                // SADECE nokta formatını kabul ediyor; alt çizgili gönderilince
-                // "Series does not exist" ile TÜM isteği reddediyordu. Canlı testle
-                // doğrulandı (debug=1 üzerinden gerçek değerler geldi).
-                karPayiSatir("Konut Finansmanı Kâr Oranı", "TP.KKP.TRY.KTF10"),
-                karPayiSatir("Taşıt Finansmanı Kâr Oranı", "TP.KKP.TRY.17"),
-                karPayiSatir("İhtiyaç Finansmanı Kâr Oranı", "TP.KKP.TRY.18"),
-                karPayiSatir("Ticari Finansmanı Kâr Oranı (TL)", "TP.KKP.TRY.1"),
-                karPayiSatir("Ticari Finansmanı Kâr Oranı (USD)", "TP.KKP.USD.KTF17"),
-                karPayiSatir("Ticari Finansmanı Kâr Oranı (EUR)", "TP.KKP.EUR.KTF17"),
+                karPayiSatir("Konut Finansmanı Kâr Oranı", "TP.KBK.TRY.18"),
+                karPayiSatir("Taşıt Finansmanı Kâr Oranı", "TP.KBK.TRY.17"),
+                karPayiSatir("İhtiyaç Finansmanı Kâr Oranı", "TP.KBK.TRY.KBTF10"),
+                karPayiSatir("Ticari Finansmanı Kâr Oranı (TL)", "TP.KBK.TRY.1"),
+                karPayiSatir("Ticari Finansmanı Kâr Oranı (USD)", "TP.KBK.USD.KBTF17"),
+                karPayiSatir("Ticari Finansmanı Kâr Oranı (EUR)", "TP.KBK.EUR.KBTF17"),
               ];
 
-              // ── Alt kategori 5: RİSK GÖSTERGELERİ / REZERVLER (toplam mevcut,
-              // döviz/altın ayrımı + net rezerv 2026-07-23 YENİ — henüz eklenmedi.
-              // CDS/tahvil getirileri BİLEREK eklenmedi — ücretli/harici kaynak
-              // gerektiriyor, EVDS'te yok.) ──
+              // ── Alt kategori 5: RİSK GÖSTERGELERİ / REZERVLER (2026-07-23 —
+              // Döviz/Altın ayrımı doğrulanmış EVDS kodlarıyla bağlandı, aynı
+              // "Toplam Uluslararası Rezervler" grubundan (TP.AB.TOPLAM ile
+              // birlikte). Net Rezerv (Swap Hariç) için EVDS'te ayrı bir seri
+              // bulunamadı — placeholder'da kalıyor. CDS/tahvil getirileri
+              // BİLEREK eklenmedi — ücretli/harici kaynak gerektiriyor. ──
               const RISK:any[] = [
                 {ad:"TCMB Brüt Rezerv (Toplam)", deger:fmtRezerv(rezerv), tarih:rezerv?.tarih||"Haftalık", canli:rezerv!=null,
                  seri:evdsMakro?.["TP_AB_TOPLAM_SERI"], seriAd:"TCMB Brüt Rezerv (Milyon $)", seriBirim:"milyon$"},
-                {ad:"TCMB Brüt Döviz Rezervleri", deger:"—", tarih:"TCMB · henüz eklenmedi"},
-                {ad:"TCMB Brüt Altın Rezervleri", deger:"—", tarih:"TCMB · henüz eklenmedi"},
-                {ad:"TCMB Swap Hariç Net Rezervler", deger:"—", tarih:"TCMB · henüz eklenmedi"},
+                {ad:"TCMB Brüt Döviz Rezervleri", deger:fmtRezerv(gY("TP.AB.B2")), tarih:gY("TP.AB.B2")?.tarih||"Haftalık", canli:gY("TP.AB.B2")!=null,
+                 seri:evdsMakro?.["TP_AB_B2_SERI"], seriAd:"TCMB Brüt Döviz Rezervleri (Milyon $)", seriBirim:"milyon$"},
+                {ad:"TCMB Brüt Altın Rezervleri", deger:fmtRezerv(gY("TP.AB.B1")), tarih:gY("TP.AB.B1")?.tarih||"Haftalık", canli:gY("TP.AB.B1")!=null,
+                 seri:evdsMakro?.["TP_AB_B1_SERI"], seriAd:"TCMB Brüt Altın Rezervleri (Milyon $)", seriBirim:"milyon$"},
+                {ad:"TCMB Swap Hariç Net Rezervler", deger:"—", tarih:"TCMB · EVDS'te güncel seri bulunamadı"},
               ];
 
               const ALT_SEKMELER=[
