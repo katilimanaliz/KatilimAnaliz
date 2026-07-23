@@ -107,14 +107,6 @@ const HAFTALIK = [
 
 const REZERV = ["TP.AB.TOPLAM"];
 
-// GEÇİCİ TEST (2026-07-23) — henüz doğrulanmamış, henüz frontend'e bağlı DEĞİL.
-// Sadece hangi kodların gerçek/geçerli olduğunu debug=1 ile görmek için eklendi.
-const TEST_YENI = [
-  "TP.GSYIH26","TP.GSYIH27","TP.SUEYILL","TP.KKO","TP.RKGE","TP.TGE","TP.ISSIZLIK",
-  "TP.TUFEB","TP.TUFEC","TP.YIUFEY","TP.YIUFEM","TP.TUFEGIDA","TP.TUFEENERJI","TP.TUFEKIRA",
-  "TP.BRDOVIZ","TP.BRALTIN","TP.NETREZSW",
-];
-
 const AYLIK_BKR = [
   "TP.BKR.TRY.KTF10","TP.BKR.TRY.17","TP.BKR.TRY.18",
   "TP.BKR.TRY.1","TP.BKR.USD.1","TP.BKR.EUR.1",
@@ -477,7 +469,7 @@ export default async function handler(req,res){
   }
 
   try{
-    const [hafJson,bkrJson,kbkJson,kkpJson,gunJson,enfJson,polJson,rezervJson,dtJson,testJson]=await Promise.all([
+    const [hafJson,bkrJson,kbkJson,kkpJson,gunJson,enfJson,polJson,rezervJson,dtJson]=await Promise.all([
       guvenliCek("haftalik", `${BASE}/series=${HAFTALIK.join("-")}&startDate=${onceki(60)}&endDate=${tarihStr(new Date())}&type=json&frequency=3`),
       guvenliCek("aylik_bkr", `${BASE}/series=${AYLIK_BKR.join("-")}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
       guvenliCek("aylik_kbk", `${BASE}/series=${AYLIK_KBK.join("-")}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
@@ -489,7 +481,6 @@ export default async function handler(req,res){
       // Dış ticaret (v10): 12 aylık kümülatif serinin 24 noktası için ~36 ay
       // ham aylık veri gerekir → 1150 günlük pencere (~38 ay), tek istek.
       guvenliCek("disticaret", `${BASE}/series=${DISTICARET.join("-")}&startDate=${onceki(1150)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
-      guvenliCek("test_yeni", `${BASE}/series=${TEST_YENI.join("-")}&startDate=${onceki(400)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
     ]);
 
     const [sofr,eur3m,us2y,us5y,us10y,fedFonlama,ecbMevduat,sofr3m,sofr6m,fedUst,fedAlt]=await Promise.all([
@@ -554,10 +545,6 @@ export default async function handler(req,res){
 
     sonuclar["TP.APIFON4_SERI"]=tumDegerler(polJson?.items||[], "TP.APIFON4").slice(-24);
     sonuclar["TP_AB_TOPLAM_SERI"]=tumDegerler(rezervJson?.items||[], "TP_AB_TOPLAM").slice(-24);
-
-    // GEÇİCİ TEST sonuçları — teşhis amaçlı, evdsMakro üzerinden frontend'e gitmiyor.
-    teshis.test_sonuclari = {};
-    for(const s of TEST_YENI) teshis.test_sonuclari[s] = sonDeger(testJson?.items||[], s);
 
     // ── DIŞ TİCARET & ÖDEMELER DENGESİ (v10) ──────────────────────────────
     // Tüm parasal değerler milyonUSDNormalize ile MİLYON USD'a normalize
