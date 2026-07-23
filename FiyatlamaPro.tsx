@@ -34,11 +34,19 @@ function analitikHazirla(): Promise<void> {
   if(_faYukleniyor) return _faYukleniyor;
   _faYukleniyor = (async () => {
     try{
-      // @vite-ignore: paket henüz npm'e eklenmediğinde (native build/npm install
-      // yapılana kadar) Rollup'ın bunu derleme zamanında çözümleyip build'i
-      // kırmasını engeller — yalnızca native'de, gerçekten çalışırken
-      // çözümlenir; kurulu değilse zaten aşağıdaki catch sessizce yutar.
-      const mod = await import(/* @vite-ignore */ "@capacitor-firebase/analytics");
+      // Paket henüz npm'e eklenmediğinde (native build/npm install yapılana
+      // kadar) Rollup'ın bunu derleme zamanında çözümleyip build'i kırmasını
+      // engellemek için import hedefi BİLEREK sabit metin (literal string)
+      // olarak YAZILMIYOR — parça parça birleştirilen bir değişkenle
+      // oluşturuluyor. Rollup yalnızca doğrudan yazılmış sabit metinleri
+      // derleme zamanında çözümlemeye çalışır; değişkenle kurulan hedefleri
+      // analiz edemediği için build'i kırmadan atlar (denenmiş, tek başına
+      // "/* @vite-ignore */" yorumu Rollup'ın üretim derlemesinde YETERSİZ
+      // kaldı — yalnızca Vite'ın geliştirme-zamanı uyarısını bastırıyor).
+      // Yalnızca native'de, gerçekten çalışırken çözümlenir; kurulu değilse
+      // zaten aşağıdaki catch sessizce yutar.
+      const faModulAdi = "@capacitor-firebase" + "/analytics";
+      const mod = await import(faModulAdi);
       FA = mod.FirebaseAnalytics;
     }catch(e){
       console.warn("Firebase Analytics yüklenemedi:", e);
@@ -16348,19 +16356,29 @@ function App(){
               if(hesaplamaGunleri.length>0){
                 parcalar.push(`🔴 Bugün ${hesaplamaGunleri.join(" ve ")} Hesaplama günü`);
               }
-              parcalar.push(...digerBugunEtk.map((e:any)=>`${e.icon} ${e.label}`));
+              parcalar.push(...digerBugunEtk.map((e:any)=>{
+                // PPK için saat + açıklama içeren bilgilendirici mesaj — TCMB Para
+                // Politikası Kurulu kararları Türkiye saatiyle 14:00'da açıklanır
+                // (resmi TCMB takvimi). Diğer etkinlik tipleri kısa etiketiyle kalır.
+                if(e.label==="PPK Toplantısı") return `${e.icon} Bugün 14:00'da Para Politikası Kurulu toplantı kararı açıklanacak`;
+                return `${e.icon} ${e.label}`;
+              }));
 
               if(parcalar.length===0) return null;
+              // ÖNEMLİ (2026-07-23 düzeltmesi): Önceki kayan-yazı (marquee) uygulaması
+              // hem masaüstü web'de hem native uygulamada AYNI koddan render ediliyordu
+              // ve iki ayrı sorunu vardı: (1) içerik "tekrar" değişkeninde 2 kez, render'da
+              // bir daha 2 kez olmak üzere TOPLAM 4 KEZ tekrarlanıyordu ("aynı şey iki kere
+              // yazıyor" şikayeti); (2) kısa/tek etkinlikli günlerde (bugünkü PPK gibi) bu
+              // kısa metin geniş şeride kayarken çoğu zaman şerit boş görünüyordu ("çubuğu
+              // çoğu boş" şikayeti). Kayma animasyonu tamamen kaldırıldı; artık sabit,
+              // ortalanmış, gerekirse doğal olarak alt satıra kayan (nowrap ZORLANMAYAN)
+              // tek bir banner gösteriliyor — hem mobilde hem masaüstünde aynı, doğru
+              // davranışı verir, cihaz/şerit genişliğinden bağımsızdır.
               const metin=parcalar.join("   •   ");
-              const tekrar=`${metin}   •   ${metin}   •   `;
               return(
-                <div style={{marginTop:5,overflow:"hidden",borderRadius:8,background:"rgba(184,50,50,0.15)",border:"1px solid rgba(184,50,50,0.35)",padding:"5px 0"}}>
-                  <style>{`@keyframes takvimTicker{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}.takvim-ticker{display:inline-flex;animation:takvimTicker 18s linear infinite;white-space:nowrap;}`}</style>
-                  <div className="takvim-ticker">
-                    {[tekrar,tekrar].map((t,i)=>(
-                      <span key={i} style={{fontSize:11,fontWeight:700,color:"#FF9999",paddingRight:40}}>{t}</span>
-                    ))}
-                  </div>
+                <div style={{marginTop:5,borderRadius:8,background:"rgba(184,50,50,0.15)",border:"1px solid rgba(184,50,50,0.35)",padding:"7px 12px",textAlign:"center"}}>
+                  <span style={{fontSize:11,fontWeight:700,color:"#FF9999",lineHeight:1.45}}>{metin}</span>
                 </div>
               );
             })()}
