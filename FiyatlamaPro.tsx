@@ -17140,12 +17140,19 @@ function App(){
                 };
               };
               const KAR_PAYI:any[] = [
-                karPayiSatir("Konut Finansmanı Kâr Oranı", "TP_KKP_TRY_KTF10"),
-                karPayiSatir("Taşıt Finansmanı Kâr Oranı", "TP_KKP_TRY_17"),
-                karPayiSatir("İhtiyaç Finansmanı Kâr Oranı", "TP_KKP_TRY_18"),
-                karPayiSatir("Ticari Finansmanı Kâr Oranı (TL)", "TP_KKP_TRY_1"),
-                karPayiSatir("Ticari Finansmanı Kâr Oranı (USD)", "TP_KKP_USD_KTF17"),
-                karPayiSatir("Ticari Finansmanı Kâr Oranı (EUR)", "TP_KKP_EUR_KTF17"),
+                // DÜZELTME (2026-07-23): Anahtarlar "TP_KKP_..." (alt çizgi) değil
+                // "TP.KKP..." (nokta) olmalı — kullanıcının EVDS export dosyası
+                // sütun başlıklarında nokta alt çizgiye çevrilmiş görünüyordu (Excel/
+                // CSV exportlarında yaygın), ama EVDS API'nin series= parametresi
+                // SADECE nokta formatını kabul ediyor; alt çizgili gönderilince
+                // "Series does not exist" ile TÜM isteği reddediyordu. Canlı testle
+                // doğrulandı (debug=1 üzerinden gerçek değerler geldi).
+                karPayiSatir("Konut Finansmanı Kâr Oranı", "TP.KKP.TRY.KTF10"),
+                karPayiSatir("Taşıt Finansmanı Kâr Oranı", "TP.KKP.TRY.17"),
+                karPayiSatir("İhtiyaç Finansmanı Kâr Oranı", "TP.KKP.TRY.18"),
+                karPayiSatir("Ticari Finansmanı Kâr Oranı (TL)", "TP.KKP.TRY.1"),
+                karPayiSatir("Ticari Finansmanı Kâr Oranı (USD)", "TP.KKP.USD.KTF17"),
+                karPayiSatir("Ticari Finansmanı Kâr Oranı (EUR)", "TP.KKP.EUR.KTF17"),
               ];
 
               // ── Alt kategori 5: RİSK GÖSTERGELERİ / REZERVLER (toplam mevcut,
@@ -17244,14 +17251,19 @@ function App(){
                   {/* Piyasa Duyarlılığı — VIX/DXY: diğerleri gibi EVDS/FRED üzerinden
                       değil, doğrudan Yahoo Finance'ten canlı çekilir (PiyasaSatiri,
                       sparkline dahil) — tıklanınca aynı grafik ekranı + alarm kurma açılır.
-                      Alt kategorilerden bağımsız, her zaman görünür (mevcut davranış). */}
-                  <p style={{margin:"16px 0 6px 4px",fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>Piyasa Duyarlılığı</p>
-                  <div>
-                    {(PIYASA_TABLO_VERISI["gostergeler"]||[]).map((r:any,sira:number)=>(
-                      <PiyasaSatiri key={r.sembol} sira={sira} ad={r.ad} sembol={r.sembol} dec={r.dec} paraOnek={r.paraOnek}
-                        onTikla={()=>setSeciliKur({kod:r.ad,ad:r.ad,sembol:r.sembol,birim:r.paraOnek||"₺"})}/>
-                    ))}
-                  </div>
+                      DÜZELTME (2026-07-23): Önceden alt kategorilerden bağımsız HER
+                      sekmede tekrar tekrar görünüyordu (kullanıcı bildirdi, gereksiz
+                      tekrar). Artık yalnızca "Risk Göstergeleri" sekmesinde gösteriliyor
+                      — VIX/DXY zaten kavramsal olarak bir risk/duyarlılık göstergesi. */}
+                  {piyasaGostergeAltSekme==="risk"&&(<>
+                    <p style={{margin:"16px 0 6px 4px",fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>Piyasa Duyarlılığı</p>
+                    <div>
+                      {(PIYASA_TABLO_VERISI["gostergeler"]||[]).map((r:any,sira:number)=>(
+                        <PiyasaSatiri key={r.sembol} sira={sira} ad={r.ad} sembol={r.sembol} dec={r.dec} paraOnek={r.paraOnek}
+                          onTikla={()=>setSeciliKur({kod:r.ad,ad:r.ad,sembol:r.sembol,birim:r.paraOnek||"₺"})}/>
+                      ))}
+                    </div>
+                  </>)}
                 </div>
               );
             })():(

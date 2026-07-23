@@ -74,8 +74,8 @@ const redis = new Redis({
 // NOT (2026-07-11): v9 → v10 sürüm değişikliği — Dış Ticaret & Ödemeler
 // Dengesi serileri (DT_* / CARI_* / REK_*) eklendiği için yapıldı. Aynı ders:
 // versiyon artırılmazsa eski önbellek yeni alanları 6 saat boyunca göstermez.
-const KV_ANLIK_KEY = "evds:anlik:v11";
-const KV_TARIHSEL_PREFIX = "evds:tarihsel:v11:";
+const KV_ANLIK_KEY = "evds:anlik:v12";
+const KV_TARIHSEL_PREFIX = "evds:tarihsel:v12:";
 
 // Vercel'in varsayılan fonksiyon süresi (Hobby planda genelde 10sn) artık 8 dış
 // isteğe (5 EVDS + 3 FRED) yetmiyor — bu yüzden ERR_CONNECTION_CLOSED alınıyordu
@@ -108,12 +108,12 @@ const HAFTALIK = [
 const REZERV = ["TP.AB.TOPLAM"];
 
 const AYLIK_BKR = [
-  "TP_BKR_TRY_KTF10","TP_BKR_TRY_17","TP_BKR_TRY_18",
-  "TP_BKR_TRY_1","TP_BKR_USD_1","TP_BKR_EUR_1",
+  "TP.BKR.TRY.KTF10","TP.BKR.TRY.17","TP.BKR.TRY.18",
+  "TP.BKR.TRY.1","TP.BKR.USD.1","TP.BKR.EUR.1",
 ];
 const AYLIK_KBK = [
-  "TP_KBK_TRY_KBTF10","TP_KBK_TRY_17","TP_KBK_TRY_18",
-  "TP_KBK_TRY_1","TP_KBK_USD_KBTF17","TP_KBK_EUR_KBTF17",
+  "TP.KBK.TRY.KBTF10","TP.KBK.TRY.17","TP.KBK.TRY.18",
+  "TP.KBK.TRY.1","TP.KBK.USD.KBTF17","TP.KBK.EUR.KBTF17",
 ];
 const AYLIK_KKP = [
   "TP.KKP.TRY.KTF10","TP.KKP.TRY.17","TP.KKP.TRY.18",
