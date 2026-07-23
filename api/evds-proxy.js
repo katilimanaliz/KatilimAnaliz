@@ -551,7 +551,7 @@ export default async function handler(req,res){
   }
 
   try{
-    const [hafJson,bkrJson,kbkJson,kkpJson,gunJson,enfJson,polJson,rezervJson,dtJson,gostJson,hkbkJson]=await Promise.all([
+    const [hafJson,bkrJson,kbkJson,kkpJson,gunJson,enfJson,polJson,rezervJson,dtJson,gostJson,hkbkJson,testGsyhCeyrekJson]=await Promise.all([
       guvenliCek("haftalik", `${BASE}/series=${HAFTALIK.join("-")}&startDate=${onceki(60)}&endDate=${tarihStr(new Date())}&type=json&frequency=3`),
       guvenliCek("aylik_bkr", `${BASE}/series=${AYLIK_BKR.join("-")}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
       guvenliCek("aylik_kbk", `${BASE}/series=${AYLIK_KBK.join("-")}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
@@ -640,6 +640,7 @@ export default async function handler(req,res){
 
     // ── GÖSTERGELER (2026-07-23) ────────────────────────────────────────
     const gostItems = gostJson?.items||[];
+    teshis.gsyh_ham_ornek = (testGsyhCeyrekJson?.items||[]).slice(-1)[0] || null;
     sonuclar["GOSTERGE_KKO"]=sonDeger(gostItems, "TP.KKO2.IS.TOP");
     sonuclar["GOSTERGE_KKO_SERI"]=tumDegerler(gostItems, "TP.KKO2.IS.TOP").slice(-24);
     sonuclar["GOSTERGE_RKGE"]=sonDeger(gostItems, "TP.GY1.N2");
