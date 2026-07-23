@@ -74,8 +74,8 @@ const redis = new Redis({
 // NOT (2026-07-11): v9 → v10 sürüm değişikliği — Dış Ticaret & Ödemeler
 // Dengesi serileri (DT_* / CARI_* / REK_*) eklendiği için yapıldı. Aynı ders:
 // versiyon artırılmazsa eski önbellek yeni alanları 6 saat boyunca göstermez.
-const KV_ANLIK_KEY = "evds:anlik:v10";
-const KV_TARIHSEL_PREFIX = "evds:tarihsel:v10:";
+const KV_ANLIK_KEY = "evds:anlik:v11";
+const KV_TARIHSEL_PREFIX = "evds:tarihsel:v11:";
 
 // Vercel'in varsayılan fonksiyon süresi (Hobby planda genelde 10sn) artık 8 dış
 // isteğe (5 EVDS + 3 FRED) yetmiyor — bu yüzden ERR_CONNECTION_CLOSED alınıyordu
@@ -107,11 +107,15 @@ const HAFTALIK = [
 
 const REZERV = ["TP.AB.TOPLAM"];
 
-const AYLIK = [
+const AYLIK_BKR = [
   "TP_BKR_TRY_KTF10","TP_BKR_TRY_17","TP_BKR_TRY_18",
   "TP_BKR_TRY_1","TP_BKR_USD_1","TP_BKR_EUR_1",
+];
+const AYLIK_KBK = [
   "TP_KBK_TRY_KBTF10","TP_KBK_TRY_17","TP_KBK_TRY_18",
   "TP_KBK_TRY_1","TP_KBK_USD_KBTF17","TP_KBK_EUR_KBTF17",
+];
+const AYLIK_KKP = [
   "TP_KKP_TRY_KTF10","TP_KKP_TRY_17","TP_KKP_TRY_18",
   "TP_KKP_TRY_1","TP_KKP_USD_KTF17","TP_KKP_EUR_KTF17",
 ];
@@ -465,9 +469,11 @@ export default async function handler(req,res){
   }
 
   try{
-    const [hafJson,ayJson,gunJson,enfJson,polJson,rezervJson,dtJson]=await Promise.all([
+    const [hafJson,bkrJson,kbkJson,kkpJson,gunJson,enfJson,polJson,rezervJson,dtJson]=await Promise.all([
       guvenliCek("haftalik", `${BASE}/series=${HAFTALIK.join("-")}&startDate=${onceki(60)}&endDate=${tarihStr(new Date())}&type=json&frequency=3`),
-      guvenliCek("aylik",    `${BASE}/series=${AYLIK.join("-")}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
+      guvenliCek("aylik_bkr", `${BASE}/series=${AYLIK_BKR.join("-")}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
+      guvenliCek("aylik_kbk", `${BASE}/series=${AYLIK_KBK.join("-")}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
+      guvenliCek("aylik_kkp", `${BASE}/series=${AYLIK_KKP.join("-")}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
       guvenliCek("gunluk_tlref", `${BASE}/series=${GUNLUK.join("-")}&startDate=${onceki(30)}&endDate=${tarihStr(new Date())}&type=json&frequency=1`),
       guvenliCek("enflasyon", `${BASE}/series=${ENFLASYON.join("-")}&startDate=${onceki(730)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
       guvenliCek("politika_aofm", `${BASE}/series=${POLITIKA.join("-")}&startDate=${onceki(60)}&endDate=${tarihStr(new Date())}&type=json&frequency=1`),
@@ -509,7 +515,9 @@ export default async function handler(req,res){
 
     const sonuclar={};
     for(const s of HAFTALIK) sonuclar[s]=sonDeger(hafJson?.items||[],s);
-    for(const s of AYLIK)    sonuclar[s]=sonDeger(ayJson?.items||[],s);
+    for(const s of AYLIK_BKR) sonuclar[s]=sonDeger(bkrJson?.items||[],s);
+    for(const s of AYLIK_KBK) sonuclar[s]=sonDeger(kbkJson?.items||[],s);
+    for(const s of AYLIK_KKP) sonuclar[s]=sonDeger(kkpJson?.items||[],s);
     for(const s of POLITIKA) sonuclar[s]=sonDeger(polJson?.items||[],s);
     for(const s of REZERV)   sonuclar[s]=sonDeger(rezervJson?.items||[],s);
     sonuclar["FRED_SOFR"]=sofr.son;

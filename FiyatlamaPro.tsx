@@ -16933,7 +16933,7 @@ function App(){
             </div>
 
             {/* Kategori filtre çipleri */}
-            <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:4,marginBottom:6}}>
+            <div className="piyasa-scroll" style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:4,marginBottom:6}}>
               {PIYASA_TABLO_KATEGORILER.map(k=>{
                 const aktif=piyasaTabloFiltre===k.id;
                 return (
@@ -17173,7 +17173,7 @@ function App(){
                 <div>
                   {/* Alt kategori sekmeleri — bankanın kendi makro veri panelindeki
                       6 kategoriyle aynı isimlendirme (Küresel Piyasalar hariç). */}
-                  <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:2,marginTop:6,marginBottom:10,WebkitOverflowScrolling:"touch"}}>
+                  <div className="piyasa-scroll" style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:2,marginTop:6,marginBottom:10,WebkitOverflowScrolling:"touch"}}>
                     {ALT_SEKMELER.map(s=>{
                       const aktif=piyasaGostergeAltSekme===s.id;
                       return(
