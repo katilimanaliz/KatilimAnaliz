@@ -198,7 +198,7 @@ const YAPILANDIRMA = {
   kripto: { anahtar: "kripto:v1", ttl: 300,   fn: kriptoTaze, cacheControl: "s-maxage=300" },
   petrol: { anahtar: "petrol:v1", ttl: 1800,  fn: petrolTaze, cacheControl: "s-maxage=1800" },
   kur:    { anahtar: "kur:v1",    ttl: 300,   fn: kurTaze,    cacheControl: "s-maxage=300" },
-  altinapi: { anahtar: "altinapi:v1", ttl: 3600, fn: altinApiTaze, cacheControl: "s-maxage=3600" },
+  altinapi: { anahtar: "altinapi:v2", ttl: 3600, fn: altinApiTaze, cacheControl: "s-maxage=3600" },
 };
 
 export default async function handler(req, res) {
