@@ -14488,7 +14488,7 @@ type PortfoyKalemi = {
   tur: "hisse" | "fon" | "altin" | "kripto" | "emtia" | "doviz";
   kod: string;           // hisse ticker / fon kodu / GRAM_ALTIN vb sembol / kripto-emtia-döviz sembolü
   ad: string;
-  altinCarpan?: number;  // sadece tur==="altin" ve Gram Altın dışı bir alt tür ise (ALTIN_URUN_TABLOSU'ndan)
+  altinCarpan?: number;  // SADECE eski (2026-07-24 öncesi) sabit-çarpan sistemiyle eklenmiş altın kayıtlarında dolu — yeni kayıtlar AltinAPI'den gerçek fiyat kullanır, bu alanı hiç set etmez (bkz. portfoyTarihselFiyat, portfoyKalemTikla)
   birim: string;         // "lot" | "₺ tutar" | "gram" | "adet" | "ons" ...
   miktar: number | null; // null = izleme modu
   fiyat: number | null;  // en son bilinen güncel fiyat (birim başına; altın alt türlerinde carpan uygulanmış hali)
@@ -14515,16 +14515,32 @@ function portfoyYaz(liste: PortfoyKalemi[]) {
   try { localStorage.setItem(PORTFOY_LS_KEY, JSON.stringify(liste)); } catch {}
 }
 
-// Altın alt türleri — kendi katsayılarımızı UYDURMAK yerine uygulamada zaten
-// var olan ALTIN_URUN_TABLOSU'nu (Araçlar > Altın Ürünleri ekranıyla birebir
-// aynı kaynak) kullanıyoruz, iki yerde farklı sayı göstermeyelim diye.
-const PORTFOY_ALTIN_TURLERI: {ad:string; birim:string; carpan:number}[] = [
-  { ad: "Gram Altın", birim: "gram", carpan: 1 },
-  ...ALTIN_URUN_TABLOSU.map(u => ({
-    ad: u.ad,
-    birim: u.ad.includes("Gram") ? "gram" : "adet",
-    carpan: u.carpan,
-  })),
+// Altın alt türleri (2026-07-24: eski sabit-çarpan sisteminden gerçek
+// AltinAPI sembollerine geçirildi) — Araçlar > Altın Ürünleri ekranındaki
+// ALTIN_URUN_TABLOSU_V2 ile BİREBİR AYNI 18 ürün, iki yerde farklı fiyat
+// göstermeyelim diye. Artık "carpan" yok — her ürünün kendi gerçek bid/ask'ı
+// AltinAPI'den doğrudan çekiliyor (bkz. altinAltTuruSec). ALTIN_URUN_TABLOSU
+// (eski çarpan listesi) hâlâ SİLİNMEDİ — geçmişte bu sistemle eklenmiş
+// (altinCarpan alanı dolu) kayıtlar için bkz. portfoyTarihselFiyat.
+const PORTFOY_ALTIN_TURLERI: {ad:string; sembol:string; birim:string; paraOnek:string}[] = [
+  { ad: "Gram Altın (Has · 24 Ayar)", sembol: "ALTIN", birim: "gram", paraOnek: "₺" },
+  { ad: "22 Ayar (Gram)", sembol: "AYAR22", birim: "gram", paraOnek: "₺" },
+  { ad: "14 Ayar (Gram)", sembol: "AYAR14", birim: "gram", paraOnek: "₺" },
+  { ad: "Çeyrek Altın (Yeni)", sembol: "CEYREK_YENI", birim: "adet", paraOnek: "₺" },
+  { ad: "Çeyrek Altın (Eski)", sembol: "CEYREK_ESKI", birim: "adet", paraOnek: "₺" },
+  { ad: "Yarım Altın (Yeni)", sembol: "YARIM_YENI", birim: "adet", paraOnek: "₺" },
+  { ad: "Yarım Altın (Eski)", sembol: "YARIM_ESKI", birim: "adet", paraOnek: "₺" },
+  { ad: "Tam Altın (Yeni)", sembol: "TEK_YENI", birim: "adet", paraOnek: "₺" },
+  { ad: "Tam Altın (Eski)", sembol: "TEK_ESKI", birim: "adet", paraOnek: "₺" },
+  { ad: "Ata Altın (Yeni)", sembol: "ATA_YENI", birim: "adet", paraOnek: "₺" },
+  { ad: "Ata Altın (Eski)", sembol: "ATA_ESKI", birim: "adet", paraOnek: "₺" },
+  { ad: "Gram Gümüş", sembol: "GUMUSTRY", birim: "gram", paraOnek: "₺" },
+  { ad: "Gram Platin", sembol: "PLATIN", birim: "gram", paraOnek: "₺" },
+  { ad: "Gram Paladyum", sembol: "PALADYUM", birim: "gram", paraOnek: "₺" },
+  { ad: "Ons Altın", sembol: "ONS", birim: "ons", paraOnek: "$" },
+  { ad: "Ons Gümüş", sembol: "XAGUSD", birim: "ons", paraOnek: "$" },
+  { ad: "Ons Platin", sembol: "XPTUSD", birim: "ons", paraOnek: "$" },
+  { ad: "Ons Paladyum", sembol: "XPDUSD", birim: "ons", paraOnek: "$" },
 ];
 
 function portfoyGuncelDeger(k: PortfoyKalemi): number {
@@ -14663,6 +14679,12 @@ async function portfoyTarihselFiyat(k: PortfoyKalemi, hedefIso: string): Promise
       return nokta ? nokta.kapanis : null;
     } catch { return null; }
   }
+  // Altın (2026-07-24): AltinAPI'ye geçirilen yeni kayıtlarda (altinCarpan
+  // yok) geçmiş veri hiç sunulmuyor — burada dürüstçe null dönülür, çağıran
+  // taraf (portfoyKarZararHesapla) zaten bugünkü fiyatla sabit kabul ederek
+  // devam ediyor. Eski (altinCarpan dolu) kayıtlar için GRAM_ALTIN tabanlı
+  // eski hesap KORUNDU — geriye dönük davranış bozulmasın diye.
+  if (k.tur === "altin" && k.altinCarpan == null) return null;
   const sembol = k.tur === "altin" ? "GRAM_ALTIN" : k.kod;
   try {
     const veri = await portfoyGecmisVeri(sembol);
@@ -14883,7 +14905,9 @@ function portfoyFmtFiyat(n: number, tur: PortfoyKalemi["tur"]): string {
 // saklanıyor (API çağrıları için gerekli) ama kullanıcıya "USDTRY" olarak
 // gösterilmeli — "=X" sadece dahili bir teknik detay.
 function portfoyKodGoster(k: PortfoyKalemi): string {
-  if (k.tur === "emtia") return k.ad;
+  // Altın (2026-07-24): AYAR22/CEYREK_YENI gibi ham AltinAPI sembolleri
+  // yerine emtia'da olduğu gibi anlaşılır ürün adı gösteriliyor.
+  if (k.tur === "emtia" || k.tur === "altin") return k.ad;
   return k.kod.replace(/=X$/, "");
 }
 // Her kalemin KENDİ para birimini (paraOnek) ve ondalık hassasiyetini (dec)
@@ -14983,7 +15007,7 @@ function PortfoyWidgetSatir({k, gizli, sonSatirMi, onTikla, onSil, acik, onAcikD
             <span style={{fontSize:8.5,fontWeight:700,color:meta.renk,background:meta.bg,borderRadius:4,padding:"1px 5px"}}>{meta.label}</span>
             {izlemeModu && <span style={{fontSize:8.5,fontWeight:700,color:C.sub2,background:WA(0.06),borderRadius:4,padding:"1px 5px"}}>İzleniyor</span>}
           </div>
-          {k.tur!=="emtia" && <div style={{fontSize:10.5,color:C.sub2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{k.ad}</div>}
+          {k.tur!=="emtia" && k.tur!=="altin" && <div style={{fontSize:10.5,color:C.sub2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{k.ad}</div>}
         </div>
         <span style={{fontSize:13,fontWeight:700,color:C.text,marginRight:8,fontVariantNumeric:"tabular-nums"}}>
           {izlemeModu && k.fiyat==null ? "—" : (gizli?"₺••••":(izlemeModu ? portfoyFmtDeger(k.fiyat||0, k) : portfoyFmtDeger(portfoyGuncelDeger(k), k)))}
@@ -15161,7 +15185,7 @@ function PortfoyWidget({liste, gizli, onGizliToggle, onDetay, onEkle, onSil, onG
 function PortfoyEkleModal({onKapat, onEklendi}:{onKapat:()=>void; onEklendi:(k:PortfoyKalemi)=>void}){
   const [asama, setAsama] = useState<"tur"|"altinAlt"|"ara"|"miktar"|"alis">("tur");
   const [tur, setTur] = useState<PortfoyKalemi["tur"]|null>(null);
-  const [altinTuru, setAltinTuru] = useState<{ad:string;birim:string;carpan:number}|null>(null);
+  const [altinTuru, setAltinTuru] = useState<{ad:string;sembol:string;birim:string;paraOnek:string}|null>(null);
   const [aramaMetni, setAramaMetni] = useState("");
   const [hisseListesi, setHisseListesi] = useState<any[]>([]);
   const [fonListesi, setFonListesi] = useState<any[]>([]);
@@ -15197,27 +15221,33 @@ function PortfoyEkleModal({onKapat, onEklendi}:{onKapat:()=>void; onEklendi:(k:P
     else setAsama("ara");
   };
 
-  const altinAltTuruSec = async (at: {ad:string;birim:string;carpan:number}) => {
+  const altinAltTuruSec = async (at: {ad:string;sembol:string;birim:string;paraOnek:string}) => {
     setAltinTuru(at);
     setEnstrumanYukleniyor(true);
-    const veri = await portfoyGecmisVeri("GRAM_ALTIN");
+    try {
+      const r = await fetch(`${API_BASE}/api/piyasa-fiyatlar?tip=altinapi`);
+      const veri = r.ok ? await r.json() : null;
+      const d = veri?.[at.sembol];
+      const bid = d?.bid, ask = d?.ask;
+      // Portföy değeri, Altın sekmesindeki (AltinUrunleriTablo) mantıkla aynı:
+      // orta fiyat (bid+ask ortalaması). Aynı sağlamlık filtresi de burada —
+      // AltinAPI bazı sembollerde close alanında mantıksız değer verebiliyor.
+      const fiyat = (bid!=null && ask!=null) ? (bid+ask)/2 : null;
+      const degisimYuzdeHam = (d && d.close && bid!=null && ask!=null) ? (((bid+ask)/2 - d.close)/d.close*100) : null;
+      const gunluk = (degisimYuzdeHam!=null && Math.abs(degisimYuzdeHam)<=10) ? degisimYuzdeHam : null;
+      setSecilenEnstruman({
+        kod: at.sembol, ad: at.ad, fiyat, birim: at.birim, paraOnek: at.paraOnek, dec: 2,
+        g: gunluk,
+        // AltinAPI geçmiş veri sunmuyor (Altın sekmesiyle aynı kısıt) —
+        // haftalık/aylık değişim ve tarihe-göre-otomatik-alış-fiyatı burada
+        // dürüstçe boş bırakılıyor, GRAM_ALTIN'den sahte türetme yapılmıyor.
+        h: null, a: null, y: null,
+        _noktalar: [],
+      });
+    } catch {
+      setSecilenEnstruman({ kod: at.sembol, ad: at.ad, fiyat: null, birim: at.birim, paraOnek: at.paraOnek, dec: 2, g: null, h: null, a: null, y: null, _noktalar: [] });
+    }
     setEnstrumanYukleniyor(false);
-    const gramFiyat = veri.guncelFiyat;
-    const gramOnceki = veri.oncekiKapanis;
-    const carpan = at.carpan;
-    const fiyat = gramFiyat!=null ? gramFiyat*carpan : null;
-    const gunluk = (gramFiyat!=null && gramOnceki) ? ((gramFiyat-gramOnceki)/gramOnceki*100) : null;
-    const haftaOnce = portfoyNGunOnce(veri.noktalar, 7);
-    const ayOnce = portfoyNGunOnce(veri.noktalar, 30);
-    setSecilenEnstruman({
-      kod: at.ad==="Gram Altın" ? "GRAM_ALTIN" : at.ad.toUpperCase().replace(/\s/g,"_"),
-      ad: at.ad, fiyat, birim: at.birim, paraOnek:"₺", dec:2,
-      g: gunluk,
-      h: (gramFiyat!=null && haftaOnce) ? ((gramFiyat-haftaOnce)/haftaOnce*100) : null,
-      a: (gramFiyat!=null && ayOnce) ? ((gramFiyat-ayOnce)/ayOnce*100) : null,
-      y: null, // 30 günlük pencerede yıllık hesaplanamaz — dürüstçe boş
-      _noktalar: veri.noktalar, _carpan: carpan,
-    });
     setAsama("miktar");
   };
 
@@ -15372,7 +15402,7 @@ function PortfoyEkleModal({onKapat, onEklendi}:{onKapat:()=>void; onEklendi:(k:P
                 ))}
                 <div style={{display:"flex",alignItems:"flex-start",gap:5,marginTop:6,fontSize:10,color:C.sub2,lineHeight:1.4}}>
                   <Info size={11} style={{flexShrink:0,marginTop:1}}/>
-                  <span>Değer, güncel Gram Altın fiyatı üzerinden has altın karşılığına göre hesaplanır. İşçilik farkı dahil değildir.</span>
+                  <span>Fiyat, Altın sekmesiyle aynı kaynaktan (gerçek alış/satış ortalaması) alınır. Geçmiş veri sunulmadığı için haftalık/aylık değişim gösterilmez.</span>
                 </div>
               </div>
             )}
@@ -15709,7 +15739,7 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onKalem
                       <span style={{flex:1}}/>
                       <span style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:"tabular-nums"}}>{k.fiyat==null?"—":(gizli?"₺••••":portfoyFmtDeger(k.fiyat||0, k))}</span>
                     </div>
-                    {k.tur!=="emtia" && <div style={{fontSize:10.5,color:C.sub2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{k.ad}</div>}
+                    {k.tur!=="emtia" && k.tur!=="altin" && <div style={{fontSize:10.5,color:C.sub2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{k.ad}</div>}
                   </>
                 ) : (
                   <>
@@ -15717,7 +15747,7 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onKalem
                       <span style={{fontSize:13,fontWeight:800,color:C.text}}>{portfoyKodGoster(k)}</span>
                       <span style={{fontSize:8.5,fontWeight:700,color:meta.renk,background:meta.bg,borderRadius:4,padding:"1px 5px"}}>{meta.label}</span>
                     </div>
-                    {k.tur!=="emtia" && <div style={{fontSize:10.5,color:C.sub2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{k.ad}</div>}
+                    {k.tur!=="emtia" && k.tur!=="altin" && <div style={{fontSize:10.5,color:C.sub2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{k.ad}</div>}
                     <div style={{fontSize:10.5,color:C.sub2,marginTop:1}}>
                       {gizli?"••":k.miktar!.toLocaleString("tr-TR")} {k.birim} · {gizli?"₺••••":portfoyFmtDeger(portfoyGuncelDeger(k), k)}
                     </div>
@@ -16403,15 +16433,18 @@ function App(){
     else { setPendingFonSecim(sembol); nav("fonGetiriIzleme", geriHedefi); }
   };
   // Portföyüm/Takip Listem'de bir ürüne tıklanınca ilgili grafik ekranını açar.
-  // Altın alt türlerinin (Çeyrek/Ayar vb.) kendi geçmiş verisi yok — hepsi
-  // Gram Altın'dan türetildiği için grafik her zaman GRAM_ALTIN sembolüyle
-  // açılıyor (ürün adı yine de doğru gösteriliyor).
+  // Altın (2026-07-24): eski (altinCarpan dolu) kayıtlar hâlâ GRAM_ALTIN'den
+  // türetildiği için o grafikle açılıyor (davranış korundu). Yeni AltinAPI
+  // kayıtlarında (altinCarpan yok) her ürün FARKLI bir varlık (Platin ≠
+  // Altın) ve AltinAPI'de zaten hiç geçmiş veri yok (bkz. Altın sekmesi/
+  // AltinAlarmModal notları) — bu yüzden GRAM_ALTIN grafiğini yanlışlıkla
+  // göstermek yerine bilinçli olarak HİÇBİR ŞEY açılmıyor.
   // "portfoyum" geri hedefi olarak veriliyor ki hisse/fon detayından Geri'ye
   // basınca BİST/Fon ekranına değil, Portföyüm'e dönsün.
   const portfoyKalemTikla=(k: PortfoyKalemi)=>{
     if(k.tur==="hisse"){ irHisseFonDetay("hisse", k.kod, "portfoyum"); }
     else if(k.tur==="fon"){ setPendingFonDetay(k); nav("fonDetay", "portfoyum"); }
-    else if(k.tur==="altin"){ setSeciliKur({kod:k.ad, ad:k.ad, sembol:"GRAM_ALTIN", birim:"₺"}); }
+    else if(k.tur==="altin"){ if(k.altinCarpan!=null){ setSeciliKur({kod:k.ad, ad:k.ad, sembol:"GRAM_ALTIN", birim:"₺"}); } }
     else { setSeciliKur({kod:k.ad, ad:k.ad, sembol:k.kod, birim: k.paraOnek||"$"}); }
   };
   const back=()=>{
