@@ -824,11 +824,37 @@ function Field({label,value,onChange,suffix,hint,type="number",prefix}){
             if(["Backspace","Delete","Tab","ArrowLeft","ArrowRight","Home","End","Enter"].includes(e.key)||e.metaKey||e.ctrlKey) return;
             if(!/^[0-9,]$/.test(e.key)){ e.preventDefault(); return; }
             if(e.key===","&&String(value).includes(",")){ e.preventDefault(); }
+          }):type==="number"?(e=>{
+            // Negatif deger engeli (2026-07-23): HTML native <input type="number">
+            // masaustunde/fiziksel klavyede "-" tusuna izin veriyordu (tarayicinin
+            // varsayilan davranisi) — mobilde sanal klavyede "-" tusu genelde hic
+            // gorunmedigi icin bu sorun sadece masaustunde fark ediliyordu. Vade,
+            // tutar, oran gibi hicbir alan bu uygulamada negatif olmamali.
+            if(e.key==="-"||e.key==="Minus"||e.key==="Subtract"){ e.preventDefault(); }
           }):undefined}
           onPaste={isOran?(e=>{
             e.preventDefault();
             const yapistirilan = e.clipboardData.getData("text");
             onChange(sadeceRakamVeVirgul(yapistirilan));
+          }):type==="number"?(e=>{
+            // Yapistirma yoluyla negatif deger girisini de kapat — onKeyDown
+            // sadece tek tek tuslara basmayi yakalar, "Yapistir" ile "-5" gibi
+            // bir deger dogrudan girilebiliyordu.
+            const yapistirilan = e.clipboardData.getData("text");
+            if(yapistirilan.includes("-")){
+              e.preventDefault();
+              onChange(yapistirilan.replace(/-/g,""));
+            }
+          }):undefined}
+          {...(type==="number"?{min:0}:{})}
+          onWheel={type==="number"?(e=>{
+            // Mouse tekerlegi ile deger degistirme engeli (2026-07-23):
+            // <input type="number"> uzerindeyken fare tekerlegi cevrilince
+            // tarayici degeri artirip/azaltiyor (native davranis) — bu yolla
+            // da negatife inilebiliyordu. preventDefault() bu event'te bazi
+            // tarayicilarda calismiyor (passive listener), bu yuzden en
+            // guvenilir cozum input'tan fokusu kaldirmak (blur).
+            e.target.blur();
           }):undefined}
           style={{width:"100%",boxSizing:"border-box",padding:padLeft,
             fontSize:15,fontWeight:600,fontFamily:"monospace",background:WA(0.06),
