@@ -1,0 +1,85 @@
+name: Android Release Build (AAB)
+
+# Manuel tetiklenir (Actions sekmesinden "Run workflow"). Play Store'a
+# OTOMATIK YUKLEME YAPMAZ — sadece imzali .aab dosyasi uretip "Artifacts"
+# olarak sunar, indirip Play Console'a MANUEL yuklemek kullanicinin
+# sorumlulugundadir. Bu, Capawesome'in kendi (ayri, calisir durumdaki)
+# Android otomatik yayin surecinin YANINDA, ONUNLA CAKISMADAN calisir.
+on:
+  workflow_dispatch:
+    inputs:
+      versionCode:
+        description: "Version Code (Play Console'daki mevcut en yuksek degerden BUYUK olmali)"
+        required: true
+        type: string
+      versionName:
+        description: "Version Name (ornek: 1.3.0)"
+        required: true
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK platform 36 + build-tools
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build web assets
+        run: npm run build
+
+      - name: Sync Capacitor Android
+        run: npx cap sync android
+
+      # Keystore SADECE bu calismanin gecici dosya sisteminde var olur,
+      # is bitince silinir (asagidaki "Clean up" adimi). Repoya hicbir
+      # zaman yazilmaz/commit edilmez.
+      - name: Decode keystore (gecici, bu calisma icin)
+        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/release.keystore
+
+      # build.gradle'i SADECE bu calismanin gecici checkout kopyasinda
+      # patch'ler — commit edilmez, repodaki gercek dosya degismez.
+      # Detaylar: .github/scripts/patch_android_build.py
+      - name: Patch build.gradle (gecici, commit edilmiyor)
+        env:
+          VERSION_CODE: ${{ github.event.inputs.versionCode }}
+          VERSION_NAME: ${{ github.event.inputs.versionName }}
+        run: python3 .github/scripts/patch_android_build.py
+
+      - name: Build Release AAB
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew bundleRelease --no-daemon
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: katilimplus-release-v${{ github.event.inputs.versionCode }}
+          path: android/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 30
+
+      - name: Clean up keystore
+        if: always()
+        run: rm -f android/app/release.keystore
