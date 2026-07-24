@@ -14399,8 +14399,8 @@ function AltinUrunleriTablo(){
           <span style={{fontSize:12,color:WA(0.4)}}>…</span>
         ):(d&&d.ask!=null&&d.bid!=null)?(
           <>
-            <span style={{minWidth:80,flexShrink:0,textAlign:"right",fontSize:11.5,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace",whiteSpace:"nowrap"}}>{fmtPara(d.bid,birim)}</span>
-            <span style={{minWidth:80,flexShrink:0,textAlign:"right",fontSize:11.5,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace",whiteSpace:"nowrap"}}>{fmtPara(d.ask,birim)}</span>
+            <span style={{minWidth:92,flexShrink:0,textAlign:"right",fontSize:14,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace",whiteSpace:"nowrap"}}>{fmtPara(d.bid,birim)}</span>
+            <span style={{minWidth:92,flexShrink:0,textAlign:"right",fontSize:14,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace",whiteSpace:"nowrap"}}>{fmtPara(d.ask,birim)}</span>
             {tiklanabilir&&<span style={{color:WA(0.3),fontSize:16,flexShrink:0}}>›</span>}
           </>
         ):(
@@ -14415,8 +14415,8 @@ function AltinUrunleriTablo(){
       {altinAlarmSecili&&<AltinAlarmModal urun={altinAlarmSecili} onClose={()=>setAltinAlarmSecili(null)}/>}
       <div style={{display:"flex",alignItems:"center",gap:8,padding:"0 14px 6px"}}>
         <span style={{flex:1,minWidth:0,fontSize:10,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.4}}>Birim</span>
-        <span style={{minWidth:80,flexShrink:0,textAlign:"right",fontSize:10,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.4}}>Alış</span>
-        <span style={{minWidth:80,flexShrink:0,textAlign:"right",fontSize:10,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.4}}>Satış</span>
+        <span style={{minWidth:92,flexShrink:0,textAlign:"right",fontSize:10,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.4}}>Alış</span>
+        <span style={{minWidth:92,flexShrink:0,textAlign:"right",fontSize:10,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.4}}>Satış</span>
       </div>
       <div>
         {satirRender("Gram Altın (Has · 24 Ayar)", "ALTIN", 0)}
@@ -17527,7 +17527,7 @@ function App(){
                 {id:"aktivite", label:"Ekonomik Aktivite", veri:AKTIVITE},
                 {id:"enflasyon", label:"Enflasyon ve Fiyat Dengesi", veri:ENFLASYON_LISTE},
                 {id:"para", label:"Para Politikası ve Finansal Koşullar", veri:PARA},
-                {id:"karpayi", label:"Kâr Payı Oranları", veri:KAR_PAYI},
+                {id:"karpayi", label:"Finansman Kâr Oranları", veri:KAR_PAYI},
                 {id:"risk", label:"Risk Göstergeleri", veri:RISK},
               ] as const;
               const aktifSekme = ALT_SEKMELER.find(s=>s.id===piyasaGostergeAltSekme) || ALT_SEKMELER[2];
@@ -17552,7 +17552,7 @@ function App(){
 
                   {piyasaGostergeAltSekme==="karpayi"&&(
                     <p style={{margin:"0 4px 10px",fontSize:10.5,color:WA(0.4),lineHeight:1.6}}>
-                      TCMB'nin katılım bankaları için ayrı yayınladığı kâr oranı serisi (konvansiyonel faiz değil). Üstte <b style={{color:(TEMA==="acik"?C.label:"#fff")}}>bileşik</b> (EVDS ham veri), altında <b>≈ basit</b> (haftalık bileşiklemeye dayalı hesaplanmış karşılık).
+                      TCMB'nin katılım bankaları için ayrı yayınladığı kâr oranı serisi (konvansiyonel faiz değil). Üstte <b style={{color:(TEMA==="acik"?C.label:"#fff")}}>bileşik</b> (EVDS ham veri), altında <b>≈ yıllık basit</b> (haftalık bileşiklemeye dayalı hesaplanmış karşılık).
                     </p>
                   )}
 
@@ -17572,9 +17572,9 @@ function App(){
                             <p style={{margin:"1px 0 0",fontSize:10,color:(TEMA==="acik"?"#4A6178":"rgba(255,255,255,0.55)")}}>{g.tarih}{g.canli?" · canlı":""}</p>
                           </div>
                           <div style={{textAlign:"right"}}>
-                            <p style={{margin:0,fontSize:13,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace"}}>{g.bilesik!=null?`bileşik %${g.bilesik}`:"—"}</p>
-                            {g.basit!=null&&<p style={{margin:"1px 0 0",fontSize:10.5,color:WA(0.45),fontFamily:"monospace"}}>≈ basit %{g.basit}</p>}
-                            {g.basitAylik!=null&&<p style={{margin:"1px 0 0",fontSize:10.5,color:WA(0.4),fontFamily:"monospace"}}>≈ aylık basit %{g.basitAylik}</p>}
+                            <p style={{margin:0,fontSize:16,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace"}}>{g.bilesik!=null?`bileşik %${g.bilesik}`:"—"}</p>
+                            {g.basit!=null&&<p style={{margin:"2px 0 0",fontSize:12.5,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace"}}>≈ yıllık basit %{g.basit}</p>}
+                            {g.basitAylik!=null&&<p style={{margin:"1px 0 0",fontSize:12.5,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace"}}>≈ aylık basit %{g.basitAylik}</p>}
                           </div>
                         </div>
                       ))
