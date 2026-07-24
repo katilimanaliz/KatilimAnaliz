@@ -2927,20 +2927,20 @@ function KatilimEndeksiTopHareketliler({ nav, onSecim }: { nav: (sc: string) => 
         onClick={() => onSecim?.(sekme, sembol)}
         style={{ display: "flex", alignItems: "center", padding: "8px 2px", borderBottom: index === 4 ? "none" : `1px solid ${WA(0.06)}`, minWidth: 0, cursor: onSecim ? "pointer" : "default" }}
       >
-        <div style={{ width: 14, flexShrink: 0, fontSize: 10, color: WA(0.3) }}>{index + 1}</div>
+        <div style={{ width: 14, flexShrink: 0, fontSize: 10.5, color: WA(0.3) }}>{index + 1}</div>
         <div style={{ flex: "1 1 auto", minWidth: 0 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: C.soft }}>{sembol}</div>
-          <div style={{ fontSize: 9.5, color: (TEMA==="acik"?"#16222E":"#FFFFFF"), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ad}</div>
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: C.soft }}>{sembol}</div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: (TEMA==="acik"?"#000000":"#FFFFFF"), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ad}</div>
         </div>
         <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 4 }}>
           {isHisse ? (
-            <div style={{ fontSize: 11.5, fontWeight: 700, color: (TEMA==="acik"?"#16222E":"#FFFFFF"), marginBottom: 2, whiteSpace: "nowrap" }}>{fiyat ?? "—"}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: (TEMA==="acik"?"#000000":"#FFFFFF"), marginBottom: 2, whiteSpace: "nowrap" }}>{fiyat ?? "—"}</div>
           ) : (
-            <div style={{ fontSize: 8.5, color: WA(0.3), marginBottom: 2, whiteSpace: "nowrap" }}>Günlük</div>
+            <div style={{ fontSize: 9.5, color: WA(0.3), marginBottom: 2, whiteSpace: "nowrap" }}>Günlük</div>
           )}
           <div style={{
             display: "inline-flex", alignItems: "center", gap: 1, padding: "1.5px 5px", borderRadius: 6,
-            fontSize: 10, fontWeight: 700, color: up ? C.green : C.red,
+            fontSize: 11, fontWeight: 700, color: up ? C.green : C.red,
             background: up ? C.greenLight : "rgba(248,113,113,0.15)", whiteSpace: "nowrap",
           }}>
             {up ? <ArrowUp size={9} strokeWidth={3} /> : <ArrowDown size={9} strokeWidth={3} />}
