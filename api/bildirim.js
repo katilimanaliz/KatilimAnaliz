@@ -26,6 +26,15 @@
 //   HEM header HEM query param (?anahtar=) ile kabul ediliyor — tıpkı
 //   alarm-kontrol uç noktasındaki gibi.
 //
+//   YİNELENEN GÖNDERİM KORUMASI (2026-07-24 eklendi): Admin panelindeki
+//   "Gönder" butonu klasik form gönderimi kullanıyor (bkz. panel notları) —
+//   yavaş bağlantı/çift dokunma/form resubmit gibi durumlarda aynı içerik
+//   yanlışlıkla iki kez TÜM kullanıcılara gidebiliyordu (yaşanmış vaka).
+//   Şimdi aynı başlık+gövde BILDIRIM_TEKRAR_ONLE_SANIYE içinde tekrar
+//   gönderilmeye çalışılırsa 409 ile reddediliyor. Gerçekten aynı içeriği
+//   bilerek tekrar göndermek gerekiyorsa ?zorla=1 (query) veya
+//   {"zorla":true} (body) ile bypass edilebilir.
+//
 // ── 3) FİYAT ALARMLARI (2026-07 eklendi) ──
 //
 // Kullanıcı bir enstrüman için "şu fiyata gelirse" veya "%X yükselir/düşerse"
@@ -141,6 +150,17 @@ async function tekTokeneGonder(token, baslik, govde, veri) {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// YİNELENEN GÖNDERİM KORUMASI (2026-07-24)
+// ═══════════════════════════════════════════════════════════════════════════
+// Aynı başlık+gövde çok kısa süre içinde ikinci kez ?islem=gonder ile
+// gelirse (çift tıklama, form resubmit, yavaş bağlantıda tekrar deneme vb.)
+// sessizce engellenir. Redis'te TEK bir anahtar altında son gönderimin
+// içerik özeti + zaman damgası tutulur — TTL süresi dolunca otomatik silinir,
+// ayrıca temizlik kodu gerekmez.
+const SON_BILDIRIM_ANAHTAR = "sonGonderilenBildirim";
+const BILDIRIM_TEKRAR_ONLE_SANIYE = 30 * 60; // 30 dakika
+
 async function bildirimGonder(req, res) {
   const gelenAnahtarHeader = req.headers["x-admin-key"];
   const gelenAnahtarQuery = req.query?.anahtar;
@@ -159,6 +179,26 @@ async function bildirimGonder(req, res) {
   if (!baslik || !govde) {
     res.status(400).json({ hata: "'baslik' ve 'govde' alanları zorunlu" });
     return;
+  }
+
+  // Yinelenen gönderim kontrolü — ?zorla=1 veya {"zorla":true} ile atlanabilir.
+  const zorla = req.query?.zorla === "1" || req.body?.zorla === true;
+  const icerikAnahtari = `${baslik}\u0000${govde}`;
+  if (!zorla) {
+    try {
+      const son = await redis.get(SON_BILDIRIM_ANAHTAR);
+      if (son && son.icerik === icerikAnahtari && Date.now() - son.ts < BILDIRIM_TEKRAR_ONLE_SANIYE * 1000) {
+        res.status(409).json({
+          hata: "Bu içerik az önce gönderildi, yinelenen gönderim engellendi.",
+          oncekiGonderim: new Date(son.ts).toISOString(),
+          bypassIcin: "İstenerek tekrar göndermek için ?zorla=1 ekleyin.",
+        });
+        return;
+      }
+    } catch (e) {
+      // Redis kontrolü başarısız olursa gönderimi engellemeyelim — sessizce devam.
+      console.error("Yinelenen gönderim kontrolü hatası (gönderime devam ediliyor):", e.message);
+    }
   }
 
   const tokenlar = await redis.smembers("pushTokens");
@@ -206,6 +246,14 @@ async function bildirimGonder(req, res) {
   if (gecersizTokenlar.length > 0) {
     await redis.srem("pushTokens", ...gecersizTokenlar);
     await redis.hdel("pushTokenPlatform", ...gecersizTokenlar);
+  }
+
+  // Başarılı gönderim sonrası iz kaydı (yinelenen gönderim koruması için).
+  // Bu adım hata verse bile yanıt zaten hazır — sessizce yutulur.
+  try {
+    await redis.set(SON_BILDIRIM_ANAHTAR, { icerik: icerikAnahtari, ts: Date.now() }, { ex: BILDIRIM_TEKRAR_ONLE_SANIYE });
+  } catch (e) {
+    console.error("Son gönderim izi kaydedilemedi (bildirim yine de gitti):", e.message);
   }
 
   res.status(200).json({
