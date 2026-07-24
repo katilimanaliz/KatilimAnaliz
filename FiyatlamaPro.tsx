@@ -2930,11 +2930,11 @@ function KatilimEndeksiTopHareketliler({ nav, onSecim }: { nav: (sc: string) => 
         <div style={{ width: 14, flexShrink: 0, fontSize: 10, color: WA(0.3) }}>{index + 1}</div>
         <div style={{ flex: "1 1 auto", minWidth: 0 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: C.soft }}>{sembol}</div>
-          <div style={{ fontSize: 9.5, color: WA(0.45), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ad}</div>
+          <div style={{ fontSize: 9.5, color: (TEMA==="acik"?"#16222E":"#FFFFFF"), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ad}</div>
         </div>
         <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 4 }}>
           {isHisse ? (
-            <div style={{ fontSize: 9, color: WA(0.35), marginBottom: 2, whiteSpace: "nowrap" }}>{fiyat ?? "—"}</div>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: (TEMA==="acik"?"#16222E":"#FFFFFF"), marginBottom: 2, whiteSpace: "nowrap" }}>{fiyat ?? "—"}</div>
           ) : (
             <div style={{ fontSize: 8.5, color: WA(0.3), marginBottom: 2, whiteSpace: "nowrap" }}>Günlük</div>
           )}
@@ -16487,7 +16487,7 @@ function App(){
                   borderLeft:aktif?"3px solid #5B9BD8":"3px solid transparent",
                 }}>
                   <AltBarIcon tip={t.tip} aktif={aktif}/>
-                  <span style={{fontSize:13.5,fontWeight:aktif?700:500,color:aktif?(TEMA==="acik"?"#16222E":"#EAF1FA"):(TEMA==="acik"?"#1F3247":WA(0.6))}}>{CV(t.label)}</span>
+                  <span style={{fontSize:13.5,fontWeight:aktif?700:500,color:aktif?(TEMA==="acik"?"#16222E":"#EAF1FA"):(TEMA==="acik"?"#16222E":"rgba(255,255,255,0.85)")}}>{CV(t.label)}</span>
                 </div>
               );
             })}
@@ -16507,7 +16507,7 @@ function App(){
                 background:screen===m.key?"rgba(91,155,216,0.14)":"transparent",
               }}>
                 <span style={{width:20,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon k={m.key} size={15}/></span>
-                <span style={{fontSize:12.5,fontWeight:screen===m.key?700:500,color:screen===m.key?(TEMA==="acik"?"#0F3B66":"#DCE9F7"):(TEMA==="acik"?"#24384E":WA(0.55))}}>{CV(m.label)}</span>
+                <span style={{fontSize:12.5,fontWeight:screen===m.key?700:500,color:screen===m.key?(TEMA==="acik"?"#0F3B66":"#DCE9F7"):(TEMA==="acik"?"#16222E":"rgba(255,255,255,0.82)")}}>{CV(m.label)}</span>
               </div>
             ))}
           </div>
@@ -16515,7 +16515,7 @@ function App(){
           <div style={{marginTop:"auto",paddingTop:12,borderTop:`1px solid ${WA(0.07)}`}}>
             <div className="kp-side-item" onClick={()=>nav("ayarlar")} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:10,background:screen==="ayarlar"?"rgba(91,155,216,0.14)":"transparent"}}>
               <span style={{width:20,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon k="ayarlar" size={15}/></span>
-              <span style={{fontSize:12.5,fontWeight:600,color:screen==="ayarlar"?(TEMA==="acik"?"#0F3B66":"#DCE9F7"):(TEMA==="acik"?"#24384E":WA(0.55))}}>{CV("Ayarlar")}</span>
+              <span style={{fontSize:12.5,fontWeight:600,color:screen==="ayarlar"?(TEMA==="acik"?"#0F3B66":"#DCE9F7"):(TEMA==="acik"?"#16222E":"rgba(255,255,255,0.82)")}}>{CV("Ayarlar")}</span>
             </div>
             <div style={{fontSize:9.5,color:WA(0.4),padding:"10px 12px 0",lineHeight:1.5}}>© {new Date().getFullYear()} Katılım Plus</div>
           </div>
