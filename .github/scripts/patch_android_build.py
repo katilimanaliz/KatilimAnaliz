@@ -1,85 +1,66 @@
-name: Android Release Build (AAB)
+#!/usr/bin/env python3
+"""
+Android release build.gradle'ini GECICI olarak (sadece bu GitHub Actions
+calismasi icin) patch'ler:
+  - signingConfigs.release ekler (sifreler ortam degiskenlerinden okunur,
+    hicbir zaman diske/repoya yazilmaz)
+  - versionCode/versionName'i workflow input'larindan gelen degerlerle
+    degistirir
 
-# Manuel tetiklenir (Actions sekmesinden "Run workflow"). Play Store'a
-# OTOMATIK YUKLEME YAPMAZ — sadece imzali .aab dosyasi uretip "Artifacts"
-# olarak sunar, indirip Play Console'a MANUEL yuklemek kullanicinin
-# sorumlulugundadir. Bu, Capawesome'in kendi (ayri, calisir durumdaki)
-# Android otomatik yayin surecinin YANINDA, ONUNLA CAKISMADAN calisir.
-on:
-  workflow_dispatch:
-    inputs:
-      versionCode:
-        description: "Version Code (Play Console'daki mevcut en yuksek degerden BUYUK olmali)"
-        required: true
-        type: string
-      versionName:
-        description: "Version Name (ornek: 1.3.0)"
-        required: true
-        type: string
+ONEMLI: Bu script SADECE GitHub Actions workflow'unun GECICI checkout
+kopyasinda calisir. Degisiklikler COMMIT EDILMEZ, repodaki gercek
+android/app/build.gradle dosyasi HICBIR ZAMAN degismez. Bu, Capawesome'in
+kendi (ayri, calisir durumdaki) Android build surecini ETKILEMEMEK icin
+BILEREK boyle tasarlandi.
+"""
+import os
+import sys
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+BUILD_GRADLE = "android/app/build.gradle"
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
+version_code = os.environ["VERSION_CODE"]
+version_name = os.environ["VERSION_NAME"]
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: "temurin"
-          java-version: "17"
+with open(BUILD_GRADLE, "r") as f:
+    content = f.read()
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+# 1) versionCode / versionName override
+eski_vc = "versionCode 1"
+eski_vn = 'versionName "1.0"'
+if eski_vc not in content or eski_vn not in content:
+    print("HATA: beklenen versionCode/versionName satirlari bulunamadi.")
+    print("Repo icerigi degismis olabilir, scripti guncellemek gerekebilir.")
+    sys.exit(1)
 
-      - name: Install Android SDK platform 36 + build-tools
-        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+content = content.replace(eski_vc, f"versionCode {version_code}")
+content = content.replace(eski_vn, f'versionName "{version_name}"')
 
-      - name: Install dependencies
-        run: npm install
+# 2) signingConfigs ekle (defaultConfig'den SONRA, buildTypes'tan ONCE)
+eski_buildtypes = """    buildTypes {
+        release {
+            minifyEnabled false"""
 
-      - name: Build web assets
-        run: npm run build
+yeni_buildtypes = """    signingConfigs {
+        release {
+            storeFile file("release.keystore")
+            storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+            keyAlias System.getenv("ANDROID_KEY_ALIAS")
+            keyPassword System.getenv("ANDROID_KEY_PASSWORD")
+        }
+    }
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled false"""
 
-      - name: Sync Capacitor Android
-        run: npx cap sync android
+if eski_buildtypes not in content:
+    print("HATA: beklenen buildTypes blogu bulunamadi.")
+    print("Repo icerigi degismis olabilir, scripti guncellemek gerekebilir.")
+    sys.exit(1)
 
-      # Keystore SADECE bu calismanin gecici dosya sisteminde var olur,
-      # is bitince silinir (asagidaki "Clean up" adimi). Repoya hicbir
-      # zaman yazilmaz/commit edilmez.
-      - name: Decode keystore (gecici, bu calisma icin)
-        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/release.keystore
+content = content.replace(eski_buildtypes, yeni_buildtypes)
 
-      # build.gradle'i SADECE bu calismanin gecici checkout kopyasinda
-      # patch'ler — commit edilmez, repodaki gercek dosya degismez.
-      # Detaylar: .github/scripts/patch_android_build.py
-      - name: Patch build.gradle (gecici, commit edilmiyor)
-        env:
-          VERSION_CODE: ${{ github.event.inputs.versionCode }}
-          VERSION_NAME: ${{ github.event.inputs.versionName }}
-        run: python3 .github/scripts/patch_android_build.py
+with open(BUILD_GRADLE, "w") as f:
+    f.write(content)
 
-      - name: Build Release AAB
-        working-directory: android
-        env:
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: ./gradlew bundleRelease --no-daemon
-
-      - name: Upload AAB artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: katilimplus-release-v${{ github.event.inputs.versionCode }}
-          path: android/app/build/outputs/bundle/release/app-release.aab
-          retention-days: 30
-
-      - name: Clean up keystore
-        if: always()
-        run: rm -f android/app/release.keystore
+print(f"Patch tamamlandi: versionCode={version_code}, versionName={version_name}, signingConfig eklendi.")
