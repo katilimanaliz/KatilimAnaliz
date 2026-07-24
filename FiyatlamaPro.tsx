@@ -11158,13 +11158,18 @@ const ALT_BAR_SEKMELERI = [
   {tab:"profil",    key:"profil",      tip:"profil",    label:"Profil"},
 ];
 
-// DÜZELTME (2026-07-16): Masaüstü web sürümünde menüler arasında gezinirken
-// adres çubuğu hiç değişmiyordu (SPA state ile yönetiliyordu, tarayıcı
-// geçmişi/yer imi/paylaşım linki desteklenmiyordu). Bu tablo, ana ekranları
-// gerçek URL yollarına eşliyor — nav() artık bu yolu history.pushState ile
-// adres çubuğuna yazıyor, sayfa ilk yüklendiğinde de bu yol okunup doğru
-// ekran açılıyor. Burada olmayan (parametre gerektiren, örn. fon/hisse
-// detay) ekranlar URL'i değiştirmez, eski davranış korunur.
+// DÜZELTME (2026-07-16, GENİŞLETİLDİ 2026-07-24): Masaüstü web sürümünde
+// menüler arasında gezinirken adres çubuğu hiç değişmiyordu (SPA state ile
+// yönetiliyordu, tarayıcı geçmişi/yer imi/paylaşım linki desteklenmiyordu).
+// Bu tablo, ekranları gerçek URL yollarına eşliyor — nav() artık bu yolu
+// history.pushState ile adres çubuğuna yazıyor, sayfa ilk yüklendiğinde de
+// bu yol okunup doğru ekran açılıyor. İlk sürümde sadece 12 ana ekran
+// kapsanıyordu (kullanıcı "Döviz Dönüştürücü, Kâr Payı Oran Karşılaştırma
+// gibi alt sayfalara girince URL değişmiyor" diye fark etti) — şimdi
+// MENU'deki hemen hemen TÜM statik ekranlar burada. Sadece PARAMETRE
+// gerektiren, dinamik içerikli ekranlar (örn. fonDetay — hangi fonun
+// gösterileceği state'e bağlı) BİLİNÇLİ OLARAK dışarıda bırakıldı; o
+// ekranlarda adres çubuğu değişmez, eski davranış korunur.
 const SCREEN_TO_PATH: Record<string,string> = {
   home: "/",
   hesaplaMenu: "/hesapla",
@@ -11178,6 +11183,49 @@ const SCREEN_TO_PATH: Record<string,string> = {
   fiyatAlarmlarim: "/fiyat-alarmlarim",
   sozluk: "/finans-sozlugu",
   ayarlar: "/ayarlar",
+  toggFinansman: "/togg-finansmani",
+  arsaIsyeri: "/arsa-isyeri-finansmani",
+  vadeliKatilim: "/katilim-hesabi-getiri",
+  getiridenAnapara: "/getiriden-anapara",
+  oranAnalizi: "/gunluk-hesap-oran",
+  tahvilBono: "/sukuk-kira-sertifikasi-getiri",
+  kasaOranAnalizi: "/basitten-bilesige-oran",
+  verimlilikAnalizi: "/verimlilik-analizi",
+  fonGetiriIzleme: "/yatirim-fonlari-getiri-izleme",
+  karPayiOranlari: "/kar-payi-oran-karsilastirma",
+  bistHisseTarayici: "/bist-hisse-veri-izleme",
+  konutFinansman: "/konut-finansmani",
+  tasitFinansman: "/tasit-finansmani",
+  yatirimFonuFinansman: "/ihtiyac-finansmani",
+  taksitenKredi: "/taksitten-tutar",
+  spotFinansman: "/spot-finansman",
+  taksitliTicari: "/taksitli-ticari-finansman",
+  leasing: "/finansal-kiralama",
+  cekArkasiFinansman: "/cek-teminatli-finansman",
+  posHesaplama: "/pos-komisyon",
+  tmKomisyon: "/teminat-mektubu-komisyon",
+  akreditifKomisyon: "/akreditif-komisyon",
+  soikReeskont: "/soik-reeskont-finansmani",
+  katkiPayi: "/katki-payi",
+  esnekOdemePlanlari: "/esnek-odeme-planlari",
+  esitAnapara: "/esit-anapara-plani",
+  araOdemeli: "/ara-odemeli-plan",
+  artanOdemeli: "/artan-odemeli-plan",
+  azalanOdemeli: "/azalan-odemeli-plan",
+  balonOdemeli: "/balon-odemeli-plan",
+  esnekOdemeli: "/esnek-odemeli-plan",
+  gecmis: "/son-hesaplamalar",
+  vadeTakibi: "/vade-takip",
+  katilimBankalari: "/katilim-bankalari",
+  kfkNedir: "/kfk-nedir",
+  portfoyum: "/portfoyum",
+  hazineDoviz: "/doviz-donusturucu",
+  hazineForward: "/forward-hesaplama",
+  hazineSwap: "/swap-hesaplama",
+  hazineBono: "/hazine-sukuk-getiri",
+  hazineSenaryo: "/kur-hareketi-senaryo",
+  piyasaHaberleri: "/piyasa-haberleri",
+  finansalGostergeler: "/finansal-gostergeler",
 };
 const PATH_TO_SCREEN: Record<string,string> = Object.fromEntries(
   Object.entries(SCREEN_TO_PATH).map(([ekran,yol])=>[yol,ekran])
