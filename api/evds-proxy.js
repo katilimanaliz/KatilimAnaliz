@@ -74,8 +74,8 @@ const redis = new Redis({
 // NOT (2026-07-11): v9 → v10 sürüm değişikliği — Dış Ticaret & Ödemeler
 // Dengesi serileri (DT_* / CARI_* / REK_*) eklendiği için yapıldı. Aynı ders:
 // versiyon artırılmazsa eski önbellek yeni alanları 6 saat boyunca göstermez.
-const KV_ANLIK_KEY = "evds:anlik:v16";
-const KV_TARIHSEL_PREFIX = "evds:tarihsel:v16:";
+const KV_ANLIK_KEY = "evds:anlik:v17";
+const KV_TARIHSEL_PREFIX = "evds:tarihsel:v17:";
 
 // Vercel'in varsayılan fonksiyon süresi (Hobby planda genelde 10sn) artık 8 dış
 // isteğe (5 EVDS + 3 FRED) yetmiyor — bu yüzden ERR_CONNECTION_CLOSED alınıyordu
@@ -647,7 +647,7 @@ export default async function handler(req,res){
     sonuclar["FRED_FED_ALT_SERI"]=fedAlt.seri;
 
     sonuclar["TP.APIFON4_SERI"]=tumDegerler(polJson?.items||[], "TP.APIFON4").slice(-24);
-    sonuclar["TP_AB_TOPLAM_SERI"]=tumDegerler(rezervJson?.items||[], "TP_AB_TOPLAM").slice(-24);
+    sonuclar["TP_AB_B6_SERI"]=tumDegerler(rezervJson?.items||[], "TP.AB.B6").slice(-24);
     sonuclar["TP_AB_B1_SERI"]=tumDegerler(rezervJson?.items||[], "TP.AB.B1").slice(-24);
     sonuclar["TP_AB_B2_SERI"]=tumDegerler(rezervJson?.items||[], "TP.AB.B2").slice(-24);
     sonuclar["TP_AB_B3_SERI"]=tumDegerler(rezervJson?.items||[], "TP.AB.B3").slice(-24);
