@@ -9067,6 +9067,19 @@ function HaftalikPiyasaOzeti(){
   const [yukleniyor,setYukleniyor]=useState(true);
   const [hata,setHata]=useState<string|null>(null);
 
+  // Küresel merkez bankaları paragrafı için (2026-07-26 eklendi) — FED/ECB
+  // oranları zaten Göstergeler sekmesinde çekilen aynı evds-proxy endpoint'i
+  // üzerinden geliyor, TCMB politika faizi ise uygulamanın geri kalanındaki
+  // gibi (Ana Sayfa kartı vb.) sabit metin — PPK toplantısında değişirse
+  // elle güncellenmesi gerekir.
+  const [evdsMakro,setEvdsMakro]=useState<any>(null);
+  useEffect(()=>{
+    fetch(`${API_BASE}/api/evds-proxy`)
+      .then(r=>r.ok?r.json():null)
+      .then(d=>{if(d?.seriler) setEvdsMakro(d.seriler);})
+      .catch(()=>{});
+  },[]);
+
   useEffect(()=>{
     let iptal=false;
     const CK="hp_ozet_v2";
@@ -9105,9 +9118,79 @@ function HaftalikPiyasaOzeti(){
     return liste.sort((a:any,b:any)=>b.getiri-a.getiri);
   },[gosterilen,fonHafta]);
   const haberler=gosterilen?.haberler||[];
-
   const fmtTarih=(iso:string|null)=>iso?new Date(iso).toLocaleDateString("tr-TR",{day:"numeric",month:"long"}):null;
   const fmtTarihKisa=(iso:string|null)=>iso?new Date(iso).toLocaleDateString("tr-TR",{day:"numeric",month:"short"}):null;
+
+  // Haftanın öne çıkan hisse/fonları (2026-07-26 eklendi) — hisse-proxy'de
+  // degisim1h, tefas-proxy'de haftalik alanı zaten hazır olduğu için ekstra
+  // bir backend hesabı gerekmiyor; "kea_" önekli cache anahtarları Ana
+  // Sayfa'daki Top Hareketliler widget'ıyla PAYLAŞILIR — kullanıcı az önce
+  // Ana Sayfa'ya baktıysa burada ekstra istek bile atılmaz.
+  const HP_CACHE_TTL=5*60*1000;
+  const hpOkuCache=(key:string):any[]=>{
+    try{
+      const raw=sessionStorage.getItem(key);
+      if(!raw) return [];
+      const {data}=JSON.parse(raw);
+      return Array.isArray(data)&&data.length>0?data:[];
+    }catch{return [];}
+  };
+  const hpCacheTaze=(key:string):boolean=>{
+    try{
+      const raw=sessionStorage.getItem(key);
+      if(!raw) return false;
+      const {data,ts}=JSON.parse(raw);
+      return Array.isArray(data)&&data.length>0&&typeof ts==="number"&&(Date.now()-ts)<HP_CACHE_TTL;
+    }catch{return false;}
+  };
+  const [hisseler,setHisseler]=useState<any[]>(()=>hpOkuCache("kea_hisseler"));
+  const [fonlar,setFonlar]=useState<any[]>(()=>hpOkuCache("kea_fonlar"));
+  useEffect(()=>{
+    if(!hpCacheTaze("kea_hisseler")){
+      fetch(`${API_BASE}/api/hisse-proxy`).then(r=>r.ok?r.json():null).then(d=>{
+        if(d?.success&&(d.data||[]).length>0){
+          setHisseler(d.data);
+          try{sessionStorage.setItem("kea_hisseler",JSON.stringify({data:d.data,ts:Date.now()}));}catch{}
+        }
+      }).catch(()=>{});
+    }
+    if(!hpCacheTaze("kea_fonlar")){
+      fetch(`${API_BASE}/api/tefas-proxy`).then(r=>r.ok?r.json():null).then(d=>{
+        if(d?.success&&(d.data||[]).length>0){
+          setFonlar(d.data);
+          try{sessionStorage.setItem("kea_fonlar",JSON.stringify({data:d.data,ts:Date.now()}));}catch{}
+        }
+      }).catch(()=>{});
+    }
+  },[]);
+  // Katılım Endeksi hisseleriyle sınırlı (uygulamanın geri kalanıyla tutarlı) —
+  // haftalık değişimi (degisim1h) olanlar arasından en iyi/en kötü 3.
+  const hisseHaftaSirali=useMemo(()=>{
+    return [...hisseler].filter((h:any)=>h.katilimEndeksi&&typeof h.degisim1h==="number").sort((a:any,b:any)=>b.degisim1h-a.degisim1h);
+  },[hisseler]);
+  const hisseHaftaYukselen=hisseHaftaSirali.slice(0,3);
+  const hisseHaftaDusen=hisseHaftaSirali.length>3?hisseHaftaSirali.slice(-3).reverse():[];
+  const fonHaftaSirali=useMemo(()=>{
+    return [...fonlar].filter((f:any)=>typeof f.haftalik==="number").sort((a:any,b:any)=>b.haftalik-a.haftalik);
+  },[fonlar]);
+  const fonHaftaYukselen=fonHaftaSirali.slice(0,3);
+
+  // BIST 100 haftalık trend grafiği (2026-07-26 eklendi) — arşivdeki +
+  // güncel haftanın kapanış değerlerinden türetilir, yeni istek YOK.
+  const trendHaftalar=useMemo(()=>{
+    if(!ozet) return [];
+    const hepsi=[...(ozet.arsiv||[]),ozet.guncel].filter(Boolean);
+    const sirali=[...hepsi].sort((a:any,b:any)=>{
+      const ta=a?.donem?.ilkTarih?new Date(a.donem.ilkTarih).getTime():0;
+      const tb=b?.donem?.ilkTarih?new Date(b.donem.ilkTarih).getTime():0;
+      return ta-tb;
+    });
+    return sirali.map((h:any)=>{
+      const xu=(h.satirlar||[]).find((g:any)=>g.kod==="XU100");
+      return {tarih:fmtTarihKisa(h?.donem?.sonTarih),deger:xu?.son??null};
+    }).filter((p:any)=>p.deger!=null);
+  },[ozet]);
+
   const donemBas=fmtTarih(gosterilen?.donem?.ilkTarih);
   const donemSon=fmtTarih(gosterilen?.donem?.sonTarih);
 
@@ -9188,8 +9271,19 @@ function HaftalikPiyasaOzeti(){
     if(fonHafta!=null) p5.push(`Katılım esaslı para piyasası fonlarının haftalık ortalama getirisi ${(fonHafta>=0?"+":"")}${fonHafta.toFixed(2).replace(".",",")}% düzeyinde gerçekleşti.`);
     if(p5.length) paragraflar.push(p5.join(" "));
 
+    // 6) Küresel merkez bankaları (2026-07-26 eklendi) — sadece canlı veri
+    // varsa yazılır, yoksa paragraf tamamen atlanır (dürüstçe boş).
+    const fedUst=evdsMakro?.["FRED_FED_UST"]?.deger, fedAlt=evdsMakro?.["FRED_FED_ALT"]?.deger;
+    const ecb=evdsMakro?.["FRED_ECB"]?.deger;
+    if(fedUst!=null||ecb!=null){
+      const p6:string[]=[];
+      if(fedUst!=null&&fedAlt!=null) p6.push(`Küresel merkez bankaları tarafında FED, politika faizini %${fedAlt.toFixed(2).replace(".",",")}–%${fedUst.toFixed(2).replace(".",",")} hedef bandında tutmaya devam ediyor.`);
+      if(ecb!=null) p6.push(`ECB mevduat faizi %${ecb.toFixed(2).replace(".",",")} seviyesinde; TCMB'nin %37,00 düzeyindeki politika faiziyle aradaki fark hâlâ oldukça geniş.`);
+      if(p6.length) paragraflar.push(p6.join(" "));
+    }
+
     return paragraflar;
-  },[satirlar,fonHafta,donemBas,donemSon]);
+  },[satirlar,fonHafta,donemBas,donemSon,evdsMakro]);
 
   return(
     <div style={{background:C.bg,minHeight:"100vh",padding:"0 16px 40px",boxSizing:"border-box"}}>
@@ -9259,6 +9353,35 @@ function HaftalikPiyasaOzeti(){
             })}
           </div>
 
+          {/* BIST 100 haftalık trend grafiği — arşivdeki haftalardan türetilir */}
+          {trendHaftalar.length>=2&&(
+            <div style={{background:WA(0.04),border:`1px solid ${WA(0.07)}`,borderRadius:16,padding:"14px 16px",marginBottom:14}}>
+              <p style={{margin:"0 0 10px",fontSize:12,fontWeight:800,color:(TEMA==="acik"?"#2E6DA8":"#9FC1EA"),textTransform:"uppercase",letterSpacing:0.4}}>📈 BIST 100 Haftalık Trend</p>
+              {(()=>{
+                const degerler=trendHaftalar.map(p=>p.deger as number);
+                const minV=Math.min(...degerler)*0.995;
+                const maxV=Math.max(...degerler)*1.005;
+                const aralikV=(maxV-minV)||1;
+                const W=320,H=110,PAD=6;
+                const barW=(W-PAD*2)/trendHaftalar.length;
+                const getY=(v:number)=>H-PAD-((v-minV)/aralikV)*(H-PAD*2);
+                const pts=trendHaftalar.map((p,i)=>`${PAD+i*barW+barW/2},${getY(p.deger as number)}`).join(" ");
+                return (
+                  <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} style={{overflow:"visible"}}>
+                    <polyline points={pts} fill="none" stroke={C.blue} strokeWidth={2}/>
+                    {trendHaftalar.map((p,i)=>(
+                      <circle key={i} cx={PAD+i*barW+barW/2} cy={getY(p.deger as number)} r={2.5} fill={C.blue}/>
+                    ))}
+                  </svg>
+                );
+              })()}
+              <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
+                <span style={{fontSize:9.5,color:WA(0.35)}}>{trendHaftalar[0]?.tarih}</span>
+                <span style={{fontSize:9.5,color:WA(0.35)}}>{trendHaftalar[trendHaftalar.length-1]?.tarih}</span>
+              </div>
+            </div>
+          )}
+
           {/* Otomatik yorum — paragraflı */}
           {yorum&&yorum.length>0&&(
             <div style={{background:WA(0.04),border:`1px solid ${WA(0.07)}`,borderRadius:16,padding:"14px 16px"}}>
@@ -9266,6 +9389,49 @@ function HaftalikPiyasaOzeti(){
               {yorum.map((par:string,i:number)=>(
                 <p key={i} style={{margin:i<yorum.length-1?"0 0 10px":"0",fontSize:13,color:WA(0.75),lineHeight:1.65}}>{par}</p>
               ))}
+            </div>
+          )}
+
+          {/* Haftanın öne çıkan hisse/fonları */}
+          {(hisseHaftaYukselen.length>0||fonHaftaYukselen.length>0)&&(
+            <div style={{marginTop:14,background:WA(0.04),border:`1px solid ${WA(0.07)}`,borderRadius:16,padding:"14px 16px"}}>
+              <p style={{margin:"0 0 10px",fontSize:12,fontWeight:800,color:(TEMA==="acik"?"#2E6DA8":"#9FC1EA"),textTransform:"uppercase",letterSpacing:0.4}}>🏆 Haftanın Öne Çıkanları</p>
+              <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+                {hisseHaftaYukselen.length>0&&(
+                  <div style={{flex:"1 1 140px",minWidth:0}}>
+                    <p style={{margin:"0 0 6px",fontSize:10.5,fontWeight:800,color:C.green,textTransform:"uppercase",letterSpacing:0.3}}>En Çok Yükselen Hisseler</p>
+                    {hisseHaftaYukselen.map((h:any)=>(
+                      <div key={h.ticker} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"5px 0"}}>
+                        <span style={{fontSize:12,fontWeight:700,color:C.soft,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{h.ticker}</span>
+                        <span style={{fontSize:12,fontWeight:800,color:C.green,flexShrink:0}}>+{h.degisim1h.toFixed(2).replace(".",",")}%</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {hisseHaftaDusen.length>0&&(
+                  <div style={{flex:"1 1 140px",minWidth:0}}>
+                    <p style={{margin:"0 0 6px",fontSize:10.5,fontWeight:800,color:C.red,textTransform:"uppercase",letterSpacing:0.3}}>En Çok Düşen Hisseler</p>
+                    {hisseHaftaDusen.map((h:any)=>(
+                      <div key={h.ticker} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"5px 0"}}>
+                        <span style={{fontSize:12,fontWeight:700,color:C.soft,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{h.ticker}</span>
+                        <span style={{fontSize:12,fontWeight:800,color:C.red,flexShrink:0}}>{h.degisim1h.toFixed(2).replace(".",",")}%</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {fonHaftaYukselen.length>0&&(
+                  <div style={{flex:"1 1 140px",minWidth:0}}>
+                    <p style={{margin:"0 0 6px",fontSize:10.5,fontWeight:800,color:C.green,textTransform:"uppercase",letterSpacing:0.3}}>En Çok Yükselen Fonlar</p>
+                    {fonHaftaYukselen.map((f:any)=>(
+                      <div key={f.kod} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"5px 0"}}>
+                        <span style={{fontSize:12,fontWeight:700,color:C.soft,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.kod}</span>
+                        <span style={{fontSize:12,fontWeight:800,color:C.green,flexShrink:0}}>+{f.haftalik.toFixed(2).replace(".",",")}%</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <p style={{margin:"10px 0 0",fontSize:9.5,color:WA(0.3),lineHeight:1.4}}>Katılım Endeksi hisseleri ve TEFAS fonlarının haftalık değişimine göre.</p>
             </div>
           )}
 
@@ -9300,13 +9466,23 @@ function HaftalikPiyasaOzeti(){
 // Piyasa verisi: /api/getiri (Yahoo tabanlı). Fon ortalaması: /api/tefas-proxy
 // verisindeki dönem alanlarının ortalaması (6 Ay alanı TEFAS verisinde
 // bulunmadığı için o dönemde fon barı gösterilmez).
+// TÜFE aylık serisinin SON N ayını BİLEŞİK olarak toplar (basit toplama
+// değil — %1 ve %2'lik iki ardışık ay basitçe %3 değil, %3,02 eder; doğru
+// enflasyon matematiği budur). Seri evds-proxy'den zaten eski→yeni sıralı
+// geldiği için (bkz. GostergeGrafikModal) ekstra tarih ayrıştırmaya gerek yok.
+function tufeBilesikHesapla(seri:{tarih:string,deger:number}[]|undefined, aySayisi:number): number|null {
+  if(!seri||seri.length<aySayisi) return null;
+  const sonAylar=seri.slice(-aySayisi);
+  const carpim=sonAylar.reduce((acc,m)=>acc*(1+(m.deger||0)/100),1);
+  return (carpim-1)*100;
+}
 const GK_ARALIKLAR=[
-  {key:"1hafta",label:"1 Hafta",fon:"haftalik"},
-  {key:"1ay",  label:"1 Ay",  fon:"aylik"},
-  {key:"3ay",  label:"3 Ay",  fon:"uc_aylik"},
-  {key:"6ay",  label:"6 Ay",  fon:null},
-  {key:"1yil", label:"1 Yıl", fon:"yillik"},
-  {key:"ybb",  label:"YBB",   fon:"ytd"},
+  {key:"1hafta",label:"1 Hafta",fon:"haftalik",tufe:null,           tufeAy:null},
+  {key:"1ay",  label:"1 Ay",  fon:"aylik",     tufe:"TUFE_AYLIK",   tufeAy:null},
+  {key:"3ay",  label:"3 Ay",  fon:"uc_aylik",  tufe:null,           tufeAy:3},
+  {key:"6ay",  label:"6 Ay",  fon:null,        tufe:null,           tufeAy:6},
+  {key:"1yil", label:"1 Yıl", fon:"yillik",    tufe:"TUFE_YILLIK",  tufeAy:null},
+  {key:"ybb",  label:"YBB",   fon:"ytd",       tufe:null,           tufeAy:null},
 ];
 function GetiriKarsilastirma(){
   const [aralik,setAralik]=useState("1ay");
@@ -9315,6 +9491,19 @@ function GetiriKarsilastirma(){
   const [fonListe,setFonListe]=useState<any[]>([]); // TEFAS fon listesi (kod araması için)
   const [yukleniyor,setYukleniyor]=useState(true);
   const [hata,setHata]=useState<string|null>(null);
+
+  // Enflasyon (TÜFE) karşılaştırma çubuğu için — sadece 1 Ay/1 Yıl'da gerçek
+  // veri var (TÜFE haftalık/3 aylık/YBB olarak ayrı yayınlanmıyor, o yüzden
+  // diğer dönemlerde dürüstçe "—" gösterilir, tahmini rakam üretilmez).
+  // evds-proxy zaten sunucu tarafında önbellekli olduğu için bu ekstra istek
+  // hafif — Göstergeler sekmesindeki aynı endpoint.
+  const [evdsMakro,setEvdsMakro]=useState<any>(null);
+  useEffect(()=>{
+    fetch(`${API_BASE}/api/evds-proxy`)
+      .then(r=>r.ok?r.json():null)
+      .then(d=>{if(d?.seriler) setEvdsMakro(d.seriler);})
+      .catch(()=>{});
+  },[]);
 
   // Kullanıcının eklediği enstrümanlar — kalıcı (localStorage)
   // {tip:"yahoo",kod:"THYAO.IS",etiket:"THYAO"} | {tip:"fon",kod:"AC1",etiket:"AC1"}
@@ -9411,7 +9600,7 @@ function GetiriKarsilastirma(){
           const v=paraFonlari.map((f:any)=>f?.[alan]).filter((x:any)=>typeof x==="number"&&isFinite(x)&&x!==0);
           return v.length? v.reduce((a:number,b:number)=>a+b,0)/v.length : null;
         };
-        setFonOrt({aylik:ort("aylik"),uc_aylik:ort("uc_aylik"),yillik:ort("yillik"),ytd:ort("ytd")});
+        setFonOrt({haftalik:ort("haftalik"),aylik:ort("aylik"),uc_aylik:ort("uc_aylik"),yillik:ort("yillik"),ytd:ort("ytd")});
       })
       .catch(()=>{});
   },[]);
@@ -9452,6 +9641,19 @@ function GetiriKarsilastirma(){
       // değil veri sınırlaması olduğunu anlasın. Grafikte bar çizilmez.
       liste.push({ad:"Para Piyasası Fonları (Ort.)",kisaAd:"Para P. Fonları",getiri:null});
     }
+    // Enflasyon (TÜFE) — 1 Ay/1 Yıl'da doğrudan EVDS'in yayınladığı rakam,
+    // 3 Ay/6 Ay'da aylık seriden bileşik hesap (bkz. tufeBilesikHesapla).
+    // 1 Hafta/YBB'de TÜFE ayrı bir seri olarak yayınlanmadığı için dürüstçe "—".
+    const tufeAlan=aktifAralik?.tufe;
+    const tufeAySayisi=aktifAralik?.tufeAy;
+    let tufeDeger:number|null=null;
+    if(tufeAlan){
+      const v=evdsMakro?.[tufeAlan]?.deger;
+      tufeDeger=typeof v==="number"?v:null;
+    } else if(tufeAySayisi){
+      tufeDeger=tufeBilesikHesapla(evdsMakro?.TUFE_AYLIK_SERI,tufeAySayisi);
+    }
+    liste.push({ad:"Enflasyon (TÜFE)",kisaAd:"TÜFE",getiri:tufeDeger});
     // Kullanıcının eklediği Yahoo enstrümanları (API yanıtındaki ekstraGetiriler)
     (veri?.ekstraGetiriler||[]).forEach((g:any)=>{
       const kayit=ekstraListe.find(e=>e.tip==="yahoo"&&e.kod===g.sembol);
@@ -9471,7 +9673,7 @@ function GetiriKarsilastirma(){
       if(b.getiri==null) return -1;
       return b.getiri-a.getiri;
     });
-  },[veri,fonOrt,fonListe,ekstraListe,aralik]);
+  },[veri,fonOrt,fonListe,ekstraListe,aralik,evdsMakro]);
 
   const fmtYzd=(v:number)=>`${v.toFixed(2).replace(".",",")} %`;
 
