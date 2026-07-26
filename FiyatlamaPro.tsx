@@ -9362,16 +9362,24 @@ function HaftalikPiyasaOzeti(){
                 const minV=Math.min(...degerler)*0.995;
                 const maxV=Math.max(...degerler)*1.005;
                 const aralikV=(maxV-minV)||1;
-                const W=320,H=110,PAD=6;
-                const barW=(W-PAD*2)/trendHaftalar.length;
-                const getY=(v:number)=>H-PAD-((v-minV)/aralikV)*(H-PAD*2);
-                const pts=trendHaftalar.map((p,i)=>`${PAD+i*barW+barW/2},${getY(p.deger as number)}`).join(" ");
+                const W=320,PAD_SIDE=8,PAD_TOP=18,PAD_BOTTOM=8,PLOT_H=84;
+                const H=PAD_TOP+PLOT_H+PAD_BOTTOM;
+                const barW=(W-PAD_SIDE*2)/trendHaftalar.length;
+                const getY=(v:number)=>PAD_TOP+PLOT_H-((v-minV)/aralikV)*PLOT_H;
+                const pts=trendHaftalar.map((p,i)=>`${PAD_SIDE+i*barW+barW/2},${getY(p.deger as number)}`).join(" ");
                 return (
                   <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} style={{overflow:"visible"}}>
                     <polyline points={pts} fill="none" stroke={C.blue} strokeWidth={2}/>
-                    {trendHaftalar.map((p,i)=>(
-                      <circle key={i} cx={PAD+i*barW+barW/2} cy={getY(p.deger as number)} r={2.5} fill={C.blue}/>
-                    ))}
+                    {trendHaftalar.map((p,i)=>{
+                      const x=PAD_SIDE+i*barW+barW/2;
+                      const y=getY(p.deger as number);
+                      return (
+                        <g key={i}>
+                          <circle cx={x} cy={y} r={2.5} fill={C.blue}/>
+                          <text x={x} y={y-8} fontSize={9} fontWeight={700} textAnchor="middle" fill={WA(0.65)}>{fmtFiyat(p.deger as number)}</text>
+                        </g>
+                      );
+                    })}
                   </svg>
                 );
               })()}
@@ -9399,33 +9407,42 @@ function HaftalikPiyasaOzeti(){
               <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
                 {hisseHaftaYukselen.length>0&&(
                   <div style={{flex:"1 1 140px",minWidth:0}}>
-                    <p style={{margin:"0 0 6px",fontSize:10.5,fontWeight:800,color:C.green,textTransform:"uppercase",letterSpacing:0.3}}>En Çok Yükselen Hisseler</p>
+                    <p style={{margin:"0 0 6px",fontSize:10.5,fontWeight:800,color:C.green,textTransform:"uppercase",letterSpacing:0.3,lineHeight:1.3,minHeight:"2.6em"}}>En Çok Yükselen Hisseler</p>
                     {hisseHaftaYukselen.map((h:any)=>(
-                      <div key={h.ticker} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"5px 0"}}>
-                        <span style={{fontSize:12,fontWeight:700,color:C.soft,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{h.ticker}</span>
-                        <span style={{fontSize:12,fontWeight:800,color:C.green,flexShrink:0}}>+{h.degisim1h.toFixed(2).replace(".",",")}%</span>
+                      <div key={h.ticker} style={{padding:"5px 0"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",gap:8}}>
+                          <span style={{fontSize:12,fontWeight:700,color:C.soft}}>{h.ticker}</span>
+                          <span style={{fontSize:12,fontWeight:800,color:C.green,flexShrink:0}}>+{h.degisim1h.toFixed(2).replace(".",",")}%</span>
+                        </div>
+                        {h.sirket&&<div style={{fontSize:10,color:WA(0.4),overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{h.sirket}</div>}
                       </div>
                     ))}
                   </div>
                 )}
                 {hisseHaftaDusen.length>0&&(
                   <div style={{flex:"1 1 140px",minWidth:0}}>
-                    <p style={{margin:"0 0 6px",fontSize:10.5,fontWeight:800,color:C.red,textTransform:"uppercase",letterSpacing:0.3}}>En Çok Düşen Hisseler</p>
+                    <p style={{margin:"0 0 6px",fontSize:10.5,fontWeight:800,color:C.red,textTransform:"uppercase",letterSpacing:0.3,lineHeight:1.3,minHeight:"2.6em"}}>En Çok Düşen Hisseler</p>
                     {hisseHaftaDusen.map((h:any)=>(
-                      <div key={h.ticker} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"5px 0"}}>
-                        <span style={{fontSize:12,fontWeight:700,color:C.soft,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{h.ticker}</span>
-                        <span style={{fontSize:12,fontWeight:800,color:C.red,flexShrink:0}}>{h.degisim1h.toFixed(2).replace(".",",")}%</span>
+                      <div key={h.ticker} style={{padding:"5px 0"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",gap:8}}>
+                          <span style={{fontSize:12,fontWeight:700,color:C.soft}}>{h.ticker}</span>
+                          <span style={{fontSize:12,fontWeight:800,color:C.red,flexShrink:0}}>{h.degisim1h.toFixed(2).replace(".",",")}%</span>
+                        </div>
+                        {h.sirket&&<div style={{fontSize:10,color:WA(0.4),overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{h.sirket}</div>}
                       </div>
                     ))}
                   </div>
                 )}
                 {fonHaftaYukselen.length>0&&(
                   <div style={{flex:"1 1 140px",minWidth:0}}>
-                    <p style={{margin:"0 0 6px",fontSize:10.5,fontWeight:800,color:C.green,textTransform:"uppercase",letterSpacing:0.3}}>En Çok Yükselen Fonlar</p>
+                    <p style={{margin:"0 0 6px",fontSize:10.5,fontWeight:800,color:C.green,textTransform:"uppercase",letterSpacing:0.3,lineHeight:1.3,minHeight:"2.6em"}}>En Çok Yükselen Fonlar</p>
                     {fonHaftaYukselen.map((f:any)=>(
-                      <div key={f.kod} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"5px 0"}}>
-                        <span style={{fontSize:12,fontWeight:700,color:C.soft,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.kod}</span>
-                        <span style={{fontSize:12,fontWeight:800,color:C.green,flexShrink:0}}>+{f.haftalik.toFixed(2).replace(".",",")}%</span>
+                      <div key={f.kod} style={{padding:"5px 0"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",gap:8}}>
+                          <span style={{fontSize:12,fontWeight:700,color:C.soft}}>{f.kod}</span>
+                          <span style={{fontSize:12,fontWeight:800,color:C.green,flexShrink:0}}>+{f.haftalik.toFixed(2).replace(".",",")}%</span>
+                        </div>
+                        {f.ad&&<div style={{fontSize:10,color:WA(0.4),overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{f.ad}</div>}
                       </div>
                     ))}
                   </div>
