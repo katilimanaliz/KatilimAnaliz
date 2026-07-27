@@ -2370,6 +2370,14 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri 
   const detayPendingKaynakli = useRef(false);
 
   const [sonGuncelleme, setSonGuncelleme] = useState<Date|null>(null);
+  // Verinin KAYNAKTA üretildiği an (2026-07-27 eklendi). sonGuncelleme bizim
+  // isteği attığımız an; bu ise Midas'ın kendi DateTime alanı — ikisi normalde
+  // birbirine yakın olmalı, ama kaynak donarsa (yaşanmış vaka: 27 Temmuz'da
+  // Midas bütün gün Cuma kapanışını döndürdü) arada saatler oluşabiliyor.
+  // Bu yüzden kullanıcıya "kaç dk gecikmeli" sabit metni yerine GERÇEK saat
+  // gösteriliyor. Backend bu alanı vermiyorsa (eski sürüm) satır eskisi gibi
+  // kalıyor, hiçbir şey bozulmuyor.
+  const [veriZamani, setVeriZamani] = useState<Date|null>(null);
   const [siraGorunum, setSiraGorunum]   = useState<"tumu"|"yukselen"|"dusen"|"hacim">("tumu");
   const [hareketlilerTip, setHareketlilerTip] = useState<"yukselen"|"dusen">("yukselen");
   const [endeksVeri, setEndeksVeri]     = useState<{[k:string]:{deger:number,degisim:number}}>({});
@@ -2417,6 +2425,7 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri 
           if (d.success) {
             setHisseler(d.data);
             setSonGuncelleme(new Date());
+            if (d.veriZamani) { const t=new Date(d.veriZamani); if(!isNaN(t.getTime())) setVeriZamani(t); }
             const yeniFlash: Record<string,"up"|"down"> = {};
             for (const h of d.data) {
               const onceki = oncekiFiyatRef.current[h.ticker];
@@ -2558,7 +2567,10 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri 
             <span style={{width:5,height:5,borderRadius:2.5,background:piyasaDurum.acik?C.green:C.sub,flexShrink:0}}/>
             {piyasaDurum.etiket}
           </div>
-          <div style={{fontSize:10.5,color:WA(0.4),marginTop:2,marginLeft:11}}>Seans 10:00–18:00 · veri 15 dk gecikmeli</div>
+          <div style={{fontSize:10.5,color:WA(0.4),marginTop:2,marginLeft:11}}>
+            Seans 10:00–18:00 · veri 15 dk gecikmeli
+            {veriZamani && <> · son veri {veriZamani.toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"})}</>}
+          </div>
         </div>
 
         <div style={{height:1,background:WA(0.09),margin:"10px 0"}}/>
