@@ -146,6 +146,119 @@ async function sirketIsimleriniGetir() {
   }
 }
 
+// ─── YEDEK VERİ KAYNAĞI: TradingView Scanner (2026-07-27 eklendi) ───────────
+// GEREKÇE: 27 Temmuz'da Midas'ın kendi API'si bütün gün donup Cuma kapanışını
+// döndürdü (uygulamada hisse fiyatları hiç değişmedi). Tek kaynağa bağımlılığı
+// azaltmak için, SADECE Midas bayat kaldığında devreye giren bir yedek eklendi.
+//
+// TASARIM İLKESİ — bu yedek TAMAMEN EK bir katman:
+//   • Midas taze ise TradingView'a HİÇ istek atılmaz (normal akış değişmedi)
+//   • TradingView herhangi bir sebeple başarısız olursa (erişilemez, format
+//     değişmiş, alan eksik) sessizce Midas verisine düşülür — bayat da olsa
+//     ekranda bir şey görünür, boş kalmaz
+//   • Hangi kaynağın kullanıldığı yanıttaki "kaynak" alanında bildirilir
+//
+// Scanner uç noktası, istenen sütunları biz belirlediğimiz için yanıt formatı
+// tahmine dayalı değil: { data: [ { s: "BIST:ASELS", d: [sütun değerleri...] } ] }
+// — d dizisinin sırası, aşağıdaki TV_SUTUNLAR dizisinin sırasıyla birebir aynı.
+// Yine de sütun KİMLİKLERİ canlı doğrulanmalı: /api/hisse-proxy?debug=tv
+const TV_SUTUNLAR = [
+  "name",                 // 0  ticker (ASELS)
+  "close",                // 1  son fiyat
+  "change",               // 2  günlük değişim %
+  "Perf.W",               // 3  haftalık %
+  "Perf.1M",              // 4  aylık %
+  "Perf.Y",               // 5  yıllık %
+  "high",                 // 6  gün içi yüksek
+  "low",                  // 7  gün içi düşük
+  "volume",               // 8  hacim (lot)
+  "market_cap_basic",     // 9  piyasa değeri
+  "price_earnings_ttm",   // 10 F/K
+  "price_book_fq",        // 11 PD/DD
+  "return_on_equity",     // 12 ROE
+];
+
+// Midas verisi ne kadar eskiyse "bayat" sayılsın (dakika). Seans içinde Midas
+// normalde 15 dk gecikmeli geliyor; 45 dk eşiği normal gecikmeyi yanlışlıkla
+// bayat saymayacak kadar geniş, gerçek donmayı yakalayacak kadar dar.
+const BAYAT_ESIK_DK = 45;
+
+// Piyasa açık mı? (TR saati, hafta içi 10:00–18:00). Kapalıyken Midas'ın
+// "eski" veri döndürmesi NORMAL — o yüzden yedeğe hiç gerek yok.
+function piyasaAcikMi() {
+  const tr = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Istanbul" }));
+  const gun = tr.getDay();                       // 0=Pazar, 6=Cumartesi
+  const dk = tr.getHours() * 60 + tr.getMinutes();
+  return gun >= 1 && gun <= 5 && dk >= 10 * 60 && dk < 18 * 60;
+}
+
+function midasBayatMi(veriZamani) {
+  if (!piyasaAcikMi()) return false;             // kapalıyken eskilik normal
+  if (!veriZamani) return true;                  // hiç damga yoksa güvenme
+  const yasDk = (Date.now() - new Date(veriZamani).getTime()) / 60000;
+  return yasDk > BAYAT_ESIK_DK;
+}
+
+async function tradingViewCek() {
+  const govde = {
+    filter: [{ left: "type", operation: "equal", right: "stock" }],
+    options: { lang: "tr" },
+    symbols: { query: { types: [] }, tickers: [] },
+    columns: TV_SUTUNLAR,
+    sort: { sortBy: "market_cap_basic", sortOrder: "desc" },
+    range: [0, 1000],
+  };
+  const r = await fetchZamanAsimli(
+    "https://scanner.tradingview.com/turkey/scan",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "User-Agent": "Mozilla/5.0" },
+      body: JSON.stringify(govde),
+    },
+    6000
+  );
+  if (!r.ok) throw new Error(`TV HTTP ${r.status}`);
+  const j = await r.json();
+  if (!Array.isArray(j?.data) || j.data.length === 0) throw new Error("TV boş liste");
+  return j;
+}
+
+// TradingView yanıtını, Midas'la AYNI şekle çevirir — frontend hiçbir farkı
+// görmez, sadece sayılar başka kaynaktan gelir.
+function tradingViewNormalize(tvJson, isimMap) {
+  const sayi = (v) => (typeof v === "number" && isFinite(v) ? v : null);
+  const yuvarla = (v) => (sayi(v) == null ? null : parseFloat(v.toFixed(2)));
+
+  return (tvJson.data || [])
+    .map((satir) => {
+      const d = satir?.d || [];
+      // "BIST:ASELS" → "ASELS" (name sütunu zaten sade gelir ama garanti olsun)
+      const kod = String(d[0] || satir?.s || "").split(":").pop().trim().toUpperCase();
+      if (!kod || kod.startsWith("X")) return null;   // endeksleri ele (Midas'taki filtreyle aynı)
+      return {
+        ticker: kod,
+        sirket: isimMap[kod] || kod,
+        sektor: "",
+        fiyat: sayi(d[1]) ?? 0,
+        degisim1g: yuvarla(d[2]) ?? 0,
+        degisim1h: yuvarla(d[3]),
+        degisim1a: yuvarla(d[4]),
+        degisim1y: yuvarla(d[5]),
+        yuksek: sayi(d[6]) ?? 0,
+        dusuk: sayi(d[7]) ?? 0,
+        hacim: sayi(d[8]) ?? 0,
+        piyasaDegeri: sayi(d[9]) ?? 0,
+        fk: sayi(d[10]),
+        pddd: sayi(d[11]),
+        roe: sayi(d[12]),
+        temetu: null,
+        katilimEndeksi: XK100_KODLARI.has(kod),
+      };
+    })
+    .filter((h) => h && h.fiyat > 0)
+    .sort((a, b) => (b.piyasaDegeri || 0) - (a.piyasaDegeri || 0));
+}
+
 // ─── CORS: sadece kendi domain(ler)imize izin ver ───────────────────────────
 function originIzinliMi(origin) {
   if (!origin) return false;
@@ -170,6 +283,29 @@ export default async function handler(req, res) {
   try {
     const debug = req.query.debug === "1";
 
+    // ── TEŞHİS: TradingView ham yanıtı (?debug=tv) ──────────────────────────
+    // Sütun KİMLİKLERİNİN gerçekten doğru olduğunu tahminle değil canlı
+    // görerek doğrulamak için. Bir kez bakıp kapatılabilir, zararsız.
+    if (req.query.debug === "tv") {
+      try {
+        const tv = await tradingViewCek();
+        const isimMap = await sirketIsimleriniGetir();
+        const normal = tradingViewNormalize(tv, isimMap);
+        return res.status(200).json({
+          tv_calisti: true,
+          tv_toplam: tv.totalCount ?? null,
+          tv_donen_satir: (tv.data || []).length,
+          istenen_sutunlar: TV_SUTUNLAR,
+          ham_ilk_3_satir: (tv.data || []).slice(0, 3),
+          normalize_ilk_3: normal.slice(0, 3),
+          normalize_toplam: normal.length,
+          piyasa_acik: piyasaAcikMi(),
+        });
+      } catch (e) {
+        return res.status(200).json({ tv_calisti: false, hata: String(e && e.message || e) });
+      }
+    }
+
     const [midasRes, isimMap] = await Promise.all([
       fetch("https://www.getmidas.com/wp-json/midas-api/v1/midas_table_data?sortId=&return=table", {
         headers: { "Accept": "application/json", "User-Agent": "Mozilla/5.0" }
@@ -187,6 +323,20 @@ export default async function handler(req, res) {
       } catch(e) {}
     }
 
+    // ─── VERİNİN KAYNAKTA ÜRETİLDİĞİ AN (2026-07-27 eklendi) ─────────────────
+    // Midas her kayda kendi DateTime damgasını (epoch ms) koyuyor. Bunu dışarı
+    // vermek ÖNEMLİ: 27 Temmuz'da Midas bütün gün Cuma kapanışını döndürdü,
+    // uygulamada sabit "veri 15 dk gecikmeli" yazdığı için sorun saatlerce fark
+    // edilmedi. Artık frontend gerçek saati de gösteriyor — kaynak donarsa
+    // kullanıcı bunu doğrudan görebiliyor.
+    // Kayıtlar birkaç ms farkla geldiği için EN BÜYÜK damga alınıyor.
+    const zamanDamgalari = midasListe
+      .map(h => h && h.DateTime)
+      .filter(t => typeof t === "number" && t > 0);
+    const veriZamani = zamanDamgalari.length
+      ? new Date(Math.max(...zamanDamgalari)).toISOString()
+      : null;
+
     if (debug) {
       const tumKodlar = midasListe.filter(h => h.Code && !h.Code.startsWith("X")).map(h => h.Code);
       const eslesenler = tumKodlar.filter(k => isimMap[k]);
@@ -194,6 +344,9 @@ export default async function handler(req, res) {
       const tamListe = req.query.tam === "1";
       return res.status(200).json({
         midas_kayit_sayisi: midasListe.length,
+        // Verinin tazeliğini hızlıca kontrol etmek için (bkz. yukarıdaki not)
+        veri_zamani: veriZamani,
+        veri_yasi_dk: veriZamani ? Math.round((Date.now() - new Date(veriZamani).getTime()) / 60000) : null,
         // YENİ: Midas'ın döndürdüğü TÜM alan adlarını görmek için ham örnek —
         // sektör bilgisi (Sector/Sektor/Industry/Group vb.) var mı yok mu bunu
         // görmek için ekledik. "sektor" alanı hep boş geliyordu, kaynakta var mı
@@ -217,7 +370,7 @@ export default async function handler(req, res) {
       });
     }
 
-    const hisseler = midasListe
+    const midasHisseler = midasListe
       .filter(h => h.Code && !h.Code.startsWith("X"))
       .map(h => {
         const kod = h.Code;
@@ -245,12 +398,42 @@ export default async function handler(req, res) {
       })
       .sort((a,b) => (b.piyasaDegeri||0) - (a.piyasaDegeri||0));
 
+    // ── KAYNAK SEÇİMİ ───────────────────────────────────────────────────────
+    // Varsayılan her zaman Midas. TradingView'a SADECE Midas seans içinde
+    // bayat kalmışsa gidilir; o da başarısız olursa yine Midas'a düşülür.
+    let hisseler = midasHisseler;
+    let kaynak = "midas";
+    let etkinVeriZamani = veriZamani;
+    let yedekHata = null;
+
+    if (midasBayatMi(veriZamani)) {
+      try {
+        const tv = await tradingViewCek();
+        const tvHisseler = tradingViewNormalize(tv, isimMap);
+        // Anlamlı sayıda kayıt gelmediyse güvenme — Midas'ta kal.
+        if (tvHisseler.length >= 100) {
+          hisseler = tvHisseler;
+          kaynak = "tradingview";
+          // TradingView de ~15 dk gecikmeli veri veriyor; kesin damga
+          // sunmadığı için zamanı bu bilinen gecikmeye göre belirtiyoruz.
+          etkinVeriZamani = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+        } else {
+          yedekHata = `TV yetersiz kayit (${tvHisseler.length})`;
+        }
+      } catch (e) {
+        yedekHata = String(e && e.message || e);
+      }
+    }
+
     res.setHeader("Cache-Control", "s-maxage=600, stale-while-revalidate=120");
     res.status(200).json({
       success: true,
       count: hisseler.length,
       katilimCount: hisseler.filter(h=>h.katilimEndeksi).length,
-      guncelleme: new Date().toISOString(),
+      guncelleme: new Date().toISOString(),   // bu isteğin işlendiği an
+      veriZamani: etkinVeriZamani,             // verinin üretildiği an (bkz. yukarıdaki not)
+      kaynak,                                  // "midas" | "tradingview"
+      ...(yedekHata ? { yedekHata } : {}),     // yedek denenip başarısız olduysa sebebi
       data: hisseler,
     });
 
