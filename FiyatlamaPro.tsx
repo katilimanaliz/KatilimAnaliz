@@ -1616,7 +1616,7 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
       <div style={{display:"flex",alignItems:"center",padding:"6px 10px",background:FC.cardAlt,borderBottom:`1px solid ${FC.border}`,borderTop:`1px solid ${FC.border}`}}>
         <span style={{width:38,flexShrink:0,fontSize:9,fontWeight:700,color:FC.sub,letterSpacing:0.5}}>KOD</span>
         <span style={{flex:1,fontSize:9,fontWeight:700,color:FC.sub,letterSpacing:0.5,textAlign:"center"}}>FON ADI</span>
-        <span style={{width:58,textAlign:"right",flexShrink:0,fontSize:9,fontWeight:700,color:FC.sub,letterSpacing:0.5}}>KATEGORİ</span>
+        <span style={{width:genisEkran?130:58,textAlign:genisEkran?"left":"right",paddingLeft:genisEkran?6:0,flexShrink:0,fontSize:9,fontWeight:700,color:FC.sub,letterSpacing:0.5}}>KATEGORİ</span>
         {genisEkran ? (
           <>
             <span onClick={()=>setSirala((ss:string)=>ss==="gunluk"?"gunlukD":"gunluk")}
@@ -1642,7 +1642,7 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
           </span>
         )}
         <span onClick={()=>setSirala((ss:string)=>ss==="portfoy"?"portfoyD":"portfoy")}
-          style={{width:60,textAlign:"right",flexShrink:0,fontSize:9,fontWeight:700,cursor:"pointer",
+          style={{width:genisEkran?86:60,textAlign:"right",flexShrink:0,fontSize:9,fontWeight:700,cursor:"pointer",
             color:sirala?.replace("D","")==="portfoy"?FC.green:FC.sub,letterSpacing:0.5}}>
           BÜYÜKLÜK{sirala==="portfoy"?"↓":sirala==="portfoyD"?"↑":""}
         </span>
@@ -1688,8 +1688,12 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
                         {typeof fon.fiyat==="number" ? `${fonFiyatBicimle(fon.fiyat)} ₺` : "—"}
                       </div>
                     </div>
-                    <span style={{width:58,textAlign:"right",flexShrink:0,fontSize:8,color:FC.sub2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                      {(fon.kategori||"—").length>10?(fon.kategori||"").slice(0,10)+"…":(fon.kategori||"—")}
+                    <span style={{width:genisEkran?130:58,textAlign:genisEkran?"left":"right",paddingLeft:genisEkran?6:0,flexShrink:0,fontSize:genisEkran?10:8,color:FC.sub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                      {/* Masaüstünde sütun geniş olduğu için kategori adı kırpılmadan
+                          gösteriliyor; dar ekranda eskisi gibi 10 karakterde kesiliyor. */}
+                      {genisEkran
+                        ? (fon.kategori||"—")
+                        : ((fon.kategori||"—").length>10?(fon.kategori||"").slice(0,10)+"…":(fon.kategori||"—"))}
                     </span>
                     {genisEkran ? (
                       <>
@@ -1708,7 +1712,7 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
                         {g==null?"—":(g>0?"+":"")+g.toFixed(4)+"%"}
                       </span>
                     )}
-                    <span style={{width:60,textAlign:"right",flexShrink:0,fontSize:10,color:FC.sub}}>{fmtPF(fon.portfoy)}</span>
+                    <span style={{width:genisEkran?86:60,textAlign:"right",flexShrink:0,fontSize:genisEkran?11:10,color:FC.text,fontWeight:600}}>{fmtPF(fon.portfoy)}</span>
                   </div>
 
                   {/* Detay paneli */}
