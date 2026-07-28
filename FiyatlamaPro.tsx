@@ -1859,6 +1859,20 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
   const [grafik, setGrafik]       = useState<any[]>([]);
   const [grafikYukl, setGrafikYukl] = useState(true);
   const [donem, setDonem]         = useState<"1a"|"3a"|"1y">("1a");
+  // O hisseye ait son KAP bildirimleri — ayrı uçtan, grafikten bağımsız
+  // yükleniyor ki KAP erişilemezse sayfanın geri kalanı beklemesin.
+  const [kapBildirim, setKapBildirim] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!hisse?.ticker) return;
+    let iptal = false;
+    setKapBildirim([]);
+    fetch(`${API_BASE}/api/evds-proxy?kap=hisse&kod=${encodeURIComponent(hisse.ticker)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (!iptal && d && Array.isArray(d.bildirimler)) setKapBildirim(d.bildirimler); })
+      .catch(() => {});
+    return () => { iptal = true; };
+  }, [hisse?.ticker]);
 
   useEffect(() => {
     if (!hisse?.ticker) return;
@@ -2070,6 +2084,44 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
           ))}
         </div>
       </div>
+
+      {/* KAP BİLDİRİMLERİ — bildirim yoksa bölüm hiç görünmez. */}
+      {kapBildirim.length > 0 && (
+        <div style={{padding:"18px 14px 0"}}>
+          <div style={{fontSize:11,fontWeight:700,color:C.sub,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>{TR("Son KAP Bildirimleri")} · SON 15 GÜN</div>
+          <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,overflow:"hidden"}}>
+            {kapBildirim.map((b:any, i:number) => (
+              <a
+                key={b.id || i}
+                href={b.link || "#"}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{display:"block",padding:"11px 14px",borderBottom:i<kapBildirim.length-1?`1px solid ${C.border}`:"none",textDecoration:"none",WebkitTapHighlightColor:"transparent"}}
+              >
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:9}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <p style={{margin:0,fontSize:12.5,color:C.text,lineHeight:1.4,fontWeight:600}}>
+                      {b.ozet || b.baslik}
+                    </p>
+                    <p style={{margin:"4px 0 0",fontSize:10.5,color:C.sub}}>
+                      {b.tarih}{b.ek > 0 ? ` · ${b.ek} ek` : ""}
+                      {/* Bildirimi yapan şirket bu hisse DEĞİLSE belirt — örn. bir
+                          varlık kiralama şirketinin bildiriminde ilgili taraf olarak
+                          bu hisse geçiyor olabilir. */}
+                      {b.kod && b.kod.toUpperCase() !== String(hisse.ticker).toUpperCase() && b.sirket
+                        ? ` · ${b.sirket}` : ""}
+                    </p>
+                  </div>
+                  <span style={{fontSize:12,color:C.sub,flexShrink:0,marginTop:2}}>↗</span>
+                </div>
+              </a>
+            ))}
+          </div>
+          <p style={{margin:"7px 2px 0",fontSize:10.5,color:C.sub,lineHeight:1.5}}>
+            Kaynak: Kamuyu Aydınlatma Platformu. Bir bildirime dokunduğunuzda KAP'ın kendi sayfası açılır.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

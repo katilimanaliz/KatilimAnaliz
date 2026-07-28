@@ -419,7 +419,7 @@ function kapIhracMi(k){
 // Bunun yerine liste BİR KEZ çekilip sadeleştirilmiş hâli önbelleğe alınıyor,
 // hisse sorguları bu önbellekten süzülüyor. Böylece 600+ hisse tek bir KAP
 // isteğiyle karşılanıyor.
-const KV_KAP_TUM_KEY = "kap:tum:v2";
+const KV_KAP_TUM_KEY = "kap:tum:v3";
 const KAP_TUM_TTL = 3600;          // 1 saat
 // PENCERE/TAVAN AYARI (2026-07-28, canlı testten sonra): İlk sürüm 21 gün
 // isteyip 1.500 kayıtta kesiyordu — 21 gün ~3.500 kayıt olduğu için fiilen
@@ -427,8 +427,8 @@ const KAP_TUM_TTL = 3600;          // 1 saat
 // öngörülemiyordu (THYAO gibi büyük bir hissede hiç bildirim çıkmamasının
 // sebebi buydu). Artık DAR AMA TAM kapsama tercih ediliyor: 10 gün, tavan
 // bunu rahatça alacak kadar yüksek.
-const KAP_TUM_GUN = 10;
-const KAP_TUM_MAX = 3000;
+const KAP_TUM_GUN = 15;
+const KAP_TUM_MAX = 4000;
 // Hisse detayı için geniş tip listesi — FR = Finansal Rapor (bilanço),
 // CA = hak kullanımı (temettü, bedelsiz, rüçhan). Bunlar kullanıcı için
 // en değerli bildirimler ve ilk sürümde dışarıda kalmışlardı.
@@ -447,7 +447,7 @@ function kapSadeKayit(k){
     baslik: b.title || null,
     // Özet bazen çok uzun oluyor; önbelleği şişirmemek için kırpılıyor
     // (ekranda zaten 2-3 satır gösteriliyor, tam metin KAP sayfasında).
-    ozet: b.summary ? String(b.summary).slice(0, 220) : null,
+    ozet: b.summary ? String(b.summary).slice(0, 170) : null,
     tarih: b.publishDate || null,
     ek: typeof b.attachmentCount === "number" ? b.attachmentCount : 0,
     link: idx ? `https://www.kap.org.tr/tr/Bildirim/${idx}` : null,
