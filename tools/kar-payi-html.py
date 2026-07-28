@@ -191,6 +191,34 @@ def main():
         "isPartOf": {"@type": "WebSite", "name": "Katılım Plus", "url": SITE},
     }
 
+    # ── İLGİLİ YAZILAR ───────────────────────────────────────────────────
+    # SEO amaçlı iç bağlantı. Search Console'da bu yazılar "Keşfedildi ancak
+    # dizine eklenmedi · Son tarama: Yok" durumundaydı — Google adreslerini
+    # biliyor ama henüz hiç ziyaret etmemişti. Yeni sitelerde tarama bütçesi
+    # kısıtlı olduğu için, taranan bir sayfadan verilen bağlantı keşif yolu
+    # açıyor. Bu sayfa dizine ekleme talebiyle öne alındığı için buradan
+    # verilen linkler işe yarar.
+    ilgili = [
+        ("/blog/kar-payi-nedir-nasil-hesaplanir/",
+         "Kâr payı nedir, nasıl hesaplanır?"),
+        ("/blog/enflasyon-korumali-katilma-hesabi-nedir/",
+         "Enflasyon korumalı katılma hesabı nedir?"),
+        ("/blog/katilim-bankaciligi-faizsiz-mi-helal-mi/",
+         "Katılım bankacılığı faizsiz mi, helal mi?"),
+        ("/blog/tlref-nedir-nasil-hesaplanir/",
+         "TLREF nedir, nasıl hesaplanır?"),
+        ("/blog/konut-finansmani-murabaha/",
+         "Konut finansmanı ve murabaha yöntemi"),
+        ("/blog/katilma-hesabi-getirisi-adim-adim-hesaplama/",
+         "Katılma hesabı getirisi: adım adım hesaplama"),
+        ("/blog/halka-arz-katilim-endeksi-uygunlugu/",
+         "Halka arzlarda katılım endeksi uygunluğu"),
+        ("/blog/katilim-hesabi-stopaj-hesaplama/",
+         "Katılma hesabında stopaj nasıl hesaplanır?"),
+    ]
+    ilgili_html = "\n".join(
+        f'      <li><a href="{SITE}{y}">{b}</a></li>' for y, b in ilgili)
+
     baslik = f"Katılım Bankası Kâr Payı Oranları ({kat_tarih}) — Karşılaştırma"
     aciklama = (
         f"Katılım bankalarının {kat_tarih} tarihli güncel kâr payı ve konut, taşıt, "
@@ -258,6 +286,11 @@ def main():
   .cta {{ display:block; text-align:center; background:var(--mavi); color:#fff;
           text-decoration:none; font-weight:700; padding:14px; border-radius:12px;
           margin-top:24px; }}
+  .ilgili {{ list-style:none; padding:0; margin:0; }}
+  .ilgili li {{ padding:9px 0; border-bottom:1px solid var(--cizgi); }}
+  .ilgili li:last-child {{ border-bottom:none; }}
+  .ilgili a {{ color:var(--mavi); text-decoration:none; font-size:15px; font-weight:600; }}
+  .ilgili a:hover {{ text-decoration:underline; }}
   footer {{ margin-top:34px; font-size:12.5px; color:var(--soluk); }}
   footer a {{ color:var(--mavi); }}
 </style>
@@ -318,6 +351,13 @@ def main():
 
 <h2>Sıkça Sorulan Sorular</h2>
 {sss_html}
+
+<h2>İlgili Yazılar</h2>
+<div class="kutu">
+  <ul class="ilgili">
+{ilgili_html}
+  </ul>
+</div>
 
 <a class="cta" href="{SITE}/">Tüm hesaplama araçlarını ücretsiz kullan →</a>
 
