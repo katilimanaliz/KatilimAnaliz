@@ -1688,7 +1688,7 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
                         {typeof fon.fiyat==="number" ? `${fonFiyatBicimle(fon.fiyat)} ₺` : "—"}
                       </div>
                     </div>
-                    <span style={{width:genisEkran?130:58,textAlign:genisEkran?"left":"right",paddingLeft:genisEkran?6:0,flexShrink:0,fontSize:genisEkran?10:8,color:FC.sub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                    <span style={{width:genisEkran?130:58,textAlign:genisEkran?"left":"right",paddingLeft:genisEkran?6:0,flexShrink:0,fontSize:genisEkran?10.5:8,color:genisEkran?FC.text:FC.sub,fontWeight:genisEkran?600:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                       {/* Masaüstünde sütun geniş olduğu için kategori adı kırpılmadan
                           gösteriliyor; dar ekranda eskisi gibi 10 karakterde kesiliyor. */}
                       {genisEkran
@@ -2410,9 +2410,20 @@ const avatarRenk = (ticker: string) => AVATAR_RENKLER[ticker.charCodeAt(0) % AVA
 
 function HisseAvatar({ticker, boyut=42}:{ticker:string, boyut?:number}){
   const [hata, setHata] = useState(false);
+  // ARKA PLAN MANTIĞI (2026-07-28 düzeltildi): Önceden kutunun zemini HER ZAMAN
+  // avatarRenk(ticker) idi. Logo görseli %9 iç boşlukla yerleştirildiği için bu
+  // renk logonun çevresinde halka gibi görünüyor, çoğu BİST logosu beyaz zemin
+  // için tasarlandığından mor/turuncu çerçeveler çirkin duruyordu.
+  // Artık renkli zemin YALNIZCA logo yüklenemediğinde (baş harf gösterilirken)
+  // kullanılıyor; logo varken nötr açık zemin veriliyor.
+  const logoVar = !hata;
   return (
-    <div style={{width:boyut,height:boyut,borderRadius:boyut*0.28,flexShrink:0,overflow:"hidden",background:avatarRenk(ticker),border:`1px solid ${WA(0.15)}`}}>
-      {!hata ? (
+    <div style={{
+      width:boyut,height:boyut,borderRadius:boyut*0.28,flexShrink:0,overflow:"hidden",
+      background: logoVar ? "#FFFFFF" : avatarRenk(ticker),
+      border:`1px solid ${WA(0.12)}`,
+    }}>
+      {logoVar ? (
         <img src={bistLogoUrl(ticker)} onError={()=>setHata(true)} alt="" style={{width:"100%",height:"100%",objectFit:"contain",padding:boyut*0.09,boxSizing:"border-box"}}/>
       ) : (
         <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:boyut*0.34,fontWeight:800}}>
@@ -2853,11 +2864,14 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri 
                     <span style={{fontSize:13,fontWeight:800,color:h.katilimEndeksi?C.green:C.blue,flexShrink:0}}>{h.ticker}</span>
                     {h.katilimEndeksi && <span style={{fontSize:10,color:C.green}}>☪</span>}
                   </div>
-                  <div style={{fontSize:11,color:C.sub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                  <div style={{fontSize:11.5,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                     {(h.sirket&&h.sirket.toUpperCase()!==h.ticker.toUpperCase()) ? h.sirket : "\u00A0"}
                   </div>
-                  <div style={{fontSize:10,color:WA(0.35),marginTop:1}}>
-                    {SEKTOR_TR[h.sektor]||h.sektor||"—"} · {h.hacim?fmtByk(h.hacim):"—"}
+                  <div style={{fontSize:10,color:C.sub,marginTop:1}}>
+                    {/* Sektör bilgisi kaynakta boş geldiği için hep "—" görünüyordu;
+                        anlamsız bir tire yerine yalnızca dolu olan alan yazılıyor. */}
+                    {[(SEKTOR_TR[h.sektor]||h.sektor||null), (h.hacim?fmtByk(h.hacim):null)]
+                      .filter(Boolean).join(" · ") || "—"}
                   </div>
                 </div>
 
