@@ -1,5 +1,5 @@
 {
-  "guncelleme": "2026-07-20",
+  "guncelleme": "2026-07-28",
   "bankalar": [
     {
       "ad": "Adil Katılım",
@@ -18,15 +18,15 @@
     {
       "ad": "Dünya Katılım",
       "tl": 33.3,
-      "usd": 1.8,
+      "usd": 1.81,
       "eur": 1.71,
-      "altin": 1.67
+      "altin": 1.68
     },
     {
       "ad": "Emlak Katılım",
-      "tl": 32.9,
+      "tl": 32.19,
       "usd": 0.7,
-      "eur": 0.56,
+      "eur": 0.59,
       "altin": 0.1
     },
     {
@@ -38,42 +38,42 @@
     },
     {
       "ad": "Hayat Finans",
-      "tl": 38.2,
-      "usd": 2.37,
-      "eur": 2.09,
+      "tl": 37.91,
+      "usd": 2.38,
+      "eur": 2.1,
       "altin": null
     },
     {
       "ad": "Kuveyt Türk",
-      "tl": 33.22,
+      "tl": 33.12,
       "usd": 1.16,
       "eur": 0.85,
       "altin": 0.14
     },
     {
       "ad": "T.O.M. Katılım",
-      "tl": 41.74,
+      "tl": 41.51,
       "usd": 4.0,
-      "eur": 1.73,
+      "eur": 1.74,
       "altin": null
     },
     {
       "ad": "Türkiye Finans",
-      "tl": 28.21,
+      "tl": 28.09,
       "usd": 0.61,
       "eur": 0.43,
       "altin": 0.04
     },
     {
       "ad": "Vakıf Katılım",
-      "tl": 32.3,
-      "usd": 1.25,
-      "eur": 0.85,
+      "tl": 32.11,
+      "usd": 1.01,
+      "eur": 0.68,
       "altin": null
     },
     {
       "ad": "Ziraat Katılım",
-      "tl": 28.01,
+      "tl": 28.0,
       "usd": 0.8,
       "eur": 0.5,
       "altin": null
@@ -81,17 +81,17 @@
   ],
   "finansman": {
     "guncelleme": {
-      "konut": "2026-07-13",
-      "tasit": "2026-07-13",
-      "ihtiyac": "2026-07-13"
+      "konut": "2026-07-28",
+      "tasit": "2026-07-28",
+      "ihtiyac": "2026-07-28"
     },
     "bankalar": [
       {
         "ad": "Vakıf Katılım",
-        "konut60": 2.94,
+        "konut60": 2.99,
         "konut120": 2.89,
-        "tasit12": 3.34,
-        "tasit24": 3.24,
+        "tasit12": 3.39,
+        "tasit24": 3.29,
         "ihtiyac12": 3.85,
         "ihtiyac24": 3.75
       },
@@ -99,34 +99,34 @@
         "ad": "Albaraka Türk",
         "konut60": 2.8,
         "konut120": 2.8,
-        "tasit12": 3.53,
-        "tasit24": 3.19,
-        "ihtiyac12": 3.9,
-        "ihtiyac24": 3.85
+        "tasit12": 3.55,
+        "tasit24": 3.21,
+        "ihtiyac12": 4.0,
+        "ihtiyac24": 4.0
       },
       {
         "ad": "Kuveyt Türk",
-        "konut60": 2.91,
-        "konut120": 2.91,
-        "tasit12": 3.78,
-        "tasit24": 3.53,
+        "konut60": 2.99,
+        "konut120": 2.99,
+        "tasit12": 3.92,
+        "tasit24": 3.67,
         "ihtiyac12": 4.11,
         "ihtiyac24": 4.11
       },
       {
         "ad": "Türkiye Finans",
-        "konut60": 3.14,
-        "konut120": 2.99,
-        "tasit12": 3.75,
-        "tasit24": 3.63,
+        "konut60": 3.55,
+        "konut120": 3.41,
+        "tasit12": 4.23,
+        "tasit24": 4.12,
         "ihtiyac12": 4.05,
         "ihtiyac24": 3.99
       },
       {
         "ad": "Dünya Katılım",
-        "konut60": 2.89,
-        "konut120": 2.89,
-        "tasit12": 3.29,
+        "konut60": 2.99,
+        "konut120": 2.99,
+        "tasit12": 3.39,
         "tasit24": 3.39,
         "ihtiyac12": 3.99,
         "ihtiyac24": 3.99
@@ -137,8 +137,8 @@
         "konut120": 2.89,
         "tasit12": 3.49,
         "tasit24": 3.49,
-        "ihtiyac12": 4.99,
-        "ihtiyac24": 4.99
+        "ihtiyac12": 4.39,
+        "ihtiyac24": 4.29
       },
       {
         "ad": "Emlak Katılım",
