@@ -376,6 +376,9 @@ function kapNormalize(k){
     link: idx ? `https://www.kap.org.tr/tr/Bildirim/${idx}` : null,
   };
 }
+
+const HAFTALIK = [
+  "TP.KTF10","TP.KTF11","TP.KTF12",
   "TP.KTF101",
   "TP.KTF17","TP.KTF171","TP.KTF172",
   "TP.KTF1",
