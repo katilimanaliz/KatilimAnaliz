@@ -272,7 +272,7 @@ function spkIhraccilariGrupla(kayitlar){
 // Bildirimler kanunen kamuya açıklanmak zorunda olan bilgilerdir; Borsa
 // İstanbul'un lisanslı fiyat verisinden farklı bir hukuki zemindedir.
 const KAP_LISTE_URL = "https://kap.org.tr/tr/api/disclosure/list/main";
-const KV_KAP_SUKUK_KEY = "kap:sukuk:v5";   // v5: tavan elendi + tekrar temizligi
+const KV_KAP_SUKUK_KEY = "kap:sukuk:v6";   // v6: tekillestirme ozet-basi bazli
 const KAP_CACHE_TTL = 2 * 3600;   // 2 saat
 const KAP_GUN_ARALIK = 14;        // 14 GÜN — canlı ölçüm: 7 günde 82 sukuk
                                   // bildirimi, 1.321 ham kayıt. 14 gün hem
@@ -936,13 +936,31 @@ export default async function handler(req,res){
       let suzulmus = (tumunuGoster ? sukukHam : sukukHam.filter(k => kapIhracMi(kapTemel(k))))
         .map(kapNormalize);
 
-      // TEKRAR TEMİZLİĞİ: Bir halka arz için şirket aynı gün birkaç ayrı belge
-      // bildiriyor (İzahname, İhraççı Bilgi Dokümanı, SP Aracı Notu...) ve
-      // hepsinin ÖZETİ aynı oluyor. Kullanıcı için bunlar tek bir olay —
-      // şirket + özet ikilisinde ilkini tutup gerisini eliyoruz.
+      // TEKRAR TEMİZLİĞİ: Bir halka arz / ihraç için şirket aynı gün birkaç
+      // ayrı belge bildiriyor (İzahname, İhraççı Bilgi Dokümanı, SP Aracı
+      // Notu, Getiri Oranı...). Özet metinleri BİREBİR AYNI OLMUYOR ama aynı
+      // olayı anlatıyor — örn. VAKVK'nin 27.07 tarihli üç bildirimi:
+      //   "Yurt İçi Kira Sertifikası Halka Arzı İçin SPK Tarafından Onaylanan Belgeler"
+      //   "Yurt İçi Kira Sertifikası Halka Arzına İlişkin SPK Onayı"
+      //   "Yurt İçi Kira Sertifikası Halka Arzı Getiri Oranı"
+      // Bu yüzden tam metin yerine ŞİRKET + GÜN + ÖZETİN İLK 5 KELİMESİ
+      // karşılaştırılıyor. Yukarıdaki üçü de "YURT ICI KIRA SERTIFIKASI HALKA"
+      // ile başladığı için teke iniyor.
+      // Farklı ihraçlar ISIN kodu / fon kullanıcısı adı gibi ayırt edici
+      // ifadelerle başladığından yanlışlıkla birleşmiyor (örn.
+      // "TRDKTSKA2630 ISIN KODLU..." vs "TRDGLVK92627 ISIN KODLU...").
+      // Liste en yeniden eskiye sıralı olduğu için her gruptan EN YENİ kayıt
+      // korunuyor.
+      const ozetAnahtari = (b)=>{
+        const kelimeler = spkNormalizeMetin(b.ozet || b.baslik || "")
+          .replace(/[^A-Z0-9ĞÜŞİÖÇ ]/g, " ")
+          .split(/\s+/).filter(Boolean).slice(0, 5).join(" ");
+        const gun = String(b.tarih || "").slice(0, 10);   // GG.AA.YYYY
+        return `${b.sirket || ""}|${gun}|${kelimeler}`;
+      };
       const gorulen = new Set();
       suzulmus = suzulmus.filter(b=>{
-        const anahtar = `${b.sirket||""}|${b.ozet||b.baslik||""}`;
+        const anahtar = ozetAnahtari(b);
         if(gorulen.has(anahtar)) return false;
         gorulen.add(anahtar);
         return true;
