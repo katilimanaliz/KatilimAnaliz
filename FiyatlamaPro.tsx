@@ -9986,6 +9986,16 @@ function KiraSertifikasiIhraclari(){
 
   // milyon TL → "312,4 milyar ₺"
   const mlyr=(milyonTL:number)=> (milyonTL/1000).toLocaleString("tr-TR",{minimumFractionDigits:1,maximumFractionDigits:1});
+  // HAM TL → "1,0" (milyar). İhraççı ucu tür ucundan FARKLI birim kullanıyor —
+  // tür bazı milyon TL, ihraççı bazı ham TL. Karıştırılırsa 1000 kat sapar.
+  const mlrTL=(hamTL:number)=> (hamTL/1e9).toLocaleString("tr-TR",{minimumFractionDigits:1,maximumFractionDigits:1});
+  const tarihKisaSPK=(iso:string|null)=>{
+    if(!iso) return "";
+    const p=String(iso).slice(0,10).split("-");
+    if(p.length!==3) return String(iso).slice(0,10);
+    const AY=["","Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"];
+    return `${parseInt(p[2],10)} ${AY[parseInt(p[1],10)]||p[1]} ${p[0]}`;
+  };
   const yzd=(v:number)=> (v>=0?"+":"")+v.toLocaleString("tr-TR",{maximumFractionDigits:1})+"%";
   const AY_KISA=["","Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"];
 
@@ -10133,6 +10143,45 @@ function KiraSertifikasiIhraclari(){
               </span>
               <span style={{fontSize:10.5,color:WA(0.35),marginLeft:"auto"}}>milyar ₺</span>
             </div>
+          </div>
+        </>
+      )}
+
+      {/* SPK ONAYI ALAN İHRAÇÇILAR */}
+      {veri.ihraccilar && (veri.ihraccilar.liste||[]).length>0 && (
+        <>
+          <p style={{margin:"0 0 8px",fontSize:11,fontWeight:800,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("SPK Onayı Alan İhraççılar")} · {veri.guncelYil}</p>
+          <div style={{background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,borderRadius:14,overflow:"hidden",marginBottom:10}}>
+            {(veri.ihraccilar.liste||[]).map((g:any,i:number)=>(
+              <div key={g.unvan} style={{padding:"12px 14px",borderBottom:i<(veri.ihraccilar.liste.length-1)?`1px solid ${WA(0.06)}`:"none"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <p style={{margin:0,fontSize:12.5,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),lineHeight:1.35}}>{g.unvan}</p>
+                    <p style={{margin:"3px 0 0",fontSize:10.5,color:WA(0.42)}}>
+                      {g.onaySayisi>1?`${g.onaySayisi} onay · `:""}{tarihKisaSPK(g.sonOnayTarihi)}
+                      {(g.satisYontemleri||[]).length>0?` · ${g.satisYontemleri.join(", ")}`:""}
+                    </p>
+                  </div>
+                  <div style={{textAlign:"right",flexShrink:0}}>
+                    <p style={{margin:0,fontSize:14,fontWeight:800,color:"#F5A623"}}>{mlrTL(g.onayliTavan)}</p>
+                    <p style={{margin:"1px 0 0",fontSize:9.5,color:WA(0.38)}}>milyar ₺ tavan</p>
+                  </div>
+                </div>
+                {g.satisBildirilen>0 && (
+                  <p style={{margin:"6px 0 0",fontSize:10.5,color:WA(0.45)}}>
+                    Bildirilen satış: <b style={{color:C.soft}}>{mlrTL(g.satisBildirilen)} milyar ₺</b>
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+          <div style={{background:"rgba(245,166,35,0.08)",border:"1px solid rgba(245,166,35,0.22)",borderRadius:12,padding:"11px 13px",marginBottom:18}}>
+            <p style={{margin:0,fontSize:11,color:C.soft,lineHeight:1.55}}>
+              Buradaki tutarlar <b>SPK'nın onayladığı ihraç tavanıdır</b> — bir üst sınırdır, ihraççı bu tutarın tamamını kullanmak zorunda değildir. Fiilen satılan tutarlar yukarıdaki bölümlerde gösterilmektedir. Satış bilgisi yalnızca SPK'ya bildirilmiş kayıtlarda görünür.
+              {veri.ihraccilar.ihracciSayisi>(veri.ihraccilar.liste||[]).length
+                ? ` ${veri.guncelYil} yılında toplam ${veri.ihraccilar.ihracciSayisi} ihraççı onay aldı; en büyük ${veri.ihraccilar.liste.length} tanesi listelenmiştir.`
+                : ""}
+            </p>
           </div>
         </>
       )}
