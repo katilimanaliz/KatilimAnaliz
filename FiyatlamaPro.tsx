@@ -1145,7 +1145,13 @@ function KarPayiOranlari({nav}:{nav:any}){
   // atıldığında Vercel otomatik yeniden deploy ediyor. Şifreli admin ekranı
   // ve api/kar-payi.js kaldırıldı (basitlik + bir Vercel fonksiyonu tasarrufu).
   useEffect(()=>{
-    fetch("/kar-payi.json", {cache:"no-store"})
+    // MUTLAK YOL ŞART (2026-07-28 düzeltildi): Burada "/kar-payi.json" göreli
+    // yolu kullanılıyordu. Masaüstü tarayıcıda bu katilimplus.com'a çözülüp
+    // güncel dosyayı getiriyor, ama NATIVE uygulamada WebView yerel paketten
+    // servis edildiği için uygulamanın İÇİNE GÖMÜLMÜŞ eski kopya okunuyordu —
+    // oranlar sitede güncellenmesine rağmen uygulamada eski kalıyordu.
+    // API_BASE native'de "https://www.katilimplus.com", web'de "" döner.
+    fetch(`${API_BASE}/kar-payi.json`, {cache:"no-store"})
       .then(r=>r.ok?r.json():Promise.reject(new Error(`HTTP ${r.status}`)))
       .then(d=>setVeri(d))
       .catch(e=>setHata(e.message))
