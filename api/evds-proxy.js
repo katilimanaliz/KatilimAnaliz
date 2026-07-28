@@ -254,8 +254,103 @@ function spkIhraccilariGrupla(kayitlar){
   };
 }
 
-const HAFTALIK = [
-  "TP.KTF10","TP.KTF11","TP.KTF12",
+// ── KAP KİRA SERTİFİKASI BİLDİRİMLERİ (v12) ────────────────────────────────
+// Kaynak: Kamuyu Aydınlatma Platformu'nun kendi web arayüzünün kullandığı
+// POST /tr/api/disclosure/list/main ucu. Kimlik doğrulama gerektirmiyor.
+//
+// NEDEN BU KAYNAK: SPK'nın kendi servislerinde (tür bazı, ihraççı bazı, özel
+// durum açıklamaları) kira sertifikası ihraçlarının HANGİ KURUM ADINA
+// yapıldığı bilgisi yok — `kaynakKurulus` alanı canlı veride hep null.
+// KAP'ta ise `relatedStocks` alanı bu bilgiyi veriyor (örn. KATILIM VARLIK
+// KİRALAMA'nın bildiriminde relatedStocks="HDFFL" → fon kullanıcısı).
+//
+// ⚠️ KIRILGANLIK UYARISI: Bu BELGELENMEMİŞ bir iç uçtur. KAP arayüzünü
+// yenilerse alan adları veya yol değişebilir. Bu yüzden:
+//   • Ayrı bir şube (?kap=sukuk) — çökerse diğer ekranlar etkilenmez
+//   • Hata durumunda boş liste döner, frontend bölümü gizler
+//   • Uzun önbellek (2 saat) — KAP'ın sunucusu gereksiz yorulmasın
+// Bildirimler kanunen kamuya açıklanmak zorunda olan bilgilerdir; Borsa
+// İstanbul'un lisanslı fiyat verisinden farklı bir hukuki zemindedir.
+const KAP_LISTE_URL = "https://kap.org.tr/tr/api/disclosure/list/main";
+const KV_KAP_SUKUK_KEY = "kap:sukuk:v1";
+const KAP_CACHE_TTL = 2 * 3600;   // 2 saat
+const KAP_GUN_ARALIK = 120;       // kaç günlük geçmiş taransın
+const KAP_LIMIT = 40;             // ekranda en fazla kaç bildirim gösterilsin
+
+// KAP tarih formatı: GG.AA.YYYY
+function kapTarih(d){
+  return `${String(d.getDate()).padStart(2,"0")}.${String(d.getMonth()+1).padStart(2,"0")}.${d.getFullYear()}`;
+}
+
+// Bir bildirimin kira sertifikasıyla ilgili olup olmadığını belirler.
+// İki yoldan yakalıyoruz: (a) ihraççı bir varlık kiralama şirketiyse,
+// (b) başlık/özet metninde kira sertifikası geçiyorsa. İkisi de gerekli —
+// bazı bildirimleri VKŞ dışı kurumlar da yapabiliyor (örn. MKK'nın toplu
+// itfa/kupon bildirimleri).
+function kapSukukMu(k){
+  const sirket = spkNormalizeMetin(k?.companyTitle);
+  const metin  = spkNormalizeMetin((k?.title||"") + " " + (k?.summary||""));
+  if(sirket.indexOf("VARLIK KIRALAMA") >= 0) return true;
+  if(metin.indexOf("KIRA SERTIFIKA") >= 0) return true;
+  return false;
+}
+
+async function kapSukukCek(gunAralik){
+  const bitis = new Date();
+  const baslangic = new Date();
+  baslangic.setDate(baslangic.getDate() - (gunAralik || KAP_GUN_ARALIK));
+
+  const govde = {
+    fromDate: kapTarih(baslangic),
+    toDate: kapTarih(bitis),
+    // ODA = Özel Durum Açıklaması, DG = Diğer (İhraç Belgesi burada),
+    // DUY = Duyuru. FR (finansal rapor) ve CA (hak kullanımı) bizi
+    // ilgilendirmiyor, isteği küçük tutmak için dışarıda bırakıldı.
+    disclosureTypes: ["ODA", "DG", "DUY"],
+  };
+
+  const r = await fetchZamanli(KAP_LISTE_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+      // KAP bazı otomatik istekleri tarayıcı dışı sayıp reddedebiliyor.
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+    },
+    body: JSON.stringify(govde),
+  }, 15000);
+
+  if(r.status < 200 || r.status >= 300) throw new Error(`KAP HTTP ${r.status}`);
+  const text = await r.text();
+  if(text.trim().startsWith("<")) throw new Error(`KAP HTML döndü: ${text.slice(0,150)}`);
+  const j = JSON.parse(text);
+  // Yanıt ya doğrudan dizi ya da { basic: [...] } benzeri sarmalanmış olabilir;
+  // ikisini de karşılıyoruz.
+  const ham = Array.isArray(j) ? j
+            : Array.isArray(j?.data) ? j.data
+            : Array.isArray(j?.basic) ? j.basic
+            : Array.isArray(j?.disclosures) ? j.disclosures
+            : [];
+  return { ham, hamSayi: ham.length };
+}
+
+// KAP kaydını sadeleştirip frontend'in ihtiyacı olan alanlara indirger.
+function kapNormalize(k){
+  // Kayıt bazen düz, bazen {basic:{...}} şeklinde sarmalanmış geliyor.
+  const b = k?.basic || k || {};
+  const idx = b.disclosureIndex;
+  return {
+    id: idx || null,
+    sirket: b.companyTitle || null,
+    kod: b.stockCode || null,
+    ilgiliKurum: b.relatedStocks || null,   // fon kullanıcısı (SPK'da yok!)
+    baslik: b.title || null,
+    ozet: b.summary || null,
+    tarih: b.publishDate || null,
+    ekSayisi: typeof b.attachmentCount === "number" ? b.attachmentCount : 0,
+    link: idx ? `https://www.kap.org.tr/tr/Bildirim/${idx}` : null,
+  };
+}
   "TP.KTF101",
   "TP.KTF17","TP.KTF171","TP.KTF172",
   "TP.KTF1",
@@ -708,6 +803,87 @@ export default async function handler(req,res){
         if(eski) return res.status(200).json({...eski, cached:true, hata:err.message});
       }catch{}
       return res.status(500).json({error: err.message});
+    }
+  }
+
+  // ── KAP KİRA SERTİFİKASI BİLDİRİMLERİ (v12): /api/evds-proxy?kap=sukuk ──
+  // SPK şubesi gibi, EVDS_KEY kontrolünden ÖNCE — TCMB'ye hiç gitmiyor.
+  if(req.query.kap === "sukuk"){
+    const kilitKap = `lock:${KV_KAP_SUKUK_KEY}`;
+    let kilitBizdeMiKap = false;
+    const hamGoster = req.query.ham === "1";   // teşhis: ham KAP kaydını göster
+
+    if(req.query.debug !== "1" && !hamGoster){
+      try{
+        const onbellek = await redis.get(KV_KAP_SUKUK_KEY);
+        if(onbellek) return res.status(200).json({...onbellek, cached:true});
+      }catch{}
+      try{
+        const s = await redis.set(kilitKap, "1", {nx:true, ex:30});
+        kilitBizdeMiKap = (s === "OK" || s === true);
+      }catch{}
+      if(!kilitBizdeMiKap){
+        for(let i=0;i<5;i++){
+          await new Promise(r=>setTimeout(r,400));
+          try{
+            const onbellek = await redis.get(KV_KAP_SUKUK_KEY);
+            if(onbellek) return res.status(200).json({...onbellek, cached:true});
+          }catch{}
+        }
+      }
+    }
+
+    try{
+      const gun = parseInt(req.query.gun,10) || KAP_GUN_ARALIK;
+      const { ham, hamSayi } = await kapSukukCek(gun);
+
+      // Teşhis modu: ilk 2 ham kaydı olduğu gibi göster (alan adlarını
+      // canlı doğrulamak için — KAP arayüzü değişirse buradan anlaşılır).
+      if(hamGoster){
+        return res.status(200).json({
+          hamSayi,
+          ilkIkiHamKayit: ham.slice(0,2),
+          ornekAlanlar: ham[0] ? Object.keys(ham[0].basic || ham[0]) : [],
+        });
+      }
+
+      const suzulmus = ham.filter(k => kapSukukMu(k?.basic || k)).map(kapNormalize);
+      // En yeniden eskiye. publishDate "GG.AA.YYYY SS:DD:ss" formatında
+      // geldiği için doğrudan string sıralaması yanlış olur — çeviriyoruz.
+      const zaman = (t)=>{
+        if(!t) return 0;
+        const m = String(t).match(/^(\d{2})\.(\d{2})\.(\d{4})[ T]?(\d{2})?:?(\d{2})?/);
+        if(!m) return 0;
+        return new Date(+m[3], +m[2]-1, +m[1], +(m[4]||0), +(m[5]||0)).getTime();
+      };
+      suzulmus.sort((a,b)=> zaman(b.tarih) - zaman(a.tarih));
+
+      const yanit = {
+        kaynak: "KAP (Kamuyu Aydınlatma Platformu)",
+        gunAralik: gun,
+        toplamTaranan: hamSayi,
+        sukukSayisi: suzulmus.length,
+        bildirimler: suzulmus.slice(0, KAP_LIMIT),
+        guncelleme: new Date().toISOString(),
+      };
+
+      try{ await redis.set(KV_KAP_SUKUK_KEY, yanit, {ex: KAP_CACHE_TTL}); }catch{}
+      if(kilitBizdeMiKap){ try{ await redis.del(kilitKap); }catch{} }
+      return res.status(200).json(yanit);
+    }catch(err){
+      if(kilitBizdeMiKap){ try{ await redis.del(kilitKap); }catch{} }
+      try{
+        const eski = await redis.get(KV_KAP_SUKUK_KEY);
+        if(eski) return res.status(200).json({...eski, cached:true, hata:err.message});
+      }catch{}
+      // Hata durumunda 200 + boş liste — frontend bölümü sessizce gizler,
+      // ekranın geri kalanı çalışmaya devam eder.
+      return res.status(200).json({
+        kaynak: "KAP (Kamuyu Aydınlatma Platformu)",
+        bildirimler: [],
+        sukukSayisi: 0,
+        hata: err.message,
+      });
     }
   }
 
