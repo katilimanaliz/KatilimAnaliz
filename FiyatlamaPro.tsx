@@ -1348,6 +1348,19 @@ function KarPayiOranlari({nav}:{nav:any}){
 }
 
 
+// Fon birim fiyatı biçimlendirici.
+// Sabit 2 basamak kullanılMIYOR çünkü fonların büyük kısmının birim fiyatı
+// 1 TL'nin ALTINDA (örn. 0,068756) — 2 basamağa yuvarlansa "0,07" olur ve
+// farklı fonlar aynı görünür, günlük hareket de görünmez hale gelir.
+// Bunun yerine büyüklüğe göre uyarlanıyor: asıl şikâyet konusu olan
+// "25,972155" gibi uzun sayılar "25,97"ye inerken küçük fiyatlar anlamını
+// koruyor.
+function fonFiyatBicimle(v:number){
+  const m = Math.abs(v);
+  const basamak = m >= 100 ? 2 : m >= 1 ? 2 : m >= 0.1 ? 4 : 6;
+  return v.toLocaleString("tr-TR",{minimumFractionDigits:basamak,maximumFractionDigits:basamak});
+}
+
 function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran: genisEkranProp, onFonGrafikAc }: { settings?: any; initialKod?: string | null; onInitialTuketildi?: () => void; genisEkran?: boolean; onFonGrafikAc?: (fon:any)=>void } = {}) {
   // Eğer prop gelmezse localStorage'dan oku (standalone kullanım)
   const [localSettings, setLocalSettings] = useState(null);
@@ -1671,8 +1684,8 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
                     </div>
                     <div onClick={(e)=>{ if(onFonGrafikAc){ e.stopPropagation(); onFonGrafikAc(fon); } }} style={{flex:1,minWidth:0,paddingRight:2,textAlign:"left",cursor:onFonGrafikAc?"pointer":"default"}}>
                       <div style={{fontSize:11,fontWeight:800,color:FC.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",lineHeight:1.3,textDecoration:onFonGrafikAc?"underline":"none",textDecorationColor:FC.border}}>{fon.ad}</div>
-                      <div style={{fontSize:9,color:FC.sub,marginTop:1}}>
-                        {typeof fon.fiyat==="number" ? `${fon.fiyat.toLocaleString("tr-TR",{minimumFractionDigits:4,maximumFractionDigits:6})} ₺` : "—"}
+                      <div style={{fontSize:10.5,fontWeight:600,color:FC.text,marginTop:1.5}}>
+                        {typeof fon.fiyat==="number" ? `${fonFiyatBicimle(fon.fiyat)} ₺` : "—"}
                       </div>
                     </div>
                     <span style={{width:58,textAlign:"right",flexShrink:0,fontSize:8,color:FC.sub2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
