@@ -316,6 +316,15 @@ async function kapSukukCek(gunAralik){
     // DUY = Duyuru. FR (finansal rapor) ve CA (hak kullanımı) bizi
     // ilgilendirmiyor, isteği küçük tutmak için dışarıda bırakıldı.
     disclosureTypes: ["ODA", "DG", "DUY"],
+    // memberTypes ZORUNLU (2026-07-28): ilk sürümde bu alan yoktu ve KAP
+    // HTTP 500 döndürdü. Tarayıcının kendi isteğinde bu alan gönderiliyor.
+    // Kodlar KAP'ın şirket kategorileriyle örtüşüyor:
+    //   IGS=İşlem Gören Şirketler, DDK=Diğer KAP üyeleri/işlem görmeyenler,
+    //   YK=Yatırım Kuruluşları, PYS=Portföy Yönetim Şirketleri,
+    //   BDK=Bağımsız Denetim, DCS=Derecelendirme, KVH=Kripto Varlık Hizmet.
+    // Varlık kiralama şirketleri IGS/DDK altında görünüyor; yine de listeyi
+    // geniş tutuyoruz — süzmeyi zaten kendimiz yapıyoruz.
+    memberTypes: ["IGS", "DDK", "YK", "PYS", "BDK", "DCS", "KVH"],
   };
 
   const r = await fetchZamanli(KAP_LISTE_URL, {
@@ -329,7 +338,13 @@ async function kapSukukCek(gunAralik){
     body: JSON.stringify(govde),
   }, 15000);
 
-  if(r.status < 200 || r.status >= 300) throw new Error(`KAP HTTP ${r.status}`);
+  if(r.status < 200 || r.status >= 300){
+    // KAP'ın kendi hata mesajını da taşıyoruz — "HTTP 500" tek başına
+    // körlemesine tahmin yürütmeye zorluyor (yaşanmış: eksik memberTypes).
+    let govdeOrnek = "";
+    try { govdeOrnek = (await r.text()).slice(0, 200); } catch {}
+    throw new Error(`KAP HTTP ${r.status}${govdeOrnek ? " — " + govdeOrnek : ""}`);
+  }
 
   // Ayrıştırmadan ÖNCE boyut kontrolü — dev bir yanıtı JSON.parse etmek
   // fonksiyonu OOM ile düşürüyor (yaşanmış vaka, bkz. yukarıdaki not).
