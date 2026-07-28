@@ -183,6 +183,7 @@ const ICON_MAP: Record<string, any> = {
   haftalikOzet: Newspaper,
   katilimBankalari: Landmark,
   kfkNedir: ShieldCheck,
+  kiraSertifikasi: FileText,
   sozluk: BookOpen,
   katilimBlog: Newspaper,
   asistan: Bot,
@@ -9949,6 +9950,203 @@ function KfkNedir(){
   );
 }
 
+// ─── KİRA SERTİFİKASI (SUKUK) İHRAÇLARI — SPK RESMİ VERİSİ ─────────────────
+// Kaynak: Sermaye Piyasası Kurulu'nun kamuya açık web servisi
+// (/api/evds-proxy?spk=sukuk → ws.spk.gov.tr). Tüm tutarlar MİLYON TL gelir;
+// okunabilirlik için ekranda MİLYAR TL'ye çevriliyor.
+//
+// TASARIM NOTU: SPK 6 kira sertifikası türü tanımlıyor ama canlı veride
+// (2026) bunlardan yalnızca 2'si kullanılmış, 4'ü tamamen sıfır. Bu yüzden
+// sıfır olan türler grafikte GÖSTERİLMİYOR (4 boş dilim anlamsız olurdu);
+// bunun yerine altta açıkça "bu yıl kullanılmadı" diye belirtiliyor —
+// bilginin kendisi de kullanıcı için anlamlı.
+const SUKUK_TUR_ACIKLAMA: Record<string,string> = {
+  yonetim:   "Varlık kiralama şirketi toplanan fonu bir vekil sıfatıyla yönetir; elde edilen gelir sertifika sahiplerine payları oranında dağıtılır. Türkiye'de en yaygın kullanılan yapı.",
+  alimSatim: "Bir varlığın peşin alınıp vadeli satılmasından doğan kâr, sertifika sahiplerine aktarılır. Kâr oranı sözleşmede baştan bellidir.",
+  sahiplik:  "Varlık satın alınıp kiraya verilir, kira geliri yatırımcıya dağıtılır. Klasik ve en bilinen sukuk yapısıdır.",
+  ortaklik:  "Bir işletmeye veya projeye ortak olunur; kâr da zarar da paylaşılır. Risk paylaşımının en belirgin olduğu yapı.",
+  eser:      "Üretilecek ya da inşa edilecek bir eserin finansmanı sağlanır; teslim sonrası doğan gelir paylaşılır.",
+  diger:     "Yukarıdaki tanımların dışında kalan yapılar.",
+};
+
+function KiraSertifikasiIhraclari(){
+  const [veri,setVeri]=useState<any>(null);
+  const [yukleniyor,setYukleniyor]=useState(true);
+  const [hata,setHata]=useState<string|null>(null);
+
+  useEffect(()=>{
+    let iptal=false;
+    fetch(`${API_BASE}/api/evds-proxy?spk=sukuk`)
+      .then(r=>r.ok?r.json():Promise.reject(new Error("Veri alınamadı")))
+      .then(d=>{ if(iptal) return; if(d?.error) throw new Error(d.error); setVeri(d); })
+      .catch(e=>{ if(!iptal) setHata(e?.message||"Veri alınamadı"); })
+      .finally(()=>{ if(!iptal) setYukleniyor(false); });
+    return ()=>{iptal=true;};
+  },[]);
+
+  // milyon TL → "312,4 milyar ₺"
+  const mlyr=(milyonTL:number)=> (milyonTL/1000).toLocaleString("tr-TR",{minimumFractionDigits:1,maximumFractionDigits:1});
+  const yzd=(v:number)=> (v>=0?"+":"")+v.toLocaleString("tr-TR",{maximumFractionDigits:1})+"%";
+  const AY_KISA=["","Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"];
+
+  if(yukleniyor) return (
+    <div style={{background:C.bg,padding:"40px 14px",minHeight:"100%",textAlign:"center"}}>
+      <p style={{fontSize:13,color:WA(0.5)}}>Veriler yükleniyor…</p>
+    </div>
+  );
+  if(hata || !veri) return (
+    <div style={{background:C.bg,padding:"24px 14px 92px",minHeight:"100%"}}>
+      <div style={{background:"rgba(248,113,113,0.1)",border:"1px solid rgba(248,113,113,0.25)",borderRadius:14,padding:"14px 15px"}}>
+        <p style={{margin:0,fontSize:12.5,color:C.soft,lineHeight:1.6}}>
+          Veriler şu anda alınamadı. Lütfen bir süre sonra tekrar deneyin.
+          {hata?<><br/><span style={{fontSize:10.5,color:WA(0.4)}}>{hata}</span></>:null}
+        </p>
+      </div>
+    </div>
+  );
+
+  const ozet=veri.ozet||{};
+  const turlerDolu=(veri.turler||[]).filter((t:any)=>t.toplam>0);
+  const turlerBos=(veri.turler||[]).filter((t:any)=>!t.toplam || t.toplam<=0);
+  const yillik=veri.yillik||[];
+  const aylik=veri.aylik||[];
+  const enBuyukYil=Math.max(1,...yillik.map((y:any)=>y.toplam||0));
+  const enBuyukAy=Math.max(1,...aylik.map((a:any)=>a.toplam||0));
+  const artiyorMu=(ozet.degisimYuzde||0)>=0;
+
+  return (
+    <div style={{background:C.bg,padding:"12px 14px 92px",minHeight:"100%"}}>
+
+      {/* ÖZET */}
+      <div style={{background:"rgba(44,203,154,0.08)",border:"1px solid rgba(44,203,154,0.25)",borderRadius:14,padding:"15px 16px",marginBottom:18}}>
+        <p style={{margin:0,fontSize:11,fontWeight:700,color:WA(0.5),textTransform:"uppercase",letterSpacing:0.5}}>
+          {veri.guncelYil} · İlk {veri.sonAy} Ay
+        </p>
+        <p style={{margin:"6px 0 0",fontSize:30,fontWeight:800,color:(TEMA==="acik"?"#0F1B26":"#fff"),letterSpacing:-0.5}}>
+          {mlyr(ozet.yilToplam||0)} <span style={{fontSize:15,fontWeight:700,color:WA(0.5)}}>milyar ₺</span>
+        </p>
+        {ozet.degisimYuzde!=null && (
+          <p style={{margin:"8px 0 0",fontSize:12.5,color:C.soft,lineHeight:1.55}}>
+            <span style={{fontWeight:800,color:artiyorMu?C.green:C.red}}>{yzd(ozet.degisimYuzde)}</span>
+            {" "}geçen yılın aynı dönemine göre
+            <span style={{color:WA(0.45)}}> ({mlyr(ozet.gecenYilAyniDonem||0)} milyar ₺)</span>
+          </p>
+        )}
+        <div style={{display:"flex",gap:16,marginTop:12,paddingTop:12,borderTop:`1px solid ${WA(0.08)}`}}>
+          <div>
+            <p style={{margin:0,fontSize:10,color:WA(0.45),textTransform:"uppercase",letterSpacing:0.3}}>Aylık Ortalama</p>
+            <p style={{margin:"2px 0 0",fontSize:14,fontWeight:800,color:C.soft}}>{mlyr(ozet.aylikOrtalama||0)} <span style={{fontSize:10,fontWeight:600,color:WA(0.4)}}>milyar ₺</span></p>
+          </div>
+          <div>
+            <p style={{margin:0,fontSize:10,color:WA(0.45),textTransform:"uppercase",letterSpacing:0.3}}>Yurt Dışı Payı</p>
+            <p style={{margin:"2px 0 0",fontSize:14,fontWeight:800,color:C.soft}}>%{(ozet.yurtDisiPay||0).toLocaleString("tr-TR",{maximumFractionDigits:1})}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* YILLIK TREND */}
+      {yillik.length>1 && (
+        <>
+          <p style={{margin:"0 0 8px",fontSize:11,fontWeight:800,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Yıllara Göre İhraç")}</p>
+          <div style={{background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,borderRadius:14,padding:"14px 15px",marginBottom:18}}>
+            {yillik.map((y:any)=>(
+              <div key={y.yil} style={{marginBottom:10}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:4}}>
+                  <span style={{fontSize:12.5,fontWeight:700,color:C.soft}}>
+                    {y.yil}{y.kismi?<span style={{fontSize:10,fontWeight:600,color:WA(0.4)}}> ({y.sonAy} aylık)</span>:null}
+                  </span>
+                  <span style={{fontSize:12.5,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff")}}>{mlyr(y.toplam)}</span>
+                </div>
+                <div style={{height:7,background:WA(0.07),borderRadius:4,overflow:"hidden"}}>
+                  <div style={{height:"100%",width:`${Math.max(2,(y.toplam/enBuyukYil)*100)}%`,background:y.kismi?"rgba(44,203,154,0.45)":"#2CCB9A",borderRadius:4}}/>
+                </div>
+              </div>
+            ))}
+            <p style={{margin:"6px 0 0",fontSize:10,color:WA(0.38),lineHeight:1.45}}>Değerler milyar ₺. Açık renkli çubuk, yılın henüz tamamlanmadığını gösterir.</p>
+          </div>
+        </>
+      )}
+
+      {/* TÜR KIRILIMI */}
+      {turlerDolu.length>0 && (
+        <>
+          <p style={{margin:"0 0 8px",fontSize:11,fontWeight:800,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Türlere Göre Dağılım")}</p>
+          <div style={{background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,borderRadius:14,padding:"14px 15px",marginBottom:18}}>
+            {turlerDolu.map((t:any,i:number)=>(
+              <div key={t.anahtar} style={{marginBottom:i<turlerDolu.length-1?14:4}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:8}}>
+                  <span style={{fontSize:12.5,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff")}}>
+                    {t.ad}{t.fikhi?<span style={{fontSize:11,fontWeight:600,color:C.blue}}> · {t.fikhi}</span>:null}
+                  </span>
+                  <span style={{fontSize:13,fontWeight:800,color:C.soft,flexShrink:0}}>%{t.pay.toLocaleString("tr-TR",{maximumFractionDigits:1})}</span>
+                </div>
+                <div style={{height:7,background:WA(0.07),borderRadius:4,overflow:"hidden",margin:"5px 0 4px"}}>
+                  <div style={{height:"100%",width:`${Math.max(2,t.pay)}%`,background:C.blue,borderRadius:4}}/>
+                </div>
+                <p style={{margin:0,fontSize:11,color:WA(0.45)}}>{mlyr(t.toplam)} milyar ₺</p>
+                {SUKUK_TUR_ACIKLAMA[t.anahtar] && (
+                  <p style={{margin:"4px 0 0",fontSize:11,color:WA(0.42),lineHeight:1.5}}>{SUKUK_TUR_ACIKLAMA[t.anahtar]}</p>
+                )}
+              </div>
+            ))}
+            {turlerBos.length>0 && (
+              <p style={{margin:"10px 0 0",paddingTop:10,borderTop:`1px solid ${WA(0.07)}`,fontSize:11,color:WA(0.42),lineHeight:1.55}}>
+                {veri.guncelYil} yılında <b style={{color:WA(0.55)}}>{turlerBos.map((t:any)=>t.fikhi||t.ad).join(", ")}</b> yapılarında ihraç gerçekleşmedi. Türkiye'de kira sertifikası ihraçları fiilen yukarıdaki yapılarda yoğunlaşıyor.
+              </p>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* AYLIK SEYİR */}
+      {aylik.length>0 && (
+        <>
+          <p style={{margin:"0 0 8px",fontSize:11,fontWeight:800,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Aylık Seyir")} · {veri.guncelYil}</p>
+          <div style={{background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,borderRadius:14,padding:"14px 15px 10px",marginBottom:18}}>
+            <div style={{display:"flex",alignItems:"flex-end",gap:5,height:110}}>
+              {aylik.map((a:any)=>{
+                const h=Math.max(3,(a.toplam/enBuyukAy)*100);
+                const disVar=(a.yurtDisi||0)>0;
+                const disPay=disVar?(a.yurtDisi/a.toplam)*100:0;
+                return (
+                  <div key={a.ay} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",height:"100%"}}>
+                    <span style={{fontSize:8.5,color:WA(0.4),marginBottom:3,whiteSpace:"nowrap"}}>{(a.toplam/1000).toLocaleString("tr-TR",{maximumFractionDigits:0})}</span>
+                    <div style={{width:"100%",height:`${h}%`,borderRadius:"4px 4px 0 0",overflow:"hidden",display:"flex",flexDirection:"column"}}>
+                      {disVar && <div style={{height:`${disPay}%`,background:"#F5A623"}}/>}
+                      <div style={{flex:1,background:C.blue}}/>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{display:"flex",gap:5,marginTop:5}}>
+              {aylik.map((a:any)=>(
+                <span key={a.ay} style={{flex:1,textAlign:"center",fontSize:9,color:WA(0.4)}}>{AY_KISA[a.ay]||a.ay}</span>
+              ))}
+            </div>
+            <div style={{display:"flex",gap:14,marginTop:9,paddingTop:9,borderTop:`1px solid ${WA(0.07)}`}}>
+              <span style={{display:"flex",alignItems:"center",gap:5,fontSize:10.5,color:WA(0.45)}}>
+                <span style={{width:9,height:9,borderRadius:2,background:C.blue}}/> Yurt içi
+              </span>
+              <span style={{display:"flex",alignItems:"center",gap:5,fontSize:10.5,color:WA(0.45)}}>
+                <span style={{width:9,height:9,borderRadius:2,background:"#F5A623"}}/> Yurt dışı
+              </span>
+              <span style={{fontSize:10.5,color:WA(0.35),marginLeft:"auto"}}>milyar ₺</span>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* KAYNAK */}
+      <div style={{background:"rgba(91,155,216,0.08)",border:"1px solid rgba(91,155,216,0.2)",borderRadius:14,padding:"13px 15px"}}>
+        <p style={{margin:0,fontSize:11.5,color:C.soft,lineHeight:1.6}}>
+          <b>Kaynak:</b> Sermaye Piyasası Kurulu (SPK) resmî web servisleri. Veriler satışı gerçekleşen ihraçların tür bazında toplam tutarlarını gösterir ve aylık olarak güncellenir. Kira sertifikası, varlık kiralama şirketleri tarafından ihraç edilen, faiz içermeyen bir sermaye piyasası aracıdır.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function KatilimBankalari(){
   const [secili,setSecili]=useState<any>(null);
   const turRenk:any={Kamu:C.green,Özel:C.blue,Dijital:C.purple};
@@ -11346,6 +11544,7 @@ const MENU = {
   haftalikOzet:{title:"Haftalık Piyasa Özeti",back:"home"},
   katilimBankalari:{title:"Katılım Bankaları",back:"araclarMenu"},
   kfkNedir:{title:"KFK Nedir?",back:"araclarMenu"},
+  kiraSertifikasi:{title:"Kira Sertifikası İhraçları",back:"araclarMenu"},
   portfoyum:{title:"Portföyüm",back:"araclarMenu"},
   fonDetay:{title:"Fon Detay",back:"portfoyum"},
   hazineDoviz:{title:"Döviz Dönüştürücü",back:"hesaplaMenu"},
@@ -11375,7 +11574,7 @@ const TAB_OF_SCREEN:any = {
   hazineDoviz:"hesapla", hazineForward:"hesapla", hazineSwap:"hesapla",
   hazineBono:"hesapla", hazineSenaryo:"hesapla",
   piyasaHaberleri:"piyasa", finansalGostergeler:"piyasa",
-  araclarMenu:"araclar", sozluk:"araclar", vadeTakibi:"araclar", katilimBankalari:"araclar", kfkNedir:"araclar", getiriKarsilastirma:"araclar", haftalikOzet:"araclar", portfoyum:"araclar", fonDetay:"araclar",
+  araclarMenu:"araclar", sozluk:"araclar", vadeTakibi:"araclar", katilimBankalari:"araclar", kfkNedir:"araclar", kiraSertifikasi:"araclar", getiriKarsilastirma:"araclar", haftalikOzet:"araclar", portfoyum:"araclar", fonDetay:"araclar",
   asistan:"yapayzeka",
   profil:"profil",
 };
@@ -11449,6 +11648,7 @@ const SCREEN_TO_PATH: Record<string,string> = {
   vadeTakibi: "/vade-takip",
   katilimBankalari: "/katilim-bankalari",
   kfkNedir: "/kfk-nedir",
+  kiraSertifikasi: "/kira-sertifikasi-ihraclari",
   portfoyum: "/portfoyum",
   hazineDoviz: "/doviz-donusturucu",
   hazineForward: "/forward-hesaplama",
@@ -11546,6 +11746,7 @@ const MENU_ARAMA_LIST=[
   {key:"haftalikOzet",       label:"Haftalık Piyasa Özeti",                       icon:"📰", grup:"Araçlar", alt:["haftalık","bülten","özet","piyasa","hafta"]},
   {key:"katilimBankalari",   label:"Katılım Bankaları",                          icon:"🏛️", grup:"Araçlar"},
   {key:"kfkNedir",           label:"KFK Nedir?",                                 icon:"🤝", grup:"Araçlar", alt:["kfk","kefalet","katılım finans kefalet","kgf","teminat","kobi"]},
+  {key:"kiraSertifikasi",    label:"Kira Sertifikası İhraçları",                 icon:"📜", grup:"Araçlar", alt:["kira sertifikası","sukuk","ihraç","vekâlet","murabaha","icare","varlık kiralama","spk"]},
   {key:"hazineDoviz",        label:"Döviz Dönüştürücü",                          icon:"💱", grup:"Hesaplama Araçları", alt:["kur","dolar","euro","dolar kaç tl"]},
   {key:"piyasaMenu",         label:"Piyasa & Veriler",                           icon:"📊", grup:"Piyasa & Veriler", alt:["tüfe","enflasyon","gösterge","politika faizi","sofr","euribor","tlref","tlrefk","aofm","rezerv","cds","borsa","bist","altın","gümüş","emtia","kripto"]},
   {key:"hazineForward",      label:"Forward Hesaplama",                          icon:"📅", grup:"Hesaplama Araçları"},
@@ -17980,6 +18181,7 @@ function App(){
               {key:"vadeTakibi", icon:"⏰", label:"Vade Takip & Hatırlatma Ajandam", desc:"Finansman ve ödeme vadelerini takip et, hatırlatma al", renk:C.green, bg:"rgba(74,222,128,0.15)"},
               {key:"katilimBankalari", icon:"🏛️", label:"Katılım Bankaları", desc:"Türkiye'deki katılım bankaları, kuruluş tarihleri ve bilgileri", renk:C.blue, bg:"rgba(91,155,216,0.15)"},
               {key:"kfkNedir", icon:"🤝", label:"KFK Nedir?", desc:"Teminat yetersizliğinde işletmenize kefalet desteği — Katılım Finans Kefalet A.Ş.", renk:"#2CCB9A", bg:"rgba(44,203,154,0.15)"},
+              {key:"kiraSertifikasi", icon:"📜", label:"Kira Sertifikası İhraçları", desc:"Türkiye'de sukuk ihraçları — SPK resmî verisiyle tür ve yıl bazında", renk:"#F5A623", bg:"rgba(245,166,35,0.15)"},
               {key:"sozluk",     icon:"📖", label:"Katılım Bankacılığı Sözlüğü",     desc:"Terim ve tanımları hızlıca ara", renk:"#60A5FA", bg:"rgba(96,165,250,0.15)"},
               {key:"katilimBlog", icon:"📝", label:"Katılım Blog", desc:"Kâr payı, murabaha, TLREF ve daha fazlası — anlaşılır rehberler", renk:"#2CCB9A", bg:"rgba(44,203,154,0.15)", harici:true},
             ].map(c=>(
@@ -18194,6 +18396,7 @@ function App(){
         {screen==="vadeTakibi"&&<VadeTakibi/>}
         {screen==="katilimBankalari"&&<KatilimBankalari/>}
         {screen==="kfkNedir"&&<KfkNedir/>}
+        {screen==="kiraSertifikasi"&&<KiraSertifikasiIhraclari/>}
         {screen==="getiriKarsilastirma"&&<GetiriKarsilastirma/>}
         {screen==="haftalikOzet"&&<HaftalikPiyasaOzeti/>}
         {screen==="hazineDoviz"&&<HtDovizDonusturucu/>}
