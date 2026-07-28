@@ -272,10 +272,13 @@ function spkIhraccilariGrupla(kayitlar){
 // Bildirimler kanunen kamuya açıklanmak zorunda olan bilgilerdir; Borsa
 // İstanbul'un lisanslı fiyat verisinden farklı bir hukuki zemindedir.
 const KAP_LISTE_URL = "https://kap.org.tr/tr/api/disclosure/list/main";
-const KV_KAP_SUKUK_KEY = "kap:sukuk:v3";   // v3: disclosureBasic duzeltmesi
+const KV_KAP_SUKUK_KEY = "kap:sukuk:v4";   // v4: ihrac suzgeci eklendi
 const KAP_CACHE_TTL = 2 * 3600;   // 2 saat
-const KAP_GUN_ARALIK = 30;        // VARSAYILAN 30 GÜN — bkz. boyut notu
-const KAP_LIMIT = 40;             // ekranda en fazla kaç bildirim gösterilsin
+const KAP_GUN_ARALIK = 14;        // 14 GÜN — canlı ölçüm: 7 günde 82 sukuk
+                                  // bildirimi, 1.321 ham kayıt. 14 gün hem
+                                  // listeyi doldurmaya fazlasıyla yetiyor hem
+                                  // de KAP'i gereksiz yormuyor.
+const KAP_LIMIT = 50;             // ekranda en fazla kaç bildirim gösterilsin
 // BOYUT KORUMASI (2026-07-28, canlı çöküşten sonra eklendi):
 // İlk sürüm 120 günlük, TÜM şirketleri kapsayan bir istek atıyordu ve Vercel
 // fonksiyonu FUNCTION_INVOCATION_FAILED ile çöktü — dönen JSON'u ayrıştırmak
@@ -383,6 +386,25 @@ async function kapSukukCek(gunAralik){
 }
 
 // KAP kaydını sadeleştirip frontend'in ihtiyacı olan alanlara indirger.
+// İkinci süzgeç: sukuk bildirimleri arasından SADECE İHRAÇLA İLGİLİ olanları
+// bırakır. Canlı veride 7 günde 82 sukuk bildirimi çıkıyor ama çoğu kupon
+// ödemesi / itfa duyurusu — kullanıcı için gürültü. Burada işe yarayanlar:
+//   • İhraç Belgesi, Tertip İhraç Belgesi
+//   • İhraç Tavanına İlişkin Bildirim (yönetim kurulu kararı)
+//   • İzahname / Sermaye Piyasası Aracı Notu (halka arz)
+//   • "...Satışının Tamamlanması" (fiilen gerçekleşen ihraç)
+// Dışarıda bırakılanlar: kupon ödemesi, itfa, getiri ödemesi.
+// NOT: "Kupon Oranının Belirlenmesi" bildirimleri de eleniyor — bunlar getiri
+// oranı içerdiği için ileride ayrı bir bölümde değerlendirilebilir.
+const KAP_IHRAC_OLUMLU = ["IHRAC", "IZAHNAME", "TERTIP", "HALKA ARZ", "SATIS"];
+const KAP_IHRAC_OLUMSUZ = ["ITFA", "KUPON", "ODEME"];
+
+function kapIhracMi(k){
+  const metin = spkNormalizeMetin((k?.title||"") + " " + (k?.summary||""));
+  if(KAP_IHRAC_OLUMSUZ.some(x => metin.indexOf(x) >= 0)) return false;
+  return KAP_IHRAC_OLUMLU.some(x => metin.indexOf(x) >= 0);
+}
+
 function kapNormalize(k){
   // Kayıt bazen düz, bazen {basic:{...}} şeklinde sarmalanmış geliyor.
   const b = kapTemel(k);
@@ -903,7 +925,13 @@ export default async function handler(req,res){
         });
       }
 
-      const suzulmus = ham.filter(k => kapSukukMu(kapTemel(k))).map(kapNormalize);
+      // İki aşamalı süzme: önce sukukla ilgili olanlar, sonra bunlar
+      // arasından SADECE ihraç bildirimleri (kupon/itfa gürültüsü elenir).
+      // ?tumu=1 ile ikinci süzgeç atlanabilir (teşhis/ileride kullanım için).
+      const sukukHam = ham.filter(k => kapSukukMu(kapTemel(k)));
+      const tumunuGoster = req.query.tumu === "1";
+      const suzulmus = (tumunuGoster ? sukukHam : sukukHam.filter(k => kapIhracMi(kapTemel(k))))
+        .map(kapNormalize);
       // En yeniden eskiye. publishDate "GG.AA.YYYY SS:DD:ss" formatında
       // geldiği için doğrudan string sıralaması yanlış olur — çeviriyoruz.
       const zaman = (t)=>{
@@ -918,7 +946,9 @@ export default async function handler(req,res){
         kaynak: "KAP (Kamuyu Aydınlatma Platformu)",
         gunAralik: gun,
         toplamTaranan: hamSayi,
-        sukukSayisi: suzulmus.length,
+        sukukToplam: sukukHam.length,      // kira sertifikasıyla ilgili tüm bildirimler
+        sukukSayisi: suzulmus.length,      // bunlardan yalnızca ihraçla ilgili olanlar
+        sadeceIhrac: !tumunuGoster,
         bildirimler: suzulmus.slice(0, KAP_LIMIT),
         guncelleme: new Date().toISOString(),
       };
