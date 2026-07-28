@@ -9973,6 +9973,21 @@ function KiraSertifikasiIhraclari(){
   const [veri,setVeri]=useState<any>(null);
   const [yukleniyor,setYukleniyor]=useState(true);
   const [hata,setHata]=useState<string|null>(null);
+  const [ihraccilarAcik,setIhraccilarAcik]=useState(false);
+  // KAP bildirimleri AYRI bir uçtan geliyor (?kap=sukuk) — ana veriden
+  // bağımsız yükleniyor ki KAP erişilemezse ekranın geri kalanı beklemesin
+  // ya da bozulmasın.
+  const [kap,setKap]=useState<any>(null);
+  const [kapAcik,setKapAcik]=useState(false);
+
+  useEffect(()=>{
+    let iptal=false;
+    fetch(`${API_BASE}/api/evds-proxy?kap=sukuk`)
+      .then(r=>r.ok?r.json():null)
+      .then(d=>{ if(!iptal && d && Array.isArray(d.bildirimler) && d.bildirimler.length>0) setKap(d); })
+      .catch(()=>{});
+    return ()=>{iptal=true;};
+  },[]);
 
   useEffect(()=>{
     let iptal=false;
@@ -10147,43 +10162,138 @@ function KiraSertifikasiIhraclari(){
         </>
       )}
 
-      {/* SPK ONAYI ALAN İHRAÇÇILAR */}
+      {/* SPK ONAYI ALAN İHRAÇÇILAR — varsayılan KAPALI, dokununca açılır.
+          Liste uzun olabildiği için (25 kuruma kadar) ekranı boğmasın diye
+          akordiyon yapıldı; sayı başlıkta görünüyor ki kullanıcı içeride ne
+          olduğunu açmadan bilsin. */}
       {veri.ihraccilar && (veri.ihraccilar.liste||[]).length>0 && (
-        <>
-          <p style={{margin:"0 0 8px",fontSize:11,fontWeight:800,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("SPK Onayı Alan İhraççılar")} · {veri.guncelYil}</p>
-          <div style={{background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,borderRadius:14,overflow:"hidden",marginBottom:10}}>
-            {(veri.ihraccilar.liste||[]).map((g:any,i:number)=>(
-              <div key={g.unvan} style={{padding:"12px 14px",borderBottom:i<(veri.ihraccilar.liste.length-1)?`1px solid ${WA(0.06)}`:"none"}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
-                  <div style={{flex:1,minWidth:0}}>
-                    <p style={{margin:0,fontSize:12.5,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),lineHeight:1.35}}>{g.unvan}</p>
-                    <p style={{margin:"3px 0 0",fontSize:10.5,color:WA(0.42)}}>
-                      {g.onaySayisi>1?`${g.onaySayisi} onay · `:""}{tarihKisaSPK(g.sonOnayTarihi)}
-                      {(g.satisYontemleri||[]).length>0?` · ${g.satisYontemleri.join(", ")}`:""}
-                    </p>
+        <div style={{marginBottom:18}}>
+          <button
+            onClick={()=>setIhraccilarAcik(!ihraccilarAcik)}
+            style={{
+              width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,
+              background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,
+              borderRadius:ihraccilarAcik?"14px 14px 0 0":14,padding:"13px 15px",
+              cursor:"pointer",textAlign:"left",WebkitTapHighlightColor:"transparent",
+            }}
+          >
+            <div style={{flex:1,minWidth:0}}>
+              <p style={{margin:0,fontSize:12.5,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff")}}>
+                SPK Onayı Alan İhraççılar · {veri.guncelYil}
+              </p>
+              <p style={{margin:"3px 0 0",fontSize:10.5,color:WA(0.42)}}>
+                {veri.ihraccilar.ihracciSayisi} kurum · toplam {mlrTL(veri.ihraccilar.toplamOnayliTavan)} milyar ₺ tavan onayı
+              </p>
+            </div>
+            <span style={{fontSize:16,color:WA(0.45),flexShrink:0,transform:ihraccilarAcik?"rotate(180deg)":"none",transition:"transform .18s"}}>⌄</span>
+          </button>
+
+          {ihraccilarAcik && (
+            <>
+              <div style={{background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),borderLeft:`1px solid ${WA(0.08)}`,borderRight:`1px solid ${WA(0.08)}`,overflow:"hidden"}}>
+                {(veri.ihraccilar.liste||[]).map((g:any,i:number)=>(
+                  <div key={g.unvan} style={{padding:"12px 14px",borderTop:`1px solid ${WA(0.06)}`}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <p style={{margin:0,fontSize:12.5,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),lineHeight:1.35}}>{g.unvan}</p>
+                        <p style={{margin:"3px 0 0",fontSize:10.5,color:WA(0.42)}}>
+                          {g.onaySayisi>1?`${g.onaySayisi} onay · `:""}{tarihKisaSPK(g.sonOnayTarihi)}
+                          {(g.satisYontemleri||[]).length>0?` · ${g.satisYontemleri.join(", ")}`:""}
+                        </p>
+                      </div>
+                      <div style={{textAlign:"right",flexShrink:0}}>
+                        <p style={{margin:0,fontSize:14,fontWeight:800,color:"#F5A623"}}>{mlrTL(g.onayliTavan)}</p>
+                        <p style={{margin:"1px 0 0",fontSize:9.5,color:WA(0.38)}}>milyar ₺ tavan</p>
+                      </div>
+                    </div>
+                    {g.satisBildirilen>0 && (
+                      <p style={{margin:"6px 0 0",fontSize:10.5,color:WA(0.45)}}>
+                        Bildirilen satış: <b style={{color:C.soft}}>{mlrTL(g.satisBildirilen)} milyar ₺</b>
+                      </p>
+                    )}
                   </div>
-                  <div style={{textAlign:"right",flexShrink:0}}>
-                    <p style={{margin:0,fontSize:14,fontWeight:800,color:"#F5A623"}}>{mlrTL(g.onayliTavan)}</p>
-                    <p style={{margin:"1px 0 0",fontSize:9.5,color:WA(0.38)}}>milyar ₺ tavan</p>
-                  </div>
-                </div>
-                {g.satisBildirilen>0 && (
-                  <p style={{margin:"6px 0 0",fontSize:10.5,color:WA(0.45)}}>
-                    Bildirilen satış: <b style={{color:C.soft}}>{mlrTL(g.satisBildirilen)} milyar ₺</b>
-                  </p>
-                )}
+                ))}
               </div>
-            ))}
-          </div>
-          <div style={{background:"rgba(245,166,35,0.08)",border:"1px solid rgba(245,166,35,0.22)",borderRadius:12,padding:"11px 13px",marginBottom:18}}>
-            <p style={{margin:0,fontSize:11,color:C.soft,lineHeight:1.55}}>
-              Buradaki tutarlar <b>SPK'nın onayladığı ihraç tavanıdır</b> — bir üst sınırdır, ihraççı bu tutarın tamamını kullanmak zorunda değildir. Fiilen satılan tutarlar yukarıdaki bölümlerde gösterilmektedir. Satış bilgisi yalnızca SPK'ya bildirilmiş kayıtlarda görünür.
-              {veri.ihraccilar.ihracciSayisi>(veri.ihraccilar.liste||[]).length
-                ? ` ${veri.guncelYil} yılında toplam ${veri.ihraccilar.ihracciSayisi} ihraççı onay aldı; en büyük ${veri.ihraccilar.liste.length} tanesi listelenmiştir.`
-                : ""}
-            </p>
-          </div>
-        </>
+              <div style={{background:"rgba(245,166,35,0.08)",border:"1px solid rgba(245,166,35,0.22)",borderTop:"none",borderRadius:"0 0 12px 12px",padding:"11px 13px"}}>
+                <p style={{margin:0,fontSize:11,color:C.soft,lineHeight:1.55}}>
+                  Buradaki tutarlar <b>SPK'nın onayladığı ihraç tavanıdır</b> — bir üst sınırdır, ihraççı bu tutarın tamamını kullanmak zorunda değildir. Fiilen satılan tutarlar yukarıdaki bölümlerde gösterilmektedir. Satış bilgisi yalnızca SPK'ya bildirilmiş kayıtlarda görünür.
+                  {" "}İhraçların büyük kısmı nitelikli yatırımcıya tahsisli satıldığı için vade ve kâr payı oranı kamuya açıklanmaz.
+                  {veri.ihraccilar.ihracciSayisi>(veri.ihraccilar.liste||[]).length
+                    ? ` ${veri.guncelYil} yılında toplam ${veri.ihraccilar.ihracciSayisi} ihraççı onay aldı; en büyük ${veri.ihraccilar.liste.length} tanesi listelenmiştir.`
+                    : ""}
+                </p>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* KAP BİLDİRİMLERİ — açılır/kapanır.
+          KAP verisi ayrı uçtan geldiği için, gelmezse bu bölüm hiç
+          görünmez (koşul: kap && bildirimler.length>0). */}
+      {kap && (kap.bildirimler||[]).length>0 && (
+        <div style={{marginBottom:18}}>
+          <button
+            onClick={()=>setKapAcik(!kapAcik)}
+            style={{
+              width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,
+              background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,
+              borderRadius:kapAcik?"14px 14px 0 0":14,padding:"13px 15px",
+              cursor:"pointer",textAlign:"left",WebkitTapHighlightColor:"transparent",
+            }}
+          >
+            <div style={{flex:1,minWidth:0}}>
+              <p style={{margin:0,fontSize:12.5,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff")}}>
+                Son KAP Bildirimleri
+              </p>
+              <p style={{margin:"3px 0 0",fontSize:10.5,color:WA(0.42)}}>
+                {kap.sukukSayisi} bildirim · son {kap.gunAralik||120} gün
+              </p>
+            </div>
+            <span style={{fontSize:16,color:WA(0.45),flexShrink:0,transform:kapAcik?"rotate(180deg)":"none",transition:"transform .18s"}}>⌄</span>
+          </button>
+
+          {kapAcik && (
+            <>
+              <div style={{background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),borderLeft:`1px solid ${WA(0.08)}`,borderRight:`1px solid ${WA(0.08)}`}}>
+                {(kap.bildirimler||[]).map((b:any,i:number)=>(
+                  <a
+                    key={b.id||i}
+                    href={b.link||"#"}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{display:"block",padding:"12px 14px",borderTop:`1px solid ${WA(0.06)}`,textDecoration:"none",WebkitTapHighlightColor:"transparent"}}
+                  >
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <p style={{margin:0,fontSize:12,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),lineHeight:1.35}}>
+                          {b.sirket}
+                        </p>
+                        {b.ilgiliKurum && (
+                          <p style={{margin:"2px 0 0",fontSize:10.5,color:C.blue,fontWeight:700}}>
+                            ilgili: {b.ilgiliKurum}
+                          </p>
+                        )}
+                        <p style={{margin:"4px 0 0",fontSize:11.5,color:C.soft,lineHeight:1.45}}>
+                          {b.ozet || b.baslik}
+                        </p>
+                        <p style={{margin:"4px 0 0",fontSize:10,color:WA(0.38)}}>
+                          {b.tarih}{b.ekSayisi>0?` · ${b.ekSayisi} ek`:""}
+                        </p>
+                      </div>
+                      <span style={{fontSize:13,color:WA(0.3),flexShrink:0,marginTop:2}}>↗</span>
+                    </div>
+                  </a>
+                ))}
+              </div>
+              <div style={{background:"rgba(91,155,216,0.08)",border:"1px solid rgba(91,155,216,0.2)",borderTop:"none",borderRadius:"0 0 12px 12px",padding:"11px 13px"}}>
+                <p style={{margin:0,fontSize:11,color:C.soft,lineHeight:1.55}}>
+                  Bildirimler Kamuyu Aydınlatma Platformu'ndan (KAP) alınmaktadır. Bir bildirime dokunduğunuzda KAP'ın kendi sayfası açılır; vade, tutar ve getiri gibi ayrıntılar oradaki belgede yer alır. "İlgili" satırı, ihracın hangi kurum adına yapıldığını gösterir.
+                </p>
+              </div>
+            </>
+          )}
+        </div>
       )}
 
       {/* KAYNAK */}
