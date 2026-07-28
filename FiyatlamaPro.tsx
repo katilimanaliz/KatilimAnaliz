@@ -10217,7 +10217,7 @@ function KiraSertifikasiIhraclari(){
               <div style={{background:"rgba(245,166,35,0.08)",border:"1px solid rgba(245,166,35,0.22)",borderTop:"none",borderRadius:"0 0 12px 12px",padding:"11px 13px"}}>
                 <p style={{margin:0,fontSize:11,color:C.soft,lineHeight:1.55}}>
                   Buradaki tutarlar <b>SPK'nın onayladığı ihraç tavanıdır</b> — bir üst sınırdır, ihraççı bu tutarın tamamını kullanmak zorunda değildir. Fiilen satılan tutarlar yukarıdaki bölümlerde gösterilmektedir. Satış bilgisi yalnızca SPK'ya bildirilmiş kayıtlarda görünür.
-                  {" "}İhraçların büyük kısmı nitelikli yatırımcıya tahsisli satıldığı için vade ve kâr payı oranı kamuya açıklanmaz.
+                  {" "}Vade, tutar ve kupon oranı gibi ayrıntılar ihraççıların KAP bildirimlerinde yer alır — aşağıdaki bölümden ulaşabilirsiniz.
                   {veri.ihraccilar.ihracciSayisi>(veri.ihraccilar.liste||[]).length
                     ? ` ${veri.guncelYil} yılında toplam ${veri.ihraccilar.ihracciSayisi} ihraççı onay aldı; en büyük ${veri.ihraccilar.liste.length} tanesi listelenmiştir.`
                     : ""}
