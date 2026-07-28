@@ -1,6 +1,6 @@
-// api/evds-proxy.js - FINAL v10
+// api/evds-proxy.js - FINAL v11
 // Haftalık kredi oranları + Aylık stok + Enflasyon + TLREF (oran, endeksten türetilmiş) + AOFM
-// + Dış Ticaret & Ödemeler Dengesi (v10)
+// + Dış Ticaret & Ödemeler Dengesi (v10) + SPK Kira Sertifikası İhraçları (v11)
 //
 // TLREF DÜZELTMESİ (2026-07): TP.BISTTLREF.KAPANIS ham değeri bir ORAN (%) değil,
 // bir ENDEKS seviyesidir (örn. 6223.01) — TLREF'in her gün bileşik olarak
@@ -33,6 +33,20 @@
 // (ihracat/ithalat*100) ve ihracat/ithalat/denge/cari için 12 AYLIK KÜMÜLATİF
 // (yıllıklandırılmış) toplamlar — takvim yılına kilitli olmadığından her ay
 // güncellenir; ekstra EVDS isteği gerektirmez.
+//
+// SPK KİRA SERTİFİKASI (2026-07-28, v11): Sermaye Piyasası Kurulu'nun resmi
+// açık web servisinden (ws.spk.gov.tr) tür bazında kira sertifikası ihraç
+// tutarları. Bu, EVDS/FRED'den TAMAMEN AYRI bir kaynak ve ayrı bir şube
+// (?spk=sukuk) olarak eklendi — ana uca eklenmedi çünkü:
+//   (a) ana uç zaten 12 EVDS + 11 FRED isteği yapıyor, 5 istek daha eklemek
+//       Vercel zaman aşımı riskini artırırdı,
+//   (b) SPK verisi AYDA BİR güncelleniyor; 6 saatlik ana TTL yerine çok daha
+//       uzun (12 saat) önbelleklenebilir, gereksiz istek yapılmaz.
+// Kimlik doğrulama GEREKTİRMEZ (kamuya açık devlet servisi) — Midas/BigPara
+// gibi kaynaklardaki lisans belirsizliği burada yok.
+// BİRİM UYARISI: Bu uç MİLYON TL döndürür. SPK'nın "İhraççı Bazında" ucu ise
+// (ileride eklenirse) HAM TL döndürüyor — ikisi karıştırılırsa rakamlar bin
+// kat şişer. Yanıtta "birim" alanı bilerek açıkça bildiriliyor.
 
 const BASE = "https://evds3.tcmb.gov.tr/igmevdsms-dis";
 
@@ -74,6 +88,9 @@ const redis = new Redis({
 // NOT (2026-07-11): v9 → v10 sürüm değişikliği — Dış Ticaret & Ödemeler
 // Dengesi serileri (DT_* / CARI_* / REK_*) eklendiği için yapıldı. Aynı ders:
 // versiyon artırılmazsa eski önbellek yeni alanları 6 saat boyunca göstermez.
+// NOT (2026-07-28): SPK kira sertifikası AYRI bir anahtar/şube kullandığı için
+// (KV_SPK_SUKUK_KEY) ana anahtarın versiyonu ARTIRILMADI — ana yanıtın içeriği
+// hiç değişmedi, mevcut önbelleği boşuna geçersiz kılmaya gerek yok.
 const KV_ANLIK_KEY = "evds:anlik:v17";
 const KV_TARIHSEL_PREFIX = "evds:tarihsel:v17:";
 
@@ -94,6 +111,63 @@ async function fetchZamanli(url, opsiyonlar={}, msTimeout=8000){
   }
 }
 const CACHE_TTL_SANIYE = 6 * 3600; // 6 saat, Redis TTL saniye cinsinden ister
+
+// ── SPK KİRA SERTİFİKASI (v11) ─────────────────────────────────────────────
+const SPK_BASE = "https://ws.spk.gov.tr/BorclanmaAraclari/api";
+const KV_SPK_SUKUK_KEY = "spk:sukuk:v1";
+const SPK_CACHE_TTL = 12 * 3600;   // 12 saat — veri ayda bir güncelleniyor
+const SPK_YIL_SAYISI = 5;          // trend grafiği için kaç yıl geriye gidilsin
+
+// SPK'nın alan adları ile Türkiye'deki resmi kira sertifikası türlerinin
+// eşlemesi. "fikhi" alanı, kullanıcıya tanıdık gelen İslami finans terimini
+// veriyor (ekranda parantez içinde gösterilecek).
+// NOT (2026-07 canlı veri gözlemi): 2026'nın ilk 7 ayında bu 6 türden yalnızca
+// "yonetim" (~%89) ve "alimSatim" (~%11) kullanılmış; diğer 4'ü sıfır. Bu,
+// hatalı veri DEĞİL — Türkiye'de sukuk ihraçlarının fiilen bu iki yapıda
+// yoğunlaştığını gösteriyor. Frontend sıfır olan türleri gizleyip bunu
+// açıkça belirtmeli (yoksa 4 boş dilimli anlamsız bir grafik çıkar).
+const SPK_SUKUK_TURLERI = [
+  { anahtar:"yonetim",   alan:"yonetimSozlesmesineDayaliKiraSertifikasi", ad:"Yönetim Sözleşmesine Dayalı", fikhi:"Vekâlet" },
+  { anahtar:"alimSatim", alan:"alimSatimaDayaliKiraSertifikasi",          ad:"Alım-Satıma Dayalı",          fikhi:"Murabaha" },
+  { anahtar:"sahiplik",  alan:"sahipligeDayaliKiraSertifikasi",           ad:"Sahipliğe Dayalı",            fikhi:"İcâre" },
+  { anahtar:"ortaklik",  alan:"ortakligaDayaliKiraSertifikasi",           ad:"Ortaklığa Dayalı",            fikhi:"Müşâreke / Mudârebe" },
+  { anahtar:"eser",      alan:"eserSozlesmesineDayaliKiraSertifikasi",    ad:"Eser Sözleşmesine Dayalı",    fikhi:"İstisnâ" },
+  { anahtar:"diger",     alan:"digerKiraSertifikasi",                     ad:"Diğer",                       fikhi:null },
+];
+
+// SPK şemasında TÜM sayısal alanlar "nullable: true" — null/eksik gelen değeri
+// 0 saymak toplamları bozmaz ama "veri yok" ile "sıfır ihraç" ayrımını da
+// kaybettirmez, çünkü ay satırının kendisi gelmezse zaten hiç toplanmaz.
+function spkSayi(v){ return (typeof v === "number" && isFinite(v)) ? v : 0; }
+
+async function spkSukukYilCek(yil){
+  const url = `${SPK_BASE}/SermayePiyasasiAraclariKiraSertifikasi?yil=${yil}`;
+  const r = await fetchZamanli(url, { headers:{ "Accept":"application/json" } }, 10000);
+  if(r.status < 200 || r.status >= 300) throw new Error(`SPK HTTP ${r.status}`);
+  const text = await r.text();
+  if(text.trim().startsWith("<")) throw new Error(`SPK HTML döndü: ${text.slice(0,150)}`);
+  const j = JSON.parse(text);
+  return Array.isArray(j) ? j : [];
+}
+
+// Bir yılın satırlarından toplamları çıkarır. sonAySiniri verilirse yalnızca
+// o aya kadar olan satırlar toplanır — yıl-içi karşılaştırmanın DÜRÜST
+// olabilmesi için şart: 7 aylık 2026 ile 12 aylık 2025 kıyaslanamaz.
+function spkYilOzeti(satirlar, sonAySiniri){
+  const turToplam = {};
+  for(const t of SPK_SUKUK_TURLERI) turToplam[t.anahtar] = 0;
+  let toplam = 0, yurtIci = 0, yurtDisi = 0, sonAy = 0;
+  for(const s of (satirlar||[])){
+    const ay = spkSayi(s.ay);
+    if(sonAySiniri && ay > sonAySiniri) continue;
+    toplam   += spkSayi(s.kiraSertifikasiToplam);
+    yurtIci  += spkSayi(s.kiraSertifikasiToplamYurtIci);
+    yurtDisi += spkSayi(s.kiraSertifikasiToplamYurtDisi);
+    if(ay > sonAy) sonAy = ay;
+    for(const t of SPK_SUKUK_TURLERI) turToplam[t.anahtar] += spkSayi(s[t.alan + "Toplam"]);
+  }
+  return { toplam, yurtIci, yurtDisi, sonAy, turToplam };
+}
 
 const HAFTALIK = [
   "TP.KTF10","TP.KTF11","TP.KTF12",
@@ -410,6 +484,128 @@ async function evdsFetch(url,apiKey){
 export default async function handler(req,res){
   res.setHeader("Access-Control-Allow-Origin","*");
   if(req.method==="OPTIONS") return res.status(200).end();
+
+  // ── SPK KİRA SERTİFİKASI İHRAÇLARI (v11): /api/evds-proxy?spk=sukuk ──────
+  // EVDS_KEY kontrolünden ÖNCE, çünkü bu şube TCMB'ye hiç gitmiyor — SPK'nın
+  // kamuya açık servisini kullanıyor, EVDS anahtarı olmasa bile çalışmalı.
+  if(req.query.spk === "sukuk"){
+    const kilitAnahtariSpk = `lock:${KV_SPK_SUKUK_KEY}`;
+    let kilitBizdeMiSpk = false;
+
+    if(req.query.debug !== "1"){
+      try{
+        const onbellek = await redis.get(KV_SPK_SUKUK_KEY);
+        if(onbellek) return res.status(200).json({...onbellek, cached:true});
+      }catch{}
+      // Aynı anda gelen isteklerin hepsi SPK'ya gitmesin (thundering herd) —
+      // diğer şubelerdeki kilit deseninin aynısı.
+      try{
+        const s = await redis.set(kilitAnahtariSpk, "1", {nx:true, ex:30});
+        kilitBizdeMiSpk = (s === "OK" || s === true);
+      }catch{}
+      if(!kilitBizdeMiSpk){
+        for(let i=0;i<5;i++){
+          await new Promise(r=>setTimeout(r,400));
+          try{
+            const onbellek = await redis.get(KV_SPK_SUKUK_KEY);
+            if(onbellek) return res.status(200).json({...onbellek, cached:true});
+          }catch{}
+        }
+      }
+    }
+
+    try{
+      const buYil = new Date().getFullYear();
+      const yillar = [];
+      for(let y = buYil - SPK_YIL_SAYISI + 1; y <= buYil; y++) yillar.push(y);
+
+      const spkTeshis = {};
+      const ham = await Promise.all(yillar.map(async (y)=>{
+        try{
+          const satirlar = await spkSukukYilCek(y);
+          spkTeshis[y] = { basarili:true, satirSayisi:satirlar.length };
+          return { yil:y, satirlar };
+        }catch(e){
+          spkTeshis[y] = { basarili:false, hata:e.message };
+          return { yil:y, satirlar:[] };
+        }
+      }));
+
+      const buYilSatirlar = (ham.find(h=>h.yil===buYil)||{satirlar:[]}).satirlar;
+      const buYilOzet = spkYilOzeti(buYilSatirlar);
+      const sonAy = buYilOzet.sonAy;
+
+      // DÜRÜST KIYAS: geçen yılın YALNIZCA aynı ay aralığı toplanır.
+      // (7 aylık 2026'yı 12 aylık 2025 ile kıyaslamak yanıltıcı olurdu.)
+      const gecenYilSatirlar = (ham.find(h=>h.yil===buYil-1)||{satirlar:[]}).satirlar;
+      const gecenYilAyniDonem = spkYilOzeti(gecenYilSatirlar, sonAy).toplam;
+      const degisimYuzde = gecenYilAyniDonem > 0
+        ? ((buYilOzet.toplam - gecenYilAyniDonem) / gecenYilAyniDonem * 100)
+        : null;
+
+      const turler = SPK_SUKUK_TURLERI.map(t=>({
+        anahtar: t.anahtar,
+        ad: t.ad,
+        fikhi: t.fikhi,
+        toplam: buYilOzet.turToplam[t.anahtar],
+        pay: buYilOzet.toplam > 0 ? (buYilOzet.turToplam[t.anahtar] / buYilOzet.toplam * 100) : 0,
+      })).sort((a,b)=> b.toplam - a.toplam);
+
+      const aylik = (buYilSatirlar||[]).map(s=>({
+        ay: spkSayi(s.ay),
+        donem: s.donem || null,
+        toplam: spkSayi(s.kiraSertifikasiToplam),
+        yurtIci: spkSayi(s.kiraSertifikasiToplamYurtIci),
+        yurtDisi: spkSayi(s.kiraSertifikasiToplamYurtDisi),
+      })).sort((a,b)=> a.ay - b.ay);
+
+      // Yıllık trend — her yılın TAM toplamı (bu yıl hariç, o kısmi).
+      const yillik = ham.map(h=>{
+        const o = spkYilOzeti(h.satirlar);
+        return {
+          yil: h.yil,
+          toplam: o.toplam,
+          yurtIci: o.yurtIci,
+          yurtDisi: o.yurtDisi,
+          kismi: h.yil === buYil,   // frontend "2026 (7 aylık)" diye yazabilsin
+          sonAy: o.sonAy,
+        };
+      });
+
+      const yanit = {
+        kaynak: "SPK (Sermaye Piyasası Kurulu) — ws.spk.gov.tr",
+        birim: "milyon TL",
+        guncelYil: buYil,
+        sonAy,
+        ozet: {
+          yilToplam: buYilOzet.toplam,
+          yurtIci: buYilOzet.yurtIci,
+          yurtDisi: buYilOzet.yurtDisi,
+          yurtDisiPay: buYilOzet.toplam>0 ? (buYilOzet.yurtDisi/buYilOzet.toplam*100) : 0,
+          gecenYilAyniDonem,
+          degisimYuzde,
+          aylikOrtalama: sonAy>0 ? (buYilOzet.toplam/sonAy) : 0,
+        },
+        turler,
+        aylik,
+        yillik,
+        _teshis: spkTeshis,
+      };
+
+      try{ await redis.set(KV_SPK_SUKUK_KEY, yanit, {ex: SPK_CACHE_TTL}); }catch{}
+      if(kilitBizdeMiSpk){ try{ await redis.del(kilitAnahtariSpk); }catch{} }
+      return res.status(200).json(yanit);
+    }catch(err){
+      if(kilitBizdeMiSpk){ try{ await redis.del(kilitAnahtariSpk); }catch{} }
+      // Hata olsa bile eski önbellek varsa onu ver — ekran boş kalmasın.
+      try{
+        const eski = await redis.get(KV_SPK_SUKUK_KEY);
+        if(eski) return res.status(200).json({...eski, cached:true, hata:err.message});
+      }catch{}
+      return res.status(500).json({error: err.message});
+    }
+  }
+
   const apiKey=process.env.EVDS_KEY;
   if(!apiKey) return res.status(500).json({error:"EVDS_KEY eksik"});
 
