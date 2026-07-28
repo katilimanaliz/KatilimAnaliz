@@ -315,7 +315,7 @@ function kapSukukMu(k){
   return false;
 }
 
-async function kapSukukCek(gunAralik){
+async function kapSukukCek(gunAralik, tipler){
   const bitis = new Date();
   const baslangic = new Date();
   baslangic.setDate(baslangic.getDate() - (gunAralik || KAP_GUN_ARALIK));
@@ -326,7 +326,10 @@ async function kapSukukCek(gunAralik){
     // ODA = Özel Durum Açıklaması, DG = Diğer (İhraç Belgesi burada),
     // DUY = Duyuru. FR (finansal rapor) ve CA (hak kullanımı) bizi
     // ilgilendirmiyor, isteği küçük tutmak için dışarıda bırakıldı.
-    disclosureTypes: ["ODA", "DG", "DUY"],
+    // Çağıran taraf tip listesi verebilir. Sukuk sorgusu dar (ODA/DG/DUY),
+    // hisse sorgusu geniş tutuluyor — hisse detayında en değerli bildirimler
+    // FR (finansal rapor / bilanço) ve CA (hak kullanımı / temettü).
+    disclosureTypes: Array.isArray(tipler) && tipler.length ? tipler : ["ODA", "DG", "DUY"],
     // memberTypes ZORUNLU (2026-07-28): ilk sürümde bu alan yoktu ve KAP
     // HTTP 500 döndürdü. Tarayıcının kendi isteğinde bu alan gönderiliyor.
     // Kodlar KAP'ın şirket kategorileriyle örtüşüyor:
@@ -416,10 +419,20 @@ function kapIhracMi(k){
 // Bunun yerine liste BİR KEZ çekilip sadeleştirilmiş hâli önbelleğe alınıyor,
 // hisse sorguları bu önbellekten süzülüyor. Böylece 600+ hisse tek bir KAP
 // isteğiyle karşılanıyor.
-const KV_KAP_TUM_KEY = "kap:tum:v1";
+const KV_KAP_TUM_KEY = "kap:tum:v2";
 const KAP_TUM_TTL = 3600;          // 1 saat
-const KAP_TUM_GUN = 21;            // hisse başına yeterli geçmiş
-const KAP_TUM_MAX = 1500;          // önbellekte tutulacak azami kayıt
+// PENCERE/TAVAN AYARI (2026-07-28, canlı testten sonra): İlk sürüm 21 gün
+// isteyip 1.500 kayıtta kesiyordu — 21 gün ~3.500 kayıt olduğu için fiilen
+// yalnızca son ~9 günü kapsıyor, üstelik hangi güne kadar kapsadığı
+// öngörülemiyordu (THYAO gibi büyük bir hissede hiç bildirim çıkmamasının
+// sebebi buydu). Artık DAR AMA TAM kapsama tercih ediliyor: 10 gün, tavan
+// bunu rahatça alacak kadar yüksek.
+const KAP_TUM_GUN = 10;
+const KAP_TUM_MAX = 3000;
+// Hisse detayı için geniş tip listesi — FR = Finansal Rapor (bilanço),
+// CA = hak kullanımı (temettü, bedelsiz, rüçhan). Bunlar kullanıcı için
+// en değerli bildirimler ve ilk sürümde dışarıda kalmışlardı.
+const KAP_HISSE_TIPLER = ["ODA", "DG", "DUY", "FR", "CA"];
 const KAP_HISSE_LIMIT = 8;         // hisse detayında gösterilecek bildirim sayısı
 
 // Sadeleştirilmiş kayıt — önbelleği küçük tutmak için yalnızca gerekli alanlar.
@@ -432,7 +445,9 @@ function kapSadeKayit(k){
     ilgili: b.relatedStocks || null,
     sirket: b.companyTitle || null,
     baslik: b.title || null,
-    ozet: b.summary || null,
+    // Özet bazen çok uzun oluyor; önbelleği şişirmemek için kırpılıyor
+    // (ekranda zaten 2-3 satır gösteriliyor, tam metin KAP sayfasında).
+    ozet: b.summary ? String(b.summary).slice(0, 220) : null,
     tarih: b.publishDate || null,
     ek: typeof b.attachmentCount === "number" ? b.attachmentCount : 0,
     link: idx ? `https://www.kap.org.tr/tr/Bildirim/${idx}` : null,
@@ -460,7 +475,7 @@ async function kapTumBildirimler(){
     if(Array.isArray(onbellek) && onbellek.length) return { liste: onbellek, cached: true };
   }catch{}
 
-  const { ham } = await kapSukukCek(KAP_TUM_GUN);
+  const { ham } = await kapSukukCek(KAP_TUM_GUN, KAP_HISSE_TIPLER);
   const liste = ham
     .map(kapSadeKayit)
     .filter(k => k.id && (k.kod || k.ilgili))   // hiçbir hisseyle ilişkisi yoksa taşımaya gerek yok
