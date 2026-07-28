@@ -408,6 +408,68 @@ function kapIhracMi(k){
   return KAP_IHRAC_OLUMLU.some(x => metin.indexOf(x) >= 0);
 }
 
+// ── HİSSE BAZLI KAP BİLDİRİMLERİ (v13) ─────────────────────────────────────
+// Hisse detay ekranında o hisseye ait son KAP bildirimlerini göstermek için.
+//
+// TASARIM: Her hisse için ayrı KAP isteği atmak israf olur — tek istekte
+// zaten TÜM piyasanın bildirimleri geliyor (21 günde birkaç bin kayıt).
+// Bunun yerine liste BİR KEZ çekilip sadeleştirilmiş hâli önbelleğe alınıyor,
+// hisse sorguları bu önbellekten süzülüyor. Böylece 600+ hisse tek bir KAP
+// isteğiyle karşılanıyor.
+const KV_KAP_TUM_KEY = "kap:tum:v1";
+const KAP_TUM_TTL = 3600;          // 1 saat
+const KAP_TUM_GUN = 21;            // hisse başına yeterli geçmiş
+const KAP_TUM_MAX = 1500;          // önbellekte tutulacak azami kayıt
+const KAP_HISSE_LIMIT = 8;         // hisse detayında gösterilecek bildirim sayısı
+
+// Sadeleştirilmiş kayıt — önbelleği küçük tutmak için yalnızca gerekli alanlar.
+function kapSadeKayit(k){
+  const b = kapTemel(k);
+  const idx = b.disclosureIndex;
+  return {
+    id: idx || null,
+    kod: b.stockCode || null,
+    ilgili: b.relatedStocks || null,
+    sirket: b.companyTitle || null,
+    baslik: b.title || null,
+    ozet: b.summary || null,
+    tarih: b.publishDate || null,
+    ek: typeof b.attachmentCount === "number" ? b.attachmentCount : 0,
+    link: idx ? `https://www.kap.org.tr/tr/Bildirim/${idx}` : null,
+  };
+}
+
+// Bir kaydın belirtilen hisseye ait olup olmadığı. İki yol: bildirimi yapan
+// şirketin kodu (stockCode) ya da bildirimde ilgili gösterilen şirketler
+// (relatedStocks — virgül/boşlukla ayrılmış olabiliyor).
+function kapHisseEslesir(kayit, kod){
+  const K = String(kod||"").toUpperCase().trim();
+  if(!K) return false;
+  if(String(kayit.kod||"").toUpperCase().trim() === K) return true;
+  const ilgili = String(kayit.ilgili||"").toUpperCase();
+  if(!ilgili) return false;
+  // Parçalara ayırıp TAM eşleşme aranıyor — indexOf kullanılsaydı "AKBNK"
+  // ararken "AKBNKX" gibi bir kodu da yanlışlıkla yakalardı.
+  return ilgili.split(/[,;\s]+/).filter(Boolean).includes(K);
+}
+
+// Tüm bildirimleri (sadeleştirilmiş) getirir; önce Redis, yoksa KAP.
+async function kapTumBildirimler(){
+  try{
+    const onbellek = await redis.get(KV_KAP_TUM_KEY);
+    if(Array.isArray(onbellek) && onbellek.length) return { liste: onbellek, cached: true };
+  }catch{}
+
+  const { ham } = await kapSukukCek(KAP_TUM_GUN);
+  const liste = ham
+    .map(kapSadeKayit)
+    .filter(k => k.id && (k.kod || k.ilgili))   // hiçbir hisseyle ilişkisi yoksa taşımaya gerek yok
+    .slice(0, KAP_TUM_MAX);
+
+  try{ await redis.set(KV_KAP_TUM_KEY, liste, {ex: KAP_TUM_TTL}); }catch{}
+  return { liste, cached: false };
+}
+
 function kapNormalize(k){
   // Kayıt bazen düz, bazen {basic:{...}} şeklinde sarmalanmış geliyor.
   const b = kapTemel(k);
@@ -1003,6 +1065,29 @@ export default async function handler(req,res){
         sukukSayisi: 0,
         hata: err.message,
       });
+    }
+  }
+
+  // ── HİSSE BAZLI KAP BİLDİRİMLERİ: /api/evds-proxy?kap=hisse&kod=ASELS ────
+  // Hisse detay ekranı için. Tüm liste ortak önbellekten geldiği için her
+  // hisse sorgusu KAP'a gitmiyor (bkz. kapTumBildirimler notu).
+  if(req.query.kap === "hisse"){
+    const kod = String(req.query.kod || "").toUpperCase().trim();
+    if(!kod) return res.status(200).json({ kod:null, bildirimler:[], hata:"kod parametresi gerekli" });
+    try{
+      const { liste, cached } = await kapTumBildirimler();
+      const bulunan = liste.filter(k => kapHisseEslesir(k, kod)).slice(0, KAP_HISSE_LIMIT);
+      return res.status(200).json({
+        kaynak: "KAP (Kamuyu Aydınlatma Platformu)",
+        kod,
+        gunAralik: KAP_TUM_GUN,
+        bildirimler: bulunan,
+        cached,
+      });
+    }catch(err){
+      // Hata durumunda 200 + boş liste — hisse detay ekranı bölümü gizler,
+      // sayfanın geri kalanı etkilenmez.
+      return res.status(200).json({ kod, bildirimler:[], hata: err.message });
     }
   }
 
