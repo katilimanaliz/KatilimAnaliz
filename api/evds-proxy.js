@@ -272,7 +272,7 @@ function spkIhraccilariGrupla(kayitlar){
 // Bildirimler kanunen kamuya açıklanmak zorunda olan bilgilerdir; Borsa
 // İstanbul'un lisanslı fiyat verisinden farklı bir hukuki zemindedir.
 const KAP_LISTE_URL = "https://kap.org.tr/tr/api/disclosure/list/main";
-const KV_KAP_SUKUK_KEY = "kap:sukuk:v2";
+const KV_KAP_SUKUK_KEY = "kap:sukuk:v3";   // v3: disclosureBasic duzeltmesi
 const KAP_CACHE_TTL = 2 * 3600;   // 2 saat
 const KAP_GUN_ARALIK = 30;        // VARSAYILAN 30 GÜN — bkz. boyut notu
 const KAP_LIMIT = 40;             // ekranda en fazla kaç bildirim gösterilsin
@@ -296,6 +296,14 @@ function kapTarih(d){
 // (b) başlık/özet metninde kira sertifikası geçiyorsa. İkisi de gerekli —
 // bazı bildirimleri VKŞ dışı kurumlar da yapabiliyor (örn. MKK'nın toplu
 // itfa/kupon bildirimleri).
+// KAP kaydının asıl gövdesi "disclosureBasic" anahtarının altında geliyor.
+// (İlk sürümde "basic" varsayılmıştı — canlı veride öyle olmadığı görüldü,
+// süzgeç hiçbir kaydı yakalayamıyordu. Yine de birkaç varyantı deniyoruz ki
+// KAP alan adını değiştirirse tek noktadan uyarlanabilsin.)
+function kapTemel(k){
+  return k?.disclosureBasic || k?.basic || k || {};
+}
+
 function kapSukukMu(k){
   const sirket = spkNormalizeMetin(k?.companyTitle);
   const metin  = spkNormalizeMetin((k?.title||"") + " " + (k?.summary||""));
@@ -377,7 +385,7 @@ async function kapSukukCek(gunAralik){
 // KAP kaydını sadeleştirip frontend'in ihtiyacı olan alanlara indirger.
 function kapNormalize(k){
   // Kayıt bazen düz, bazen {basic:{...}} şeklinde sarmalanmış geliyor.
-  const b = k?.basic || k || {};
+  const b = kapTemel(k);
   const idx = b.disclosureIndex;
   return {
     id: idx || null,
@@ -891,11 +899,11 @@ export default async function handler(req,res){
           gun,
           hamSayi,
           ilkIkiHamKayit: ham.slice(0,2),
-          ornekAlanlar: ham[0] ? Object.keys(ham[0]?.basic || ham[0] || {}) : [],
+          ornekAlanlar: ham[0] ? Object.keys(kapTemel(ham[0])) : [],
         });
       }
 
-      const suzulmus = ham.filter(k => kapSukukMu(k?.basic || k)).map(kapNormalize);
+      const suzulmus = ham.filter(k => kapSukukMu(kapTemel(k))).map(kapNormalize);
       // En yeniden eskiye. publishDate "GG.AA.YYYY SS:DD:ss" formatında
       // geldiği için doğrudan string sıralaması yanlış olur — çeviriyoruz.
       const zaman = (t)=>{
