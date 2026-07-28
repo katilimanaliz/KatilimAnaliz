@@ -272,10 +272,19 @@ function spkIhraccilariGrupla(kayitlar){
 // Bildirimler kanunen kamuya açıklanmak zorunda olan bilgilerdir; Borsa
 // İstanbul'un lisanslı fiyat verisinden farklı bir hukuki zemindedir.
 const KAP_LISTE_URL = "https://kap.org.tr/tr/api/disclosure/list/main";
-const KV_KAP_SUKUK_KEY = "kap:sukuk:v1";
+const KV_KAP_SUKUK_KEY = "kap:sukuk:v2";
 const KAP_CACHE_TTL = 2 * 3600;   // 2 saat
-const KAP_GUN_ARALIK = 120;       // kaç günlük geçmiş taransın
+const KAP_GUN_ARALIK = 30;        // VARSAYILAN 30 GÜN — bkz. boyut notu
 const KAP_LIMIT = 40;             // ekranda en fazla kaç bildirim gösterilsin
+// BOYUT KORUMASI (2026-07-28, canlı çöküşten sonra eklendi):
+// İlk sürüm 120 günlük, TÜM şirketleri kapsayan bir istek atıyordu ve Vercel
+// fonksiyonu FUNCTION_INVOCATION_FAILED ile çöktü — dönen JSON'u ayrıştırmak
+// belleği taşırdı (tarayıcıda 250 kayıt bile ~1,9 MB). Artık:
+//   • varsayılan pencere 30 gün,
+//   • yanıt bu eşiği aşarsa hiç ayrıştırılmadan reddediliyor.
+// Eşik cömert tutuldu; asıl amaç patolojik büyüklükte yanıtta çökmemek.
+const KAP_MAX_BAYT = 8 * 1024 * 1024;   // 8 MB
+const KAP_MAX_GUN = 90;                  // ?gun= ile bunun üstü istenemez
 
 // KAP tarih formatı: GG.AA.YYYY
 function kapTarih(d){
@@ -321,9 +330,25 @@ async function kapSukukCek(gunAralik){
   }, 15000);
 
   if(r.status < 200 || r.status >= 300) throw new Error(`KAP HTTP ${r.status}`);
+
+  // Ayrıştırmadan ÖNCE boyut kontrolü — dev bir yanıtı JSON.parse etmek
+  // fonksiyonu OOM ile düşürüyor (yaşanmış vaka, bkz. yukarıdaki not).
+  const uzunlukBasligi = parseInt(r.headers.get("content-length") || "0", 10);
+  if(uzunlukBasligi && uzunlukBasligi > KAP_MAX_BAYT){
+    throw new Error(`KAP yanıtı çok büyük (${Math.round(uzunlukBasligi/1048576)} MB) — daha dar tarih aralığı gerekiyor`);
+  }
+
   const text = await r.text();
+  // content-length gzip'li geldiğinde gerçek boyutu yansıtmayabiliyor;
+  // açılmış metni de ayrıca ölçüyoruz.
+  if(text.length > KAP_MAX_BAYT){
+    throw new Error(`KAP yanıtı çok büyük (${Math.round(text.length/1048576)} MB açılmış) — daha dar tarih aralığı gerekiyor`);
+  }
   if(text.trim().startsWith("<")) throw new Error(`KAP HTML döndü: ${text.slice(0,150)}`);
-  const j = JSON.parse(text);
+
+  let j;
+  try { j = JSON.parse(text); }
+  catch(e){ throw new Error(`KAP JSON ayrıştırılamadı: ${String(e.message).slice(0,120)}`); }
   // Yanıt ya doğrudan dizi ya da { basic: [...] } benzeri sarmalanmış olabilir;
   // ikisini de karşılıyoruz.
   const ham = Array.isArray(j) ? j
@@ -834,16 +859,21 @@ export default async function handler(req,res){
     }
 
     try{
-      const gun = parseInt(req.query.gun,10) || KAP_GUN_ARALIK;
+      // ?gun= ile istenen pencere üst sınırla kısıtlanıyor — kullanıcı
+      // yanlışlıkla (ya da bilerek) devasa bir aralık isteyip fonksiyonu
+      // düşüremesin.
+      const istenenGun = parseInt(req.query.gun,10) || KAP_GUN_ARALIK;
+      const gun = Math.max(1, Math.min(istenenGun, KAP_MAX_GUN));
       const { ham, hamSayi } = await kapSukukCek(gun);
 
       // Teşhis modu: ilk 2 ham kaydı olduğu gibi göster (alan adlarını
       // canlı doğrulamak için — KAP arayüzü değişirse buradan anlaşılır).
       if(hamGoster){
         return res.status(200).json({
+          gun,
           hamSayi,
           ilkIkiHamKayit: ham.slice(0,2),
-          ornekAlanlar: ham[0] ? Object.keys(ham[0].basic || ham[0]) : [],
+          ornekAlanlar: ham[0] ? Object.keys(ham[0]?.basic || ham[0] || {}) : [],
         });
       }
 
