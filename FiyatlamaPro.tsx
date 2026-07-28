@@ -14124,7 +14124,9 @@ function HakkindaModal({onClose}){
 // bildirimlerinin (uygulama açıkken veya bildirime dokunarak) yerel geçmişini
 // listeler. Sunucudan bir şey çekmez — tamamen cihazdaki localStorage'a
 // dayanır, bu yüzden yalnızca BU cihazda alınmış bildirimleri gösterir.
-function BildirimGecmisiModal({gecmis,onClose}:{gecmis:any[],onClose:()=>void}){
+function BildirimGecmisiModal({gecmis,onClose,onSil,onTumunuSil}:{gecmis:any[],onClose:()=>void,onSil?:(id:string)=>void,onTumunuSil?:()=>void}){
+  // "Tümünü Sil" için iki adımlı onay durumu — bkz. düğmedeki not.
+  const [silOnay,setSilOnay]=useState(false);
   const gorelZaman=(iso:string)=>{
     const farkDk=Math.round((Date.now()-new Date(iso).getTime())/60000);
     if(farkDk<1) return "az önce";
@@ -14135,21 +14137,50 @@ function BildirimGecmisiModal({gecmis,onClose}:{gecmis:any[],onClose:()=>void}){
   return(
     <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.6)",zIndex:500,display:"flex",alignItems:"flex-end",...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}} onClick={onClose}>
       <div onClick={e=>e.stopPropagation()} style={{background:C.card,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",maxHeight:"78vh",display:"flex",flexDirection:"column"}}>
-        <div style={{padding:"16px 18px",borderBottom:`1px solid ${WA(0.08)}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+        <div style={{padding:"16px 18px",borderBottom:`1px solid ${WA(0.08)}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,gap:10}}>
           <span style={{fontSize:16,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff")}}>🔔 Bildirimler</span>
-          <button onClick={onClose} style={{background:WA(0.1),border:"none",width:32,height:32,borderRadius:16,fontSize:18,color:(TEMA==="acik"?C.label:"#fff"),cursor:"pointer"}}>×</button>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            {gecmis.length>0 && onTumunuSil && (
+              // İki adımlı onay: ilk dokunuş uyarıya çevirir, ikincisi siler.
+              // Tarayıcı confirm() penceresi mobilde kaba durduğu için bu tercih edildi.
+              <button
+                onClick={()=>{ if(silOnay){ onTumunuSil(); setSilOnay(false); } else { setSilOnay(true); } }}
+                style={{
+                  background:silOnay?"rgba(248,113,113,0.18)":WA(0.08),
+                  border:`1px solid ${silOnay?"rgba(248,113,113,0.45)":WA(0.1)}`,
+                  borderRadius:8,padding:"6px 11px",fontSize:11.5,fontWeight:700,
+                  color:silOnay?"#F87171":WA(0.55),cursor:"pointer",whiteSpace:"nowrap",
+                  WebkitTapHighlightColor:"transparent",
+                }}
+              >
+                {silOnay?"Emin misiniz?":"Tümünü Sil"}
+              </button>
+            )}
+            <button onClick={onClose} style={{background:WA(0.1),border:"none",width:32,height:32,borderRadius:16,fontSize:18,color:(TEMA==="acik"?C.label:"#fff"),cursor:"pointer",flexShrink:0}}>×</button>
+          </div>
         </div>
         <div style={{overflowY:"auto",padding:"8px 14px 20px"}}>
           {gecmis.length===0?(
             <p style={{textAlign:"center",color:WA(0.4),fontSize:13,padding:"40px 0"}}>Henüz bildirim yok.</p>
           ):gecmis.map((b:any)=>(
-            <div key={b.id} style={{padding:"12px 4px",borderBottom:`1px solid ${WA(0.06)}`,display:"flex",gap:10}}>
+            <div key={b.id} style={{padding:"12px 4px",borderBottom:`1px solid ${WA(0.06)}`,display:"flex",gap:10,alignItems:"flex-start"}}>
               <span style={{flexShrink:0,fontSize:18,marginTop:1}}>🔔</span>
               <div style={{flex:1,minWidth:0}}>
                 <p style={{margin:0,fontSize:13.5,fontWeight:700,color:C.soft}}>{b.baslik}</p>
                 {b.govde&&<p style={{margin:"3px 0 0",fontSize:12.5,color:WA(0.6),lineHeight:1.4}}>{b.govde}</p>}
                 <p style={{margin:"4px 0 0",fontSize:10.5,color:WA(0.35)}}>{gorelZaman(b.tarih)}</p>
               </div>
+              {onSil && (
+                <button
+                  onClick={()=>onSil(b.id)}
+                  aria-label="Bildirimi sil"
+                  style={{
+                    background:"transparent",border:"none",padding:"2px 4px",marginTop:-2,
+                    fontSize:17,lineHeight:1,color:WA(0.3),cursor:"pointer",flexShrink:0,
+                    WebkitTapHighlightColor:"transparent",
+                  }}
+                >×</button>
+              )}
             </div>
           ))}
         </div>
@@ -16975,6 +17006,20 @@ function App(){
       return yeni;
     });
   };
+  // Tek bir bildirimi sil (listedeki × düğmesi).
+  const bildirimSil=(id:string)=>{
+    setBildirimGecmisi(p=>{
+      const yeni=p.filter(b=>b.id!==id);
+      try{ localStorage.setItem("kp_bildirim_gecmisi",JSON.stringify(yeni)); }catch{}
+      return yeni;
+    });
+  };
+  // Tüm geçmişi temizle. Geri alınamaz olduğu için modalde iki adımlı
+  // onay isteniyor (ilk dokunuş "Emin misiniz?" der, ikincisi siler).
+  const bildirimTumunuSil=()=>{
+    setBildirimGecmisi([]);
+    try{ localStorage.removeItem("kp_bildirim_gecmisi"); }catch{}
+  };
   const bildirimOkunmamisSayisi=bildirimGecmisi.filter(b=>!b.okundu).length;
   const [secilikur,setSeciliKur]=useState<any>(null);
   const [hakkindaAcik,setHakkindaAcik]=useState(false);
@@ -17417,7 +17462,7 @@ function App(){
       </div>
 
       {bildirimAcik&&<BildirimModal onClose={()=>setBildirimAcik(false)}/>}
-      {bildirimGecmisiAcik&&<BildirimGecmisiModal gecmis={bildirimGecmisi} onClose={()=>setBildirimGecmisiAcik(false)}/>}
+      {bildirimGecmisiAcik&&<BildirimGecmisiModal gecmis={bildirimGecmisi} onClose={()=>setBildirimGecmisiAcik(false)} onSil={bildirimSil} onTumunuSil={bildirimTumunuSil}/>}
       {piyasaOzetiDuzenleAcik&&<PiyasaOzetiDuzenleModal secili={piyasaOzetiSecim} onToggle={piyasaOzetiToggle} onClose={()=>setPiyasaOzetiDuzenleAcik(false)}/>}
       {secilikur&&<KurGrafikModal kur={secilikur} onClose={()=>setSeciliKur(null)}/>}
       {portfoyEkleAcik&&<PortfoyEkleModal onKapat={()=>setPortfoyEkleAcik(false)} onEklendi={portfoyEkle}/>}
