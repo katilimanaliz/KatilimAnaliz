@@ -272,13 +272,13 @@ function spkIhraccilariGrupla(kayitlar){
 // Bildirimler kanunen kamuya açıklanmak zorunda olan bilgilerdir; Borsa
 // İstanbul'un lisanslı fiyat verisinden farklı bir hukuki zemindedir.
 const KAP_LISTE_URL = "https://kap.org.tr/tr/api/disclosure/list/main";
-const KV_KAP_SUKUK_KEY = "kap:sukuk:v4";   // v4: ihrac suzgeci eklendi
+const KV_KAP_SUKUK_KEY = "kap:sukuk:v5";   // v5: tavan elendi + tekrar temizligi
 const KAP_CACHE_TTL = 2 * 3600;   // 2 saat
 const KAP_GUN_ARALIK = 14;        // 14 GÜN — canlı ölçüm: 7 günde 82 sukuk
                                   // bildirimi, 1.321 ham kayıt. 14 gün hem
                                   // listeyi doldurmaya fazlasıyla yetiyor hem
                                   // de KAP'i gereksiz yormuyor.
-const KAP_LIMIT = 50;             // ekranda en fazla kaç bildirim gösterilsin
+const KAP_LIMIT = 30;             // ekranda en fazla kaç bildirim gösterilsin
 // BOYUT KORUMASI (2026-07-28, canlı çöküşten sonra eklendi):
 // İlk sürüm 120 günlük, TÜM şirketleri kapsayan bir istek atıyordu ve Vercel
 // fonksiyonu FUNCTION_INVOCATION_FAILED ile çöktü — dönen JSON'u ayrıştırmak
@@ -397,7 +397,10 @@ async function kapSukukCek(gunAralik){
 // NOT: "Kupon Oranının Belirlenmesi" bildirimleri de eleniyor — bunlar getiri
 // oranı içerdiği için ileride ayrı bir bölümde değerlendirilebilir.
 const KAP_IHRAC_OLUMLU = ["IHRAC", "IZAHNAME", "TERTIP", "HALKA ARZ", "SATIS"];
-const KAP_IHRAC_OLUMSUZ = ["ITFA", "KUPON", "ODEME"];
+// "İhraç Tavanına İlişkin Bildirim" de eleniyor: ekranın üst kısmındaki
+// "SPK Onayı Alan İhraççılar" bölümü zaten aynı bilgiyi TUTARLARIYLA
+// gösteriyor, burada tekrar etmek gürültü yapıyor.
+const KAP_IHRAC_OLUMSUZ = ["ITFA", "KUPON", "ODEME", "IHRAC TAVAN"];
 
 function kapIhracMi(k){
   const metin = spkNormalizeMetin((k?.title||"") + " " + (k?.summary||""));
@@ -930,8 +933,20 @@ export default async function handler(req,res){
       // ?tumu=1 ile ikinci süzgeç atlanabilir (teşhis/ileride kullanım için).
       const sukukHam = ham.filter(k => kapSukukMu(kapTemel(k)));
       const tumunuGoster = req.query.tumu === "1";
-      const suzulmus = (tumunuGoster ? sukukHam : sukukHam.filter(k => kapIhracMi(kapTemel(k))))
+      let suzulmus = (tumunuGoster ? sukukHam : sukukHam.filter(k => kapIhracMi(kapTemel(k))))
         .map(kapNormalize);
+
+      // TEKRAR TEMİZLİĞİ: Bir halka arz için şirket aynı gün birkaç ayrı belge
+      // bildiriyor (İzahname, İhraççı Bilgi Dokümanı, SP Aracı Notu...) ve
+      // hepsinin ÖZETİ aynı oluyor. Kullanıcı için bunlar tek bir olay —
+      // şirket + özet ikilisinde ilkini tutup gerisini eliyoruz.
+      const gorulen = new Set();
+      suzulmus = suzulmus.filter(b=>{
+        const anahtar = `${b.sirket||""}|${b.ozet||b.baslik||""}`;
+        if(gorulen.has(anahtar)) return false;
+        gorulen.add(anahtar);
+        return true;
+      });
       // En yeniden eskiye. publishDate "GG.AA.YYYY SS:DD:ss" formatında
       // geldiği için doğrudan string sıralaması yanlış olur — çeviriyoruz.
       const zaman = (t)=>{
