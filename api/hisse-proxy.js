@@ -398,19 +398,37 @@ export default async function handler(req, res) {
       })
       .sort((a,b) => (b.piyasaDegeri||0) - (a.piyasaDegeri||0));
 
-    // ── KAYNAK SEÇİMİ ───────────────────────────────────────────────────────
-    // Varsayılan her zaman Midas. TradingView'a SADECE Midas seans içinde
-    // bayat kalmışsa gidilir; o da başarısız olursa yine Midas'a düşülür.
+    // ── KAYNAK SEÇİMİ (2026-07-28: SIRA TERSİNE ÇEVRİLDİ) ──────────────────
+    // ARTIK ÖNCE TRADINGVIEW, sonra Midas.
+    //
+    // GEREKÇE: Midas'ın bu ucu (getmidas.com'un WordPress eklentisi,
+    // /wp-json/midas-api/...) 24 Temmuz Cuma kapanışından beri donmuş —
+    // dört gün boyunca aynı DateTime damgasını (1784905800501) döndürdü.
+    // Bu geçici bir aksaklık değil, beslemenin kırılmış olması. Midas'ın
+    // KENDİ uygulaması çalışıyor; sorun yalnızca pazarlama sitesindeki
+    // "Canlı Borsa" tablosunu besleyen serviste ve fark edilmiş görünmüyor.
+    //
+    // Eski kurgu (Midas asıl → bayatsa TV) her istekte önce bayatlık hesabı
+    // yapıp sonra yedeğe gidiyordu; kaynak kalıcı olarak bozukken bu sadece
+    // gereksiz gecikme demek.
+    //
+    // GERİ ALMAK KOLAY: Midas düzelirse ?kaynak=midas ile anında test edilir,
+    // kalıcı dönüş için aşağıdaki TERCIH sabitini "midas" yapmak yeterli.
+    const TERCIH = "tradingview";                    // "tradingview" | "midas"
+    const zorlananKaynak = req.query.kaynak;         // test/geri alma anahtarı
+    const oncelik = (zorlananKaynak === "midas" || zorlananKaynak === "tradingview")
+      ? zorlananKaynak : TERCIH;
+
     let hisseler = midasHisseler;
     let kaynak = "midas";
     let etkinVeriZamani = veriZamani;
     let yedekHata = null;
 
-    if (midasBayatMi(veriZamani)) {
+    if (oncelik === "tradingview") {
       try {
         const tv = await tradingViewCek();
         const tvHisseler = tradingViewNormalize(tv, isimMap);
-        // Anlamlı sayıda kayıt gelmediyse güvenme — Midas'ta kal.
+        // Anlamlı sayıda kayıt gelmediyse güvenme — Midas'a düş.
         if (tvHisseler.length >= 100) {
           hisseler = tvHisseler;
           kaynak = "tradingview";
@@ -418,10 +436,10 @@ export default async function handler(req, res) {
           // sunmadığı için zamanı bu bilinen gecikmeye göre belirtiyoruz.
           etkinVeriZamani = new Date(Date.now() - 15 * 60 * 1000).toISOString();
         } else {
-          yedekHata = `TV yetersiz kayit (${tvHisseler.length})`;
+          yedekHata = `TV yetersiz kayit (${tvHisseler.length}) — Midas'a dusuldu`;
         }
       } catch (e) {
-        yedekHata = String(e && e.message || e);
+        yedekHata = String(e && e.message || e) + " — Midas'a dusuldu";
       }
     }
 
@@ -433,6 +451,10 @@ export default async function handler(req, res) {
       guncelleme: new Date().toISOString(),   // bu isteğin işlendiği an
       veriZamani: etkinVeriZamani,             // verinin üretildiği an (bkz. yukarıdaki not)
       kaynak,                                  // "midas" | "tradingview"
+      // Midas'ın durumu izlenebilsin diye her yanıtta bildiriliyor — düzelip
+      // düzelmediğini görmek için ayrıca istek atmaya gerek kalmıyor.
+      midasVeriZamani: veriZamani,
+      midasBayat: midasBayatMi(veriZamani),
       ...(yedekHata ? { yedekHata } : {}),     // yedek denenip başarısız olduysa sebebi
       data: hisseler,
     });
