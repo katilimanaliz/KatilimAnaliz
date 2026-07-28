@@ -114,7 +114,7 @@ const CACHE_TTL_SANIYE = 6 * 3600; // 6 saat, Redis TTL saniye cinsinden ister
 
 // ── SPK KİRA SERTİFİKASI (v11) ─────────────────────────────────────────────
 const SPK_BASE = "https://ws.spk.gov.tr/BorclanmaAraclari/api";
-const KV_SPK_SUKUK_KEY = "spk:sukuk:v1";
+const KV_SPK_SUKUK_KEY = "spk:sukuk:v2";   // v1→v2: ihraccilar alani eklendi, eski onbellek gecersiz kilinmali
 const SPK_CACHE_TTL = 12 * 3600;   // 12 saat — veri ayda bir güncelleniyor
 const SPK_YIL_SAYISI = 5;          // trend grafiği için kaç yıl geriye gidilsin
 
@@ -167,6 +167,91 @@ function spkYilOzeti(satirlar, sonAySiniri){
     for(const t of SPK_SUKUK_TURLERI) turToplam[t.anahtar] += spkSayi(s[t.alan + "Toplam"]);
   }
   return { toplam, yurtIci, yurtDisi, sonAy, turToplam };
+}
+
+// ── İHRAÇÇI BAZINDA SPK ONAYLARI (v11) ─────────────────────────────────────
+// ÖNEMLİ AYRIM: Bu uç, tür bazındaki uçtan FARKLI bir şey ölçüyor.
+//   • SermayePiyasasiAraclariKiraSertifikasi → FİİLEN SATIŞI GERÇEKLEŞEN
+//     tutarlar (milyon TL)
+//   • DigerSermayePiyasasiAraclariIhracciBazindaIhracVerileri → SPK'nın
+//     ONAYLADIĞI İHRAÇ TAVANI (ham TL). Tavan bir ÜST SINIRDIR; ihraççı bu
+//     tutarın tamamını kullanmak zorunda değildir.
+// Canlı veri gözlemi (2026): satisiGerceklestirilenTutarTL alanı düzensiz
+// dolduruluyor — bazı kayıtlarda gerçek tutar var, çoğunda 0. Bu yüzden
+// ekranda ASIL gösterilen değer "onaylanan tavan" olmalı ve etiketi de
+// dürüstçe böyle yazılmalı; satış bilgisi yalnızca varsa ek olarak verilir.
+// kaynakKurulus alanı da canlı veride hep null geliyor (fon kullanıcısını
+// öğrenme umudumuz bu uçtan karşılanmıyor).
+const SPK_IHRACCI_LIMIT = 25;  // ekranda gösterilecek en büyük N ihraççı
+
+// Türkçe karakterleri de doğru büyütüp karşılaştırma yapar (İ/ı sorunu).
+function spkNormalizeMetin(s){
+  return String(s==null?"":s).toLocaleUpperCase("tr-TR")
+    .split("\u0130").join("I").split("\u015E").join("S")
+    .split("\u00C7").join("C").split("\u00D6").join("O")
+    .split("\u00DC").join("U").split("\u011E").join("G");
+}
+
+async function spkIhracciYilCek(yil){
+  const url = `${SPK_BASE}/DigerSermayePiyasasiAraclariIhracciBazindaIhracVerileri?yil=${yil}`;
+  const r = await fetchZamanli(url, { headers:{ "Accept":"application/json" } }, 12000);
+  if(r.status < 200 || r.status >= 300) throw new Error(`SPK ihracci HTTP ${r.status}`);
+  const text = await r.text();
+  if(text.trim().startsWith("<")) throw new Error(`SPK ihracci HTML döndü: ${text.slice(0,150)}`);
+  const j = JSON.parse(text);
+  return Array.isArray(j) ? j : [];
+}
+
+// Karışık gelen listeden (borçlanma araçları + kira sertifikası) yalnızca
+// kira sertifikalarını süzüp ihraççı bazında gruplar.
+function spkIhraccilariGrupla(kayitlar){
+  const gruplar = {};
+  let toplamKayit = 0;
+  for(const k of (kayitlar||[])){
+    const tur = spkNormalizeMetin(k.ihracTavaniAracTuru);
+    if(tur.indexOf("KIRA SERTIFIKA") < 0) continue;   // sadece sukuk
+    toplamKayit++;
+    const unvan = (k.ihracciUnvani || "Bilinmiyor").trim();
+    if(!gruplar[unvan]){
+      gruplar[unvan] = {
+        unvan,
+        onayliTavan: 0,
+        satisBildirilen: 0,
+        onaySayisi: 0,
+        sonOnayTarihi: null,
+        satisYontemleri: {},
+        paraBirimleri: {},
+        ihracciTipi: k.ihracciTipi || null,
+      };
+    }
+    const g = gruplar[unvan];
+    g.onayliTavan   += spkSayi(k.kurulcaOnaylananIhracTavaniTutari);
+    g.satisBildirilen += spkSayi(k.satisiGerceklestirilenTutarTL);
+    g.onaySayisi++;
+    const t = k.kurulKararTarihi ? String(k.kurulKararTarihi).slice(0,10) : null;
+    if(t && (!g.sonOnayTarihi || t > g.sonOnayTarihi)) g.sonOnayTarihi = t;
+    // "Tahsisli,Nitelikli" gibi virgüllü gelebiliyor — tek tek ayırıyoruz.
+    for(const y of String(k.tavanSatisYontemi||"").split(",").map(s=>s.trim()).filter(Boolean)){
+      g.satisYontemleri[y] = true;
+    }
+    if(k.ihracTavaniParaBirimi) g.paraBirimleri[k.ihracTavaniParaBirimi] = true;
+  }
+  const liste = Object.values(gruplar).map(g=>({
+    unvan: g.unvan,
+    ihracciTipi: g.ihracciTipi,
+    onayliTavan: g.onayliTavan,
+    satisBildirilen: g.satisBildirilen,
+    onaySayisi: g.onaySayisi,
+    sonOnayTarihi: g.sonOnayTarihi,
+    satisYontemleri: Object.keys(g.satisYontemleri),
+    paraBirimleri: Object.keys(g.paraBirimleri),
+  })).sort((a,b)=> b.onayliTavan - a.onayliTavan);
+  return {
+    liste: liste.slice(0, SPK_IHRACCI_LIMIT),
+    ihracciSayisi: liste.length,
+    kayitSayisi: toplamKayit,
+    toplamOnayliTavan: liste.reduce((t,g)=>t+g.onayliTavan, 0),
+  };
 }
 
 const HAFTALIK = [
@@ -535,6 +620,18 @@ export default async function handler(req,res){
       const buYilOzet = spkYilOzeti(buYilSatirlar);
       const sonAy = buYilOzet.sonAy;
 
+      // İHRAÇÇI BAZINDA SPK ONAYLARI — yalnızca güncel yıl için çekiliyor.
+      // Başarısız olursa ekranın geri kalanı çalışmaya devam etsin diye
+      // hata yutuluyor (bölüm frontend'de gizlenir).
+      let ihraccilar = null;
+      try{
+        const hamIhracci = await spkIhracciYilCek(buYil);
+        ihraccilar = spkIhraccilariGrupla(hamIhracci);
+        spkTeshis.ihracci = { basarili:true, hamKayit:hamIhracci.length, sukukKayit:ihraccilar.kayitSayisi, ihracciSayisi:ihraccilar.ihracciSayisi };
+      }catch(e){
+        spkTeshis.ihracci = { basarili:false, hata:e.message };
+      }
+
       // DÜRÜST KIYAS: geçen yılın YALNIZCA aynı ay aralığı toplanır.
       // (7 aylık 2026'yı 12 aylık 2025 ile kıyaslamak yanıltıcı olurdu.)
       const gecenYilSatirlar = (ham.find(h=>h.yil===buYil-1)||{satirlar:[]}).satirlar;
@@ -589,6 +686,14 @@ export default async function handler(req,res){
         turler,
         aylik,
         yillik,
+        // İhraççı bazında SPK ONAYLARI — birim HAM TL (tür bazındaki milyon
+        // TL'den FARKLI!). Frontend'in yanlış birimle göstermemesi için
+        // ayrıca bildiriliyor.
+        ihraccilar: ihraccilar ? {
+          birim: "TL",
+          aciklama: "SPK tarafından onaylanan ihraç tavanı üst sınırdır; fiilen ihraç edilen tutar bundan düşük olabilir.",
+          ...ihraccilar,
+        } : null,
         _teshis: spkTeshis,
       };
 
