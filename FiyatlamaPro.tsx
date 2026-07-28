@@ -1323,10 +1323,10 @@ function KarPayiOranlari({nav}:{nav:any}){
         <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden"}}>
           {/* Sütun başlıkları — tıklanınca o para birimine göre büyükten küçüğe sıralar */}
           <div style={{display:"flex",alignItems:"center",padding:"10px 12px",borderBottom:`1px solid ${C.border}`,background:WA(0.03)}}>
-            <span style={{flex:1.3,fontSize:10,fontWeight:800,color:C.sub,textTransform:"uppercase",letterSpacing:0.3}}>Banka</span>
+            <span style={{flex:2,fontSize:10,fontWeight:800,color:C.sub,textTransform:"uppercase",letterSpacing:0.3}}>Banka</span>
             {([["tl","TL"],["usd","USD"],["eur","EUR"],["altin","Altın"]] as const).map(([v,l])=>(
               <span key={v} onClick={()=>setSiralamaParaBirimi(v)} style={{
-                flex:1,textAlign:"right",fontSize:10,fontWeight:800,cursor:"pointer",
+                flex:0.92,textAlign:"right",fontSize:10,fontWeight:800,cursor:"pointer",
                 color:siralamaParaBirimi===v?C.blue:C.sub,textTransform:"uppercase",letterSpacing:0.3,
               }}>{l}{siralamaParaBirimi===v?" ▼":""}</span>
             ))}
@@ -1337,10 +1337,10 @@ function KarPayiOranlari({nav}:{nav:any}){
               display:"flex",alignItems:"center",padding:"11px 12px",
               borderBottom:i<bankalarSirali.length-1?`1px solid ${C.border}`:"none",
             }}>
-              <span style={{flex:1.3,fontSize:12.5,fontWeight:700,color:C.label,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingRight:6}}>{b.ad}</span>
+              <span style={{flex:2,fontSize:12.5,fontWeight:700,color:C.label,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingRight:6}}>{b.ad}</span>
               {([["tl",b.tl],["usd",b.usd],["eur",b.eur],["altin",b.altin]] as const).map(([v,deger])=>(
                 <span key={v} style={{
-                  flex:1,textAlign:"right",fontSize:13,fontFamily:"monospace",fontWeight:siralamaParaBirimi===v?800:700,
+                  flex:0.92,textAlign:"right",fontSize:12.5,fontFamily:"monospace",fontWeight:siralamaParaBirimi===v?800:700,
                   color:siralamaParaBirimi===v?C.blue:C.label,
                 }}>{deger!=null?`%${fmtN(deger,2)}`:"—"}</span>
               ))}
