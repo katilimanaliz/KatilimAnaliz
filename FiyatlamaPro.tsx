@@ -2044,8 +2044,8 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
 
       {/* Grafik */}
       <div style={{background:C.card,margin:"10px 0",padding:"12px 16px"}}>
-        {/* Dönem butonları */}
-        <div style={{display:"flex",gap:6,marginBottom:10}}>
+        {/* Dönem butonları + takip yıldızı */}
+        <div style={{display:"flex",gap:6,marginBottom:10,alignItems:"center"}}>
           {([["1a","1 Ay"],["3a","3 Ay"],["1y","1 Yıl"]] as ["1a"|"3a"|"1y",string][]).map(([k,l]) => (
             <button key={k} onClick={() => setDonem(k)} style={{
               padding:"4px 12px",borderRadius:6,border:`1px solid ${C.border}`,
@@ -2053,6 +2053,21 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
               fontSize:11,fontWeight:donem===k?700:400,cursor:"pointer",fontFamily:"inherit"
             }}>{l}</button>
           ))}
+          {/* Takip yıldızı — dönem butonlarının sağ ucunda, grafiğin hemen üstünde */}
+          <div style={{marginLeft:"auto"}}>
+            <TakipYildizi
+              tur="hisse"
+              kod={hisse.ticker}
+              ad={hisse.sirket || hisse.ticker}
+              birim="lot"
+              fiyat={hisse.fiyat ?? null}
+              dec={2}
+              g={hisse.degisim1g ?? null}
+              h={hisse.degisim1h ?? null}
+              a={hisse.degisim1a ?? null}
+              y={hisse.degisim1y ?? null}
+            />
+          </div>
         </div>
         {grafikYukl
           ? <div style={{height:120,display:"flex",alignItems:"center",justifyContent:"center",color:C.sub,fontSize:12}}>⟳ Yükleniyor…</div>
@@ -15214,6 +15229,111 @@ type PortfoyKalemi = {
 const PORTFOY_LS_KEY = "kp_portfoy";
 const PORTFOY_GIZLI_LS_KEY = "kp_portfoy_gizli";
 
+// ── TAKİP LİSTESİ YARDIMCILARI (2026-07-29) ────────────────────────────────
+// Grafik ekranlarındaki yıldız düğmesi için. Portföy state'i kök bileşende
+// yaşıyor ama yıldız çok daha derinde (HisseDetay, KurGrafikModal...) — prop'u
+// katman katman geçirmek yerine localStorage'a yazıp bir olay yayınlıyoruz.
+// Kök bileşen bu olayı dinleyip state'ini tazeliyor, böylece portföy widget'ı
+// da anında güncelleniyor.
+const PORTFOY_DEGISTI_OLAYI = "kp-portfoy-degisti";
+
+function portfoyOlayYayinla() {
+  try { window.dispatchEvent(new Event(PORTFOY_DEGISTI_OLAYI)); } catch {}
+}
+
+// Bir ürün listede var mı? (hem takip hem gerçek portföy kalemi sayılır)
+function takipDurumu(tur: PortfoyKalemi["tur"], kod: string): "yok" | "takip" | "portfoy" {
+  const k = portfoyOku().find(x => x.tur === tur && x.kod === kod);
+  if (!k) return "yok";
+  return k.alis == null ? "takip" : "portfoy";
+}
+
+// Yıldıza basınca: yoksa takibe ekler, takipteyse çıkarır.
+// GERÇEK PORTFÖY KALEMİNE DOKUNMAZ — alış bilgisi girilmiş bir kaydı yıldızla
+// silmek veri kaybı olurdu; o durumda hiçbir şey yapmaz ve "portfoy" döner.
+function takipDegistir(yeni: {
+  tur: PortfoyKalemi["tur"]; kod: string; ad: string; birim: string;
+  fiyat: number | null; paraOnek?: string; dec?: number;
+  g?: number|null; h?: number|null; a?: number|null; y?: number|null;
+}): "eklendi" | "cikarildi" | "portfoyKorundu" {
+  const liste = portfoyOku();
+  const mevcut = liste.find(x => x.tur === yeni.tur && x.kod === yeni.kod);
+
+  if (mevcut && mevcut.alis != null) return "portfoyKorundu";
+
+  if (mevcut) {
+    portfoyYaz(liste.filter(x => !(x.tur === yeni.tur && x.kod === yeni.kod)));
+    portfoyOlayYayinla();
+    return "cikarildi";
+  }
+
+  const kalem: PortfoyKalemi = {
+    id: (typeof crypto !== "undefined" && crypto.randomUUID)
+      ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2),
+    tur: yeni.tur,
+    kod: yeni.kod,
+    ad: yeni.ad,
+    birim: yeni.birim,
+    miktar: null,          // null = izleme modu (Takip Listem'e düşer)
+    fiyat: yeni.fiyat,
+    paraOnek: yeni.paraOnek,
+    dec: yeni.dec,
+    g: yeni.g ?? null, h: yeni.h ?? null, a: yeni.a ?? null, y: yeni.y ?? null,
+    alis: null,            // alış yok → takip kalemi
+    eklenmeTarihi: new Date().toISOString(),
+  };
+  portfoyYaz([...liste, kalem]);
+  portfoyOlayYayinla();
+  return "eklendi";
+}
+
+// Grafik ekranlarında kullanılan ortak yıldız düğmesi.
+function TakipYildizi({ tur, kod, ad, birim, fiyat, paraOnek, dec, g, h, a, y, boyut = 20 }: {
+  tur: PortfoyKalemi["tur"]; kod: string; ad: string; birim: string;
+  fiyat: number | null; paraOnek?: string; dec?: number;
+  g?: number|null; h?: number|null; a?: number|null; y?: number|null; boyut?: number;
+}) {
+  const [durum, setDurum] = useState<"yok"|"takip"|"portfoy">(() => takipDurumu(tur, kod));
+  const [uyari, setUyari] = useState<string|null>(null);
+
+  useEffect(() => { setDurum(takipDurumu(tur, kod)); }, [tur, kod]);
+
+  const dolu = durum !== "yok";
+  const tikla = () => {
+    const sonuc = takipDegistir({ tur, kod, ad, birim, fiyat, paraOnek, dec, g, h, a, y });
+    if (sonuc === "portfoyKorundu") {
+      // Portföyde alış bilgisiyle duran kalem — buradan silinmesi veri kaybı olur.
+      setUyari("Bu ürün portföyünüzde kayıtlı");
+      setTimeout(() => setUyari(null), 2200);
+      return;
+    }
+    setDurum(takipDurumu(tur, kod));
+    setUyari(sonuc === "eklendi" ? "Takip listesine eklendi" : "Takip listesinden çıkarıldı");
+    setTimeout(() => setUyari(null), 1800);
+  };
+
+  return (
+    <div style={{position:"relative",display:"inline-flex",alignItems:"center"}}>
+      <button
+        onClick={tikla}
+        aria-label={dolu ? "Takip listesinden çıkar" : "Takip listesine ekle"}
+        style={{
+          background:"transparent",border:"none",padding:4,cursor:"pointer",
+          fontSize:boyut,lineHeight:1,color:dolu?"#F5A623":WA(0.35),
+          WebkitTapHighlightColor:"transparent",
+        }}
+      >{dolu ? "★" : "☆"}</button>
+      {uyari && (
+        <span style={{
+          position:"absolute",top:"100%",right:0,marginTop:2,whiteSpace:"nowrap",
+          background:"rgba(0,0,0,0.82)",color:"#fff",fontSize:11,fontWeight:600,
+          padding:"5px 9px",borderRadius:7,zIndex:30,pointerEvents:"none",
+        }}>{uyari}</span>
+      )}
+    </div>
+  );
+}
+
 function portfoyOku(): PortfoyKalemi[] {
   try {
     const raw = localStorage.getItem(PORTFOY_LS_KEY);
@@ -16929,6 +17049,16 @@ function App(){
 
   // ── Portföyüm ────────────────────────────────────────────────────────────
   const [portfoy,setPortfoy]=useState<PortfoyKalemi[]>(()=>portfoyOku());
+
+  // Grafik ekranlarındaki takip yıldızı localStorage'a doğrudan yazıp bir olay
+  // yayınlıyor (bkz. takipDegistir). Burada dinleyip state'i tazeliyoruz ki
+  // portföy widget'ı ve detay ekranı anında güncellensin.
+  useEffect(()=>{
+    const tazele = () => setPortfoy(portfoyOku());
+    window.addEventListener(PORTFOY_DEGISTI_OLAYI, tazele);
+    return () => window.removeEventListener(PORTFOY_DEGISTI_OLAYI, tazele);
+  },[]);
+
   const [portfoyGizli,setPortfoyGizli]=useState<boolean>(()=>{
     try{ return localStorage.getItem(PORTFOY_GIZLI_LS_KEY)==="1"; }catch{ return false; }
   });
