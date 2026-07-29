@@ -16150,7 +16150,10 @@ function PortfoyWidget({liste, gizli, onGizliToggle, onDetay, onEkle, onSil, onG
                   {pozitif?"+":""}{toplamYuzde.toFixed(2)}%
                 </div>
               </div>
-              <span style={{fontSize:16,color:PORTFOY_ETIKET}}>›</span>
+              {/* "Tümü ›" başlık satırından buraya taşındı (Takip sekmesindeki
+                  özet bloğunda zaten aynısı vardı — iki sekme artık simetrik) */}
+              <span style={{fontSize:11,fontWeight:700,color:C.blue,whiteSpace:"nowrap"}}>Tümü</span>
+              <span style={{fontSize:16,color:PORTFOY_ETIKET,marginLeft:-2}}>›</span>
             </div>
           </div>
         ) : (
@@ -16174,24 +16177,25 @@ function PortfoyWidget({liste, gizli, onGizliToggle, onDetay, onEkle, onSil, onG
 
       <div style={{height:1,background:C.border}}/>
 
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 16px 0"}}>
-        <span style={{fontSize:9.5,fontWeight:800,color:PORTFOY_ETIKET,textTransform:"uppercase",letterSpacing:0.5}}>Ürünler ({aktifListe.length})</span>
-        <div onClick={()=>onDetay(undefined,sekme)} style={{textAlign:"right",cursor:"pointer"}}>
-          <div style={{fontSize:11,fontWeight:700,color:C.blue,whiteSpace:"nowrap"}}>Tümü ›</div>
-        </div>
-      </div>
-
-      {/* ── SÜTUN BAŞLIKLARI ──────────────────────────────────────────────────
-          Veri satırlarıyla BİREBİR aynı padding/gap ve aynı sabit sütun
-          genişliklerini (PORTFOY_SUT_*) kullanıyor — hiza elle ayarlanmıyor,
-          sabitler değişirse başlık kendiliğinden uyum sağlıyor. */}
-      {aktifListe.length>0 && (
-        <div style={{display:"flex",alignItems:"center",gap:10,padding:"7px 16px 6px",borderBottom:`1px solid ${C.border}`}}>
-          <span style={{flex:1,minWidth:0,fontSize:9.5,fontWeight:800,color:PORTFOY_ETIKET,textTransform:"uppercase",letterSpacing:0.4}}>Ürün</span>
+      {/* ── ÜRÜN SAYISI + SÜTUN BAŞLIKLARI (TEK SATIR) ───────────────────────
+          2026-07-29 (2. tur): Önce iki ayrı satırdı ve "ÜRÜNLER (2)" ile
+          hemen altındaki "ÜRÜN" üst üste tekrar ediyordu. Artık sol sütun
+          başlığının kendisi "ÜRÜNLER (N)" — tek satır. Sağdaki iki başlık,
+          veri satırlarıyla aynı padding/gap ve aynı sabit sütun genişliklerini
+          (PORTFOY_SUT_*) kullandığı için hiza kendiliğinden tutuyor.
+          "Tümü ›" bağlantısı yukarıdaki özet bloğuna taşındı. */}
+      {aktifListe.length>0 ? (
+        <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 16px 6px",borderBottom:`1px solid ${C.border}`}}>
+          <span style={{flex:1,minWidth:0,fontSize:9.5,fontWeight:800,color:PORTFOY_ETIKET,textTransform:"uppercase",letterSpacing:0.5}}>Ürünler ({aktifListe.length})</span>
           <span style={{width:PORTFOY_SUT_FIYAT,flexShrink:0,textAlign:"right",fontSize:9.5,fontWeight:800,color:PORTFOY_ETIKET,textTransform:"uppercase",letterSpacing:0.4}}>
             {sekme==="portfoy" ? "Değer" : "Fiyat"}
           </span>
           <span style={{width:PORTFOY_SUT_DEGISIM,flexShrink:0,textAlign:"right",fontSize:9.5,fontWeight:800,color:PORTFOY_ETIKET,textTransform:"uppercase",letterSpacing:0.4}}>Günlük %</span>
+        </div>
+      ) : (
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 16px 0"}}>
+          <span style={{fontSize:9.5,fontWeight:800,color:PORTFOY_ETIKET,textTransform:"uppercase",letterSpacing:0.5}}>Ürünler (0)</span>
+          <span onClick={()=>onDetay(undefined,sekme)} style={{fontSize:11,fontWeight:700,color:C.blue,whiteSpace:"nowrap",cursor:"pointer"}}>Tümü ›</span>
         </div>
       )}
 
@@ -16799,12 +16803,21 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onKalem
         </div>
       )}
 
+      {/* Takip Listem uyarısı: eskiden HER kartın altında tekrar ediyordu.
+          Artık liste başına bir kez yazılıyor — bilgi aynı, gürültü yok. */}
+      {sekme==="takip" && filtreliListe.length>0 && (
+        <div style={{display:"flex",alignItems:"flex-start",gap:6,padding:"0 2px 10px",fontSize:10.5,color:PORTFOY_ETIKET,lineHeight:1.45}}>
+          <Tag size={11} style={{flexShrink:0,marginTop:2}}/>
+          <span>Bu ürünlerde alış bilgisi yok. Alış eklemek için ürünü silip yeniden ekleyin — Portföyüm'e taşınır.</span>
+        </div>
+      )}
+
       {/* ── SÜTUN BAŞLIKLARI (kart listesi için) ─────────────────────────────
           Kartların iç padding'i 12, sağdaki çöp kutusu ikonu 13px + 10px boşluk
           → başlığın sağ boşluğu 12+23 = 35px olacak şekilde ayarlandı. */}
       {filtreliListe.length>0 && (
         <div style={{display:"flex",alignItems:"center",gap:10,padding:"0 35px 7px 12px"}}>
-          <span style={{flex:1,minWidth:0,fontSize:9.5,fontWeight:800,color:PORTFOY_ETIKET,textTransform:"uppercase",letterSpacing:0.4}}>Ürün</span>
+          <span style={{flex:1,minWidth:0,fontSize:9.5,fontWeight:800,color:PORTFOY_ETIKET,textTransform:"uppercase",letterSpacing:0.4}}>Ürünler ({filtreliListe.length})</span>
           <span style={{flexShrink:0,fontSize:9.5,fontWeight:800,color:PORTFOY_ETIKET,textTransform:"uppercase",letterSpacing:0.4}}>
             {sekme==="takip" ? "Güncel Fiyat" : "Güncel Değer"}
           </span>
@@ -16850,7 +16863,7 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onKalem
               <Trash2 size={13} color={PORTFOY_ETIKET} style={{cursor:"pointer"}} onClick={(e)=>{e.stopPropagation();onSil(k.id);}}/>
             </div>
 
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:sekme==="takip"?0:10}}>
               {[["Günlük",k.g],["Haftalık",k.h],["Aylık",k.a],["Yıllık",k.y]].map(([lbl,val]:any)=>(
                 <div key={lbl} style={{textAlign:"center"}}>
                   <div style={{fontSize:9.5,fontWeight:700,color:PORTFOY_ETIKET,marginBottom:3}}>{lbl}</div>
@@ -16859,11 +16872,7 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onKalem
               ))}
             </div>
 
-            {sekme==="takip" ? (
-              <div style={{borderTop:`1px solid ${C.border}`,paddingTop:9,display:"flex",alignItems:"center",gap:5,fontSize:10.5,color:PORTFOY_ETIKET}}>
-                <Tag size={11}/> Alış bilgisi eklemek için sil, yeniden ekle — Portföyüm'e taşınır
-              </div>
-            ) : (
+            {sekme==="takip" ? null : (
               <div style={{borderTop:`1px solid ${C.border}`,paddingTop:9}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:6}}>
                   <div style={{display:"flex",alignItems:"center",gap:5,fontSize:10,color:PORTFOY_ETIKET}}>
