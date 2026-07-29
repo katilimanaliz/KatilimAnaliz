@@ -15224,6 +15224,7 @@ type PortfoyKalemi = {
   alis: { tarih: string; fiyat: number; kaynak: "otomatik" | "elle" } | null; // ağırlıklı ortalama (birden fazla alışta)
   alisKalemleri?: { tarih: string; fiyat: number; miktar: number; kaynak: "otomatik" | "elle" }[]; // 2026-07-15: aynı ürün tekrar eklenince tek satırda birleşiyor, her alış burada ayrı satır olarak tutulur (ortalama maliyet + tarih geçmişi için)
   eklenmeTarihi: string;
+  eklenmeFiyat?: number | null; // 2026-07-29: eklendiği andaki fiyat — DONDURULMUŞ, tazelenmez. "Eklendiğinden beri %" bunun üzerinden hesaplanır. Eski kayıtlarda portfoyOku() içindeki tek seferlik geçişle fiyat alanından kopyalanır (o tarihe kadar fiyat hiç tazelenmiyordu, yani zaten eklenme fiyatıydı).
 };
 
 const PORTFOY_LS_KEY = "kp_portfoy";
@@ -15281,6 +15282,7 @@ function takipDegistir(yeni: {
     g: yeni.g ?? null, h: yeni.h ?? null, a: yeni.a ?? null, y: yeni.y ?? null,
     alis: null,            // alış yok → takip kalemi
     eklenmeTarihi: new Date().toISOString(),
+    eklenmeFiyat: yeni.fiyat,   // dondurulmuş referans — "eklendiğinden beri %" için
   };
   portfoyYaz([...liste, kalem]);
   portfoyOlayYayinla();
@@ -15339,7 +15341,23 @@ function portfoyOku(): PortfoyKalemi[] {
     const raw = localStorage.getItem(PORTFOY_LS_KEY);
     if (!raw) return [];
     const arr = JSON.parse(raw);
-    return Array.isArray(arr) ? arr : [];
+    if (!Array.isArray(arr)) return [];
+    // ── TEK SEFERLİK GEÇİŞ (2026-07-29) ───────────────────────────────────
+    // eklenmeFiyat alanı bu sürümde eklendi. Bu tarihe kadar fiyat alanı HİÇ
+    // tazelenmiyordu (portfoyYaz'ı yalnızca ekle/sil/sırala çağırıyordu),
+    // yani mevcut kayıtlardaki fiyat zaten eklenme anındaki fiyattır. Bir kez
+    // kopyalamak geçmişe dönük de KESİN sonuç verir — API'den geçmiş fiyat
+    // çekmeye gerek yok. Bu geçiş, fiyat tazeleme devreye girmeden ÖNCE
+    // çalışmalı; portfoyOku her okumada çağrıldığı için bu garanti.
+    let degisti = false;
+    for (const k of arr) {
+      if (k && typeof k === "object" && k.eklenmeFiyat === undefined) {
+        k.eklenmeFiyat = (typeof k.fiyat === "number") ? k.fiyat : null;
+        degisti = true;
+      }
+    }
+    if (degisti) { try { localStorage.setItem(PORTFOY_LS_KEY, JSON.stringify(arr)); } catch {} }
+    return arr;
   } catch { return []; }
 }
 function portfoyYaz(liste: PortfoyKalemi[]) {
@@ -15476,6 +15494,109 @@ function portfoyTariheEnYakinFiyat(noktalar: {tarih:string;fiyat:number}[], isoT
   // 4 günden fazla sapma varsa güvenilir sayma (veri boşluğu/pencere dışı olabilir)
   if (enYakin && enKucukFark <= 4 * 24 * 3600 * 1000) return enYakin.fiyat;
   return null;
+}
+
+// ═══ FİYAT TAZELEME (2026-07-29) ═══════════════════════════════════════════
+// Bu tarihe kadar kalemlerin fiyat/g/h/a/y alanları ekleme anında yazılıyor ve
+// bir daha GÜNCELLENMİYORDU — yani listede eklendiği günün rakamları duruyordu.
+//
+// Tasarım: kalem sayısı ne olursa olsun tür başına TEK istek. /api/hisse-proxy
+// zaten 600+ hissenin tamamını, /api/tefas-proxy tüm fonları, altinapi tüm
+// altın sembollerini tek yanıtta veriyor ve üçü de sunucu tarafında önbellekli.
+// Yalnızca kripto/emtia/döviz sembol başına ayrı istek gerektiriyor (bunlar
+// tipik olarak birkaç tane). Vercel CPU kotası dar olduğu için çağıran taraf
+// ayrıca en az 5 dakikalık aralık uyguluyor (bkz. portfoyTazele).
+//
+// eklenmeFiyat'a ASLA dokunulmaz — o dondurulmuş referans.
+async function portfoyFiyatlariTazele(liste: PortfoyKalemi[]): Promise<PortfoyKalemi[]> {
+  if (liste.length === 0) return liste;
+  const turler = new Set(liste.map(k => k.tur));
+
+  const hisseIstek = turler.has("hisse")
+    ? fetch(`${API_BASE}/api/hisse-proxy`).then(r => r.ok ? r.json() : null).catch(() => null)
+    : Promise.resolve(null);
+  const fonIstek = turler.has("fon")
+    ? fetch(`${API_BASE}/api/tefas-proxy`).then(r => r.ok ? r.json() : null).catch(() => null)
+    : Promise.resolve(null);
+  const altinIstek = turler.has("altin")
+    ? fetch(`${API_BASE}/api/piyasa-fiyatlar?tip=altinapi`).then(r => r.ok ? r.json() : null).catch(() => null)
+    : Promise.resolve(null);
+
+  const digerKodlar = Array.from(new Set(
+    liste.filter(k => k.tur === "kripto" || k.tur === "emtia" || k.tur === "doviz").map(k => k.kod)
+  ));
+  const digerIstek = Promise.all(digerKodlar.map(async kod => {
+    const v = await portfoyGecmisVeri(kod).catch(() => null);
+    return [kod, v] as const;
+  }));
+
+  const [hisseYanit, fonYanit, altinYanit, digerCiftler] =
+    await Promise.all([hisseIstek, fonIstek, altinIstek, digerIstek]);
+
+  const hisseHarita = new Map<string, any>();
+  if (hisseYanit?.success && Array.isArray(hisseYanit.data)) {
+    for (const it of hisseYanit.data) if (it?.ticker) hisseHarita.set(it.ticker, it);
+  }
+  const fonHarita = new Map<string, any>();
+  if (fonYanit?.success && Array.isArray(fonYanit.data)) {
+    for (const it of fonYanit.data) if (it?.kod) fonHarita.set(it.kod, it);
+  }
+  const digerHarita = new Map<string, any>();
+  for (const [kod, v] of digerCiftler) if (v) digerHarita.set(kod, v);
+
+  const sayi = (v: any): number | null => (typeof v === "number" && isFinite(v)) ? v : null;
+
+  return liste.map(k => {
+    if (k.tur === "hisse") {
+      const it = hisseHarita.get(k.kod);
+      if (!it) return k;
+      return { ...k, fiyat: sayi(it.fiyat) ?? k.fiyat,
+        g: sayi(it.degisim1g), h: sayi(it.degisim1h), a: sayi(it.degisim1a), y: sayi(it.degisim1y) };
+    }
+    if (k.tur === "fon") {
+      const it = fonHarita.get(k.kod);
+      if (!it) return k;
+      return { ...k, fiyat: sayi(it.fiyat) ?? k.fiyat,
+        g: sayi(it.gunluk), h: sayi(it.haftalik), a: sayi(it.aylik), y: sayi(it.yillik) };
+    }
+    if (k.tur === "altin") {
+      // Eski (altinCarpan dolu) kayıtların kodu AltinAPI sembol listesinde
+      // yok — haritada bulunamaz, olduğu gibi bırakılır. Bilinçli.
+      const d = altinYanit?.[k.kod];
+      if (!d) return k;
+      const bid = sayi(d.bid), ask = sayi(d.ask);
+      if (bid == null || ask == null) return k;
+      const orta = (bid + ask) / 2;
+      const kapanis = sayi(d.close);
+      const hamDegisim = (kapanis && kapanis > 0) ? ((orta - kapanis) / kapanis * 100) : null;
+      // AltinAPI bazı sembollerde close alanında mantıksız değer veriyor —
+      // Altın sekmesindeki ile AYNI %10 sağlamlık filtresi.
+      const gunluk = (hamDegisim != null && Math.abs(hamDegisim) <= 10) ? hamDegisim : null;
+      return { ...k, fiyat: orta, g: gunluk };
+    }
+    const v = digerHarita.get(k.kod);
+    if (!v || v.guncelFiyat == null) return k;
+    const guncel = v.guncelFiyat, onceki = v.oncekiKapanis;
+    const haftaOnce = portfoyNGunOnce(v.noktalar, 7);
+    const ayOnce = portfoyNGunOnce(v.noktalar, 30);
+    return { ...k, fiyat: guncel,
+      g: (onceki && onceki > 0) ? ((guncel - onceki) / onceki * 100) : null,
+      h: (haftaOnce && haftaOnce > 0) ? ((guncel - haftaOnce) / haftaOnce * 100) : null,
+      a: (ayOnce && ayOnce > 0) ? ((guncel - ayOnce) / ayOnce * 100) : null };
+  });
+}
+
+// Eklendiği günden bugüne % değişim. eklenmeFiyat yoksa/0 ise dürüstçe null.
+function portfoyEklenmedenBeri(k: PortfoyKalemi): number | null {
+  const bas = k.eklenmeFiyat;
+  if (bas == null || !(bas > 0) || k.fiyat == null) return null;
+  return ((k.fiyat - bas) / bas) * 100;
+}
+// Liste geneli ortalama (ağırlıksız — takip kalemlerinde ₺ tutar yok).
+function portfoyEklenmedenBeriOrt(liste: PortfoyKalemi[]): number | null {
+  const d = liste.map(portfoyEklenmedenBeri).filter((v): v is number => v != null);
+  if (d.length === 0) return null;
+  return d.reduce((a, b) => a + b, 0) / d.length;
 }
 
 // ─── PORTFÖYÜM — KÂR/ZARAR GRAFİĞİ ─────────────────────────────────────────
@@ -16018,6 +16139,7 @@ function PortfoyWidget({liste, gizli, onGizliToggle, onDetay, onEkle, onSil, onG
     if (degerler.length===0) return null;
     return degerler.reduce((a,b)=>a+b,0)/degerler.length;
   },[takipListesi]);
+  const takipEklenmeOrt = useMemo(()=>portfoyEklenmedenBeriOrt(takipListesi),[takipListesi]);
 
   // Uzun basma tamamlandı → taşıma modunu başlat, tüm satırların ekran
   // konumlarını ölç ve dondur.
@@ -16157,20 +16279,33 @@ function PortfoyWidget({liste, gizli, onGizliToggle, onDetay, onEkle, onSil, onG
             </div>
           </div>
         ) : (
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",paddingBottom:14}}>
-            <div>
-              <div style={{fontSize:10,fontWeight:800,color:PORTFOY_ETIKET,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Ort. Günlük Değişim</div>
-              <div style={{fontSize:24,fontWeight:800,color:takipGunlukOrt==null?PORTFOY_YAZI:(takipGunlukOrt>=0?C.green:C.red),fontVariantNumeric:"tabular-nums"}}>
-                {takipGunlukOrt==null ? "—" : `${takipGunlukOrt>=0?"+":""}${takipGunlukOrt.toFixed(2)}%`}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",paddingBottom:14,gap:10}}>
+            <div style={{display:"flex",gap:18,flex:1,minWidth:0,flexWrap:"wrap"}}>
+              <div>
+                <div style={{fontSize:10,fontWeight:800,color:PORTFOY_ETIKET,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Ort. Günlük Değişim</div>
+                <div style={{fontSize:22,fontWeight:800,color:takipGunlukOrt==null?PORTFOY_YAZI:(takipGunlukOrt>=0?C.green:C.red),fontVariantNumeric:"tabular-nums"}}>
+                  {takipGunlukOrt==null ? "—" : `${takipGunlukOrt>=0?"+":""}${takipGunlukOrt.toFixed(2)}%`}
+                </div>
               </div>
-              <div style={{fontSize:10.5,color:PORTFOY_YAZI,opacity:0.8,marginTop:4}}>
-                {takipListesi.length} üründeki fiyat değişiminin ortalaması
+              {/* 2026-07-29: "Eklendiğinden beri" — günlük % piyasanın durumunu,
+                  bu ise kullanıcının kendi takip kararının sonucunu gösteriyor.
+                  Referans, eklenme anında dondurulan eklenmeFiyat alanı. */}
+              <div>
+                <div style={{fontSize:10,fontWeight:800,color:PORTFOY_ETIKET,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Eklendiğinden Beri</div>
+                <div style={{fontSize:22,fontWeight:800,color:takipEklenmeOrt==null?PORTFOY_YAZI:(takipEklenmeOrt>=0?C.green:C.red),fontVariantNumeric:"tabular-nums"}}>
+                  {takipEklenmeOrt==null ? "—" : `${takipEklenmeOrt>=0?"+":""}${takipEklenmeOrt.toFixed(2)}%`}
+                </div>
               </div>
             </div>
             <div onClick={()=>onDetay(undefined,"takip")} style={{cursor:"pointer",display:"flex",alignItems:"center",gap:2,flexShrink:0}}>
               <span style={{fontSize:11,fontWeight:700,color:C.blue,whiteSpace:"nowrap"}}>Tümü</span>
               <span style={{fontSize:16,color:PORTFOY_ETIKET}}>›</span>
             </div>
+          </div>
+        )}
+        {sekme==="takip" && (
+          <div style={{fontSize:10.5,color:PORTFOY_YAZI,opacity:0.8,paddingBottom:14,marginTop:-10}}>
+            {takipListesi.length} üründeki fiyat değişiminin ortalaması
           </div>
         )}
       </div>
@@ -16385,6 +16520,7 @@ function PortfoyEkleModal({onKapat, onEklendi}:{onKapat:()=>void; onEklendi:(k:P
       g: secilenEnstruman.g, h: secilenEnstruman.h, a: secilenEnstruman.a, y: secilenEnstruman.y,
       alis: (miktar!=null && !isNaN(miktar)) ? alis : null,
       eklenmeTarihi: new Date().toISOString(),
+      eklenmeFiyat: secilenEnstruman.fiyat,   // dondurulmuş referans
     };
     onEklendi(k);
     onKapat();
@@ -16715,6 +16851,12 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onKalem
   const toplamKZ = kzToplamlar.kz;
   const toplamKZYuzde = toplamMaliyet>0 ? (toplamKZ/toplamMaliyet)*100 : 0;
 
+  const takipGunlukOrt = useMemo(()=>{
+    const d = takipListesi.map(k=>k.g).filter((v):v is number=>v!=null);
+    return d.length ? d.reduce((a,b)=>a+b,0)/d.length : null;
+  },[takipListesi]);
+  const takipEklenmeOrt = useMemo(()=>portfoyEklenmedenBeriOrt(takipListesi),[takipListesi]);
+
   if (liste.length===0) {
     return (
       <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"28px 18px",textAlign:"center",marginTop:8}}>
@@ -16803,6 +16945,30 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onKalem
         </div>
       )}
 
+      {/* Takip Listem özeti — ana sayfa kartındaki blokla aynı iki metrik.
+          Portföyüm'ün "Toplam Değer" kartının takip karşılığı. */}
+      {sekme==="takip" && takipListesi.length>0 && (
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:16,marginBottom:14}}>
+          <div style={{display:"flex",gap:22,flexWrap:"wrap"}}>
+            <div>
+              <div style={{fontSize:10,fontWeight:800,color:PORTFOY_ETIKET,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Ort. Günlük Değişim</div>
+              <div style={{fontSize:24,fontWeight:800,color:takipGunlukOrt==null?PORTFOY_YAZI:(takipGunlukOrt>=0?C.green:C.red),fontVariantNumeric:"tabular-nums"}}>
+                {takipGunlukOrt==null ? "—" : `${takipGunlukOrt>=0?"+":""}${takipGunlukOrt.toFixed(2)}%`}
+              </div>
+            </div>
+            <div>
+              <div style={{fontSize:10,fontWeight:800,color:PORTFOY_ETIKET,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Eklendiğinden Beri</div>
+              <div style={{fontSize:24,fontWeight:800,color:takipEklenmeOrt==null?PORTFOY_YAZI:(takipEklenmeOrt>=0?C.green:C.red),fontVariantNumeric:"tabular-nums"}}>
+                {takipEklenmeOrt==null ? "—" : `${takipEklenmeOrt>=0?"+":""}${takipEklenmeOrt.toFixed(2)}%`}
+              </div>
+            </div>
+          </div>
+          <div style={{fontSize:10.5,color:PORTFOY_YAZI,opacity:0.8,marginTop:8,lineHeight:1.45}}>
+            {takipListesi.length} üründeki değişimin ortalaması. "Eklendiğinden beri", her ürünün takibe alındığı andaki fiyatına göre hesaplanır.
+          </div>
+        </div>
+      )}
+
       {/* Takip Listem uyarısı: eskiden HER kartın altında tekrar ediyordu.
           Artık liste başına bir kez yazılıyor — bilgi aynı, gürültü yok. */}
       {sekme==="takip" && filtreliListe.length>0 && (
@@ -16833,34 +16999,26 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onKalem
           <div key={k.id} onClick={()=>onKalemTikla(k)} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:12,marginBottom:8,cursor:"pointer"}}>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
               <div style={{flex:1,minWidth:0}}>
-                {sekme==="takip" ? (
-                  <>
-                    <div style={{display:"flex",alignItems:"center",gap:6}}>
-                      <span style={{fontSize:13,fontWeight:800,color:PORTFOY_YAZI}}>{portfoyKodGoster(k)}</span>
-                      <span style={{fontSize:8.5,fontWeight:700,color:meta.renk,background:meta.bg,borderRadius:4,padding:"1px 5px"}}>{meta.label}</span>
-                      <span style={{flex:1}}/>
-                      <span style={{fontSize:13,fontWeight:700,color:PORTFOY_YAZI,fontVariantNumeric:"tabular-nums"}}>{k.fiyat==null?"—":(gizli?"₺••••":portfoyFmtDeger(k.fiyat||0, k))}</span>
-                    </div>
-                    {k.tur!=="emtia" && k.tur!=="altin" && <div style={{fontSize:10.5,color:PORTFOY_YAZI,opacity:0.8,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{k.ad}</div>}
-                  </>
-                ) : (
-                  <>
-                    {/* Güncel değer artık ilk satırın sağında — Takip sekmesiyle
-                        aynı hizada ve üstteki "GÜNCEL DEĞER" başlığının altında. */}
-                    <div style={{display:"flex",alignItems:"center",gap:6}}>
-                      <span style={{fontSize:13,fontWeight:800,color:PORTFOY_YAZI}}>{portfoyKodGoster(k)}</span>
-                      <span style={{fontSize:8.5,fontWeight:700,color:meta.renk,background:meta.bg,borderRadius:4,padding:"1px 5px"}}>{meta.label}</span>
-                      <span style={{flex:1}}/>
-                      <span style={{fontSize:13,fontWeight:700,color:PORTFOY_YAZI,fontVariantNumeric:"tabular-nums"}}>{gizli?"₺••••":portfoyFmtDeger(portfoyGuncelDeger(k), k)}</span>
-                    </div>
-                    {k.tur!=="emtia" && k.tur!=="altin" && <div style={{fontSize:10.5,color:PORTFOY_YAZI,opacity:0.8,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{k.ad}</div>}
-                    <div style={{fontSize:10.5,color:PORTFOY_YAZI,opacity:0.8,marginTop:1}}>
-                      {gizli?"••":k.miktar!.toLocaleString("tr-TR")} {k.birim}
-                    </div>
-                  </>
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{fontSize:13,fontWeight:800,color:PORTFOY_YAZI}}>{portfoyKodGoster(k)}</span>
+                  <span style={{fontSize:8.5,fontWeight:700,color:meta.renk,background:meta.bg,borderRadius:4,padding:"1px 5px"}}>{meta.label}</span>
+                </div>
+                {k.tur!=="emtia" && k.tur!=="altin" && <div style={{fontSize:10.5,color:PORTFOY_YAZI,opacity:0.8,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{k.ad}</div>}
+                {sekme!=="takip" && (
+                  <div style={{fontSize:10.5,color:PORTFOY_YAZI,opacity:0.8,marginTop:1}}>
+                    {gizli?"••":k.miktar!.toLocaleString("tr-TR")} {k.birim}
+                  </div>
                 )}
               </div>
-              <Trash2 size={13} color={PORTFOY_ETIKET} style={{cursor:"pointer"}} onClick={(e)=>{e.stopPropagation();onSil(k.id);}}/>
+              {/* Fiyat artık isim bloğunun İÇİNDE değil, çöp kutusunun kardeşi —
+                  ikisi de dikeyde ortalanıyor, böylece aynı hizaya geliyor.
+                  (Önceden fiyat ilk satırda, çöp kutusu iki satırın ortasındaydı.) */}
+              <span style={{flexShrink:0,fontSize:13,fontWeight:700,color:PORTFOY_YAZI,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>
+                {sekme==="takip"
+                  ? (k.fiyat==null ? "—" : (gizli?"₺••••":portfoyFmtDeger(k.fiyat||0, k)))
+                  : (gizli?"₺••••":portfoyFmtDeger(portfoyGuncelDeger(k), k))}
+              </span>
+              <Trash2 size={13} color={PORTFOY_ETIKET} style={{cursor:"pointer",flexShrink:0}} onClick={(e)=>{e.stopPropagation();onSil(k.id);}}/>
             </div>
 
             <div style={{display:"flex",justifyContent:"space-between",marginBottom:sekme==="takip"?0:10}}>
@@ -16872,7 +17030,22 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onKalem
               ))}
             </div>
 
-            {sekme==="takip" ? null : (
+            {sekme==="takip" ? (
+              (()=>{
+                const eb = portfoyEklenmedenBeri(k);
+                if (eb==null) return null;
+                return (
+                  <div style={{borderTop:`1px solid ${C.border}`,marginTop:10,paddingTop:8,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+                    <span style={{fontSize:10,color:PORTFOY_ETIKET}}>
+                      {portfoyTarihGoster(k.eklenmeTarihi)} tarihinde eklendi
+                    </span>
+                    <span style={{fontSize:11.5,fontWeight:800,color:eb>=0?C.green:C.red,whiteSpace:"nowrap"}}>
+                      {eb>=0?"+":""}{eb.toFixed(2)}%
+                    </span>
+                  </div>
+                );
+              })()
+            ) : (
               <div style={{borderTop:`1px solid ${C.border}`,paddingTop:9}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:6}}>
                   <div style={{display:"flex",alignItems:"center",gap:5,fontSize:10,color:PORTFOY_ETIKET}}>
@@ -17363,6 +17536,31 @@ function App(){
     setPortfoy(yeniListe);
     portfoyYaz(yeniListe);
   };
+
+  // ── Fiyat tazeleme (2026-07-29) ──────────────────────────────────────────
+  // Kilit: aynı anda iki tazeleme başlamasın. Aralık: Vercel CPU kotası dar
+  // olduğu için en az 5 dakikada bir. Uçların hepsi zaten sunucu tarafında
+  // önbellekli, bu ikinci bir güvenlik katmanı.
+  const portfoyTazeleKilidi=useRef(false);
+  const portfoySonTazeleme=useRef(0);
+  const portfoyTazele=useCallback(async(zorla=false)=>{
+    if (portfoyTazeleKilidi.current) return;
+    if (!zorla && Date.now()-portfoySonTazeleme.current < 5*60*1000) return;
+    portfoyTazeleKilidi.current=true;
+    try{
+      const mevcut=portfoyOku();
+      if (mevcut.length===0) return;
+      const yeni=await portfoyFiyatlariTazele(mevcut);
+      portfoySonTazeleme.current=Date.now();
+      portfoyYaz(yeni);
+      setPortfoy(yeni);
+    }catch{}
+    finally{ portfoyTazeleKilidi.current=false; }
+  },[]);
+
+  useEffect(()=>{ portfoyTazele(); },[portfoyTazele]);
+  // Portföyüm ekranı açıldığında da dene (aralık kuralı yine geçerli).
+  useEffect(()=>{ if(screen==="portfoyum") portfoyTazele(); },[screen, portfoyTazele]);
   // Profil alanı — üyelik sistemi yok, sadece cihaz bazında yerel bir rumuz/isim.
   // Ana sayfa selamlamasında ve Profil ekranında kullanılıyor.
   const [kullaniciAdi,setKullaniciAdi]=useState<string>(()=>{
