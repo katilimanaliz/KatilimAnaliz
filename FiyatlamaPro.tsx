@@ -2098,7 +2098,7 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
             ["Gün İçi Yüksek", hisse.yuksek ? hisse.yuksek.toLocaleString("tr-TR") + " ₺" : "—"],
             ["Gün İçi Düşük", hisse.dusuk ? hisse.dusuk.toLocaleString("tr-TR") + " ₺" : "—"],
             ["Hacim", hisse.hacim ? hisse.hacim.toLocaleString("tr-TR") + " lot" : "—"],
-            ["Katılım Endeksi", hisse.katilimEndeksi ? "✅ XK100'de" : "❌ XK100'de değil"],
+            ["Katılım Endeksi", hisse.katilimEndeksi ? "✅ Katılım Endeksinde" : "❌ Katılım Endeksinde değil"],
           ].map(([lbl, val], i, arr) => (
             <div key={lbl as string} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"11px 14px",borderBottom:i<arr.length-1?`1px solid ${C.border}`:"none"}}>
               <span style={{fontSize:13,color:C.sub}}>{lbl}</span>
@@ -2749,7 +2749,7 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri 
             border: sadeceKatilim ? "none" : `1.5px solid ${C.green}55`,
             color: sadeceKatilim ? "#fff" : C.green,
           }}>
-          {sadeceKatilim ? "✓ Katılım Endeksi (XK100)" : "Katılım Endeksi (XK100)"}
+          {sadeceKatilim ? "✓ Katılım Endeksi" : "Katılım Endeksi"}
         </button>
       </div>
 
@@ -2913,7 +2913,7 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri 
                       ["ROE (Özkaynak Getirisi)", h.roe ? fmt2(h.roe,2)+"%" : "—"],
                       ["Temettü Verimi", h.temetu ? fmt2(h.temetu,2)+"%" : "—"],
                       ["Sektör", SEKTOR_TR[h.sektor] || h.sektor],
-                      ["Katılım Endeksi", h.katilimEndeksi ? "✅ XK100" : "❌ Değil"],
+                      ["Katılım Endeksi", h.katilimEndeksi ? "✅ Uygun" : "❌ Değil"],
                     ].map(([lbl, val]) => (
                       <div key={lbl as string} style={{background:C.bg,borderRadius:8,padding:"8px 10px"}}>
                         <div style={{fontSize:9,color:C.sub,textTransform:"uppercase",letterSpacing:0.4,marginBottom:3}}>{TR(lbl)}</div>

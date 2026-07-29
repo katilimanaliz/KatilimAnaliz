@@ -1,3 +1,12 @@
+import { Redis } from "@upstash/redis";
+
+// NOT: Vercel KV entegrasyonu UPSTASH_* yerine KV_REST_API_* isimlerini
+// kullanıyor; diğer api dosyalarındaki desenin aynısı, fallback'li.
+const redis = new Redis({
+  url: process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL,
+  token: process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN,
+});
+
 // Katılım Endeksi (XK100) etiketi için kullanılan liste. ÖNEMLİ KURAL:
 // konvansiyonel (faizli) bankalar, konvansiyonel sigorta şirketleri ve alkol
 // üretimi gibi yasak sektörler, TANIM GEREĞİ hiçbir katılım/faizsiz endekste
@@ -36,7 +45,25 @@
 // görünüyor; büyük şirketlerin de gerçekten güncel katılım listesinde olup
 // olmadığı ayrıca resmi bir kaynakla teyit edilirse liste tekrar
 // güncellenmelidir.
-const XK100_KODLARI = new Set([
+// ── KATILIM ENDEKSİ ÜYELİĞİ ────────────────────────────────────────────────
+// 2026-07-28'e kadar bu liste ELLE yazılmış sabit bir Set'ti ve adı
+// XK100_KODLARI idi. Canlı veriyle karşılaştırınca iki şey ortaya çıktı:
+//
+//   1) Liste aslında XK100 DEĞİL, XKTUM (BIST Katılım Tüm Endeksi) idi.
+//      206 kaydın TAMAMI XKTUM'da çıktı; XK100'ün ise yalnızca 100 üyesi var.
+//      Yani isimlendirme baştan yanlıştı.
+//   2) Liste bayatlamıştı: XKTUM'a sonradan giren 35 hisse eksikti.
+//      Neyse ki hata TEMKİNLİ yöndeydi — yanlış "uygun" gösterilen hisse
+//      YOKTU, sadece uygun olan bazıları "değil" görünüyordu.
+//
+// Ayrım kullanıcı için kritik: XKTUM = katılım ilkelerine uygun TÜM hisseler
+// ("bu hisse uygun mu" sorusunun cevabı). XK100/XK050/XK030 ise bunların
+// büyüklük/likidite sıralamasıdır — uygunlukla ilgisi yoktur.
+//
+// Artık üyelik TradingView'dan canlı çekiliyor (fiyat verisiyle aynı kaynak,
+// ek bağımlılık yok). Aşağıdaki sabit liste SİLİNMEDİ — en son güvenlik ağı
+// olarak duruyor (bkz. katilimUyelikGetir'deki üç katmanlı düşüş).
+const KATILIM_YEDEK_LISTE = new Set([
   "AAGYO","ACSEL","AHGAZ","AHSGY","AKFYE","AKHAN","ALBRK","ALCTL","ALFAS",
   "ALKA","ALKIM","ALKLC","ALTNY","ALVES","ARASE","ARDYZ","ARENA","ASELS",
   "ATAKP","ATATP","AVPGY","AYEN","BAHKM","BAKAB","BASGZ","BAYRK","BEGYO",
@@ -61,6 +88,84 @@ const XK100_KODLARI = new Set([
   "TUCLK","TUKAS","TUPRS","TUREX","TURGG","UCAYM","UFUK","ULUSE","USAK",
   "VAKKO","VANGD","YATAS","YEOTK","YIGIT","YKSLN","YUNSA","ZERGY",
 ]);
+
+// TradingView'ın "indexes" sütunu her hisse için üyesi olduğu endeksleri
+// döndürüyor (bkz. proname: "BIST:XKTUM"). Bu sütun BÜYÜK veri getirdiği için
+// fiyat isteğine EKLENMİYOR; ayrı ve seyrek (24 saatte bir) çekilip Redis'te
+// tutuluyor. Endeks kompozisyonu üç ayda bir revize edildiği için bu fazlasıyla
+// yeterli, üstelik Vercel CPU kotasını da korur.
+const KV_KATILIM_KEY = "katilim:endeks:v1";
+const KATILIM_TTL = 24 * 3600;
+
+// Yalnızca GERÇEK katılım endeksleri. Dikkat: "XK" önekiyle eşleştirme YAPMA —
+// XKMYA (kimya), XKOBI (KOBİ), XKURY (kurumsal yönetim), XKAGT (kağıt) da bu
+// önekle başlıyor ama katılım endeksi DEĞİLLER.
+const KATILIM_ENDEKS_ESLEME = {
+  "BIST:XKTUM": "tum",   // Katılım Tüm — uygunluk ölçütü budur
+  "BIST:XK100": "yuz",
+  "BIST:XK050": "elli",
+  "BIST:XK030": "otuz",
+};
+
+async function tradingViewEndeksCek() {
+  const govde = {
+    columns: ["name", "indexes"],
+    filter: [{ left: "type", operation: "equal", right: "stock" }],
+    range: [0, 1000],
+  };
+  const r = await fetchZamanAsimli(
+    "https://scanner.tradingview.com/turkey/scan",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "User-Agent": "Mozilla/5.0" },
+      body: JSON.stringify(govde),
+    },
+    15000   // fiyat isteğinden uzun: "indexes" sütunu çok daha büyük yanıt getiriyor
+  );
+  if (!r.ok) throw new Error("TV endeks HTTP " + r.status);
+  const j = await r.json();
+
+  const gruplar = { tum: [], yuz: [], elli: [], otuz: [] };
+  for (const kayit of (j?.data || [])) {
+    const kod = kayit?.d?.[0];
+    const endeksler = kayit?.d?.[1];
+    if (!kod || !Array.isArray(endeksler)) continue;
+    for (const e of endeksler) {
+      const alan = KATILIM_ENDEKS_ESLEME[e?.proname];
+      if (alan) gruplar[alan].push(kod);
+    }
+  }
+  return gruplar;
+}
+
+// Üç katmanlı düşüş: Redis → taze istek → sabit yedek liste.
+// Kaynak çökerse uygulama "hiçbir hisse uygun değil" gibi YANLIŞ ve zararlı
+// bir cevap vermek yerine son bilinen doğruya döner.
+async function katilimUyelikGetir() {
+  try {
+    const kayit = await redis.get(KV_KATILIM_KEY);
+    if (kayit && Array.isArray(kayit.tum) && kayit.tum.length > 50) {
+      return { veri: kayit, kaynak: "onbellek" };
+    }
+  } catch {}
+
+  try {
+    const gruplar = await tradingViewEndeksCek();
+    // Anlamsız küçük sonuca güvenme — XKTUM normalde 240 civarı.
+    if (gruplar.tum.length > 50) {
+      try { await redis.set(KV_KATILIM_KEY, gruplar, { ex: KATILIM_TTL }); } catch {}
+      return { veri: gruplar, kaynak: "canli" };
+    }
+  } catch (e) {
+    console.error("Katilim endeksi cekilemedi:", e.message);
+  }
+
+  return {
+    veri: { tum: [...KATILIM_YEDEK_LISTE], yuz: [], elli: [], otuz: [] },
+    kaynak: "yedek",
+  };
+}
+
 
 // ─── STATİK ŞİRKET İSİM HARİTASI ────────────────────────────────────────────
 // Kaynak: BigPara /api/v1/hisse/list, alındığı tarih: 2026-07-02 (646 kayıt).
@@ -192,6 +297,17 @@ function piyasaAcikMi() {
   return gun >= 1 && gun <= 5 && dk >= 10 * 60 && dk < 18 * 60;
 }
 
+// Önbellek süresi için kullanılan pencere. piyasaAcikMi()'den AYRI tutuldu
+// çünkü o fonksiyon midasBayatMi() içinde "bayatlık normal mi" kararında
+// kullanılıyor ve seans saatini (10:00–18:00) temsil etmeli. Burada ise
+// kapanış verisinin oturması için 18:30'a kadar uzatıyoruz.
+function veriTazelenirMi() {
+  const tr = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Istanbul" }));
+  const gun = tr.getDay();                       // 0=Pazar, 6=Cumartesi
+  const dk = tr.getHours() * 60 + tr.getMinutes();
+  return gun >= 1 && gun <= 5 && dk >= 10 * 60 && dk < 18 * 60 + 30;
+}
+
 function midasBayatMi(veriZamani) {
   if (!piyasaAcikMi()) return false;             // kapalıyken eskilik normal
   if (!veriZamani) return true;                  // hiç damga yoksa güvenme
@@ -225,7 +341,7 @@ async function tradingViewCek() {
 
 // TradingView yanıtını, Midas'la AYNI şekle çevirir — frontend hiçbir farkı
 // görmez, sadece sayılar başka kaynaktan gelir.
-function tradingViewNormalize(tvJson, isimMap) {
+function tradingViewNormalize(tvJson, isimMap, katilimSet) {
   const sayi = (v) => (typeof v === "number" && isFinite(v) ? v : null);
   const yuvarla = (v) => (sayi(v) == null ? null : parseFloat(v.toFixed(2)));
 
@@ -252,7 +368,7 @@ function tradingViewNormalize(tvJson, isimMap) {
         pddd: sayi(d[11]),
         roe: sayi(d[12]),
         temetu: null,
-        katilimEndeksi: XK100_KODLARI.has(kod),
+        katilimEndeksi: katilimSet.has(kod),
       };
     })
     .filter((h) => h && h.fiyat > 0)
@@ -290,7 +406,7 @@ export default async function handler(req, res) {
       try {
         const tv = await tradingViewCek();
         const isimMap = await sirketIsimleriniGetir();
-        const normal = tradingViewNormalize(tv, isimMap);
+        const normal = tradingViewNormalize(tv, isimMap, KATILIM_YEDEK_LISTE);
         return res.status(200).json({
           tv_calisti: true,
           tv_toplam: tv.totalCount ?? null,
@@ -370,6 +486,11 @@ export default async function handler(req, res) {
       });
     }
 
+    // Katılım endeksi üyeliği (Redis → canlı → yedek liste). Her iki kaynak
+    // yolunda da aynı Set kullanılıyor ki Midas ve TradingView tutarlı olsun.
+    const { veri: katilimVeri, kaynak: katilimKaynak } = await katilimUyelikGetir();
+    const katilimSet = new Set(katilimVeri.tum || []);
+
     const midasHisseler = midasListe
       .filter(h => h.Code && !h.Code.startsWith("X"))
       .map(h => {
@@ -393,7 +514,7 @@ export default async function handler(req, res) {
           pddd:         h.PriceBookValue || null,
           roe:          h.ReturnOnEquity != null ? h.ReturnOnEquity * 100 : null,
           temetu:       null,
-          katilimEndeksi: XK100_KODLARI.has(kod),
+          katilimEndeksi: katilimSet.has(kod),
         };
       })
       .sort((a,b) => (b.piyasaDegeri||0) - (a.piyasaDegeri||0));
@@ -427,7 +548,7 @@ export default async function handler(req, res) {
     if (oncelik === "tradingview") {
       try {
         const tv = await tradingViewCek();
-        const tvHisseler = tradingViewNormalize(tv, isimMap);
+        const tvHisseler = tradingViewNormalize(tv, isimMap, katilimSet);
         // Anlamlı sayıda kayıt gelmediyse güvenme — Midas'a düş.
         if (tvHisseler.length >= 100) {
           hisseler = tvHisseler;
@@ -443,7 +564,18 @@ export default async function handler(req, res) {
       }
     }
 
-    res.setHeader("Cache-Control", "s-maxage=600, stale-while-revalidate=120");
+    // ── ÖNBELLEK SÜRESİ PİYASA SAATİNE GÖRE ────────────────────────────────
+    // Fiyatlar yalnızca seans içinde değişiyor; kapalıyken aynı veriyi 10
+    // dakikada bir yeniden üretmek boşuna işlemci harcaması. Vercel CPU
+    // kotası sınırlı olduğu için (aylık 4 saat, Temmuz sonunda %75'i doluydu)
+    // bu gerçek bir tasarruf: haftanın ~%75'i seans dışı, o sürede istekler
+    // fonksiyonu hiç çalıştırmadan CDN önbelleğinden karşılanıyor.
+    //
+    // Pencere 18:30'a kadar uzatıldı çünkü kapanış verisi 18:00'dan sonra
+    // birkaç dakika daha oturuyor (Midas damgası 18:10 görülmüştü).
+    const tazelenmeli = veriTazelenirMi();
+    const onbellekSn = tazelenmeli ? 600 : 3600;
+    res.setHeader("Cache-Control", `s-maxage=${onbellekSn}, stale-while-revalidate=120`);
     res.status(200).json({
       success: true,
       count: hisseler.length,
@@ -455,6 +587,10 @@ export default async function handler(req, res) {
       // düzelmediğini görmek için ayrıca istek atmaya gerek kalmıyor.
       midasVeriZamani: veriZamani,
       midasBayat: midasBayatMi(veriZamani),
+      // Katılım üyeliğinin nereden geldiği izlenebilsin: "onbellek"|"canli"|"yedek".
+      // "yedek" görülüyorsa TradingView'a ulaşılamıyor demektir — liste bayatlar.
+      katilimKaynak,
+      katilimSayisi: katilimSet.size,
       ...(yedekHata ? { yedekHata } : {}),     // yedek denenip başarısız olduysa sebebi
       data: hisseler,
     });
