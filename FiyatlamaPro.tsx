@@ -10744,6 +10744,42 @@ const SOIK_REESKONT_KOMISYON_ORAN_YP = 0.5; // YP (USD/EUR) SÖİK'te azami komi
 const SOIK_YP_AZAMI_TUTAR = 1000000; // SÖİK YP'de azami finansman tutarı: 1 Mio (USD veya EUR)
 const SOIK_BSMV_ORAN = 5; // Sabit %5 BSMV - kâr payı üzerinden, her taksitte
 
+// ── ARACI BANKA KOMİSYONU (SÖİK) — 2026-07-29 ──────────────────────────────
+// Eximbank'ın aracı banka komisyon tablosuna göre:
+//   • Vade ≤ 360 gün → TAM anapara üzerinden, gün oranlı:  T × oran × gun/360
+//   • Vade > 360 gün → ilk 360 gün TAM anapara üzerinden TAM oran; kalan süre
+//     için 360. gündeki KALAN ANAPARA üzerinden gün oranlı. ("Risk 1 yılı
+//     aşıyorsa kalan ana para risk değeri üzerinden ilk komisyon değeri ile
+//     tümü toplanarak peşin tahsil edilir.")
+//
+// Doğrulama (10.000.000 TL, %1):
+//   180g/1tks → 50.000,00 · 360g/4tks → 100.000,00
+//   540g/6tks → 100.000 + 3.333.333,33×%1×180/360 = 116.666,67
+//   720g/8tks → 100.000 + 5.000.000×%1×360/360   = 150.000,00
+//
+// ÖNCEKİ HATA: komisyon oranı Math.min(oran × gun/360, oran) ile %1'de
+// tavanlanıyordu; 540 ve 720 günde de 100.000 çıkıyor, kalan vade hiç
+// ücretlendirilmiyordu.
+function soikBankaKomisyonu(T:number, gun:number, taksit:number, oranYillik:number){
+  const bos = {komisyon:0, efektifOran:0, ilkYil:0, kalanDonemKomisyonu:0, kalanAnapara:0};
+  if(!(T>0) || !(gun>0) || !(oranYillik>0) || !(taksit>0)) return bos;
+
+  if(gun <= 360){
+    const komisyon = T * (oranYillik/100) * (gun/360);
+    return {komisyon, efektifOran: oranYillik*(gun/360), ilkYil:komisyon, kalanDonemKomisyonu:0, kalanAnapara:0};
+  }
+
+  const ilkYil = T * (oranYillik/100); // 360 gün, tam anapara, tam oran
+  const taksitAraligi = Math.round(gun/taksit);
+  // 360. güne kadar ödenmiş taksit sayısı. Tek taksitli (balon) kullanımda
+  // floor(360/gun)=0 çıkar, yani anaparanın tamamı riskte kalır — doğru.
+  const odenenTaksit = taksitAraligi>0 ? Math.floor(360/taksitAraligi) : 0;
+  const kalanAnapara = T * Math.max(0, taksit-odenenTaksit) / taksit;
+  const kalanDonemKomisyonu = kalanAnapara * (oranYillik/100) * ((gun-360)/360);
+  const komisyon = ilkYil + kalanDonemKomisyonu;
+  return {komisyon, efektifOran:(komisyon/T)*100, ilkYil, kalanDonemKomisyonu, kalanAnapara};
+}
+
 function SoikReeskontHesaplama({s,onGecmis}:any){
   const [tur,setTur]=useState<"soik"|"reeskont">("soik");
   const [dovizTur,setDovizTur]=useState<"TRY"|"USD"|"EUR">("TRY");
@@ -10754,6 +10790,11 @@ function SoikReeskontHesaplama({s,onGecmis}:any){
   const [bsmvMuaf,setBsmvMuaf]=useState(true); // varsayılan: BSMV muaf işaretli gelsin
 
   const dovizAktif = tur==="soik" && dovizTur!=="TRY";
+  // 2026-07-29: Reeskont Finansmanı YALNIZCA TL'dir. dovizTur state'i sekme
+  // değişince sıfırlanmadığı için, SÖİK'te USD seçiliyken Reeskont'a geçince
+  // tutar alanı "$" ve "(USD)" görünüyordu. Görünen para birimi artık her
+  // yerde bu türetilmiş değerden okunuyor — ham dovizTur'dan değil.
+  const efektifDoviz = tur==="soik" ? dovizTur : "TRY";
   const vadeListesi = tur!=="soik" ? REESKONT_VADELER : (dovizAktif ? SOIK_DOVIZ_VADELER[dovizTur] : SOIK_VADELER);
   const seciliVade = vadeListesi.find(v=>v.id===vadeId) || vadeListesi[0];
   // oran = YILLIK kâr payı oranı (basit faiz, 360 gün baz)
@@ -10761,7 +10802,7 @@ function SoikReeskontHesaplama({s,onGecmis}:any){
     ? (kobi==="kobi" ? (seciliVade as any).oranKobi : (seciliVade as any).oranKobiDisi)
     : ((s as any)[seciliVade.oranKey] ?? 0);
 
-  const paraSembol = dovizTur==="USD"?"$":dovizTur==="EUR"?"€":"₺";
+  const paraSembol = efektifDoviz==="USD"?"$":efektifDoviz==="EUR"?"€":"₺";
   const fmtDoviz = useCallback((n:number)=>isNaN(n)||n===null?"—":`${paraSembol}${new Intl.NumberFormat("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}).format(n)}`,[paraSembol]);
 
   useEffect(()=>{
@@ -10812,13 +10853,13 @@ function SoikReeskontHesaplama({s,onGecmis}:any){
 
     // SÖİK: Azalan bakiye üzerinden taksit taksit kâr payı + BSMV hesabı (yıllık oran, 360 gün baz)
     const anaparaTaksit = T / taksit;
-    // Komisyon oranı artık TRY'de de vadeye göre orantılı düşüyor (azami %1,
-    // 360 gün ve üzeri vadede tam oran) — daha önce TRY'de sabit %1 idi,
-    // vade uzunluğundan bağımsızdı. YP tarafı zaten aynı mantıkla çalışıyordu.
-    const komisyonOran = dovizAktif
-      ? Math.min(SOIK_REESKONT_KOMISYON_ORAN_YP * (gun/360), SOIK_REESKONT_KOMISYON_ORAN_YP)
-      : Math.min(SOIK_REESKONT_KOMISYON_ORAN * (gun/360), SOIK_REESKONT_KOMISYON_ORAN);
-    const bankaKomisyonu = T * (komisyonOran/100); // peşin tahsil edilir, taksit planına dahil değil
+    // Komisyon artık ortak soikBankaKomisyonu() ile hesaplanıyor — 360 günü
+    // aşan vadelerde kalan anapara üzerinden ek komisyon dahil (bkz. fonksiyon
+    // başındaki açıklama ve doğrulama örnekleri).
+    const komisyonTabanOran = dovizAktif ? SOIK_REESKONT_KOMISYON_ORAN_YP : SOIK_REESKONT_KOMISYON_ORAN;
+    const komisyonDetay = soikBankaKomisyonu(T, gun, taksit, komisyonTabanOran);
+    const komisyonOran = komisyonDetay.efektifOran;
+    const bankaKomisyonu = komisyonDetay.komisyon; // peşin tahsil edilir, taksit planına dahil değil
     let kalan = T;
     let toplamKarPayi = 0, toplamBsmv = 0;
     const plan = Array.from({length:taksit},(_, i)=>{
@@ -10864,7 +10905,7 @@ function SoikReeskontHesaplama({s,onGecmis}:any){
     }
 
     return {
-      tur, toplamKarPayi, toplamBsmv, bankaKomisyonu, netKullandirilan, komisyonOran,
+      tur, toplamKarPayi, toplamBsmv, bankaKomisyonu, netKullandirilan, komisyonOran, komisyonDetay,
       geriOdenecekAnapara: geriOdenecekToplam, taksitTutari: taksitTutariOrtalama,
       taksitAraligi, gun, taksit, oran: yillikOran, efektifOran, plan,
       pesinKesinti:false, limitAsimi: dovizAktif ? T > SOIK_YP_AZAMI_TUTAR : T > REESKONT_GUNLUK_LIMIT_TL,
@@ -10911,7 +10952,7 @@ function SoikReeskontHesaplama({s,onGecmis}:any){
 
       <Card>
         <SecTitle>Finansman Bilgileri</SecTitle>
-        <Field label={`Finansman Tutarı (${dovizTur})`} value={tutar} onChange={setTutar} suffix={paraSembol}/>
+        <Field label={`Finansman Tutarı (${efektifDoviz})`} value={tutar} onChange={setTutar} suffix={paraSembol}/>
         <label style={{display:"block",fontSize:12,fontWeight:600,color:C.sub,marginTop:10,marginBottom:6}}>Vade Seçimi</label>
         <div style={{display:"flex",flexDirection:"column",gap:6}}>
           {vadeListesi.map(v=>{
@@ -10955,9 +10996,18 @@ function SoikReeskontHesaplama({s,onGecmis}:any){
               : `Vadeye Göre (%${dovizAktif?SOIK_REESKONT_KOMISYON_ORAN_YP:SOIK_REESKONT_KOMISYON_ORAN} Yıllık, Gün Bazında — Peşin)`}
           </span>
           <span style={{fontSize:14,fontWeight:800,color:C.purple,whiteSpace:"nowrap",marginLeft:8}}>
-            {tur==="reeskont" ? `%${fmtN(Math.min(REESKONT_KOMISYON_ORAN_YILLIK*(seciliVade.gun/360),REESKONT_KOMISYON_ORAN_YILLIK),4)}` : `%${fmtN(dovizAktif?Math.min(SOIK_REESKONT_KOMISYON_ORAN_YP*(seciliVade.gun/360),SOIK_REESKONT_KOMISYON_ORAN_YP):SOIK_REESKONT_KOMISYON_ORAN,2)}`}
+            {tur==="reeskont"
+              ? `%${fmtN(Math.min(REESKONT_KOMISYON_ORAN_YILLIK*(seciliVade.gun/360),REESKONT_KOMISYON_ORAN_YILLIK),4)}`
+              : `%${fmtN(soikBankaKomisyonu(100,seciliVade.gun,seciliVade.taksit,dovizAktif?SOIK_REESKONT_KOMISYON_ORAN_YP:SOIK_REESKONT_KOMISYON_ORAN).efektifOran,4)}`}
           </span>
         </div>
+        {tur==="soik" && seciliVade.gun>360 && r && (r as any).komisyonDetay && (
+          <div style={{marginTop:8,padding:"10px 12px",borderRadius:10,background:C.blueLight}}>
+            <p style={{margin:0,fontSize:10.5,color:C.blue,lineHeight:1.6}}>
+              Vade 360 günü aştığı için komisyon iki parçadan oluşuyor: ilk 360 gün tam anapara üzerinden <b>{fmtDoviz((r as any).komisyonDetay.ilkYil)}</b>, kalan {seciliVade.gun-360} gün ise 360. gündeki kalan anapara (<b>{fmtDoviz((r as any).komisyonDetay.kalanAnapara)}</b>) üzerinden <b>{fmtDoviz((r as any).komisyonDetay.kalanDonemKomisyonu)}</b>.
+            </p>
+          </div>
+        )}
 
       </Card>
 
