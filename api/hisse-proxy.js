@@ -97,6 +97,30 @@ const KATILIM_YEDEK_LISTE = new Set([
 const KV_KATILIM_KEY = "katilim:endeks:v1";
 const KATILIM_TTL = 24 * 3600;
 
+// ── ALARM İÇİN FİYAT ANLIK GÖRÜNTÜSÜ (2026-07-29) ──────────────────────────
+// api/bildirim.js'deki BİST fiyat alarmları bu anahtarı okuyor.
+//
+// GEREKÇE: Alarm cron'u 10 dakikada bir çalışıyor. Önceki tasarımda bildirim.js
+// bu uca HTTP ile istek atıyordu; CDN önbelleğiyle çakışmadığı her turda
+// fonksiyonun TAM çalışmasını tetikliyordu (TradingView isteği + 615 kaydın
+// normalize edilmesi). Kaba hesapla ayda ~1.600 fazladan çalışma, ~30-50 dakika
+// CPU — aylık 4 saatlik kotanın beşte biri. Seans dışında ise tamamen boşa,
+// çünkü fiyat değişmiyor.
+//
+// Artık hesaplanan fiyatlar burada Redis'e yazılıyor, bildirim.js doğrudan
+// okuyor (altinapi:v3 deseninin aynısı). Yazma doğal olarak kısıtlı: bu
+// fonksiyon yalnızca CDN önbelleği ıskalandığında çalışıyor.
+//
+// İçerik BİLEREK sade: yalnızca ticker→fiyat haritası + veri zamanı. Tam
+// 615 kayıtlık yanıtı yazmak ~500 KB olurdu; bu hâli ~10 KB.
+//
+// ⚠️ Anahtar adı veya içerik şekli değişirse api/bildirim.js DE güncellenmeli.
+const KV_HISSE_FIYAT_KEY = "hisse:fiyat:v1";
+// TTL, tazeleme aralığından (en fazla 1 saat) belirgin şekilde uzun — kısa bir
+// kesintide anahtar boşalıp alarm sessizce atlanmasın. Bayatlık kararını
+// bildirim.js zaten veriZamani üzerinden kendisi veriyor, TTL'e güvenmiyor.
+const HISSE_FIYAT_TTL = 3 * 3600;
+
 // Yalnızca GERÇEK katılım endeksleri. Dikkat: "XK" önekiyle eşleştirme YAPMA —
 // XKMYA (kimya), XKOBI (KOBİ), XKURY (kurumsal yönetim), XKAGT (kağıt) da bu
 // önekle başlıyor ama katılım endeksi DEĞİLLER.
@@ -576,6 +600,30 @@ export default async function handler(req, res) {
     const tazelenmeli = veriTazelenirMi();
     const onbellekSn = tazelenmeli ? 600 : 3600;
     res.setHeader("Cache-Control", `s-maxage=${onbellekSn}, stale-while-revalidate=120`);
+
+    // ── ALARM ANLIK GÖRÜNTÜSÜ ────────────────────────────────────────────────
+    // api/bildirim.js bunu okuyor (bkz. KV_HISSE_FIYAT_KEY notu). Yanıttan
+    // ÖNCE yazılıyor ama hata yutuluyor: Redis erişilemezse kullanıcıya
+    // dönen fiyat verisi bundan etkilenmemeli. En kötü durumda bildirim.js
+    // kendi HTTP yedeğine düşer.
+    try {
+      const fiyatHaritasi = {};
+      for (const h of hisseler) {
+        if (h?.ticker && typeof h.fiyat === "number" && h.fiyat > 0) fiyatHaritasi[h.ticker] = h.fiyat;
+      }
+      if (Object.keys(fiyatHaritasi).length >= 100) {
+        await redis.set(KV_HISSE_FIYAT_KEY, {
+          veriZamani: etkinVeriZamani,
+          kaynak,
+          yazilmaTs: Date.now(),
+          adet: Object.keys(fiyatHaritasi).length,
+          fiyatlar: fiyatHaritasi,
+        }, { ex: HISSE_FIYAT_TTL });
+      }
+    } catch (e) {
+      console.error("Alarm fiyat anlik goruntusu yazilamadi:", e.message);
+    }
+
     res.status(200).json({
       success: true,
       count: hisseler.length,

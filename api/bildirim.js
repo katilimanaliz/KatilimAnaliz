@@ -47,6 +47,10 @@
 //   POST ?islem=alarm-listele { token }                    → {alarmlar:[...]}
 //   POST ?islem=alarm-sil     { token, id }
 //
+//   BİST HİSSE ALARMLARI (2026-07-29 eklendi): Sembol "BIST:" önekiyle
+//   gelirse (örn. "BIST:ASELS") fiyat /api/hisse-proxy'den okunur. Detaylı
+//   gerekçe ve güvenlik önlemleri için aşağıdaki BİST bölümüne bakın.
+//
 // ── 4) ALARM KONTROLÜ (dış tetikleyici çağırır — Vercel Cron DEĞİL) ──
 //
 // Vercel Hobby planında cron günde 1 kezle sınırlı (fiyat alarmı için işe
@@ -358,14 +362,218 @@ async function altinApiOnbellektenOku(sembol) {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// BİST HİSSE ALARMLARI (2026-07-29)
+// ═══════════════════════════════════════════════════════════════════════════
+// SEMBOL BİÇİMİ: "BIST:ASELS" — önek ŞART. Mevcut alarm sembolleri Yahoo
+// biçiminde ("USDTRY=X", "GC=F") veya AltinAPI sembolü ("ALTIN", "AYAR22")
+// olduğu için, çıplak "ALTIN"/"ONS" gibi kodlarla çakışma riski var. Önek
+// bunu tamamen ortadan kaldırıyor ve TradingView'ın kendi gösterimiyle de
+// aynı ("BIST:ASELS").
+//
+// NEDEN /api/hisse-proxy: O uç TEK istekte 615 hissenin TAMAMINI döndürüyor.
+// Kaç farklı hisseye alarm kurulmuş olursa olsun kontrol turu başına BİR
+// istek yetiyor. hisse-proxy verisini Redis'e YAZMIYOR (yalnızca CDN
+// önbelleği kullanıyor), bu yüzden altinapi'deki gibi hazır bir anahtardan
+// okuyamıyoruz — HTTP üzerinden çağırıyoruz. Uç zaten seans içinde 600 sn,
+// seans dışında 3600 sn CDN önbellekli olduğu için bu çağrı çoğu zaman
+// fonksiyonu hiç çalıştırmadan karşılanıyor (Vercel CPU kotası korunuyor).
+//
+// ⚠️ BAYAT VERİ KORUMASI — bu bölümün en kritik parçası:
+// 24-28 Temmuz'da Midas dört gün boyunca donuk veri döndürdü ve fiyatlar
+// ekranda hiç değişmedi. Alarm sistemi böyle bir durumda ya hiç ateşlemez ya
+// da YANLIŞ ateşler, üstelik kimse fark etmez. Bu yüzden seans içinde veri
+// BIST_BAYAT_ESIK_DK'dan eskiyse BİST alarmları o tur TAMAMEN ATLANIR —
+// bayat fiyatla karar vermektense hiç karar vermemek doğrudur. Atlanan tur
+// yanıtta "bistNot" alanıyla bildirilir, sessizce yutulmaz.
+const BIST_ONEK = "BIST:";
+const BIST_BAYAT_ESIK_DK = 45;
+// hisse-proxy.js'in yazdığı fiyat anlık görüntüsü. ⚠️ O dosyadaki
+// KV_HISSE_FIYAT_KEY ile AYNI olmak zorunda; içerik şekli:
+//   { veriZamani, kaynak, yazilmaTs, adet, fiyatlar: { ASELS: 361.75, ... } }
+const KV_HISSE_FIYAT_KEY = "hisse:fiyat:v1";
+// Kendi uç noktamıza çağrı — YALNIZCA Redis anlık görüntüsü yokken yedek olarak.
+// VERCEL_URL dağıtım başına değiştiği ve apex alan adı 308 yönlendirme yaptığı
+// için (devir belgesi notu) kanonik www adresi sabit tutuluyor.
+const API_TABAN = process.env.API_TABAN || "https://www.katilimplus.com";
+
+// Tek kontrol turu içinde birden fazla kez istenirse tekrar okumamak için
+// kısa ömürlü bellek içi önbellek (fonksiyon örneği yaşadığı sürece).
+let bistBellek = { paket: null, ts: 0 };
+const BIST_BELLEK_MS = 60 * 1000;
+
+// ASIL YOL: hisse-proxy.js'in Redis'e yazdığı anlık görüntüyü okur.
+//
+// NEDEN HTTP DEĞİL: Alarm cron'u 10 dakikada bir çalışıyor. HTTP ile
+// /api/hisse-proxy çağırmak, CDN önbelleğiyle çakışmadığı her turda o
+// fonksiyonun TAM çalışmasını tetikliyordu (TradingView isteği + 615 kaydın
+// normalize edilmesi) — ayda ~30-50 dakika CPU, 4 saatlik kotanın beşte biri.
+// Redis okuması ise hiçbir fonksiyon çalıştırmıyor.
+//
+// YEDEK: Anahtar boşsa (ör. yeni dağıtım sonrası hisse-proxy hiç
+// çalışmamışsa) eski HTTP yolu deneniyor — o çağrı zaten anahtarı da
+// doldurduğu için sonraki turlar yeniden Redis'ten okur.
+async function bistVerisiGetir() {
+  if (bistBellek.paket && Date.now() - bistBellek.ts < BIST_BELLEK_MS) return bistBellek.paket;
+
+  // 1) Redis anlık görüntüsü
+  try {
+    const anlik = await redis.get(KV_HISSE_FIYAT_KEY);
+    const fiyatlar = anlik?.fiyatlar;
+    if (fiyatlar && typeof fiyatlar === "object") {
+      const kodlar = Object.keys(fiyatlar);
+      if (kodlar.length >= 100) {
+        const harita = new Map();
+        for (const kod of kodlar) harita.set(kod.toUpperCase(), { fiyat: fiyatlar[kod] });
+        const paket = { harita, veriZamani: anlik.veriZamani || null, kaynak: anlik.kaynak || null, okuma: "redis" };
+        bistBellek = { paket, ts: Date.now() };
+        return paket;
+      }
+    }
+  } catch (e) {
+    console.error("BIST anlik goruntusu okunamadi:", e.message);
+  }
+
+  // 2) Yedek: HTTP (aynı zamanda Redis anahtarını da doldurur)
+  try {
+    const r = await fetchZamanli(
+      `${API_TABAN}/api/hisse-proxy`,
+      { headers: { Accept: "application/json", "User-Agent": "KatilimPlus-Alarm/1.0" } },
+      12000
+    );
+    if (!r.ok) return null;
+    const j = await r.json();
+    if (!j?.success || !Array.isArray(j.data) || j.data.length < 100) return null;
+    const harita = new Map();
+    for (const h of j.data) if (h?.ticker) harita.set(String(h.ticker).toUpperCase(), h);
+    const paket = { harita, veriZamani: j.veriZamani || null, kaynak: j.kaynak || null, okuma: "http-yedek" };
+    bistBellek = { paket, ts: Date.now() };
+    return paket;
+  } catch (e) {
+    console.error("BIST verisi alinamadi (HTTP yedek):", e.message);
+    return null;
+  }
+}
+
+// hisse-proxy.js'deki piyasaAcikMi() ile BİREBİR aynı mantık (TR saati,
+// hafta içi 10:00–18:00). Ortak dosyaya çıkarılmadı çünkü iki uç birbirinden
+// bağımsız kalsın istiyoruz; değişirse İKİSİ birlikte güncellenmeli.
+function bistSeansAcikMi() {
+  const tr = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Istanbul" }));
+  const gun = tr.getDay();                       // 0=Pazar, 6=Cumartesi
+  const dk = tr.getHours() * 60 + tr.getMinutes();
+  return gun >= 1 && gun <= 5 && dk >= 10 * 60 && dk < 18 * 60;
+}
+
+function bistVerisiBayatMi(veriZamani) {
+  if (!bistSeansAcikMi()) return false;   // seans dışında eskilik NORMAL
+  if (!veriZamani) return true;           // damga yoksa güvenme
+  return (Date.now() - new Date(veriZamani).getTime()) / 60000 > BIST_BAYAT_ESIK_DK;
+}
+
+async function bistTekFiyat(sembol) {
+  const paket = await bistVerisiGetir();
+  if (!paket) return null;
+  const h = paket.harita.get(sembol.slice(BIST_ONEK.length).toUpperCase());
+  return (h && typeof h.fiyat === "number" && h.fiyat > 0) ? h.fiyat : null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// KAP BİLDİRİM ALARMLARI (2026-07-29)
+// ═══════════════════════════════════════════════════════════════════════════
+// Fiyat alarmından YAPISAL OLARAK FARKLI — bu bir ABONELİK:
+//   • Tetiklenince aktif:false YAPILMAZ, izlemeye devam eder
+//   • Eşik yok; "son gördüğümden yenisi geldi mi" durumu tutulur
+//   • Kurulurken o anki EN YENİ bildirim başlangıç kabul edilir — yoksa
+//     alarm kurar kurmaz son 15 günün tamamı push olarak yağar
+//
+// VERİ KAYNAĞI: evds-proxy.js'in doldurduğu "kap:tum:v3" Redis anahtarı
+// DOĞRUDAN okunuyor. İki dosya aynı Upstash örneğine bağlı (ikisi de
+// KV_REST_API_URL kullanıyor) — altinapi:v3 deseninin aynısı, ekstra HTTP
+// isteği yok. Önbellek boş/süresi dolmuşsa evds-proxy tek bir çağrıyla
+// ısıtılıp tekrar okunuyor (saatte en fazla bir kez).
+//
+// ⚠️ evds-proxy.js'deki KV_KAP_TUM_KEY ve kapSadeKayit alan adları
+// değişirse BURASI DA güncellenmeli. Alan adları: id, kod, ilgili, sirket,
+// baslik, ozet, tarih, ek, link.
+const KV_KAP_TUM_KEY = "kap:tum:v3";
+const MAKS_KAP_ALARM_TOKEN_BASINA = 15;
+const KAP_TUR_BASINA_MAKS_BILDIRIM = 3;   // tek turda bir hisse için en fazla kaç yeni bildirim duyurulsun
+
+async function kapTumOku(isitmaYapilsinMi = true) {
+  try {
+    const liste = await redis.get(KV_KAP_TUM_KEY);
+    if (Array.isArray(liste) && liste.length) return liste;
+  } catch {}
+  if (!isitmaYapilsinMi) return null;
+  // Önbellek boş → evds-proxy'yi bir kez çağırıp doldurt, sonra tekrar oku.
+  // Yanıtı kullanmıyoruz (yalnızca 8 kayıt döner); amaç önbelleği ısıtmak.
+  try {
+    await fetchZamanli(
+      `${API_TABAN}/api/evds-proxy?kap=hisse&kod=ASELS`,
+      { headers: { Accept: "application/json", "User-Agent": "KatilimPlus-Alarm/1.0" } },
+      20000
+    );
+    const liste = await redis.get(KV_KAP_TUM_KEY);
+    if (Array.isArray(liste) && liste.length) return liste;
+  } catch (e) {
+    console.error("KAP onbellegi isitilamadi:", e.message);
+  }
+  return null;
+}
+
+// evds-proxy.js'deki kapHisseEslesir ile AYNI mantık: bildirimi yapan
+// şirketin kodu ya da ilgili şirketler listesinde TAM kelime eşleşmesi.
+// indexOf kullanılmıyor — "AKBNK" ararken "AKBNKX"i yakalamasın diye.
+function kapHisseyeAitMi(kayit, kod) {
+  const K = String(kod || "").toUpperCase().trim();
+  if (!K) return false;
+  if (String(kayit?.kod || "").toUpperCase().trim() === K) return true;
+  const ilgili = String(kayit?.ilgili || "").toUpperCase();
+  if (!ilgili) return false;
+  return ilgili.split(/[,;\s]+/).filter(Boolean).includes(K);
+}
+
+// KAP publishDate biçimi: "GG.AA.YYYY SS:DD:ss". String sıralaması yanlış
+// sonuç verir, epoch'a çeviriyoruz (evds-proxy'deki zaman() ile aynı).
+function kapZaman(t) {
+  if (!t) return 0;
+  const m = String(t).match(/^(\d{2})\.(\d{2})\.(\d{4})[ T]?(\d{2})?:?(\d{2})?/);
+  if (!m) return 0;
+  return new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0)).getTime();
+}
+
+// Bir hissenin bildirimlerini en YENİDEN eskiye sıralı döndürür.
+function kapHisseBildirimleri(liste, kod) {
+  return (liste || [])
+    .filter((k) => k && k.id && kapHisseyeAitMi(k, kod))
+    .sort((a, b) => kapZaman(b.tarih) - kapZaman(a.tarih));
+}
+
+// "Yeni" tanımı: disclosureIndex KAP tarafından artan sırayla veriliyor, bu
+// yüzden sayısal karşılaştırma birincil ölçüt. İki taraf da sayı değilse
+// yayın zamanına düşülüyor — id biçimi değişirse alarm sessizce ölmesin.
+function kapDahaYeniMi(kayit, sonGorulenId, sonGorulenTs) {
+  const a = Number(kayit?.id), b = Number(sonGorulenId);
+  if (isFinite(a) && isFinite(b)) return a > b;
+  return kapZaman(kayit?.tarih) > (sonGorulenTs || 0);
+}
+
 // GRAM_ALTIN/GRAM_GUMUS gibi sentetik semboller dahil, herhangi bir alarm
 // sembolünün güncel fiyatını döner.
+//
+// NOT: alarm-kontrol turunda BİST sembolleri için bu fonksiyon KULLANILMAZ —
+// orada tek istekle toplu okuma yapılıyor (bkz. alarmKontrol). Buradaki BİST
+// dalı yalnızca alarm-ekle sırasındaki tekil doğrulama için.
 async function alarmFiyatGetir(sembol) {
   if (sembol === "GRAM_ALTIN" || sembol === "GRAM_GUMUS") {
     const onsSembol = sembol === "GRAM_ALTIN" ? "GC=F" : "SI=F";
     const [ons, usdTry] = await Promise.all([yahooGuncelFiyat(onsSembol), yahooGuncelFiyat("USDTRY=X")]);
     if (ons == null || usdTry == null) return null;
     return (ons * usdTry) / OZ;
+  }
+  if (typeof sembol === "string" && sembol.startsWith(BIST_ONEK)) {
+    return bistTekFiyat(sembol);
   }
   if (ALTINAPI_SEMBOLLERI.has(sembol)) {
     return altinApiOnbellektenOku(sembol);
@@ -390,10 +598,81 @@ async function alarmEkle(req, res) {
     const cevrilen = await hamTokeniDonustur(token);
     if (cevrilen) token = cevrilen;
   }
+  // KAP alarmında "yon" anlamsız — istemci göndermese de kabul ediyoruz.
+  if (tip === "kap" && !yon) yon = "yeni";
   if (!token || !sembol || !ad || !tip || !yon) {
     res.status(400).json({ hata: "token, sembol, ad, tip, yon alanları zorunlu" });
     return;
   }
+
+  // ── KAP BİLDİRİM ALARMI ─────────────────────────────────────────────────
+  // Fiyat çekilmez; bunun yerine o anki EN YENİ bildirim başlangıç noktası
+  // olarak kaydedilir. Böylece kullanıcı alarmı kurar kurmaz geçmiş 15 günün
+  // bildirimleriyle boğulmaz — yalnızca BUNDAN SONRA gelenler duyurulur.
+  if (tip === "kap") {
+    if (!sembol.startsWith(BIST_ONEK)) {
+      res.status(400).json({ hata: "KAP alarmı yalnızca BİST hisseleri için kurulabilir (sembol 'BIST:' önekli olmalı)" });
+      return;
+    }
+    const kod = sembol.slice(BIST_ONEK.length).toUpperCase();
+    const tumListe = await kapTumOku();
+    if (!tumListe) {
+      res.status(502).json({ hata: "KAP bildirim listesi şu an alınamadı, alarm oluşturulamadı. Lütfen biraz sonra tekrar deneyin." });
+      return;
+    }
+    const bildirimler = kapHisseBildirimleri(tumListe, kod);
+    const enYeni = bildirimler[0] || null;
+
+    try {
+      const { basarili, sonuc } = await kilitliCalistir(
+        redis, ALARM_KILIT_ANAHTAR, 15,
+        async () => {
+          const alarmlar = await alarmlariOku();
+          // KAP alarmları kalıcı olduğu için fiyat alarmlarından AYRI sayılıyor —
+          // aksi halde 20 KAP aboneliği fiyat alarmı kurmayı tamamen engellerdi.
+          const kapSayisi = alarmlar.filter((a) => a.token === token && a.tip === "kap" && a.aktif).length;
+          if (kapSayisi >= MAKS_KAP_ALARM_TOKEN_BASINA) {
+            return { hataKodu: 429, hata: `En fazla ${MAKS_KAP_ALARM_TOKEN_BASINA} KAP bildirim aboneliği kurabilirsiniz.` };
+          }
+          const zatenVar = alarmlar.some((a) => a.token === token && a.tip === "kap" && a.sembol === sembol && a.aktif);
+          if (zatenVar) return { hataKodu: 409, hata: "Bu hisse için zaten bir KAP bildirim aboneliğiniz var." };
+
+          const yeniAlarm = {
+            id: randomUUID(),
+            token, sembol, ad,
+            tip: "kap",
+            yon: "yeni",
+            hedefFiyat: null,
+            yuzde: null,
+            baslangicFiyat: null,
+            // Başlangıç referansı: bu ikisinden HANGİSİ varsa o kullanılır.
+            sonGorulenId: enYeni?.id ?? null,
+            sonGorulenTs: enYeni ? kapZaman(enYeni.tarih) : Date.now(),
+            bildirimSayisi: 0,
+            olusturulmaTs: Date.now(),
+            aktif: true,
+            tetiklenmeTs: null,
+            tetiklenmeFiyat: null,
+          };
+          await redis.set(ALARM_KV_ANAHTAR, [...alarmlar, yeniAlarm]);
+          return { alarm: yeniAlarm };
+        },
+        { denemeSayisi: 10, bekleMs: 300 }
+      );
+      if (!basarili) { res.status(409).json({ hata: "Şu anda başka bir alarm işlemi sürüyor, lütfen tekrar deneyin." }); return; }
+      if (sonuc?.hataKodu) { res.status(sonuc.hataKodu).json({ hata: sonuc.hata }); return; }
+      res.status(200).json({
+        basarili: true,
+        alarm: sonuc.alarm,
+        mevcutBildirimSayisi: bildirimler.length,
+        not: "Bundan sonra yayınlanacak yeni bildirimler için uyarılacaksınız.",
+      });
+    } catch (e) {
+      res.status(500).json({ hata: "KAP alarmı oluşturulamadı", detay: e.message });
+    }
+    return;
+  }
+
   if (tip === "hedef" && (hedefFiyat == null || isNaN(parseFloat(hedefFiyat)))) {
     res.status(400).json({ hata: "tip=hedef için geçerli bir 'hedefFiyat' gerekli" });
     return;
@@ -535,6 +814,48 @@ async function alarmTemizle(req, res) {
   }
 }
 
+// Aktif alarmların benzersiz sembolleri için fiyat tablosu üretir.
+// BİST sembolleri TEK istekte toplu okunur; diğerleri (Yahoo/AltinAPI)
+// eskisi gibi paralel ve tekil çekilir.
+async function alarmFiyatTablosu(benzersizSemboller) {
+  const fiyatlar = {};
+  let bistNot = null;
+  let bistMeta = null;
+
+  const bistSemboller = benzersizSemboller.filter((s) => typeof s === "string" && s.startsWith(BIST_ONEK));
+  const digerSemboller = benzersizSemboller.filter((s) => !(typeof s === "string" && s.startsWith(BIST_ONEK)));
+
+  const isler = [];
+
+  if (bistSemboller.length > 0) {
+    isler.push((async () => {
+      const paket = await bistVerisiGetir();
+      if (!paket) {
+        bistNot = "BIST verisi alinamadi — BIST alarmlari bu turda atlandi";
+        return;
+      }
+      bistMeta = { veriZamani: paket.veriZamani, kaynak: paket.kaynak, okuma: paket.okuma };
+      if (bistVerisiBayatMi(paket.veriZamani)) {
+        // Bilinçli davranış: bayat fiyatla karar verme. Alarmlar aktif kalır,
+        // bir sonraki turda taze veriyle tekrar bakılır.
+        bistNot = `BIST verisi bayat (${paket.veriZamani}) — BIST alarmlari bu turda atlandi`;
+        return;
+      }
+      for (const s of bistSemboller) {
+        const h = paket.harita.get(s.slice(BIST_ONEK.length).toUpperCase());
+        fiyatlar[s] = (h && typeof h.fiyat === "number" && h.fiyat > 0) ? h.fiyat : null;
+      }
+    })());
+  }
+
+  for (const s of digerSemboller) {
+    isler.push((async () => { fiyatlar[s] = await alarmFiyatGetir(s); })());
+  }
+
+  await Promise.all(isler);
+  return { fiyatlar, bistNot, bistMeta };
+}
+
 // Dış zamanlayıcının çağırdığı kontrol uç noktası. Tüm AKTİF alarmları
 // gruplanmış sembollerle tek seferde fiyatlandırır, koşulu sağlayanlara
 // SADECE KENDİ TOKEN'INA push gönderir ve alarmı "aktif:false" yapar.
@@ -560,17 +881,26 @@ async function alarmKontrol(req, res) {
           return { kontrolEdilenAlarm: 0, benzersizSembol: 0, tetiklenen: 0, gonderilenBildirim: 0 };
         }
 
+        // Fiyat alarmları ve KAP abonelikleri ayrı akışlar — KAP'ta fiyat yok.
+        const kapAlarmlar = aktifAlarmlar.filter((a) => a.tip === "kap");
+        const fiyatAlarmlar = aktifAlarmlar.filter((a) => a.tip !== "kap");
+
         // Aynı sembolü birden fazla alarm izliyorsa fiyatı TEK kere çekelim.
-        const benzersizSemboller = [...new Set(aktifAlarmlar.map((a) => a.sembol))];
-        const fiyatlar = {};
-        await Promise.all(
-          benzersizSemboller.map(async (s) => {
-            fiyatlar[s] = await alarmFiyatGetir(s);
-          })
-        );
+        const benzersizSemboller = [...new Set(fiyatAlarmlar.map((a) => a.sembol))];
+        const { fiyatlar, bistNot, bistMeta } = benzersizSemboller.length
+          ? await alarmFiyatTablosu(benzersizSemboller)
+          : { fiyatlar: {}, bistNot: null, bistMeta: null };
+
+        // KAP listesi TEK kere okunuyor — kaç abonelik olursa olsun.
+        let kapListe = null, kapNot = null;
+        if (kapAlarmlar.length > 0) {
+          kapListe = await kapTumOku();
+          if (!kapListe) kapNot = "KAP listesi alinamadi — KAP alarmlari bu turda atlandi";
+        }
 
         let tetiklenen = 0;
         let gonderilenBildirim = 0;
+        let kapTetiklenen = 0;
         const gonderimHatalari = [];
         const guncelListe = [];
 
@@ -579,6 +909,46 @@ async function alarmKontrol(req, res) {
             guncelListe.push(alarm);
             continue;
           }
+
+          // ── KAP ABONELİĞİ ────────────────────────────────────────────────
+          // Fiyat alarmlarından farklı olarak tetiklense de AKTİF KALIR;
+          // yalnızca "son görülen" imleci ileri alınır.
+          if (alarm.tip === "kap") {
+            if (!kapListe) { guncelListe.push(alarm); continue; }
+            const kod = String(alarm.sembol || "").slice(BIST_ONEK.length).toUpperCase();
+            const hepsi = kapHisseBildirimleri(kapListe, kod);
+            const yeniler = hepsi.filter((k) => kapDahaYeniMi(k, alarm.sonGorulenId, alarm.sonGorulenTs));
+            if (yeniler.length === 0) { guncelListe.push(alarm); continue; }
+
+            const enYeni = yeniler[0];
+            const duyurulan = Math.min(yeniler.length, KAP_TUR_BASINA_MAKS_BILDIRIM);
+            const baslikMetni = String(enYeni.baslik || enYeni.ozet || "Yeni bildirim").slice(0, 90);
+            const govde = yeniler.length > 1
+              ? `${yeniler.length} yeni bildirim. En yenisi: ${baslikMetni}`
+              : baslikMetni;
+
+            kapTetiklenen++;
+            const gonderildi = await tekTokeneGonder(
+              alarm.token, `📄 KAP: ${alarm.ad}`, govde,
+              { tip: "kap-bildirimi", sembol: alarm.sembol, alarmId: alarm.id, kapId: String(enYeni.id || ""), link: enYeni.link || "" }
+            );
+            if (gonderildi === true) gonderilenBildirim++;
+            else if (gonderildi && gonderildi.hata) {
+              gonderimHatalari.push({ alarm: alarm.ad, tokenIlk10: (alarm.token||"").slice(0,10), hata: gonderildi.hata });
+            }
+
+            // İmleç EN YENİYE alınıyor — duyurulmayanlar da "görülmüş" sayılır,
+            // aksi halde aynı yığın her turda tekrar tekrar bildirilirdi.
+            guncelListe.push({
+              ...alarm,
+              sonGorulenId: enYeni.id ?? alarm.sonGorulenId,
+              sonGorulenTs: kapZaman(enYeni.tarih) || Date.now(),
+              bildirimSayisi: (alarm.bildirimSayisi || 0) + duyurulan,
+              tetiklenmeTs: Date.now(),
+            });
+            continue;
+          }
+
           const guncelFiyat = fiyatlar[alarm.sembol];
           if (guncelFiyat == null) {
             guncelListe.push(alarm); // fiyat alınamadıysa bir sonraki kontrole bırak
@@ -608,7 +978,12 @@ async function alarmKontrol(req, res) {
 
           if (tetiklendiMi) {
             tetiklenen++;
-            const gonderildi = await tekTokeneGonder(alarm.token, `🔔 Fiyat Alarmı: ${alarm.ad}`, mesaj, {
+            // BİST fiyatları ~15 dk gecikmeli — bildirimde açıkça belirtiliyor
+            // ki kullanıcı "fiyat değdi ama bildirim geç geldi" diye düşünmesin.
+            const govde = alarm.sembol.startsWith(BIST_ONEK)
+              ? `${mesaj} · BİST verisi ~15 dk gecikmelidir`
+              : mesaj;
+            const gonderildi = await tekTokeneGonder(alarm.token, `🔔 Fiyat Alarmı: ${alarm.ad}`, govde, {
               tip: "fiyat-alarmi",
               sembol: alarm.sembol,
               alarmId: alarm.id,
@@ -626,10 +1001,18 @@ async function alarmKontrol(req, res) {
         await redis.set(ALARM_KV_ANAHTAR, guncelListe);
         return {
           kontrolEdilenAlarm: aktifAlarmlar.length,
+          fiyatAlarmi: fiyatAlarmlar.length,
+          kapAlarmi: kapAlarmlar.length,
           benzersizSembol: benzersizSemboller.length,
           tetiklenen,
+          kapTetiklenen,
           gonderilenBildirim,
           gonderimHatalari,
+          bistSeansAcik: bistSeansAcikMi(),
+          ...(kapListe ? { kapKayitSayisi: kapListe.length } : {}),
+          ...(bistMeta ? { bistMeta } : {}),
+          ...(bistNot ? { bistNot } : {}),
+          ...(kapNot ? { kapNot } : {}),
         };
       },
       { denemeSayisi: 3, bekleMs: 1000 }

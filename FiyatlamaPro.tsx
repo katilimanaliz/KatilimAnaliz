@@ -14225,11 +14225,11 @@ function HakkindaModal({onClose}){
           <div style={{height:1,background:WA(0.08),marginBottom:14}}/>
           {/* İletişim */}
           <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:16}}>
-            <a href="mailto:Katilimanalizz@gmail.com" style={{display:"flex",alignItems:"center",gap:10,textDecoration:"none"}}>
+            <a href="mailto:katilimplus2026@gmail.com" style={{display:"flex",alignItems:"center",gap:10,textDecoration:"none"}}>
               <div style={{width:38,height:38,borderRadius:10,background:"rgba(91,155,216,0.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>📧</div>
               <div>
                 <p style={{margin:0,fontSize:11,color:WA(0.55),fontWeight:600}}>E-Posta</p>
-                <p style={{margin:0,fontSize:13,color:C.thead,fontWeight:700}}>Katilimanalizz@gmail.com</p>
+                <p style={{margin:0,fontSize:13,color:C.thead,fontWeight:700}}>katilimplus2026@gmail.com</p>
               </div>
             </a>
             <a href="https://www.linkedin.com/in/u%C4%9Fur-yilmaz-62194b168" target="_blank" rel="noreferrer" style={{display:"flex",alignItems:"center",gap:10,textDecoration:"none"}}>
@@ -14362,7 +14362,7 @@ function BildirimModal({onClose}){
           user_id:"9tP8nPG0LfoiO6nIA",
           template_params:{
             name:"Katilim Analiz Kullanicisi",
-            email:"katilimanalizz@gmail.com",
+            email:"katilimplus2026@gmail.com",
             title:(tip==="hata"?"[HATA] ":"[ONERI] ")+konu,
             message:"Bildirim Tipi: "+(tip==="hata"?"Hata Bildirimi":"Oneri")+"\nKonu: "+konu+"\n\nMesaj:\n"+mesaj+"\n\nTarih: "+new Date().toLocaleString("tr-TR"),
           }
@@ -19285,11 +19285,11 @@ function App(){
 
             {/* İletişim */}
             <div style={{fontSize:11,fontWeight:700,color:WA(0.35),textTransform:"uppercase",letterSpacing:0.5,margin:"14px 0 8px"}}>{TR("İletişim")}</div>
-            <a href="mailto:katilimanalizz@gmail.com" style={{display:"flex",alignItems:"center",gap:12,textDecoration:"none",background:WA(0.05),border:`1px solid ${WA(0.07)}`,borderRadius:12,padding:"13px 14px",marginBottom:8}}>
+            <a href="mailto:katilimplus2026@gmail.com" style={{display:"flex",alignItems:"center",gap:12,textDecoration:"none",background:WA(0.05),border:`1px solid ${WA(0.07)}`,borderRadius:12,padding:"13px 14px",marginBottom:8}}>
               <span style={{fontSize:17,width:24,textAlign:"center",flexShrink:0}}>📧</span>
               <div style={{flex:1,minWidth:0}}>
                 <p style={{margin:0,fontSize:10,color:WA(0.4)}}>{CV("E-Posta")}</p>
-                <p style={{margin:0,fontSize:13,fontWeight:700,color:C.soft,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>katilimanalizz@gmail.com</p>
+                <p style={{margin:0,fontSize:13,fontWeight:700,color:C.soft,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>katilimplus2026@gmail.com</p>
               </div>
             </a>
             <a href="https://www.linkedin.com/in/u%C4%9Fur-yilmaz-62194b168" target="_blank" rel="noreferrer" style={{display:"flex",alignItems:"center",gap:12,textDecoration:"none",background:WA(0.05),border:`1px solid ${WA(0.07)}`,borderRadius:12,padding:"13px 14px",marginBottom:8}}>
