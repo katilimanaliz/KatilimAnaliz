@@ -658,9 +658,10 @@ function urdlHtmldenXlsAdaylari(html, kendiUrl) {
     if (!benzersiz.includes(t)) benzersiz.push(t);
   }
   const puan = (t) =>
-    /\.xlsx?([?#]|$)/i.test(t) ? 0 :                      // gerçek dosya uzantısı
-    /MOD=AJPERES/i.test(t) && /\/connect\//i.test(t) ? 1 : // WCM dosya deseni
-    2;
+    /\/connect\/[0-9a-f]{8}-[0-9a-f-]{20,}\//i.test(t) ? 0 : // uuid'li WCM dosyası (en güvenilir)
+    /\.xlsx?([?#]|$)/i.test(t) ? 1 :                          // gerçek dosya uzantısı
+    /MOD=AJPERES/i.test(t) && /\/connect\//i.test(t) ? 2 :    // diğer WCM linkleri
+    3;
   benzersiz.sort((x, y) => puan(x) - puan(y));
   return benzersiz.slice(0, 5);
 }
@@ -683,7 +684,13 @@ async function urdlOku(teshis) {
     let xlsUrl = URDL_XLS_URL;
     // HTML dönerse (dosya yerine kabuk sayfa — canlıda görülen durum):
     // içinden gerçek XLS bağlantısını çıkar ve İKİNCİ istekle dosyayı indir.
-    const htmlMi = (b) => b.slice(0, 300).toString("utf8").toLocaleLowerCase().includes("<html");
+    // İlk sürüm yalnızca "<html" arıyordu ve CANLIDA KAÇIRDI: dosya
+    // "<!DOCTYPE html>" ile başlayınca kontrol geçildi, SheetJS HTML'i
+    // tablo sanıp CSS satırlarını "Sheet1" olarak okudu. Artık dört imza.
+    const htmlMi = (b) => {
+      const bas = b.slice(0, 600).toString("utf8").toLocaleLowerCase();
+      return bas.includes("<html") || bas.includes("<!doctype") || bas.includes("<head") || bas.includes("<style");
+    };
     if (htmlMi(buf)) {
       const adaylar = urdlHtmldenXlsAdaylari(buf.toString("utf8"), URDL_XLS_URL);
       if (adaylar.length === 0) {
@@ -705,9 +712,10 @@ async function urdlOku(teshis) {
         } catch (e) { denenen.push(`${link} → ${e.message}`); }
       }
       if (!bulundu) {
-        teshis.urdl = { hata: "Hicbir aday binary dondurmedi", denenen };
+        teshis.urdl = { hata: "Hicbir aday binary dondurmedi", denenen, adaylar };
         return null;
       }
+      teshis.urdlAdaylar = adaylar;   // başarılı yolda da hangi listeden seçildiği görünsün
     }
     const wb = XLSX.read(buf, { type: "buffer" });
     const { bulunan, kesif, tarih } = urdlAyristir(XLSX, wb);
@@ -716,7 +724,7 @@ async function urdlOku(teshis) {
     // Hiçbir kalem bulunamadıysa keşif dökümünü teşhise koy — ayrıştırıcıyı
     // gerçek yapıya göre düzeltmek için gereken tek şey bu çıktı.
     if (bulunan.resmiRezerv == null && bulunan.swapVadeli == null && bulunan.netRezerv == null) {
-      teshis.urdl = { hata: "hicbir kalem eslesmedi", sayfalar: wb.SheetNames, kesif };
+      teshis.urdl = { hata: "hicbir kalem eslesmedi", xlsUrl, sayfalar: wb.SheetNames, kesif: kesif.slice(0, 40) };
       return null;
     }
     try { await redis.set(KV_URDL_KEY, kayit, { ex: URDL_TTL }); } catch {}
