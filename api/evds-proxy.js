@@ -569,7 +569,15 @@ const REZERV_STANDBY = ["TP.AB.N06", "TP.AB.N12", "TP.DK.USD.A"];
 // net rezerv rakamlarının kaynağı bu dosya.
 // Üç gün boyunca EVDS'te aranan veri EVDS'te hiç olmamıştı — ders: kaynak
 // yayını API'de yoksa dosya yayınına bakılmalı.
-const URDL_XLS_URL = "https://www.tcmb.gov.tr/wps/wcm/connect/TR/TCMB+TR/Main+Menu/Istatistikler/Odemeler+Dengesi+ve+Ilgili+Istatistikler/Uluslararasi+Rezervler+ve+Doviz+Likiditesi/Veri+(Tablolar)+-+Haftalik/XLS";
+// v8 (ayni gece): /XLS kabugu gercek dosya linki icermiyordu (icindeki tum
+// uuid linkleri normalize.css/webfont.js/favicon gibi site varliklariydi —
+// canli teshiste goruldu). Asil dosya linkleri LISTELEME sayfasinda; once o
+// deneniyor, /XLS kabugu yedek.
+const URDL_KAYNAK_SAYFALAR = [
+  "https://www.tcmb.gov.tr/wps/wcm/connect/TR/TCMB+TR/Main+Menu/Istatistikler/Odemeler+Dengesi+ve+Ilgili+Istatistikler/Uluslararasi+Rezervler+ve+Doviz+Likiditesi/Veri+(Tablolar)+-+Haftalik",
+  "https://www.tcmb.gov.tr/wps/wcm/connect/TR/TCMB+TR/Main+Menu/Istatistikler/Odemeler+Dengesi+ve+Ilgili+Istatistikler/Uluslararasi+Rezervler+ve+Doviz+Likiditesi/Veri+(Tablolar)+-+Haftalik/XLS",
+];
+const URDL_XLS_URL = URDL_KAYNAK_SAYFALAR[0];
 const KV_URDL_KEY = "urdl:haftalik:v1";
 const URDL_TTL = 12 * 3600;   // dosya haftada bir değişiyor; 12 saat fazlasıyla taze
 
@@ -654,16 +662,23 @@ function urdlHtmldenXlsAdaylari(html, kendiUrl) {
     const tNorm = decodeURIComponent(t).toLocaleLowerCase();
     if (tNorm === kendiNorm) continue;                    // kendine referans
     if (tNorm.endsWith("/xls")) continue;                 // ayni tur kabuk sayfalar
-    if (!/xls|MOD=AJPERES/i.test(t)) continue;
+    // SITE VARLIKLARI ELENIR (canli vaka: normalize.css secilmisti) —
+    // uuid'li olsalar bile bunlar veri dosyasi degil.
+    if (/\.(css|js|png|jpe?g|gif|svg|ico|woff2?|ttf|eot)([?#]|$)/i.test(tNorm)) continue;
+    if (/normalize|webfont|favicon/i.test(tNorm)) continue;
+    // Aday olabilmesi icin YA .xls uzantisi YA da adinda konuyla ilgili bir
+    // ipucu olmali (URDL_Gelismeleri.pdf ornegindeki adlandirma deseni).
+    const dosyaIpucu = /\.xlsx?([?#]|$)/i.test(tNorm) ||
+      ((/MOD=AJPERES/i.test(t)) && /urdl|rezerv|likidit|haftalik/i.test(tNorm));
+    if (!dosyaIpucu) continue;
     if (!benzersiz.includes(t)) benzersiz.push(t);
   }
   const puan = (t) =>
-    /\/connect\/[0-9a-f]{8}-[0-9a-f-]{20,}\//i.test(t) ? 0 : // uuid'li WCM dosyası (en güvenilir)
-    /\.xlsx?([?#]|$)/i.test(t) ? 1 :                          // gerçek dosya uzantısı
-    /MOD=AJPERES/i.test(t) && /\/connect\//i.test(t) ? 2 :    // diğer WCM linkleri
-    3;
+    /\.xlsx?([?#]|$)/i.test(t) ? 0 :                           // gerçek dosya uzantısı en önde
+    /\/connect\/[0-9a-f]{8}-[0-9a-f-]{20,}\//i.test(t) ? 1 :  // uuid'li WCM dosyası
+    2;
   benzersiz.sort((x, y) => puan(x) - puan(y));
-  return benzersiz.slice(0, 5);
+  return benzersiz.slice(0, 6);
 }
 
 // URDL verisini Redis-öncelikli getirir. Her adım kendi try/catch'inde:
@@ -675,24 +690,37 @@ async function urdlOku(teshis) {
   } catch {}
   try {
     const XLSX = await import("xlsx");
-    const r = await fetch(URDL_XLS_URL, {
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; KatilimPlus/1.0)", Accept: "*/*" },
-      redirect: "follow",
-    });
-    if (!r.ok) { teshis.urdl = { hata: `HTTP ${r.status}` }; return null; }
-    let buf = Buffer.from(await r.arrayBuffer());
-    let xlsUrl = URDL_XLS_URL;
+    // Kaynak sayfalari sirayla dene; ilk erisilebilen kabugu kullan.
+    let buf = null, xlsUrl = null, kabukHatalari = [];
+    for (const kaynakUrl of URDL_KAYNAK_SAYFALAR) {
+      try {
+        const r = await fetch(kaynakUrl, {
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; KatilimPlus/1.0)", Accept: "*/*" },
+          redirect: "follow",
+        });
+        if (!r.ok) { kabukHatalari.push(`${kaynakUrl} → HTTP ${r.status}`); continue; }
+        buf = Buffer.from(await r.arrayBuffer());
+        xlsUrl = kaynakUrl;
+        break;
+      } catch (e) { kabukHatalari.push(`${kaynakUrl} → ${e.message}`); }
+    }
+    if (!buf) { teshis.urdl = { hata: "Kaynak sayfalara erisilemedi", kabukHatalari }; return null; }
     // HTML dönerse (dosya yerine kabuk sayfa — canlıda görülen durum):
     // içinden gerçek XLS bağlantısını çıkar ve İKİNCİ istekle dosyayı indir.
-    // İlk sürüm yalnızca "<html" arıyordu ve CANLIDA KAÇIRDI: dosya
-    // "<!DOCTYPE html>" ile başlayınca kontrol geçildi, SheetJS HTML'i
-    // tablo sanıp CSS satırlarını "Sheet1" olarak okudu. Artık dört imza.
-    const htmlMi = (b) => {
-      const bas = b.slice(0, 600).toString("utf8").toLocaleLowerCase();
-      return bas.includes("<html") || bas.includes("<!doctype") || bas.includes("<head") || bas.includes("<style");
-    };
+    // ÜÇ TUR KARA LİSTEYLE UĞRAŞILDI ("HTML mi?"): once <html kacti
+    // (<!DOCTYPE), sonra CSS kacti (hic HTML imzasi yok). Dogru soru
+    // "XLS Mİ?" — beyaz liste: XLS'in iki kesin binary imzasi var:
+    //   BIFF (eski .xls): D0 CF 11 E0   |   ZIP (.xlsx): 50 4B 03 04
+    // Bunlarla baslamayan hicbir icerik dosya kabul edilmez; HTML, CSS,
+    // JSON, duz metin — hepsi tek kontrolle elenir.
+    const xlsMi = (b) =>
+      b.length > 8 && (
+        (b[0] === 0xD0 && b[1] === 0xCF && b[2] === 0x11 && b[3] === 0xE0) ||
+        (b[0] === 0x50 && b[1] === 0x4B && b[2] === 0x03 && b[3] === 0x04)
+      );
+    const htmlMi = (b) => !xlsMi(b);   // eski adla uyum: "dosya degil" testi
     if (htmlMi(buf)) {
-      const adaylar = urdlHtmldenXlsAdaylari(buf.toString("utf8"), URDL_XLS_URL);
+      const adaylar = urdlHtmldenXlsAdaylari(buf.toString("utf8"), xlsUrl);
       if (adaylar.length === 0) {
         teshis.urdl = { hata: "HTML dondu ve icinde XLS baglantisi bulunamadi" };
         return null;
