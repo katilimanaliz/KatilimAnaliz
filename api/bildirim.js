@@ -694,6 +694,34 @@ async function alarmEkle(req, res) {
     return;
   }
 
+  // ── ANINDA TETİKLENECEK ALARMI REDDET (2026-07-30) ──────────────────────
+  // Alarm mantığı SEVİYE kontrolü yapıyor ("fiyat ≥ hedef mi?"), oysa
+  // kullanıcının beklediği GEÇİŞ ("hedefin altındayken üstüne çıktı mı?").
+  // Koşul kuruluş anında zaten sağlanıyorsa alarm ilk kontrol turunda anlamsız
+  // biçimde tetikleniyordu — yaşanmış vaka: fiyat 283 iken hem "≥283" hem
+  // "≤283" alarmı kuruldu, ikisi de aynı anda ateşledi.
+  //
+  // Yüzde alarmlarında bu sorun yok: onlar zaten baslangicFiyat'a göre
+  // HAREKET ölçüyor, sıfır hareket eşiği geçemez.
+  if (tip === "hedef") {
+    const h = parseFloat(hedefFiyat);
+    const fmt = (v) => v.toLocaleString("tr-TR", { maximumFractionDigits: 4 });
+    if (yon === "ustunde" && mevcutFiyat >= h) {
+      res.status(400).json({
+        hata: `Fiyat şu an zaten hedefin üstünde (${fmt(mevcutFiyat)} ≥ ${fmt(h)}). Bu alarm anında tetiklenirdi — güncel fiyatın üstünde bir hedef girin.`,
+        mevcutFiyat,
+      });
+      return;
+    }
+    if (yon === "altinda" && mevcutFiyat <= h) {
+      res.status(400).json({
+        hata: `Fiyat şu an zaten hedefin altında (${fmt(mevcutFiyat)} ≤ ${fmt(h)}). Bu alarm anında tetiklenirdi — güncel fiyatın altında bir hedef girin.`,
+        mevcutFiyat,
+      });
+      return;
+    }
+  }
+
   try {
     const { basarili, sonuc } = await kilitliCalistir(
       redis,
@@ -999,6 +1027,7 @@ async function alarmKontrol(req, res) {
         let gonderilenBildirim = 0;
         let kapTetiklenen = 0;
         let olenAbonelik = 0;   // token gecersiz oldugu icin kapanan abonelik sayisi
+        let gecersizKurulumKapatilan = 0;   // kurulusunda kosulu zaten saglanan (eski) hedef alarmlari
         const gonderimHatalari = [];
         const guncelListe = [];
 
@@ -1070,6 +1099,21 @@ async function alarmKontrol(req, res) {
           let tetiklendiMi = false;
           let mesaj = "";
           if (alarm.tip === "hedef") {
+            // GEÇİŞ KORUMASI (2026-07-30): Kuruluş anında koşul ZATEN sağlanan
+            // alarmlar artık alarmEkle'de reddediliyor. Burası ikinci savunma
+            // hattı — düzeltmeden önce oluşturulmuş kayıtlar ve fiyatın bayat
+            // geldiği kenar durumlar için. Böyle bir kayıt tetiklenmez,
+            // sessizce kapatılır ki her turda tekrar tekrar denenmesin.
+            const bas = alarm.baslangicFiyat;
+            const gecersizKurulum = bas != null && (
+              (alarm.yon === "ustunde" && bas >= alarm.hedefFiyat) ||
+              (alarm.yon === "altinda" && bas <= alarm.hedefFiyat)
+            );
+            if (gecersizKurulum) {
+              gecersizKurulumKapatilan++;
+              guncelListe.push({ ...alarm, aktif: false, kapaliSebep: "gecersiz-kurulum", tetiklenmeTs: Date.now() });
+              continue;
+            }
             if (alarm.yon === "ustunde" && guncelFiyat >= alarm.hedefFiyat) {
               tetiklendiMi = true;
               mesaj = `${alarm.ad} fiyatı hedefinize ulaştı/geçti: ${guncelFiyat.toLocaleString("tr-TR", { maximumFractionDigits: 4 })} (hedef: ${alarm.hedefFiyat})`;
@@ -1119,6 +1163,7 @@ async function alarmKontrol(req, res) {
           tetiklenen,
           kapTetiklenen,
           olenAbonelik,
+          gecersizKurulumKapatilan,
           gonderilenBildirim,
           gonderimHatalari,
           bistSeansAcik: bistSeansAcikMi(),

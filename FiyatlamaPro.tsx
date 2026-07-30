@@ -1587,7 +1587,7 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
           {key:"Borçlanma", label:"📄 Borçlanma"},
           {key:"Karma",     label:"⚖️ Değişken/Karma"},
           {key:"Sepet",     label:"🧺 Fon Sepeti"},
-          {key:"Altın",     label:"🥇 Altın"},
+          {key:"Altın",     label:"🥇 Fiziki Altın"},
           {key:"Endeks",    label:"📊 Endeks"},
         ].map(c=>{
           const aktif = filtreYon===c.key;
@@ -15091,8 +15091,6 @@ const ALTIN_URUN_TABLOSU_V2 = [
   {ad:"Ata Altın (Yeni)", sembol:"ATA_YENI"},
   {ad:"Ata Altın (Eski)", sembol:"ATA_ESKI"},
   {ad:"Gram Gümüş", sembol:"GUMUSTRY"},
-  {ad:"Gram Platin", sembol:"PLATIN"},
-  {ad:"Gram Paladyum", sembol:"PALADYUM"},
 ];
 
 // ─── ALTIN ALARM MODAL (2026-07-23) ────────────────────────────────────────
@@ -15258,13 +15256,26 @@ function AltinAlarmModal({urun, onClose}:{urun:{ad:string, sembol:string, bid:nu
 function HisseAlarmModal({hisse, onClose}:{hisse:{ticker:string, sirket?:string, fiyat?:number|null}, onClose:()=>void}){
   const [mod,setMod]=useState<"hedef"|"yuzde"|"kap">("hedef");
   const [yon,setYon]=useState<"ustunde"|"altinda"|"artis"|"dusus">("ustunde");
-  const [deger,setDeger]=useState(hisse.fiyat!=null?String(hisse.fiyat):"");
+  const [deger,setDeger]=useState("");   // asagida varsayilanHedef ile dolduruluyor
   const [durum,setDurum]=useState<"bos"|"gonderiliyor"|"basarili"|"hata">("bos");
   const [hata,setHata]=useState("");
   const [basariNotu,setBasariNotu]=useState("");
 
   const sembol=`BIST:${hisse.ticker}`;
   const ad=hisse.sirket||hisse.ticker;
+
+  // 2026-07-30: Hedef alanı MEVCUT FİYATLA dolduruluyordu; kullanıcı hiçbir şey
+  // yazmadan "Alarm Kur"a basınca alarm ilk kontrol turunda anında tetikleniyordu
+  // (yaşanmış vaka: fiyat 283 iken hem "≥283" hem "≤283" kuruldu, ikisi de
+  // aynı anda ateşledi). Artık yöne göre %2 uzakta makul bir hedefle başlıyor.
+  const varsayilanHedef=(y:"ustunde"|"altinda")=>{
+    const f=hisse.fiyat;
+    if(f==null||!(f>0)) return "";
+    const ham=y==="ustunde"?f*1.02:f*0.98;
+    // Fiyat büyüklüğüne göre anlamlı yuvarlama
+    const bas=f>=100?2:(f>=10?2:3);
+    return ham.toFixed(bas);
+  };
   const fmt2=(n:any)=>n==null?"—":new Intl.NumberFormat("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}).format(n);
 
   const modBtn=(k:"hedef"|"yuzde"|"kap",etiket:string,tiklama:()=>void)=>(
@@ -15277,7 +15288,13 @@ function HisseAlarmModal({hisse, onClose}:{hisse:{ticker:string, sirket?:string,
   );
 
   const yonBtn=(k:any,etiket:string,renk:string,bg:string)=>(
-    <button onClick={()=>setYon(k)} style={{
+    <button onClick={()=>{
+      setYon(k); setHata("");
+      // Hedef modunda yön değişince varsayılan hedefi de o yöne çevir —
+      // "üstüne çıkarsa" seçiliyken fiyatın altında bir hedef kalması,
+      // sunucunun reddedeceği bir kurulum üretirdi.
+      if(mod==="hedef"&&(k==="ustunde"||k==="altinda")) setDeger(varsayilanHedef(k));
+    }} style={{
       flex:1,padding:"7px",borderRadius:8,border:`1px solid ${yon===k?renk:WA(0.15)}`,
       background:yon===k?bg:"transparent",
       color:yon===k?renk:WA(0.6),fontWeight:700,fontSize:11.5,cursor:"pointer",fontFamily:"inherit",
@@ -15345,7 +15362,7 @@ function HisseAlarmModal({hisse, onClose}:{hisse:{ticker:string, sirket?:string,
           ):(
             <div>
               <div style={{display:"flex",gap:6,marginBottom:12}}>
-                {modBtn("hedef","Hedef Fiyat",()=>{setMod("hedef");setYon("ustunde");setDeger(hisse.fiyat!=null?String(hisse.fiyat):"");setHata("");})}
+                {modBtn("hedef","Hedef Fiyat",()=>{setMod("hedef");setYon("ustunde");setDeger(varsayilanHedef("ustunde"));setHata("");})}
                 {modBtn("yuzde","Yüzde Değişim",()=>{setMod("yuzde");setYon("artis");setDeger("5");setHata("");})}
                 {modBtn("kap","KAP Bildirimi",()=>{setMod("kap");setHata("");})}
               </div>
@@ -15356,11 +15373,29 @@ function HisseAlarmModal({hisse, onClose}:{hisse:{ticker:string, sirket?:string,
                     {yonBtn("ustunde","▲ Üstüne çıkarsa",C.green,"rgba(74,222,128,0.12)")}
                     {yonBtn("altinda","▼ Altına inerse",C.red,"rgba(248,113,113,0.12)")}
                   </div>
-                  <div style={{position:"relative"}}>
-                    <input type="number" inputMode="decimal" value={deger} onChange={e=>setDeger(e.target.value)} placeholder="Hedef fiyat"
-                      style={{width:"100%",boxSizing:"border-box",padding:"11px 40px 11px 13px",fontSize:15,fontWeight:600,fontFamily:"monospace",background:WA(0.06),border:`1.5px solid ${WA(0.15)}`,borderRadius:10,color:C.label,outline:"none"}}/>
-                    <span style={{position:"absolute",right:11,top:"50%",transform:"translateY(-50%)",color:"#3B82F6",fontWeight:700,fontSize:13}}>₺</span>
-                  </div>
+                  {(()=>{
+                    // Sunucuya gitmeden canlı uyarı: bu hedef anında tetiklenir.
+                    const n=parseFloat(String(deger).replace(",","."));
+                    const f=hisse.fiyat;
+                    const anindaTetikler = f!=null && !isNaN(n) && n>0 &&
+                      ((yon==="ustunde" && f>=n) || (yon==="altinda" && f<=n));
+                    return (
+                      <>
+                        <div style={{position:"relative"}}>
+                          <input type="number" inputMode="decimal" value={deger} onChange={e=>{setDeger(e.target.value);setHata("");}} placeholder="Hedef fiyat"
+                            style={{width:"100%",boxSizing:"border-box",padding:"11px 40px 11px 13px",fontSize:15,fontWeight:600,fontFamily:"monospace",background:WA(0.06),border:`1.5px solid ${anindaTetikler?"rgba(248,113,113,0.55)":WA(0.15)}`,borderRadius:10,color:C.label,outline:"none"}}/>
+                          <span style={{position:"absolute",right:11,top:"50%",transform:"translateY(-50%)",color:"#3B82F6",fontWeight:700,fontSize:13}}>₺</span>
+                        </div>
+                        <p style={{margin:"6px 2px 0",fontSize:10.5,color:anindaTetikler?C.red:WA(0.4),lineHeight:1.5}}>
+                          {anindaTetikler
+                            ? (yon==="ustunde"
+                                ? `Fiyat zaten ${fmt2(f)} — bu hedef anında tetiklenir. Güncel fiyatın ÜSTÜNDE bir değer girin.`
+                                : `Fiyat zaten ${fmt2(f)} — bu hedef anında tetiklenir. Güncel fiyatın ALTINDA bir değer girin.`)
+                            : `Alarm, fiyat ${yon==="ustunde"?"bu seviyeye çıktığında":"bu seviyeye indiğinde"} bir kez tetiklenir.`}
+                        </p>
+                      </>
+                    );
+                  })()}
                 </>
               )}
 
@@ -15502,12 +15537,17 @@ function AltinUrunleriTablo(){
         <span style={{minWidth:92,flexShrink:0,textAlign:"right",fontSize:10,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.4}}>Satış</span>
       </div>
       <div>
+        {/* 2026-07-30: Platin ve Paladyum bu ekrandan kaldırıldı (hem ons hem
+            gram). Gerekçe: sekme "Fiziki Altın" oldu ve bu iki metal zaten
+            Emtia sekmesinde ons olarak duruyordu — iki yerde birden görünmeleri
+            tutarsızlıktı. Altın ve Gümüş ons kotasyonları referans olarak
+            kalıyor. Backend sembolleri (XPTUSD/PLATIN/XPDUSD/PALADYUM)
+            SİLİNMEDİ: bu ürünlerle kurulmuş eski portföy kayıtları ve
+            alarmlar çalışmaya devam etmeli. */}
         {satirRender("Gram Altın (Has · 24 Ayar)", "ALTIN", 0)}
         {satirRender("Ons Altın", "ONS", 1, "$")}
         {satirRender("Ons Gümüş", "XAGUSD", 2, "$")}
-        {satirRender("Ons Platin", "XPTUSD", 3, "$")}
-        {satirRender("Ons Paladyum", "XPDUSD", 4, "$")}
-        {ALTIN_URUN_TABLOSU_V2.map((u,i)=>satirRender(u.ad, u.sembol, i+5))}
+        {ALTIN_URUN_TABLOSU_V2.map((u,i)=>satirRender(u.ad, u.sembol, i+3))}
       </div>
     </div>
   );
@@ -15675,7 +15715,7 @@ function portfoyYaz(liste: PortfoyKalemi[]) {
 
 // Altın alt türleri (2026-07-24: eski sabit-çarpan sisteminden gerçek
 // AltinAPI sembollerine geçirildi) — Araçlar > Altın Ürünleri ekranındaki
-// ALTIN_URUN_TABLOSU_V2 ile BİREBİR AYNI 18 ürün, iki yerde farklı fiyat
+// ALTIN_URUN_TABLOSU_V2 ile BİREBİR AYNI 14 ürün, iki yerde farklı fiyat
 // göstermeyelim diye. Artık "carpan" yok — her ürünün kendi gerçek bid/ask'ı
 // AltinAPI'den doğrudan çekiliyor (bkz. altinAltTuruSec). ALTIN_URUN_TABLOSU
 // (eski çarpan listesi) hâlâ SİLİNMEDİ — geçmişte bu sistemle eklenmiş
@@ -15693,12 +15733,14 @@ const PORTFOY_ALTIN_TURLERI: {ad:string; sembol:string; birim:string; paraOnek:s
   { ad: "Ata Altın (Yeni)", sembol: "ATA_YENI", birim: "adet", paraOnek: "₺" },
   { ad: "Ata Altın (Eski)", sembol: "ATA_ESKI", birim: "adet", paraOnek: "₺" },
   { ad: "Gram Gümüş", sembol: "GUMUSTRY", birim: "gram", paraOnek: "₺" },
-  { ad: "Gram Platin", sembol: "PLATIN", birim: "gram", paraOnek: "₺" },
-  { ad: "Gram Paladyum", sembol: "PALADYUM", birim: "gram", paraOnek: "₺" },
   { ad: "Ons Altın", sembol: "ONS", birim: "ons", paraOnek: "$" },
   { ad: "Ons Gümüş", sembol: "XAGUSD", birim: "ons", paraOnek: "$" },
-  { ad: "Ons Platin", sembol: "XPTUSD", birim: "ons", paraOnek: "$" },
-  { ad: "Ons Paladyum", sembol: "XPDUSD", birim: "ons", paraOnek: "$" },
+  // 2026-07-30: Platin ve Paladyum (hem gram hem ons) bu listeden çıkarıldı —
+  // "Fiziki Altın" ekranında da artık gösterilmiyorlar, eklenebilir olup
+  // hiçbir yerde fiyatı görünmeyen ürün bırakmayalım. Platin/Paladyum isteyen
+  // kullanıcı bunları Emtia türünden ekleyebilir (Emtia sekmesinde ons olarak
+  // duruyorlar). MEVCUT KAYITLAR ETKİLENMEZ: kalemin kod'u kayıtta saklı ve
+  // backend sembolleri silinmedi, fiyat tazeleme çalışmaya devam eder.
 ];
 
 function portfoyGuncelDeger(k: PortfoyKalemi): number {
