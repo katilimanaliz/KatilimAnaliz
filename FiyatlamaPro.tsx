@@ -401,6 +401,7 @@ const EN_SOZLUK: Record<string, string> = {
   "Hazine İşlemleri": "Treasury Operations",
   "Tümü": "All",
   "Dış Ticaret": "Foreign Trade",
+  "Fiziki Altın": "Physical Gold",
   "Katılım Hesabı Hesaplama": "Participation Account",
   "Katılım Hesabı Hesaplamaları": "Participation Account Calculations",
   // ── Ana sayfa ──
@@ -1587,7 +1588,7 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
           {key:"Borçlanma", label:"📄 Borçlanma"},
           {key:"Karma",     label:"⚖️ Değişken/Karma"},
           {key:"Sepet",     label:"🧺 Fon Sepeti"},
-          {key:"Altın",     label:"🥇 Fiziki Altın"},
+          {key:"Altın",     label:"🥇 Altın"},   // altın FONLARI — fiziki altın değil, adı bilerek böyle
           {key:"Endeks",    label:"📊 Endeks"},
         ].map(c=>{
           const aktif = filtreYon===c.key;
@@ -14821,7 +14822,7 @@ const PIYASA_TABLO_KATEGORILER = [
   {id:"tumu",        label:"Tümü"},
   {id:"gostergeler", label:"Göstergeler"},
   {id:"disticaret",  label:"Dış Ticaret"},
-  {id:"altin",       label:"Altın"},
+  {id:"altin",       label:"Fiziki Altın"},
   {id:"doviz",       label:"Döviz"},
   {id:"emtia",       label:"Emtia"},
   {id:"borsa",       label:"Borsa"},
