@@ -19328,12 +19328,40 @@ function App(){
                 // hesaplanıyor (bin TL ÷ aynı haftanın TCMB USD alış kuru).
                 // TCMB'nin doğrudan dolar cinsi açıklaması DEĞİL — bu yüzden
                 // etikette "hesaplanmış" ibaresi var.
-                {ad:"TCMB Net Rezerv (hesaplanmış)", deger:fmtRezerv(evdsMakro?.["REZERV_NET"]),
-                 tarih:evdsMakro?.["REZERV_NET"]?.tarih?`${evdsMakro["REZERV_NET"].tarih} · Stand-By bilançosundan`:"veri yok", canli:false},
-                {ad:"Swap Tutarı (Net Vadeli İşlemler)", deger:fmtRezerv(evdsMakro?.["REZERV_SWAP"]),
-                 tarih:evdsMakro?.["REZERV_SWAP"]?.tarih?`${evdsMakro["REZERV_SWAP"].tarih} · Stand-By bilançosundan`:"veri yok", canli:false},
-                {ad:"Swap Hariç Net Rezerv (hesaplanmış)", deger:fmtRezerv(evdsMakro?.["REZERV_NET_SWAPSIZ"]),
-                 tarih:evdsMakro?.["REZERV_NET_SWAPSIZ"]?.tarih?`${evdsMakro["REZERV_NET_SWAPSIZ"].tarih} · Net − Swap`:"veri yok", canli:false},
+                // Stand-By net satırı yalnızca URDL yolunun boş kaldığı durumda
+                // yedek olarak görünür — ikisi birden listelenmez.
+                ...(evdsMakro?.["URDL_NET"]?.deger==null&&evdsMakro?.["REZERV_NET"]?.deger!=null?[
+                  {ad:"TCMB Net Rezerv (hesaplanmış)", deger:fmtRezerv(evdsMakro["REZERV_NET"]),
+                   tarih:`${evdsMakro["REZERV_NET"].tarih} · Stand-By bilançosundan`, canli:false},
+                ]:[]),
+                // ── URDL HAFTALIK XLS'ten SWAP + SWAP HARİÇ NET (2026-07-30 gece) ──
+                // Kaynak: TCMB'nin haftalık "Uluslararası Rezervler ve Döviz
+                // Likiditesi" XLS dosyası (EVDS API'de yalnızca aylık versiyon var;
+                // haftalık swap ve resmi net rezerv bu dosyadan geliyor — üç günlük
+                // arayışın sonucu). Backend ayrıştırıp URDL_* anahtarlarıyla verir.
+                // KOŞULLU: XLS inmez/ayrışmazsa alanlar hiç oluşmaz, satırlar
+                // görünmez — sessizce yanlış yerine sessizce yok.
+                ...(evdsMakro?.["URDL_NET"]?.deger!=null?[
+                  {ad:`TCMB Net Rezerv${evdsMakro["URDL_NET"].resmi?"":" (hesaplanmış)"}`, deger:fmtRezerv(evdsMakro["URDL_NET"]),
+                   tarih:`${evdsMakro["URDL_NET"].tarih||""} · ${evdsMakro["URDL_NET"].resmi?"TCMB haftalık bülteni":"Stand-By bilançosundan"}`, canli:false},
+                ]:[]),
+                ...(evdsMakro?.["URDL_SWAP"]?.deger!=null?[
+                  {ad:"Swap Tutarı", deger:fmtRezerv(evdsMakro["URDL_SWAP"]),
+                   tarih:`${evdsMakro["URDL_SWAP"].tarih||""} · TCMB haftalık bülteni`, canli:false},
+                ]:[]),
+                ...(evdsMakro?.["URDL_NET_SWAPSIZ"]?.deger!=null?[
+                  {ad:"Swap Hariç Net Rezerv (hesaplanmış)", deger:fmtRezerv(evdsMakro["URDL_NET_SWAPSIZ"]),
+                   tarih:`${evdsMakro["URDL_NET_SWAPSIZ"].tarih||""} · Net − Swap`, canli:false},
+                ]:[]),
+                // ⚠️ ESKİ NOT (aynı gün, önceki tur):
+                // TP.AB.N12 ("2A3 Net Vadeli Forward İşlemler") canlı testte
+                // SIFIR döndü — TCMB swapları Stand-By bilançosunun bu satırına
+                // kaydetmiyor. Sonuç: Swap 0,00 ve "Swap Hariç Net" = Net
+                // görünüyordu, yani yanlış. Analistler swap'ı Uluslararası
+                // Rezervler ve Döviz Likiditesi tablosunun II. bölümünden
+                // (TP.DOVVARNC.K14/K15) alıyor; o seri EVDS'te AYLIK ve ~2 ay
+                // gecikmeli, haftalık net rezervle aynı satırda gösterilemez.
+                // Net Rezerv satırı doğrulanmış olduğu için kalıyor.
                 // Banka Muhabir Mevcudu KALDIRILDI: haftalık seride karşılığı
                 // yok ve zaten toplama dahil olmadığı için burada durması
                 // "Döviz+Altın neden Toplam'ı vermiyor" sorusunu doğuruyordu.

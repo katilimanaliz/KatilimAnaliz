@@ -561,6 +561,114 @@ const REZERV_HAFTALIK = ["TP.AB.TOPLAM", "TP.AB.C1", "TP.AB.C2"];  // HAFTALIK
 // ve rezerv gruplarına bakılmış, "Haftalık Vaziyet" kategorisi atlanmıştı.
 const REZERV_STANDBY = ["TP.AB.N06", "TP.AB.N12", "TP.DK.USD.A"];
 
+// ── URDL HAFTALIK XLS (2026-07-30, üçüncü tur) ─────────────────────────────
+// "Uluslararası Rezervler ve Döviz Likiditesi" tablosunun HAFTALIK versiyonu
+// EVDS API'sinde YOK — TCMB'nin kendi sayfası aylık tablonun EVDS'te
+// yayımlandığını açıkça yazıyor. Haftalık versiyon SABİT URL'li bir XLS
+// olarak her hafta güncelleniyor; Bloomberg/analistlerin haftalık swap ve
+// net rezerv rakamlarının kaynağı bu dosya.
+// Üç gün boyunca EVDS'te aranan veri EVDS'te hiç olmamıştı — ders: kaynak
+// yayını API'de yoksa dosya yayınına bakılmalı.
+const URDL_XLS_URL = "https://www.tcmb.gov.tr/wps/wcm/connect/TR/TCMB+TR/Main+Menu/Istatistikler/Odemeler+Dengesi+ve+Ilgili+Istatistikler/Uluslararasi+Rezervler+ve+Doviz+Likiditesi/Veri+(Tablolar)+-+Haftalik/XLS";
+const KV_URDL_KEY = "urdl:haftalik:v1";
+const URDL_TTL = 12 * 3600;   // dosya haftada bir değişiyor; 12 saat fazlasıyla taze
+
+// Türkçe metni arama için düzleştir: küçük harf + aksan temizliği.
+function urdlNorm(t) {
+  return String(t || "").toLocaleLowerCase("tr-TR")
+    .replace(/ı/g, "i").replace(/ş/g, "s").replace(/ğ/g, "g")
+    .replace(/ü/g, "u").replace(/ö/g, "o").replace(/ç/g, "c")
+    .replace(/\s+/g, " ").trim();
+}
+
+// Satırdaki etiketten SONRAKİ ilk sayısal hücre — IMF şablonunda ilk sayı
+// sütunu "Toplam". Parantezli negatifleri de tanır: "(13.500)".
+function urdlSatirdakiIlkSayi(hucreler) {
+  let etiketGorulduMu = false;
+  for (const h of hucreler) {
+    if (typeof h === "number" && isFinite(h)) { if (etiketGorulduMu) return h; continue; }
+    const m = String(h ?? "").trim();
+    if (!m) continue;
+    if (/[a-zçğıöşü]/i.test(m)) { etiketGorulduMu = true; continue; }
+    const temiz = m.replace(/[()\s]/g, "").replace(/\./g, "").replace(",", ".");
+    const n = parseFloat(temiz);
+    if (etiketGorulduMu && isFinite(n)) return m.includes("(") ? -n : n;
+  }
+  // Etiket hücresi sayıdan önce hiç görülmediyse (etiket ayrı sütunda vb.)
+  for (const h of hucreler) if (typeof h === "number" && isFinite(h)) return h;
+  return null;
+}
+
+// XLS çalışma kitabından hedef kalemleri etikete göre çıkarır. Hücre/satır
+// KONUMUNA asla güvenilmiyor — TCMB düzeni değiştirirse etiket araması
+// dayanır, konum araması sessizce yanlış değer okurdu.
+function urdlAyristir(XLSX, wb) {
+  const bulunan = {};
+  const kesif = [];
+  let tarih = null;
+  for (const sayfaAdi of wb.SheetNames) {
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sayfaAdi], { header: 1, raw: true, defval: null });
+    for (let i = 0; i < rows.length; i++) {
+      const metin = urdlNorm(rows[i].filter((h) => typeof h === "string").join(" "));
+      if (kesif.length < 60 && metin) kesif.push(`${sayfaAdi}#${i}: ${metin.slice(0, 110)}`);
+
+      if (!tarih) {
+        const m = (rows[i] || []).map((h) => String(h ?? "")).join(" ").match(/(\d{2})[.\/](\d{2})[.\/](\d{4})/);
+        if (m) tarih = `${m[1]}-${m[2]}-${m[3]}`;
+      }
+      if (bulunan.resmiRezerv == null && metin.includes("resmi rezerv varlik")) {
+        bulunan.resmiRezerv = urdlSatirdakiIlkSayi(rows[i]);
+      }
+      if (bulunan.swapVadeli == null && metin.includes("yurt ici para karsiliginda") && metin.includes("forward")) {
+        bulunan.swapVadeli = urdlSatirdakiIlkSayi(rows[i]);
+      }
+      if (bulunan.netRezerv == null && metin.includes("net uluslararasi rezerv")) {
+        bulunan.netRezerv = urdlSatirdakiIlkSayi(rows[i]);
+      }
+    }
+  }
+  return { bulunan, kesif, tarih };
+}
+
+// URDL verisini Redis-öncelikli getirir. Her adım kendi try/catch'inde:
+// XLS inmezse/ayrışmazsa ana EVDS yanıtı ETKİLENMEZ, ilgili alanlar boş kalır.
+async function urdlOku(teshis) {
+  try {
+    const onbellek = await redis.get(KV_URDL_KEY);
+    if (onbellek?.bulunan) { teshis.urdl = { kaynak: "onbellek", ...onbellek.ozet }; return onbellek; }
+  } catch {}
+  try {
+    const XLSX = await import("xlsx");
+    const r = await fetch(URDL_XLS_URL, {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; KatilimPlus/1.0)", Accept: "*/*" },
+      redirect: "follow",
+    });
+    if (!r.ok) { teshis.urdl = { hata: `HTTP ${r.status}` }; return null; }
+    const buf = Buffer.from(await r.arrayBuffer());
+    // HTML dönerse (dosya yerine yönlendirme sayfası) sessizce çık
+    if (buf.slice(0, 200).toString("utf8").toLocaleLowerCase().includes("<html")) {
+      teshis.urdl = { hata: "XLS yerine HTML dondu — URL degismis olabilir" };
+      return null;
+    }
+    const wb = XLSX.read(buf, { type: "buffer" });
+    const { bulunan, kesif, tarih } = urdlAyristir(XLSX, wb);
+    const ozet = { tarih, resmiRezerv: bulunan.resmiRezerv ?? null, swapVadeli: bulunan.swapVadeli ?? null, netRezerv: bulunan.netRezerv ?? null };
+    const kayit = { bulunan, tarih, ozet, ts: Date.now() };
+    // Hiçbir kalem bulunamadıysa keşif dökümünü teşhise koy — ayrıştırıcıyı
+    // gerçek yapıya göre düzeltmek için gereken tek şey bu çıktı.
+    if (bulunan.resmiRezerv == null && bulunan.swapVadeli == null && bulunan.netRezerv == null) {
+      teshis.urdl = { hata: "hicbir kalem eslesmedi", sayfalar: wb.SheetNames, kesif };
+      return null;
+    }
+    try { await redis.set(KV_URDL_KEY, kayit, { ex: URDL_TTL }); } catch {}
+    teshis.urdl = { kaynak: "xls", ...ozet, sayfalar: wb.SheetNames };
+    return kayit;
+  } catch (e) {
+    teshis.urdl = { hata: e.message };
+    return null;
+  }
+}
+
 // GECICI TEST (silinecek) - GSYH frekansini bulmak icin
 const TEST_GSYH = ["TP.GSYIH30.HY.B1GQ"]; // B1=Altın, B2=Döviz
 
@@ -1461,6 +1569,29 @@ export default async function handler(req,res){
         kur: kur?.deger ?? null, tarih: n06?.tarih ?? null,
         nokta: tumDegerler(sbItems, "TP.AB.N06").length,
       };
+    }
+
+    // ── URDL HAFTALIK XLS: swap ve resmi net rezerv ──────────────────────
+    // Kalemler bulunursa ekrana girer; bulunamazsa alanlar hiç oluşmaz ve
+    // frontend satırları gizler (sessizce yanlış yerine sessizce yok).
+    {
+      const urdl = await urdlOku(teshis);
+      const b = urdl?.bulunan;
+      if (b?.swapVadeli != null) {
+        const swapMutlak = Math.abs(b.swapVadeli);
+        sonuclar["URDL_SWAP"] = { deger: swapMutlak, tarih: urdl.tarih };
+        // Net rezerv önceliği: XLS'teki RESMİ rakam varsa o; yoksa Stand-By
+        // hesabımız (REZERV_NET). Resmi ile hesap arasındaki fark ~%0,2
+        // (TCMB kendi değerleme kurunu kullanıyor).
+        const netKaynak = b.netRezerv != null
+          ? { deger: b.netRezerv, tarih: urdl.tarih, resmi: true }
+          : (sonuclar["REZERV_NET"] ? { ...sonuclar["REZERV_NET"], resmi: false } : null);
+        if (netKaynak) {
+          sonuclar["URDL_NET"] = netKaynak;
+          sonuclar["URDL_NET_SWAPSIZ"] = { deger: netKaynak.deger - swapMutlak, tarih: netKaynak.tarih, resmi: netKaynak.resmi };
+        }
+      }
+      if (b?.resmiRezerv != null) sonuclar["URDL_BRUT_KONTROL"] = { deger: b.resmiRezerv, tarih: urdl?.tarih };
     }
 
     teshis.rezerv_secim = {
