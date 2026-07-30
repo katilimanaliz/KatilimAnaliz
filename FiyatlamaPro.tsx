@@ -11530,7 +11530,8 @@ function FinansalGostergeler({onKurTikla}:any){
   const fmtFred=(v:any)=>v?.deger!=null?`%${v.deger.toFixed(2).replace(".",",")}`:null;
   const fmtFreT=(v:any)=>v?.tarih||"";
 
-  const rezerv =evdsMakro?.["TP.AB.B6"];
+  // 2026-07-30: TP.AB.B6 → REZERV_TOPLAM (haftalık C grubu). Bkz. RISK dizisi notu.
+  const rezerv =evdsMakro?.["REZERV_TOPLAM"];
   const fmtRezerv=(v:any)=>v?.deger!=null?`$${(v.deger/1000).toFixed(2).replace(".",",")} Milyar`:"—";
 
   const SABIT=[
@@ -11583,8 +11584,8 @@ function FinansalGostergeler({onKurTikla}:any){
       // Kullanıcı tarafından EVDS'den doğrulandı. NOT: bu BRÜT rezerv — net rezerv
       // ayrı bir hesaplama gerektiriyor (bankaların ZK'ları ve swap yükümlülükleri
       // düşülerek), henüz eklenmedi.
-      {ad:"TCMB Brüt Rezerv (Altın+Döviz)",deger:fmtRezerv(rezerv),tarih:rezerv?.tarih||"Haftalık",canli:rezerv!=null,
-       seri:evdsMakro?.["TP_AB_B6_SERI"],seriAd:"TCMB Brüt Rezerv (Milyon $)",seriBirim:"milyon$"},
+      {ad:"TCMB Brüt Rezerv (Altın+Döviz)",deger:fmtRezerv(rezerv),tarih:rezerv?.tarih||"—",canli:rezerv!=null,
+       seri:evdsMakro?.["REZERV_TOPLAM_SERI"],seriAd:"TCMB Brüt Rezerv (Milyon $)",seriBirim:"milyon$"},
     ]},
     {kategori:"Dış Ticaret & Ödemeler Dengesi",icon:"🚢",color:"#0E7490",items:(()=>{
       // Seri kodları EVDS katalog keşfiyle doğrulandı (bkz. evds-proxy v10):
@@ -18732,7 +18733,7 @@ function App(){
                   ikon:Scale, renk:"#8B5CF6",
                   seri:tlrefkSeriTahmini(evdsMakro), seriAd:"TLREFK (Katılım)",
                 };})(),
-                {ad:"TCMB Brüt Rezerv", deger:evdsMakro?.["TP.AB.B6"]?.deger!=null?`$${(evdsMakro["TP.AB.B6"].deger/1000).toFixed(2).replace(".",",")} Mr`:"—", tarih:evdsMakro?.["TP.AB.B6"]?.tarih?`${evdsMakro["TP.AB.B6"].tarih} · canlı`:"", ikon:Wallet, renk:C.green, seri:evdsMakro?.["TP_AB_B6_SERI"], seriAd:"TCMB Brüt Rezerv (Milyon $)", seriBirim:"milyon$"},
+                {ad:"TCMB Brüt Rezerv", deger:evdsMakro?.["REZERV_TOPLAM"]?.deger!=null?`$${(evdsMakro["REZERV_TOPLAM"].deger/1000).toFixed(2).replace(".",",")} Mr`:"—", tarih:evdsMakro?.["REZERV_TOPLAM"]?.tarih?`${evdsMakro["REZERV_TOPLAM"].tarih} · canlı`:"", ikon:Wallet, renk:C.green, seri:evdsMakro?.["REZERV_TOPLAM_SERI"], seriAd:"TCMB Brüt Rezerv (Milyon $)", seriBirim:"milyon$"},
               ].map((g:any,i,arr)=>{
                 const IkonBileseni=g.ikon;
                 const gecmisDestekli = !!g.seriAd; // bu gösterge kavramsal olarak geçmiş veri sunuyor mu
@@ -19145,12 +19146,15 @@ function App(){
               const tufY=evdsMakro?.["TUFE_YILLIK"];
               const tufA=evdsMakro?.["TUFE_AYLIK"];
               const aofm=evdsMakro?.["TP.APIFON4"];
-              // DÜZELTME (2026-07-23): eski "TP.AB.TOPLAM" kodu hiç veri
-              // döndürmüyordu (geçersiz/eski kod). Aynı EVDS grubundan (Toplam
-              // Uluslararası Rezervler) TP.AB.B6 kullanılıyor — B1(Altın)+
-              // B2(Döviz)+B3(Banka Muhabir Mevcudu) toplamıyla matematiksel
-              // olarak doğrulandı.
-              const rezerv=evdsMakro?.["TP.AB.B6"];
+              // ⚠️ 23 TEMMUZ TEŞHİSİ YANLIŞTI (2026-07-30'da düzeltildi):
+              // "TP.AB.TOPLAM geçersiz/eski kod, hiç veri döndürmüyor" diye
+              // not düşülüp B6'ya geçilmişti. Kod geçerli, veri kusursuz —
+              // sorun HAFTALIK C serisinin AYLIK B serileriyle aynı istekte
+              // gönderilmesiydi (EVDS tek uyumsuz kodda tüm isteği reddediyor).
+              // B6'ya geçmek üç ay boyunca ~46 milyar $ yanlış rakam gösterdi,
+              // çünkü B6 banka muhabir mevcudunu da içeriyor ve aylık/gecikmeli.
+              // Artık backend haftalık C grubunu REZERV_TOPLAM ile veriyor.
+              const rezerv=evdsMakro?.["REZERV_TOPLAM"];
               const fmtPct=(v:any)=>v?.deger!=null?`%${parseFloat(v.deger).toFixed(2).replace(".",",")}`:"—";
               const fmtRezerv=(v:any)=>v?.deger!=null?`$${(v.deger/1000).toFixed(2).replace(".",",")} Milyar`:"—";
               const tlrefk=tlrefkTahmini(evdsMakro);
@@ -19288,26 +19292,41 @@ function App(){
                 karPayiSatir("Ticari Finansmanı Kâr Oranı (EUR)", "TP.KBK.EUR.KBTF17"),
               ];
 
-              // ── Alt kategori 5: RİSK GÖSTERGELERİ / REZERVLER (2026-07-23 —
-              // Döviz/Altın/Banka Muhabir ayrımı doğrulanmış EVDS kodlarıyla
-              // bağlandı, aynı "Toplam Uluslararası Rezervler" grubundan
-              // (TP.AB.B6 ile birlikte). DÜZELTME: Banka Muhabir Mevcudu ve
-              // Efektif Kasası (TP.AB.B3) eklendi — bu olmadan Döviz+Altın
-              // toplamı Toplam Rezerv'den ~49 Milyar $ eksik görünüyordu
-              // (kullanıcı fark etti). Şimdi Döviz+Altın+Banka Muhabir=Toplam
-              // matematiksel olarak tutarlı. Net Rezerv (Swap Hariç) için
-              // EVDS'te ayrı bir seri bulunamadı — placeholder'da kalıyor.
-              // CDS/tahvil getirileri BİLEREK eklenmedi — ücretli/harici
-              // kaynak gerektiriyor. ──
+              // ── Alt kategori 5: RİSK GÖSTERGELERİ / REZERVLER ──
+              // 2026-07-30: Kaynak haftalık C grubuna (TP.AB.TOPLAM/C1/C2)
+              // taşındı. Artık Döviz+Altın ≈ Toplam; banka muhabir kalemi
+              // toplama dahil olmadığı için listeden çıkarıldı.
+              // Net Rezerv (Swap Hariç) EVDS'te ayrı seri olarak yok.
+              // CDS/tahvil getirileri BİLEREK eklenmedi — ücretli kaynak. ──
+              // ── 2026-07-30 DÜZELTMESİ ────────────────────────────────────
+              // Buradaki rakam üç ay boyunca YANLIŞTI: TP.AB.B6 kullanılıyordu,
+              // o "Toplam Rezervler" banka muhabir mevcudunu DA içerdiği için
+              // 208,7 Milyar $ gösteriyordu; kamuoyunun konuştuğu rakam ise
+              // 162,6 Milyar $. Üstelik B grubu AYLIK ve 3 ay gecikmeliydi.
+              // Artık haftalık C grubu (TP.AB.TOPLAM/C1/C2) kullanılıyor,
+              // backend REZERV_* anahtarlarıyla veriyor. Basınla dört ayrı
+              // tarihte birebir doğrulandı.
+              const rezervToplam = evdsMakro?.["REZERV_TOPLAM"];
+              const rezervAltin  = evdsMakro?.["REZERV_ALTIN"];
+              const rezervDoviz  = evdsMakro?.["REZERV_DOVIZ"];
+              const rezervHaftalikMi = evdsMakro?.["REZERV_KAYNAK"] === "haftalik";
+              // Tarih ARTIK GÖRÜNÜR. "Haftalık" gibi sabit bir etiket yazmak,
+              // veri donduğunda bunu üç ay boyunca gizledi — bir daha olmasın.
+              const rezervEtiket = (v:any)=> v?.tarih
+                ? `${v.tarih} · ${rezervHaftalikMi?"haftalık":"aylık"}`
+                : "veri yok";
+
               const RISK:any[] = [
-                {ad:"TCMB Brüt Rezerv (Toplam)", deger:fmtRezerv(rezerv), tarih:rezerv?.tarih||"Haftalık", canli:rezerv!=null,
-                 seri:evdsMakro?.["TP_AB_B6_SERI"], seriAd:"TCMB Brüt Rezerv (Milyon $)", seriBirim:"milyon$"},
-                {ad:"TCMB Brüt Döviz Rezervleri", deger:fmtRezerv(gY("TP.AB.B2")), tarih:gY("TP.AB.B2")?.tarih||"Haftalık", canli:gY("TP.AB.B2")!=null,
-                 seri:evdsMakro?.["TP_AB_B2_SERI"], seriAd:"TCMB Brüt Döviz Rezervleri (Milyon $)", seriBirim:"milyon$"},
-                {ad:"TCMB Brüt Altın Rezervleri", deger:fmtRezerv(gY("TP.AB.B1")), tarih:gY("TP.AB.B1")?.tarih||"Haftalık", canli:gY("TP.AB.B1")!=null,
-                 seri:evdsMakro?.["TP_AB_B1_SERI"], seriAd:"TCMB Brüt Altın Rezervleri (Milyon $)", seriBirim:"milyon$"},
-                {ad:"TCMB Banka Muhabir Mevcudu ve Efektif Kasası", deger:fmtRezerv(gY("TP.AB.B3")), tarih:gY("TP.AB.B3")?.tarih||"Haftalık", canli:gY("TP.AB.B3")!=null,
-                 seri:evdsMakro?.["TP_AB_B3_SERI"], seriAd:"TCMB Banka Muhabir Mevcudu ve Efektif Kasası (Milyon $)", seriBirim:"milyon$"},
+                {ad:"TCMB Brüt Rezerv (Toplam)", deger:fmtRezerv(rezervToplam), tarih:rezervEtiket(rezervToplam), canli:false,
+                 seri:evdsMakro?.["REZERV_TOPLAM_SERI"], seriAd:"TCMB Brüt Rezerv (Milyon $)", seriBirim:"milyon$"},
+                {ad:"TCMB Brüt Döviz Rezervleri", deger:fmtRezerv(rezervDoviz), tarih:rezervEtiket(rezervDoviz), canli:false,
+                 seri:evdsMakro?.["REZERV_DOVIZ_SERI"], seriAd:"TCMB Brüt Döviz Rezervleri (Milyon $)", seriBirim:"milyon$"},
+                {ad:"TCMB Brüt Altın Rezervleri", deger:fmtRezerv(rezervAltin), tarih:rezervEtiket(rezervAltin), canli:false,
+                 seri:evdsMakro?.["REZERV_ALTIN_SERI"], seriAd:"TCMB Brüt Altın Rezervleri (Milyon $)", seriBirim:"milyon$"},
+                // Banka Muhabir Mevcudu KALDIRILDI: haftalık seride karşılığı
+                // yok ve zaten toplama dahil olmadığı için burada durması
+                // "Döviz+Altın neden Toplam'ı vermiyor" sorusunu doğuruyordu.
+                // Aylık B grubunda hâlâ mevcut, gerekirse geri eklenebilir.
                 // NOT (2026-07-23): "TCMB Swap Hariç Net Rezervler" placeholder'ı
                 // BİLEREK kaldırıldı — EVDS katalog aramasında ("NET REZERV,
                 // SWAP HARIC ULUSLARARASI") 0 grup çıktı, yani bu gösterge
@@ -19319,7 +19338,7 @@ function App(){
                 {id:"enflasyon", label:"Enflasyon ve Fiyat Dengesi", veri:ENFLASYON_LISTE},
                 {id:"para", label:"Para Politikası ve Finansal Koşullar", veri:PARA},
                 {id:"karpayi", label:"Finansman Kâr Oranları", veri:KAR_PAYI},
-                {id:"risk", label:"Risk Göstergeleri", veri:RISK},
+                {id:"risk", label:"MB Rezervleri", veri:RISK},
               ] as const;
               const aktifSekme = ALT_SEKMELER.find(s=>s.id===piyasaGostergeAltSekme) || ALT_SEKMELER[2];
 
@@ -19343,7 +19362,7 @@ function App(){
 
                   {piyasaGostergeAltSekme==="karpayi"&&(
                     <p style={{margin:"0 4px 10px",fontSize:10.5,color:WA(0.4),lineHeight:1.6}}>
-                      TCMB'nin katılım bankaları için ayrı yayınladığı kâr oranı serisi (konvansiyonel faiz değil). Üstte <b style={{color:(TEMA==="acik"?C.label:"#fff")}}>bileşik</b> (EVDS ham veri), altında <b>≈ yıllık basit</b> (haftalık bileşiklemeye dayalı hesaplanmış karşılık).
+                      TCMB'nin katılım bankaları için ayrı yayınladığı kâr oranı serisi (konvansiyonel faiz değil). Üstteki kalın oran <b style={{color:(TEMA==="acik"?C.label:"#fff")}}>bileşiktir</b> (EVDS ham veri); altındaki <b>yıllık ≈</b> ve <b>aylık ≈</b> satırları haftalık bileşiklemeye dayalı hesaplanmış basit karşılıklardır.
                     </p>
                   )}
 
@@ -19358,14 +19377,21 @@ function App(){
                             : {padding:"11px 14px",borderRadius:12,marginBottom:8,
                                background:(i%2===1?"#1A2633":"#16222E"),
                                border:`1px solid ${WA(0.07)}`})}}>
-                          <div>
-                            <p style={{margin:0,fontSize:13,fontWeight:800,color:C.soft}}>{g.ad}</p>
-                            <p style={{margin:"1px 0 0",fontSize:10,color:(TEMA==="acik"?"#4A6178":"rgba(255,255,255,0.55)")}}>{g.tarih}{g.canli?" · canlı":""}</p>
+                          {/* 2026-07-30 MOBİL TAŞMA DÜZELTMESİ:
+                              Sol blokta flex:1/minWidth:0 yoktu, sağ blokta
+                              flexShrink:0 yoktu — dar ekranda sağdaki rakamlar
+                              alt satıra kayıp okunmaz hale geliyordu ("%42,51"
+                              tek başına aşağı düşüyordu). Ayrıca sağdaki punto
+                              soldakinden büyüktü; ikisi dengelendi ve alt
+                              satırlardaki uzun etiketler kısaltıldı. */}
+                          <div style={{flex:1,minWidth:0,paddingRight:10}}>
+                            <p style={{margin:0,fontSize:12.5,fontWeight:800,color:C.soft,lineHeight:1.3}}>{g.ad}</p>
+                            <p style={{margin:"2px 0 0",fontSize:9.5,color:(TEMA==="acik"?"#4A6178":"rgba(255,255,255,0.55)")}}>{g.tarih}{g.canli?" · canlı":""}</p>
                           </div>
-                          <div style={{textAlign:"right"}}>
-                            <p style={{margin:0,fontSize:16,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace"}}>{g.bilesik!=null?`bileşik %${g.bilesik}`:"—"}</p>
-                            {g.basit!=null&&<p style={{margin:"2px 0 0",fontSize:12.5,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace"}}>≈ yıllık basit %{g.basit}</p>}
-                            {g.basitAylik!=null&&<p style={{margin:"1px 0 0",fontSize:12.5,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace"}}>≈ aylık basit %{g.basitAylik}</p>}
+                          <div style={{textAlign:"right",flexShrink:0,whiteSpace:"nowrap"}}>
+                            <p style={{margin:0,fontSize:14.5,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace"}}>{g.bilesik!=null?`%${g.bilesik}`:"—"}</p>
+                            {g.basit!=null&&<p style={{margin:"2px 0 0",fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#3D5771":"rgba(255,255,255,0.72)"),fontFamily:"monospace"}}>yıllık ≈ %{g.basit}</p>}
+                            {g.basitAylik!=null&&<p style={{margin:"1px 0 0",fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#3D5771":"rgba(255,255,255,0.72)"),fontFamily:"monospace"}}>aylık ≈ %{g.basitAylik}</p>}
                           </div>
                         </div>
                       ))

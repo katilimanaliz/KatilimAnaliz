@@ -91,8 +91,12 @@ const redis = new Redis({
 // NOT (2026-07-28): SPK kira sertifikası AYRI bir anahtar/şube kullandığı için
 // (KV_SPK_SUKUK_KEY) ana anahtarın versiyonu ARTIRILMADI — ana yanıtın içeriği
 // hiç değişmedi, mevcut önbelleği boşuna geçersiz kılmaya gerek yok.
-const KV_ANLIK_KEY = "evds:anlik:v17";
-const KV_TARIHSEL_PREFIX = "evds:tarihsel:v17:";
+// NOT (2026-07-30): v17 → v18 — REZERV_TOPLAM/ALTIN/DOVIZ alanları eklendi ve
+// rezerv kaynağı aylık B grubundan haftalık C grubuna geçirildi. Versiyon
+// artırılmazsa eski önbellek 6 saat boyunca hem yeni alanları göstermez hem de
+// ESKİ YANLIŞ rezerv rakamını döndürmeye devam eder.
+const KV_ANLIK_KEY = "evds:anlik:v18";
+const KV_TARIHSEL_PREFIX = "evds:tarihsel:v18:";
 
 // Vercel'in varsayılan fonksiyon süresi (Hobby planda genelde 10sn) artık 8 dış
 // isteğe (5 EVDS + 3 FRED) yetmiyor — bu yüzden ERR_CONNECTION_CLOSED alınıyordu
@@ -512,7 +516,33 @@ const HAFTALIK = [
   "TP.KTF17.TL","TP.KTF17.USD","TP.KTF17.EUR",
 ];
 
-const REZERV = ["TP.AB.B6", "TP.AB.B1", "TP.AB.B2", "TP.AB.B3"];
+// ── REZERVLER — İKİ AYRI GRUP, KARIŞTIRILMAMALI (2026-07-30 DÜZELTMESİ) ────
+//
+// bie_abreserv (TP.AB.B*) — AYLIK, "Uluslararası Rezervler ve Döviz Likiditesi
+//   Tablosu"nun özeti. ~2-3 ay gecikmeli yayımlanıyor. B6 "Toplam Rezervler"
+//   ise B3'ü (Bankalar Muhabir Mevcudu ve Efektif Kasası) de İÇERİYOR — bu
+//   ~49 milyar $ ticari bankaların muhabir bakiyesi, TCMB'nin rezervi DEĞİL.
+//   Kamuoyunun/basının "TCMB rezervi" dediği rakam bu değil.
+//
+// bie_abres2 (TP.AB.C1/C2/TOPLAM) — HAFTALIK, "Merkez Bankası Rezervleri".
+//   Her perşembe 14:30'da yayımlanıyor, ~1 hafta gecikmeli. Basının her hafta
+//   alıntıladığı rakam BUDUR.
+//
+// ⚠️ 23 TEMMUZ TEŞHİSİ YANLIŞTI: O tarihte devir belgesine "TP.AB.TOPLAM
+// geçersiz/eski kod, hiç veri döndürmüyor" diye yazılmış ve B6'ya geçilmişti.
+// Kod geçerli, veri kusursuz. Sorun, HAFTALIK C serisinin AYLIK B serileriyle
+// AYNI istekte gönderilmesiydi — EVDS'in bilinen davranışı: listede tek bir
+// uyumsuz kod olsa bile TÜM isteği reddediyor (bkz. devir belgesi 6.3).
+// Bu yüzden C grubu KENDİ AYRI çağrısında gidiyor. Asla B ile birleştirme.
+//
+// Canlı doğrulama (2026-07-30, ?grafik=1&seri=TP.AB.TOPLAM) — basınla birebir:
+//   30-01-2026: 218.157,8  ("218,2 milyar, tarihi zirve")
+//   26-06-2026: 149.204,7  ("149,2 milyar dolara indi")
+//   03-07-2026: 159.694,3  ("159,7 milyar dolar")
+//   10-07-2026: 163.302,4  ("163 milyar 302 milyon dolar")
+// Son nokta 24-07-2026 → bir haftalık gecikme.
+const REZERV = ["TP.AB.B6", "TP.AB.B4", "TP.AB.B1", "TP.AB.B2", "TP.AB.B3"];   // AYLIK (B4 = Resmi Rezerv Varlıklar, haftalık alınamazsa yedek)
+const REZERV_HAFTALIK = ["TP.AB.TOPLAM", "TP.AB.C1", "TP.AB.C2"];  // HAFTALIK
 
 // GECICI TEST (silinecek) - GSYH frekansini bulmak icin
 const TEST_GSYH = ["TP.GSYIH30.HY.B1GQ"]; // B1=Altın, B2=Döviz
@@ -1264,7 +1294,7 @@ export default async function handler(req,res){
   }
 
   try{
-    const [hafJson,bkrJson,kbkJson,kkpJson,gunJson,enfJson,polJson,rezervJson,dtJson,gostJson,hkbkJson,testGsyhCeyrekJson]=await Promise.all([
+    const [hafJson,bkrJson,kbkJson,kkpJson,gunJson,enfJson,polJson,rezervJson,rezervHafJson,dtJson,gostJson,hkbkJson,testGsyhCeyrekJson]=await Promise.all([
       guvenliCek("haftalik", `${BASE}/series=${HAFTALIK.join("-")}&startDate=${onceki(60)}&endDate=${tarihStr(new Date())}&type=json&frequency=3`),
       guvenliCek("aylik_bkr", `${BASE}/series=${AYLIK_BKR.join("-")}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
       guvenliCek("aylik_kbk", `${BASE}/series=${AYLIK_KBK.join("-")}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
@@ -1272,14 +1302,22 @@ export default async function handler(req,res){
       guvenliCek("gunluk_tlref", `${BASE}/series=${GUNLUK.join("-")}&startDate=${onceki(30)}&endDate=${tarihStr(new Date())}&type=json&frequency=1`),
       guvenliCek("enflasyon", `${BASE}/series=${ENFLASYON.join("-")}&startDate=${onceki(820)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
       guvenliCek("politika_aofm", `${BASE}/series=${POLITIKA.join("-")}&startDate=${onceki(60)}&endDate=${tarihStr(new Date())}&type=json&frequency=1`),
-      guvenliCek("rezerv", `${BASE}/series=${REZERV.join("-")}&startDate=${onceki(180)}&endDate=${tarihStr(new Date())}&type=json&frequency=3`),
+      guvenliCek("rezerv", `${BASE}/series=${REZERV.join("-")}&startDate=${onceki(180)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
+      // HAFTALIK rezerv — AYRI çağrı olması ŞART (bkz. REZERV_HAFTALIK notu).
+      // 400 günlük pencere: 24 noktalık grafik serisi için haftalıkta ~6 ay
+      // yeterdi ama daha uzun bir geçmiş trend grafiğini de besliyor.
+      guvenliCek("rezerv_haftalik", `${BASE}/series=${REZERV_HAFTALIK.join("-")}&startDate=${onceki(400)}&endDate=${tarihStr(new Date())}&type=json&frequency=3`),
       // Dış ticaret (v10): 12 aylık kümülatif serinin 24 noktası için ~36 ay
       // ham aylık veri gerekir → 1150 günlük pencere (~38 ay), tek istek.
       guvenliCek("disticaret", `${BASE}/series=${DISTICARET.join("-")}&startDate=${onceki(1150)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
       guvenliCek("gosterge", `${BASE}/series=${GOSTERGE.join("-")}&startDate=${onceki(760)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
       guvenliCek("haftalik_kbk", `${BASE}/series=${HAFTALIK_KBK.join("-")}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=3`),
+      // 2026-07-30: Buradaki 13. istek ("test_gsyh_aylik") KALDIRILDI.
+      // Promise.all 13 istek yapıyor ama sol taraftaki destructuring 12
+      // değişken tanımlıyordu — sonuncusunun sonucu hiç kullanılmıyor,
+      // her önbellek ıskasında TCMB'ye boşuna gidiliyordu. 23 Temmuz'daki
+      // GSYH frekans araştırmasından kalma, kodda zaten "silinecek" notu vardı.
       guvenliCek("test_gsyh_ceyrek", `${BASE}/series=${TEST_GSYH.join("-")}&startDate=${onceki(2000)}&endDate=${tarihStr(new Date())}&type=json&frequency=6`),
-      guvenliCek("test_gsyh_aylik", `${BASE}/series=${TEST_GSYH.join("-")}&startDate=${onceki(2000)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
     ]);
 
     const [sofr,eur3m,us2y,us5y,us10y,fedFonlama,ecbMevduat,sofr3m,sofr6m,fedUst,fedAlt]=await Promise.all([
@@ -1347,6 +1385,43 @@ export default async function handler(req,res){
     sonuclar["TP_AB_B1_SERI"]=tumDegerler(rezervJson?.items||[], "TP.AB.B1").slice(-24);
     sonuclar["TP_AB_B2_SERI"]=tumDegerler(rezervJson?.items||[], "TP.AB.B2").slice(-24);
     sonuclar["TP_AB_B3_SERI"]=tumDegerler(rezervJson?.items||[], "TP.AB.B3").slice(-24);
+
+    // ── REZERVLER: HAFTALIK ASIL, AYLIK YEDEK (2026-07-30) ────────────────
+    // Frontend artık REZERV_* anahtarlarını okumalı. Eski TP.AB.B* anahtarları
+    // geriye dönük uyumluluk için bırakıldı ama ARTIK KULLANILMAMALI:
+    // B6 "Toplam Rezervler" banka muhabir mevcudunu içerdiği için kamuoyunun
+    // konuştuğu rakamdan ~46 milyar $ yüksek çıkıyor (yaşanmış vaka).
+    const rezHafItems = rezervHafJson?.items || [];
+    const rezHafToplam = sonDeger(rezHafItems, "TP.AB.TOPLAM");
+    const rezHafAltin  = sonDeger(rezHafItems, "TP.AB.C1");
+    const rezHafDoviz  = sonDeger(rezHafItems, "TP.AB.C2");
+    const haftalikVarMi = rezHafToplam != null;
+
+    sonuclar["REZERV_TOPLAM"] = haftalikVarMi ? rezHafToplam : sonDeger(rezervJson?.items||[], "TP.AB.B4");
+    sonuclar["REZERV_ALTIN"]  = haftalikVarMi ? rezHafAltin  : sonDeger(rezervJson?.items||[], "TP.AB.B1");
+    sonuclar["REZERV_DOVIZ"]  = haftalikVarMi ? rezHafDoviz  : sonDeger(rezervJson?.items||[], "TP.AB.B2");
+    sonuclar["REZERV_TOPLAM_SERI"] = haftalikVarMi
+      ? tumDegerler(rezHafItems, "TP.AB.TOPLAM").slice(-24)
+      : tumDegerler(rezervJson?.items||[], "TP.AB.B4").slice(-24);
+    sonuclar["REZERV_ALTIN_SERI"] = haftalikVarMi
+      ? tumDegerler(rezHafItems, "TP.AB.C1").slice(-24)
+      : tumDegerler(rezervJson?.items||[], "TP.AB.B1").slice(-24);
+    sonuclar["REZERV_DOVIZ_SERI"] = haftalikVarMi
+      ? tumDegerler(rezHafItems, "TP.AB.C2").slice(-24)
+      : tumDegerler(rezervJson?.items||[], "TP.AB.B2").slice(-24);
+    // Frontend bu iki alanı ekranda gösterebilsin: kullanıcı verinin haftalık
+    // mı aylık mı olduğunu ve hangi tarihe ait olduğunu görmeli. Rakamın
+    // yanında tarih olsaydı yanlış rezerv verisi üç ay gizli kalmazdı.
+    sonuclar["REZERV_KAYNAK"] = haftalikVarMi ? "haftalik" : "aylik";
+    sonuclar["REZERV_ACIKLAMA"] = haftalikVarMi
+      ? "TCMB haftalık brüt rezervleri (her perşembe yayımlanır)"
+      : "TCMB aylık rezerv tablosu — haftalık seri alınamadı";
+    teshis.rezerv_secim = {
+      haftalik_nokta: tumDegerler(rezHafItems, "TP.AB.TOPLAM").length,
+      haftalik_son: rezHafToplam,
+      aylik_son_B4: sonDeger(rezervJson?.items||[], "TP.AB.B4"),
+      kullanilan: haftalikVarMi ? "haftalik" : "aylik",
+    };
 
     // ── HAFTALIK AKIM KÂR PAYI (2026-07-23) ─────────────────────────────
     for(const s of HAFTALIK_KBK) sonuclar[s]=sonDeger(hkbkJson?.items||[],s);
