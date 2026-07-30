@@ -630,6 +630,24 @@ function urdlAyristir(XLSX, wb) {
   return { bulunan, kesif, tarih };
 }
 
+// TCMB WCM sayfası çoğu zaman dosyanın kendisi değil, dosyaya bağlantı veren
+// bir HTML kabuğu döndürüyor (canlıda doğrulandı: "XLS yerine HTML dondu").
+// Bu fonksiyon HTML içinden gerçek XLS bağlantısını çıkarır.
+function urdlHtmldenXlsLinki(html) {
+  const linkler = [];
+  const re = /href\s*=\s*["']([^"']+)["']/gi;
+  let m;
+  while ((m = re.exec(html)) !== null) linkler.push(m[1]);
+  // Öncelik 1: adresinde "xls" geçen bağlantı (uzantı ya da yol parçası)
+  // Öncelik 2: TCMB WCM dosya deseni (MOD=AJPERES) — uzantısız dosya linki
+  const aday =
+    linkler.find((h) => /xls/i.test(h)) ||
+    linkler.find((h) => /MOD=AJPERES/i.test(h));
+  if (!aday) return null;
+  if (/^https?:\/\//i.test(aday)) return aday;
+  return "https://www.tcmb.gov.tr" + (aday.startsWith("/") ? "" : "/") + aday;
+}
+
 // URDL verisini Redis-öncelikli getirir. Her adım kendi try/catch'inde:
 // XLS inmezse/ayrışmazsa ana EVDS yanıtı ETKİLENMEZ, ilgili alanlar boş kalır.
 async function urdlOku(teshis) {
@@ -644,11 +662,28 @@ async function urdlOku(teshis) {
       redirect: "follow",
     });
     if (!r.ok) { teshis.urdl = { hata: `HTTP ${r.status}` }; return null; }
-    const buf = Buffer.from(await r.arrayBuffer());
-    // HTML dönerse (dosya yerine yönlendirme sayfası) sessizce çık
-    if (buf.slice(0, 200).toString("utf8").toLocaleLowerCase().includes("<html")) {
-      teshis.urdl = { hata: "XLS yerine HTML dondu — URL degismis olabilir" };
-      return null;
+    let buf = Buffer.from(await r.arrayBuffer());
+    let xlsUrl = URDL_XLS_URL;
+    // HTML dönerse (dosya yerine kabuk sayfa — canlıda görülen durum):
+    // içinden gerçek XLS bağlantısını çıkar ve İKİNCİ istekle dosyayı indir.
+    if (buf.slice(0, 300).toString("utf8").toLocaleLowerCase().includes("<html")) {
+      const html = buf.toString("utf8");
+      const link = urdlHtmldenXlsLinki(html);
+      if (!link) {
+        teshis.urdl = { hata: "HTML dondu ve icinde XLS baglantisi bulunamadi", ilk300: html.slice(0, 300) };
+        return null;
+      }
+      xlsUrl = link;
+      const r2 = await fetch(link, {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; KatilimPlus/1.0)", Accept: "*/*" },
+        redirect: "follow",
+      });
+      if (!r2.ok) { teshis.urdl = { hata: `XLS baglantisi HTTP ${r2.status}`, xlsUrl: link }; return null; }
+      buf = Buffer.from(await r2.arrayBuffer());
+      if (buf.slice(0, 300).toString("utf8").toLocaleLowerCase().includes("<html")) {
+        teshis.urdl = { hata: "Ikinci istek de HTML dondu", xlsUrl: link };
+        return null;
+      }
     }
     const wb = XLSX.read(buf, { type: "buffer" });
     const { bulunan, kesif, tarih } = urdlAyristir(XLSX, wb);
@@ -661,7 +696,7 @@ async function urdlOku(teshis) {
       return null;
     }
     try { await redis.set(KV_URDL_KEY, kayit, { ex: URDL_TTL }); } catch {}
-    teshis.urdl = { kaynak: "xls", ...ozet, sayfalar: wb.SheetNames };
+    teshis.urdl = { kaynak: "xls", xlsUrl, ...ozet, sayfalar: wb.SheetNames };
     return kayit;
   } catch (e) {
     teshis.urdl = { hata: e.message };
