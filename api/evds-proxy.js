@@ -681,6 +681,48 @@ function urdlHtmldenXlsAdaylari(html, kendiUrl) {
   return benzersiz.slice(0, 6);
 }
 
+// ── MİNİMAL ZIP ÇIKARICI (2026-07-30 gece, son halka) ──────────────────────
+// TCMB haftalık dosyası ZIP ARŞİVİ çıktı (URDL_YYYYAAGG.zip) ve SheetJS
+// "Unsupported ZIP file" dedi — çünkü bu XLSX değil, içinde XLS barındıran
+// gerçek bir arşiv. Ek bağımlılık yok: ZIP merkez dizini elle okunuyor,
+// DEFLATE ise Node yerleşik zlib.inflateRawSync ile açılıyor.
+// Dönüş: {xlsxKendisi:true} (dosya zaten XLSX'miş) | {icerik,ad} | null
+function zipIcindenXlsCikar(buf, zlib) {
+  let eocd = -1;
+  const alt = Math.max(0, buf.length - 65557);   // EOCD + azami yorum alanı
+  for (let i = buf.length - 22; i >= alt; i--) {
+    if (buf.readUInt32LE(i) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) return null;
+  const toplam = buf.readUInt16LE(eocd + 10);
+  let p = buf.readUInt32LE(eocd + 16);           // merkez dizin başlangıcı
+  const girdiler = [];
+  for (let k = 0; k < toplam && p + 46 <= buf.length; k++) {
+    if (buf.readUInt32LE(p) !== 0x02014b50) break;
+    const method = buf.readUInt16LE(p + 10);
+    const compSize = buf.readUInt32LE(p + 20);
+    const nlen = buf.readUInt16LE(p + 28);
+    const elen = buf.readUInt16LE(p + 30);
+    const clen = buf.readUInt16LE(p + 32);
+    const lho = buf.readUInt32LE(p + 42);
+    girdiler.push({ ad: buf.slice(p + 46, p + 46 + nlen).toString("utf8"), method, compSize, lho });
+    p += 46 + nlen + elen + clen;
+  }
+  // XLSX dosyaları da ZIP'tir — ayırt edici: [Content_Types].xml
+  if (girdiler.some((g) => g.ad === "[Content_Types].xml")) return { xlsxKendisi: true };
+  const hedef = girdiler.find((g) => /\.xlsx?$/i.test(g.ad)) || girdiler[0];
+  if (!hedef) return null;
+  const lp = hedef.lho;
+  if (lp + 30 > buf.length || buf.readUInt32LE(lp) !== 0x04034b50) return null;
+  const veriBas = lp + 30 + buf.readUInt16LE(lp + 26) + buf.readUInt16LE(lp + 28);
+  const ham = buf.slice(veriBas, veriBas + hedef.compSize);
+  try {
+    const icerik = hedef.method === 8 ? zlib.inflateRawSync(ham)
+                 : hedef.method === 0 ? ham : null;
+    return icerik ? { icerik, ad: hedef.ad } : null;
+  } catch { return null; }
+}
+
 // URDL verisini Redis-öncelikli getirir. Her adım kendi try/catch'inde:
 // XLS inmezse/ayrışmazsa ana EVDS yanıtı ETKİLENMEZ, ilgili alanlar boş kalır.
 async function urdlOku(teshis) {
@@ -745,7 +787,23 @@ async function urdlOku(teshis) {
       }
       teshis.urdlAdaylar = adaylar;   // başarılı yolda da hangi listeden seçildiği görünsün
     }
-    const wb = XLSX.read(buf, { type: "buffer" });
+    // ZIP imzalıysa önce arşiv mi XLSX mi ayır: TCMB haftalık veriyi
+    // URDL_YYYYAAGG.zip arşivi olarak yayımlıyor (canlıda görüldü —
+    // "Unsupported ZIP file"). Arşivse içindeki XLS çıkarılıp okunur.
+    let okunacak = buf;
+    if (buf[0] === 0x50 && buf[1] === 0x4B) {
+      const zlib = await import("zlib");
+      const zip = zipIcindenXlsCikar(buf, zlib.default || zlib);
+      if (zip && !zip.xlsxKendisi && zip.icerik) {
+        okunacak = zip.icerik;
+        teshis.urdlZipDosya = zip.ad;
+      } else if (!zip) {
+        teshis.urdl = { hata: "ZIP acilamadi", xlsUrl };
+        return null;
+      }
+      // xlsxKendisi ise okunacak=buf kalır, SheetJS doğrudan okur.
+    }
+    const wb = XLSX.read(okunacak, { type: "buffer" });
     const { bulunan, kesif, tarih } = urdlAyristir(XLSX, wb);
     const ozet = { tarih, resmiRezerv: bulunan.resmiRezerv ?? null, swapVadeli: bulunan.swapVadeli ?? null, netRezerv: bulunan.netRezerv ?? null };
     const kayit = { bulunan, tarih, ozet, ts: Date.now() };
