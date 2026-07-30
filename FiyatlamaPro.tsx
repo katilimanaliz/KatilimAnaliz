@@ -6763,14 +6763,20 @@ function Sozluk(){
         <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:4}}>
           {SOZLUK_KATEGORILER.map(k=>(
             <button key={k} onClick={()=>setKategori(k)} style={{
-              flexShrink:0,padding:"4px 10px",borderRadius:20,border:"none",cursor:"pointer",fontSize:10,fontWeight:700,
-              background:kategori===k?(k==="Tümü"?"#2563EB":katRenk(k)):"#1C2A38",
-              color:kategori===k?"#fff":(TEMA==="acik"?"#4A6178":"#94A3B8"),
+              flexShrink:0,padding:"5px 11px",borderRadius:20,cursor:"pointer",fontSize:10.5,fontWeight:700,fontFamily:"inherit",
+              // 2026-07-30: Pasif çip arka planı her iki temada da "#1C2A38"
+              // (koyu lacivert) sabitlenmişti; açık temada neredeyse siyah bir
+              // çip üzerine koyu gri yazı çıkıyor ve hiç okunmuyordu.
+              background:kategori===k
+                ? (k==="Tümü"?"#2563EB":katRenk(k))
+                : (TEMA==="acik"?"#E4EAF1":"#1C2A38"),
+              color:kategori===k?"#fff":(TEMA==="acik"?"#25405A":"#B6C6D8"),
+              border:kategori===k?"none":(TEMA==="acik"?"1px solid rgba(22,34,46,0.12)":"none"),
               transition:"all 0.15s"
             }}>{k}</button>
           ))}
         </div>
-        <p style={{margin:"5px 0 0 2px",fontSize:10,color:"#64748B"}}>
+        <p style={{margin:"5px 0 0 2px",fontSize:10.5,color:(TEMA==="acik"?"#4A6178":"#94A3B8")}}>
           {filtre.length} terim · {ara||kategori!=="Tümü"?`${SOZLUK_DATA.length} içinden filtrelendi`:"Toplam kayıt"}
         </p>
       </div>
@@ -6793,16 +6799,16 @@ function Sozluk(){
               <div style={{flex:1}}>
                 <p style={{margin:"0 0 3px",fontSize:14,fontWeight:800,color:(TEMA==="acik"?"#16222E":"#E2E8F0")}}>{d.terim}</p>
                 <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                  <span style={{fontSize:9,fontWeight:700,color:katRenk(d.kategori),background:WA(0.06),padding:"2px 7px",borderRadius:10}}>{d.kategori}</span>
-                  {d.en&&<span style={{fontSize:9,color:"#64748B",padding:"2px 7px",background:WA(0.04),borderRadius:10}}>{d.en}</span>}
+                  <span style={{fontSize:9.5,fontWeight:700,color:katRenk(d.kategori),background:(TEMA==="acik"?"rgba(22,34,46,0.06)":WA(0.08)),padding:"2px 7px",borderRadius:10}}>{d.kategori}</span>
+                  {d.en&&<span style={{fontSize:9.5,fontWeight:600,color:(TEMA==="acik"?"#3D5771":"#9FB2C6"),padding:"2px 7px",background:WA(0.06),borderRadius:10}}>{d.en}</span>}
                 </div>
               </div>
-              <span style={{color:"#475569",fontSize:14,marginLeft:8,flexShrink:0}}>{acik===i?"▲":"▼"}</span>
+              <span style={{color:(TEMA==="acik"?"#4A6178":"#94A3B8"),fontSize:14,marginLeft:8,flexShrink:0}}>{acik===i?"▲":"▼"}</span>
             </div>
             {acik===i&&(
               <div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
-                <p style={{margin:"0 0 8px",fontSize:12,color:(TEMA==="acik"?"#4A6178":"#94A3B8"),lineHeight:1.6}}>{d.tanim}</p>
-                {d.ar&&<p style={{margin:0,fontSize:13,color:"#64748B",textAlign:"right",fontFamily:"serif",direction:"rtl"}}>{d.ar}</p>}
+                <p style={{margin:"0 0 8px",fontSize:12.5,color:(TEMA==="acik"?"#2B4258":"#AEBFD2"),lineHeight:1.65}}>{d.tanim}</p>
+                {d.ar&&<p style={{margin:0,fontSize:14,color:(TEMA==="acik"?"#3D5771":"#9FB2C6"),textAlign:"right",fontFamily:"serif",direction:"rtl"}}>{d.ar}</p>}
               </div>
             )}
           </div>
@@ -15301,7 +15307,7 @@ function HisseAlarmModal({hisse, onClose}:{hisse:{ticker:string, sirket?:string,
         if(ok&&d?.basarili){
           setDurum("basarili");
           setBasariNotu(mod==="kap"
-            ? "Bundan sonra yayınlanacak yeni KAP bildirimleri için uyarılacaksınız."
+            ? "Bundan sonra yayınlanacak yeni KAP bildirimleri için uyarılacaksınız. Aboneliği Fiyat Alarmlarım ekranından duraklatabilir ya da silebilirsiniz."
             : "Koşul sağlandığında bildirim alacaksınız.");
           olayGonder("alarm_kuruldu",{sembol,tip:mod,yon});
         } else { setDurum("bos"); setHata(d?.hata||"Alarm kurulamadı."); }
@@ -15393,9 +15399,14 @@ function HisseAlarmModal({hisse, onClose}:{hisse:{ticker:string, sirket?:string,
                     bildirim alırsınız.
                   </p>
                   <p style={{margin:"9px 0 0",fontSize:10.5,color:WA(0.45),lineHeight:1.55}}>
-                    Fiyat alarmlarından farklı olarak bu bir aboneliktir — bir kez tetiklendikten sonra
-                    kapanmaz, silene kadar izlemeye devam eder. Yalnızca <b>bundan sonra</b> yayınlanan
-                    bildirimler için uyarılırsınız; geçmiş bildirimler gönderilmez.
+                    Fiyat alarmlarından farklı olarak bu bir aboneliktir — tetiklendikten sonra
+                    kapanmaz. <b>Fiyat Alarmlarım</b> ekranından istediğiniz zaman duraklatabilir
+                    ya da silebilirsiniz. Yalnızca <b>bundan sonra</b> yayınlanan bildirimler için
+                    uyarılırsınız; geçmiş bildirimler gönderilmez.
+                  </p>
+                  <p style={{margin:"7px 0 0",fontSize:10.5,color:WA(0.45),lineHeight:1.55}}>
+                    KAP verisi saatlik olarak yenilendiği için bildirim <b>1 saate kadar</b>
+                    gecikebilir. Cihazınızda bildirimleri kapatırsanız abonelik kendiliğinden sona erer.
                   </p>
                 </div>
               )}
