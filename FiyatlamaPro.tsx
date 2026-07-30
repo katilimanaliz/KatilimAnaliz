@@ -19323,6 +19323,17 @@ function App(){
                  seri:evdsMakro?.["REZERV_DOVIZ_SERI"], seriAd:"TCMB Brüt Döviz Rezervleri (Milyon $)", seriBirim:"milyon$"},
                 {ad:"TCMB Brüt Altın Rezervleri", deger:fmtRezerv(rezervAltin), tarih:rezervEtiket(rezervAltin), canli:false,
                  seri:evdsMakro?.["REZERV_ALTIN_SERI"], seriAd:"TCMB Brüt Altın Rezervleri (Milyon $)", seriBirim:"milyon$"},
+                // ── Net rezerv kalemleri (2026-07-30 ikinci tur) ─────────────
+                // TCMB Stand-By bilançosu 2A/2A3 kalemlerinden backend'de
+                // hesaplanıyor (bin TL ÷ aynı haftanın TCMB USD alış kuru).
+                // TCMB'nin doğrudan dolar cinsi açıklaması DEĞİL — bu yüzden
+                // etikette "hesaplanmış" ibaresi var.
+                {ad:"TCMB Net Rezerv (hesaplanmış)", deger:fmtRezerv(evdsMakro?.["REZERV_NET"]),
+                 tarih:evdsMakro?.["REZERV_NET"]?.tarih?`${evdsMakro["REZERV_NET"].tarih} · Stand-By bilançosundan`:"veri yok", canli:false},
+                {ad:"Swap Tutarı (Net Vadeli İşlemler)", deger:fmtRezerv(evdsMakro?.["REZERV_SWAP"]),
+                 tarih:evdsMakro?.["REZERV_SWAP"]?.tarih?`${evdsMakro["REZERV_SWAP"].tarih} · Stand-By bilançosundan`:"veri yok", canli:false},
+                {ad:"Swap Hariç Net Rezerv (hesaplanmış)", deger:fmtRezerv(evdsMakro?.["REZERV_NET_SWAPSIZ"]),
+                 tarih:evdsMakro?.["REZERV_NET_SWAPSIZ"]?.tarih?`${evdsMakro["REZERV_NET_SWAPSIZ"].tarih} · Net − Swap`:"veri yok", canli:false},
                 // Banka Muhabir Mevcudu KALDIRILDI: haftalık seride karşılığı
                 // yok ve zaten toplama dahil olmadığı için burada durması
                 // "Döviz+Altın neden Toplam'ı vermiyor" sorusunu doğuruyordu.

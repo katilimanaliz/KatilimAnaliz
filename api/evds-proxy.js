@@ -95,8 +95,9 @@ const redis = new Redis({
 // rezerv kaynağı aylık B grubundan haftalık C grubuna geçirildi. Versiyon
 // artırılmazsa eski önbellek 6 saat boyunca hem yeni alanları göstermez hem de
 // ESKİ YANLIŞ rezerv rakamını döndürmeye devam eder.
-const KV_ANLIK_KEY = "evds:anlik:v18";
-const KV_TARIHSEL_PREFIX = "evds:tarihsel:v18:";
+// v19 (2026-07-30 ikinci tur): REZERV_NET / REZERV_SWAP / REZERV_NET_SWAPSIZ eklendi.
+const KV_ANLIK_KEY = "evds:anlik:v19";
+const KV_TARIHSEL_PREFIX = "evds:tarihsel:v19:";
 
 // Vercel'in varsayılan fonksiyon süresi (Hobby planda genelde 10sn) artık 8 dış
 // isteğe (5 EVDS + 3 FRED) yetmiyor — bu yüzden ERR_CONNECTION_CLOSED alınıyordu
@@ -543,6 +544,22 @@ const HAFTALIK = [
 // Son nokta 24-07-2026 → bir haftalık gecikme.
 const REZERV = ["TP.AB.B6", "TP.AB.B4", "TP.AB.B1", "TP.AB.B2", "TP.AB.B3"];   // AYLIK (B4 = Resmi Rezerv Varlıklar, haftalık alınamazsa yedek)
 const REZERV_HAFTALIK = ["TP.AB.TOPLAM", "TP.AB.C1", "TP.AB.C2"];  // HAFTALIK
+
+// ── NET REZERV — STAND-BY BİLANÇOSU (2026-07-30, ikinci tur) ───────────────
+// bie_abstc2 "Merkez Bankası Bilançosu – Stand By (Cari)" grubu. TCMB'nin
+// 2002 Stand-By programından beri yayımladığı HAFTALIK cuma vaziyeti.
+// Analistlerin (Eğilmez, Babuşcu vb.) "net rezerv" dediği kalem BURADA hazır:
+//   TP.AB.N06 → "2A Net Uluslararası Rezervler (1+2+3)"   [BİN TL]
+//   TP.AB.N12 → "2A3 Net Vadeli (Forward) İşlemler"       [BİN TL] (swap bacağı)
+//   TP.DK.USD.A → USD alış kuru (dolara çevirmek için — analist geleneği de
+//                 TCMB alış kuruna bölmek; aynı istekte gelirse tarih hizalı)
+// Canlı doğrulama (2026-07-30):
+//   24-07-2026: N06 = 2.409.957.051 bin TL ÷ ~47,3 ≈ 50,95 milyar $ — Babuşcu
+//   tablosundaki "Net Rezerv 51,0" ile birebir. 13-03 noktası da Eğilmez'in
+//   okur örneğiyle (69 milyar $) tutuyor.
+// ⚠️ İlk teşhis "EVDS'te net rezerv yok" idi ve YANLIŞTI — analitik bilanço
+// ve rezerv gruplarına bakılmış, "Haftalık Vaziyet" kategorisi atlanmıştı.
+const REZERV_STANDBY = ["TP.AB.N06", "TP.AB.N12", "TP.DK.USD.A"];
 
 // GECICI TEST (silinecek) - GSYH frekansini bulmak icin
 const TEST_GSYH = ["TP.GSYIH30.HY.B1GQ"]; // B1=Altın, B2=Döviz
@@ -1294,7 +1311,7 @@ export default async function handler(req,res){
   }
 
   try{
-    const [hafJson,bkrJson,kbkJson,kkpJson,gunJson,enfJson,polJson,rezervJson,rezervHafJson,dtJson,gostJson,hkbkJson,testGsyhCeyrekJson]=await Promise.all([
+    const [hafJson,bkrJson,kbkJson,kkpJson,gunJson,enfJson,polJson,rezervJson,rezervHafJson,standbyJson,dtJson,gostJson,hkbkJson,testGsyhCeyrekJson]=await Promise.all([
       guvenliCek("haftalik", `${BASE}/series=${HAFTALIK.join("-")}&startDate=${onceki(60)}&endDate=${tarihStr(new Date())}&type=json&frequency=3`),
       guvenliCek("aylik_bkr", `${BASE}/series=${AYLIK_BKR.join("-")}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
       guvenliCek("aylik_kbk", `${BASE}/series=${AYLIK_KBK.join("-")}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
@@ -1307,6 +1324,9 @@ export default async function handler(req,res){
       // 400 günlük pencere: 24 noktalık grafik serisi için haftalıkta ~6 ay
       // yeterdi ama daha uzun bir geçmiş trend grafiğini de besliyor.
       guvenliCek("rezerv_haftalik", `${BASE}/series=${REZERV_HAFTALIK.join("-")}&startDate=${onceki(400)}&endDate=${tarihStr(new Date())}&type=json&frequency=3`),
+      // Stand-By bilançosu — net rezerv kalemleri + USD kuru, hepsi haftalık
+      // AYNI istekte (tarih hizası kendiliğinden doğru olsun diye).
+      guvenliCek("rezerv_standby", `${BASE}/series=${REZERV_STANDBY.join("-")}&startDate=${onceki(400)}&endDate=${tarihStr(new Date())}&type=json&frequency=3`),
       // Dış ticaret (v10): 12 aylık kümülatif serinin 24 noktası için ~36 ay
       // ham aylık veri gerekir → 1150 günlük pencere (~38 ay), tek istek.
       guvenliCek("disticaret", `${BASE}/series=${DISTICARET.join("-")}&startDate=${onceki(1150)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
@@ -1416,6 +1436,33 @@ export default async function handler(req,res){
     sonuclar["REZERV_ACIKLAMA"] = haftalikVarMi
       ? "TCMB haftalık brüt rezervleri (her perşembe yayımlanır)"
       : "TCMB aylık rezerv tablosu — haftalık seri alınamadı";
+    // ── NET REZERV / SWAP — Stand-By bilançosundan HESAPLANIR ────────────
+    // N06 ve N12 BİN TL; USD'ye çevirmek için AYNI HAFTANIN kuru kullanılıyor
+    // (aynı istekte geldiği için tarih eşleşmesi garanti). Çıktı MİLYON $ —
+    // frontend'in fmtRezerv'i /1000 ile milyar gösteriyor.
+    // Swap Hariç Net = N06 − N12 (2A = 2A1−2A2+2A3 yapısından; 2A3 net vadeli
+    // işlemler pozitif kayıtlı olduğu için çıkarılıyor).
+    {
+      const sbItems = standbyJson?.items || [];
+      const n06 = sonDeger(sbItems, "TP.AB.N06");
+      const n12 = sonDeger(sbItems, "TP.AB.N12");
+      const kur = sonDeger(sbItems, "TP.DK.USD.A");
+      if (n06?.deger != null && kur?.deger > 0) {
+        const netMilyon = (n06.deger / kur.deger) / 1000;
+        sonuclar["REZERV_NET"] = { deger: netMilyon, tarih: n06.tarih };
+        if (n12?.deger != null) {
+          const swapMilyon = (n12.deger / kur.deger) / 1000;
+          sonuclar["REZERV_SWAP"] = { deger: swapMilyon, tarih: n12.tarih };
+          sonuclar["REZERV_NET_SWAPSIZ"] = { deger: netMilyon - swapMilyon, tarih: n06.tarih };
+        }
+      }
+      teshis.rezerv_standby = {
+        n06_binTL: n06?.deger ?? null, n12_binTL: n12?.deger ?? null,
+        kur: kur?.deger ?? null, tarih: n06?.tarih ?? null,
+        nokta: tumDegerler(sbItems, "TP.AB.N06").length,
+      };
+    }
+
     teshis.rezerv_secim = {
       haftalik_nokta: tumDegerler(rezHafItems, "TP.AB.TOPLAM").length,
       haftalik_son: rezHafToplam,
