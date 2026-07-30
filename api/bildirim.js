@@ -46,6 +46,7 @@
 //   POST ?islem=alarm-ekle    { token, sembol, ad, tip:"hedef"|"yuzde", yon, hedefFiyat?, yuzde? }
 //   POST ?islem=alarm-listele { token }                    → {alarmlar:[...]}
 //   POST ?islem=alarm-sil     { token, id }
+//   POST ?islem=alarm-durum   { token, id, aktif } → KAP aboneliğini duraklat/başlat
 //
 //   BİST HİSSE ALARMLARI (2026-07-29 eklendi): Sembol "BIST:" önekiyle
 //   gelirse (örn. "BIST:ASELS") fiyat /api/hisse-proxy'den okunur. Detaylı
@@ -554,7 +555,12 @@ function kapHisseBildirimleri(liste, kod) {
 // yüzden sayısal karşılaştırma birincil ölçüt. İki taraf da sayı değilse
 // yayın zamanına düşülüyor — id biçimi değişirse alarm sessizce ölmesin.
 function kapDahaYeniMi(kayit, sonGorulenId, sonGorulenTs) {
-  const a = Number(kayit?.id), b = Number(sonGorulenId);
+  // DİKKAT: Number(null) === 0 ve isFinite(0) === true. Bu yüzden null/undefined
+  // açıkça elenmeli — aksi halde "a > 0" karşılaştırmasına düşer ve TÜM
+  // bildirimler yeni sayılır (abonelik duraklatıp devam ettirildiğinde
+  // geçmişin tamamının push olarak yağmasına yol açardı).
+  const a = Number(kayit?.id);
+  const b = (sonGorulenId == null || sonGorulenId === "") ? NaN : Number(sonGorulenId);
   if (isFinite(a) && isFinite(b)) return a > b;
   return kapZaman(kayit?.tarih) > (sonGorulenTs || 0);
 }
@@ -856,6 +862,97 @@ async function alarmFiyatTablosu(benzersizSemboller) {
   return { fiyatlar, bistNot, bistMeta };
 }
 
+// Bir KAP ABONELİĞİNİ duraklatır ya da yeniden başlatır (2026-07-30).
+//
+//   POST ?islem=alarm-durum { token, id, aktif: true|false }
+//
+// NEDEN AYRI BİR UÇ: Abonelik hiç auto-kapanmadığı için kullanıcının silmeden
+// susturabileceği bir yol gerekiyordu. Silmek geçmişi de yok ediyor; duraklatmak
+// kaydı koruyup bildirimi kesiyor.
+//
+// ⚠️ YENİDEN BAŞLATIRKEN İMLEÇ SIFIRLANIYOR: Duraklatılmış süre boyunca
+// yayınlanan bildirimler "yeni" sayılmıyor — aksi halde 3 hafta duraklatıp
+// açan kullanıcı 3 haftalık yığını tek seferde push olarak alırdı.
+//
+// SADECE tip:"kap" için geçerli. Fiyat alarmlarında tetiklenmiş bir alarmı
+// yeniden açmak, eşik hâlâ sağlandığı için anında tekrar tetiklenmesine yol
+// açardı — bilinçli olarak reddediliyor.
+async function alarmDurum(req, res) {
+  const { token, id, aktif } = req.body || {};
+  if (!token || !id || typeof aktif !== "boolean") {
+    res.status(400).json({ hata: "'token', 'id' ve boolean 'aktif' alanları zorunlu" });
+    return;
+  }
+
+  // Yeniden başlatma isteniyorsa güncel en yeni bildirimi ÖNCEDEN öğren
+  // (kilit içinde ağ isteği yapmamak için).
+  let yeniBaslangic = null;
+  if (aktif) {
+    try {
+      const alarmlar = await alarmlariOku();
+      const hedef = alarmlar.find((a) => a.id === id && a.token === token);
+      if (hedef && hedef.tip === "kap") {
+        const kod = String(hedef.sembol || "").slice(BIST_ONEK.length).toUpperCase();
+        const tumListe = await kapTumOku();
+        if (tumListe) {
+          const enYeni = kapHisseBildirimleri(tumListe, kod)[0] || null;
+          yeniBaslangic = {
+            sonGorulenId: enYeni?.id ?? null,
+            sonGorulenTs: enYeni ? kapZaman(enYeni.tarih) : Date.now(),
+          };
+        } else {
+          // KAP listesi alınamadıysa en azından "şu andan itibaren" diyelim;
+          // id'yi null bırakmak kapDahaYeniMi'yi zaman karşılaştırmasına düşürür.
+          yeniBaslangic = { sonGorulenId: null, sonGorulenTs: Date.now() };
+        }
+      }
+    } catch (e) {
+      console.error("Abonelik yeniden baslatma hazirligi hatasi:", e.message);
+    }
+  }
+
+  try {
+    const { basarili, sonuc } = await kilitliCalistir(
+      redis, ALARM_KILIT_ANAHTAR, 15,
+      async () => {
+        const alarmlar = await alarmlariOku();
+        const idx = alarmlar.findIndex((a) => a.id === id && a.token === token);
+        if (idx < 0) return { hataKodu: 404, hata: "Alarm bulunamadı." };
+        const mevcut = alarmlar[idx];
+        if (mevcut.tip !== "kap") {
+          return { hataKodu: 400, hata: "Bu işlem yalnızca KAP bildirim abonelikleri için geçerli." };
+        }
+        const guncel = { ...mevcut, aktif };
+        if (!aktif) {
+          guncel.kapaliSebep = "kullanici";
+        } else {
+          delete guncel.kapaliSebep;
+          if (yeniBaslangic) {
+            guncel.sonGorulenId = yeniBaslangic.sonGorulenId;
+            guncel.sonGorulenTs = yeniBaslangic.sonGorulenTs;
+          }
+        }
+        const yeniListe = alarmlar.slice();
+        yeniListe[idx] = guncel;
+        await redis.set(ALARM_KV_ANAHTAR, yeniListe);
+        return { alarm: guncel };
+      },
+      { denemeSayisi: 10, bekleMs: 300 }
+    );
+    if (!basarili) { res.status(409).json({ hata: "Şu anda başka bir alarm işlemi sürüyor, lütfen tekrar deneyin." }); return; }
+    if (sonuc?.hataKodu) { res.status(sonuc.hataKodu).json({ hata: sonuc.hata }); return; }
+    res.status(200).json({
+      basarili: true,
+      alarm: sonuc.alarm,
+      not: aktif
+        ? "Abonelik yeniden başlatıldı. Yalnızca bundan sonra yayınlanan bildirimler gönderilecek."
+        : "Abonelik duraklatıldı. Yeniden başlatana kadar bildirim gönderilmeyecek.",
+    });
+  } catch (e) {
+    res.status(500).json({ hata: "Abonelik durumu değiştirilemedi", detay: e.message });
+  }
+}
+
 // Dış zamanlayıcının çağırdığı kontrol uç noktası. Tüm AKTİF alarmları
 // gruplanmış sembollerle tek seferde fiyatlandırır, koşulu sağlayanlara
 // SADECE KENDİ TOKEN'INA push gönderir ve alarmı "aktif:false" yapar.
@@ -901,6 +998,7 @@ async function alarmKontrol(req, res) {
         let tetiklenen = 0;
         let gonderilenBildirim = 0;
         let kapTetiklenen = 0;
+        let olenAbonelik = 0;   // token gecersiz oldugu icin kapanan abonelik sayisi
         const gonderimHatalari = [];
         const guncelListe = [];
 
@@ -937,6 +1035,20 @@ async function alarmKontrol(req, res) {
               gonderimHatalari.push({ alarm: alarm.ad, tokenIlk10: (alarm.token||"").slice(0,10), hata: gonderildi.hata });
             }
 
+            // ── ÖLÜ TOKEN → ABONELİĞİ KAPAT (2026-07-30) ───────────────────
+            // Kullanıcı bildirimleri kapattıysa / uygulamayı sildiyse FCM
+            // "registration-token-not-registered" döner. Fiyat alarmları
+            // tetiklenince zaten kapandığı için kendini sınırlıyor, ama
+            // ABONELİK süresiz — sonsuza kadar ölü token'a göndermeyi
+            // denerdi. Artık kendini kapatıyor: kullanıcı bildirimi
+            // kapattığında bu abonelik de sessizce sona eriyor.
+            const olduMu = !!(gonderildi && gonderildi.hata &&
+              String(gonderildi.hata).includes("registration-token-not-registered"));
+            if (olduMu) {
+              olenAbonelik++;
+              guncelListe.push({ ...alarm, aktif: false, kapaliSebep: "token-gecersiz", tetiklenmeTs: Date.now() });
+              continue;
+            }
             // İmleç EN YENİYE alınıyor — duyurulmayanlar da "görülmüş" sayılır,
             // aksi halde aynı yığın her turda tekrar tekrar bildirilirdi.
             guncelListe.push({
@@ -1006,6 +1118,7 @@ async function alarmKontrol(req, res) {
           benzersizSembol: benzersizSemboller.length,
           tetiklenen,
           kapTetiklenen,
+          olenAbonelik,
           gonderilenBildirim,
           gonderimHatalari,
           bistSeansAcik: bistSeansAcikMi(),
@@ -1071,6 +1184,8 @@ export default async function handler(req, res) {
       await alarmSil(req, res);
     } else if (islem === "alarm-temizle") {
       await alarmTemizle(req, res);
+    } else if (islem === "alarm-durum") {
+      await alarmDurum(req, res);
     } else {
       res.status(400).json({ hata: "Geçersiz 'islem'." });
     }

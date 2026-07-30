@@ -1885,6 +1885,8 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
   // O hisseye ait son KAP bildirimleri — ayrı uçtan, grafikten bağımsız
   // yükleniyor ki KAP erişilemezse sayfanın geri kalanı beklemesin.
   const [kapBildirim, setKapBildirim] = useState<any[]>([]);
+  // 2026-07-30: Fiyat alarmı / KAP bildirim aboneliği modalı
+  const [alarmAcik, setAlarmAcik] = useState(false);
 
   useEffect(() => {
     if (!hisse?.ticker) return;
@@ -2053,8 +2055,14 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
               fontSize:11,fontWeight:donem===k?700:400,cursor:"pointer",fontFamily:"inherit"
             }}>{l}</button>
           ))}
-          {/* Takip yıldızı — dönem butonlarının sağ ucunda, grafiğin hemen üstünde */}
-          <div style={{marginLeft:"auto"}}>
+          {/* Alarm çanı + takip yıldızı — dönem butonlarının sağ ucunda */}
+          <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:2}}>
+            <button onClick={()=>setAlarmAcik(true)} title="Fiyat alarmı / KAP bildirimi" style={{
+              background:"none",border:"none",padding:4,cursor:"pointer",display:"flex",
+              alignItems:"center",justifyContent:"center",fontFamily:"inherit",
+            }}>
+              <Bell size={17} color={C.blue}/>
+            </button>
             <TakipYildizi
               tur="hisse"
               kod={hisse.ticker}
@@ -2159,6 +2167,13 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
             Kaynak: Kamuyu Aydınlatma Platformu. Bir bildirime dokunduğunuzda KAP'ın kendi sayfası açılır.
           </p>
         </div>
+      )}
+
+      {alarmAcik && (
+        <HisseAlarmModal
+          hisse={{ticker:hisse.ticker, sirket:hisse.sirket, fiyat:hisse.fiyat ?? null}}
+          onClose={()=>setAlarmAcik(false)}
+        />
       )}
     </div>
   );
@@ -13582,11 +13597,50 @@ function FiyatAlarmlarim(){
     }).then(()=>{ setSiliniyor(null); yukle(); }).catch(()=>setSiliniyor(null));
   };
 
+  // KAP aboneliğini duraklat / yeniden başlat (2026-07-30). Silmek geçmişi de
+  // yok ediyor; duraklatmak kaydı koruyup yalnızca bildirimi kesiyor.
+  const [degisiyor,setDegisiyor]=useState<string|null>(null);
+  const durumDegistir=(id:string, aktif:boolean)=>{
+    if(!token) return;
+    setDegisiyor(id);
+    fetch(`${API_BASE}/api/bildirim?islem=alarm-durum`,{
+      method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token,id,aktif}),
+    }).then(()=>{ setDegisiyor(null); yukle(); }).catch(()=>setDegisiyor(null));
+  };
+
   const kosulMetni=(a:any)=>{
-    if(a.tip==="hedef"){
-      return `${a.yon==="ustunde"?"≥":"≤"} ${a.hedefFiyat.toLocaleString("tr-TR",{maximumFractionDigits:4})}`;
+    // 2026-07-30 DÜZELTME: KAP abonelikleri (tip:"kap") buraya düşünce
+    // yuzde dalına giriyordu ve baslangicFiyat null olduğu için
+    // null.toLocaleString() ile EKRAN ÇÖKÜYORDU. Abonelik hiç
+    // auto-kapanmadığı için de silinemez hale geliyordu — kilitli döngü.
+    if(a.tip==="kap"){
+      return "Yeni KAP bildirimi yayınlandığında";
     }
-    return `${a.yon==="artis"?"+":"-"}%${a.yuzde} (kuruluş: ${a.baslangicFiyat.toLocaleString("tr-TR",{maximumFractionDigits:4})})`;
+    if(a.tip==="hedef"){
+      const h=a.hedefFiyat;
+      return `${a.yon==="ustunde"?"≥":"≤"} ${h!=null?h.toLocaleString("tr-TR",{maximumFractionDigits:4}):"—"}`;
+    }
+    const bf=a.baslangicFiyat;
+    return `${a.yon==="artis"?"+":"-"}%${a.yuzde ?? "—"}${bf!=null?` (kuruluş: ${bf.toLocaleString("tr-TR",{maximumFractionDigits:4})})`:""}`;
+  };
+
+  // Abonelikler (KAP) tetiklendikten sonra da aktif kalır; bu yüzden
+  // "Tetiklendi" yerine kaç bildirim gönderildiğini yazıyoruz.
+  const durumMetni=(a:any)=>{
+    if(a.tip==="kap"){
+      const n=a.bildirimSayisi||0;
+      const sayac=n>0?` · ${n} bildirim gönderildi`:"";
+      if(!a.aktif){
+        // Kullanıcı duraklattı mı, yoksa cihaz bildirimleri kapatıldığı için
+        // sistem mi kapattı? İkisi farklı şey, ayrı yazılıyor.
+        return a.kapaliSebep==="token-gecersiz"
+          ? `Durduruldu · bildirim izni kalkmış${sayac}`
+          : `Duraklatıldı${sayac}`;
+      }
+      return `Abonelik · izleniyor${sayac}`;
+    }
+    if(a.aktif) return "İzleniyor";
+    return `Tetiklendi · ${a.tetiklenmeTs?new Date(a.tetiklenmeTs).toLocaleDateString("tr-TR",{day:"numeric",month:"long",hour:"2-digit",minute:"2-digit"}):"—"}`;
   };
 
   return(
@@ -13605,22 +13659,36 @@ function FiyatAlarmlarim(){
         <div style={{textAlign:"center",padding:"50px 20px"}}>
           <p style={{fontSize:32,margin:"0 0 8px"}}>🔔</p>
           <p style={{margin:0,fontSize:13,color:WA(0.45)}}>Henüz alarm kurmadınız.</p>
-          <p style={{margin:"4px 0 0",fontSize:11.5,color:WA(0.3)}}>Piyasa ekranında bir enstrümana dokunup "🔔 Alarm Kur"a basarak ekleyebilirsiniz.</p>
+          <p style={{margin:"4px 0 0",fontSize:11.5,color:WA(0.3),lineHeight:1.55}}>Piyasa ekranında bir enstrümana dokunup "🔔 Alarm Kur"a basarak ekleyebilirsiniz. Hisse detayındaki çan simgesinden ayrıca KAP bildirim aboneliği kurabilirsiniz.</p>
         </div>
       ):alarmlar.map((a:any)=>(
-        <div key={a.id} style={{background:WA(0.04),border:`1px solid ${a.aktif?WA(0.08):"rgba(74,222,128,0.25)"}`,borderRadius:14,padding:"13px 14px",marginBottom:10,display:"flex",alignItems:"center",gap:10}}>
-          <span style={{fontSize:20,flexShrink:0}}>{a.aktif?"🔔":"✅"}</span>
+        <div key={a.id} style={{background:WA(0.04),border:`1px solid ${(a.tip==="kap"||a.aktif)?WA(0.08):"rgba(74,222,128,0.25)"}`,borderRadius:14,padding:"13px 14px",marginBottom:10,display:"flex",alignItems:"center",gap:10}}>
+          <span style={{fontSize:20,flexShrink:0}}>{a.tip==="kap"?"📄":(a.aktif?"🔔":"✅")}</span>
           <div style={{flex:1,minWidth:0}}>
             <p style={{margin:0,fontSize:13.5,fontWeight:700,color:C.soft}}>{a.ad}</p>
             <p style={{margin:"2px 0 0",fontSize:11.5,color:WA(0.55)}}>{kosulMetni(a)}</p>
-            <p style={{margin:"3px 0 0",fontSize:10,color:a.aktif?WA(0.35):C.green}}>
-              {a.aktif?"İzleniyor":`Tetiklendi · ${new Date(a.tetiklenmeTs).toLocaleDateString("tr-TR",{day:"numeric",month:"long",hour:"2-digit",minute:"2-digit"})}`}
+            <p style={{margin:"3px 0 0",fontSize:10,color:a.tip==="kap"?WA(0.4):(a.aktif?WA(0.35):C.green)}}>
+              {durumMetni(a)}
             </p>
           </div>
-          <button onClick={()=>sil(a.id)} disabled={siliniyor===a.id} style={{
-            flexShrink:0,background:"rgba(248,113,113,0.12)",border:"1px solid rgba(248,113,113,0.3)",
-            borderRadius:8,padding:"7px 10px",color:C.red,fontSize:11,fontWeight:700,cursor:"pointer",
-          }}>{siliniyor===a.id?"...":"Sil"}</button>
+          <div style={{display:"flex",flexDirection:"column",gap:5,flexShrink:0}}>
+            {/* Yalnızca aboneliklerde: duraklat / yeniden başlat.
+                Fiyat alarmlarında yok — tetiklenmiş bir alarmı yeniden açmak
+                eşik hâlâ sağlandığı için anında tekrar tetiklenmesine yol açar,
+                backend de bunu reddediyor. */}
+            {a.tip==="kap"&&(
+              <button onClick={()=>durumDegistir(a.id, !a.aktif)} disabled={degisiyor===a.id} style={{
+                background:a.aktif?WA(0.07):"rgba(74,222,128,0.12)",
+                border:`1px solid ${a.aktif?WA(0.16):"rgba(74,222,128,0.35)"}`,
+                borderRadius:8,padding:"7px 10px",color:a.aktif?WA(0.65):C.green,
+                fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",
+              }}>{degisiyor===a.id?"...":(a.aktif?"Duraklat":"Devam Et")}</button>
+            )}
+            <button onClick={()=>sil(a.id)} disabled={siliniyor===a.id} style={{
+              background:"rgba(248,113,113,0.12)",border:"1px solid rgba(248,113,113,0.3)",
+              borderRadius:8,padding:"7px 10px",color:C.red,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",
+            }}>{siliniyor===a.id?"...":"Sil"}</button>
+          </div>
         </div>
       ))}
     </div>
@@ -15164,6 +15232,186 @@ function AltinAlarmModal({urun, onClose}:{urun:{ad:string, sembol:string, bid:nu
                   flex:1,padding:"11px",borderRadius:10,border:"none",
                   background:"#3B82F6",color:"#fff",fontWeight:800,fontSize:13,cursor:"pointer",
                 }}>{alarmDurum==="gonderiliyor"?"Kuruluyor...":"Alarm Kur"}</button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BİST HİSSE ALARM MODALI (2026-07-30)
+// ═══════════════════════════════════════════════════════════════════════════
+// AltinAlarmModal deseninin hisseye uyarlanmış hâli, iki farkla:
+//   1) Sembol "BIST:" ÖNEKLİ gönderiliyor (backend bunu bekliyor; çıplak kod
+//      AltinAPI sembolleriyle çakışırdı — bkz. api/bildirim.js BIST_ONEK)
+//   2) Üçüncü bir mod var: KAP BİLDİRİMİ. Bu bir eşik alarmı değil, ABONELİK —
+//      tetiklenince kapanmaz, o hisseye yeni bildirim geldikçe uyarır.
+function HisseAlarmModal({hisse, onClose}:{hisse:{ticker:string, sirket?:string, fiyat?:number|null}, onClose:()=>void}){
+  const [mod,setMod]=useState<"hedef"|"yuzde"|"kap">("hedef");
+  const [yon,setYon]=useState<"ustunde"|"altinda"|"artis"|"dusus">("ustunde");
+  const [deger,setDeger]=useState(hisse.fiyat!=null?String(hisse.fiyat):"");
+  const [durum,setDurum]=useState<"bos"|"gonderiliyor"|"basarili"|"hata">("bos");
+  const [hata,setHata]=useState("");
+  const [basariNotu,setBasariNotu]=useState("");
+
+  const sembol=`BIST:${hisse.ticker}`;
+  const ad=hisse.sirket||hisse.ticker;
+  const fmt2=(n:any)=>n==null?"—":new Intl.NumberFormat("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}).format(n);
+
+  const modBtn=(k:"hedef"|"yuzde"|"kap",etiket:string,tiklama:()=>void)=>(
+    <button onClick={tiklama} style={{
+      flex:1,padding:"8px 4px",borderRadius:9,border:`1.5px solid ${mod===k?"#3B82F6":WA(0.15)}`,
+      background:mod===k?"rgba(59,130,246,0.15)":"transparent",
+      color:mod===k?(TEMA==="acik"?"#2E6DA8":"#7DB2FF"):WA(0.6),
+      fontWeight:700,fontSize:11.5,cursor:"pointer",fontFamily:"inherit",
+    }}>{etiket}</button>
+  );
+
+  const yonBtn=(k:any,etiket:string,renk:string,bg:string)=>(
+    <button onClick={()=>setYon(k)} style={{
+      flex:1,padding:"7px",borderRadius:8,border:`1px solid ${yon===k?renk:WA(0.15)}`,
+      background:yon===k?bg:"transparent",
+      color:yon===k?renk:WA(0.6),fontWeight:700,fontSize:11.5,cursor:"pointer",fontFamily:"inherit",
+    }}>{etiket}</button>
+  );
+
+  const gonder=()=>{
+    const token=pushTokenAl();
+    if(!token){
+      let neden=""; try{ neden=localStorage.getItem("kp_push_hata")||""; }catch{}
+      setHata(neden?`Bildirim kaydı başarısız: ${neden}`:"Bildirim izni gerekiyor — cihaz Ayarlar'dan izin verip tekrar deneyin.");
+      return;
+    }
+    let govde:any={token, sembol, ad, tip:mod, yon};
+    if(mod==="kap"){
+      govde={token, sembol, ad, tip:"kap", yon:"yeni"};
+    }else{
+      const n=parseFloat(String(deger).replace(",","."));
+      if(!n||n<=0){ setHata("Geçerli bir değer girin."); return; }
+      if(mod==="hedef") govde.hedefFiyat=n; else govde.yuzde=n;
+    }
+    setDurum("gonderiliyor"); setHata("");
+    fetch(`${API_BASE}/api/bildirim?islem=alarm-ekle`,{
+      method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(govde),
+    }).then(r=>r.json().then(d=>({ok:r.ok,d})))
+      .then(({ok,d})=>{
+        if(ok&&d?.basarili){
+          setDurum("basarili");
+          setBasariNotu(mod==="kap"
+            ? "Bundan sonra yayınlanacak yeni KAP bildirimleri için uyarılacaksınız."
+            : "Koşul sağlandığında bildirim alacaksınız.");
+          olayGonder("alarm_kuruldu",{sembol,tip:mod,yon});
+        } else { setDurum("bos"); setHata(d?.hata||"Alarm kurulamadı."); }
+      })
+      .catch(()=>{ setDurum("bos"); setHata("Bağlantı hatası, tekrar deneyin."); });
+  };
+
+  return(
+    <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.7)",zIndex:600,display:"flex",alignItems:"flex-end",...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}}>
+      <div style={{background:C.card,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",maxHeight:"85vh",display:"flex",flexDirection:"column"}}>
+        <div style={{padding:"16px 20px 12px",borderBottom:`1px solid ${WA(0.1)}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,gap:10}}>
+          <div style={{minWidth:0}}>
+            <p style={{margin:0,fontSize:18,fontWeight:800,color:C.label}}>{hisse.ticker}</p>
+            <p style={{margin:"2px 0 0",fontSize:11.5,color:WA(0.55),overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ad}</p>
+          </div>
+          <button onClick={onClose} style={{background:WA(0.1),border:"none",width:32,height:32,borderRadius:16,fontSize:20,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>×</button>
+        </div>
+
+        <div style={{flex:1,overflowY:"auto",padding:"16px 20px 32px"}}>
+          <div style={{background:WA(0.03),borderRadius:10,padding:"10px 12px",marginBottom:14}}>
+            <p style={{margin:0,fontSize:10,color:WA(0.55),fontWeight:600}}>GÜNCEL FİYAT</p>
+            <p style={{margin:"4px 0 0",fontSize:18,fontWeight:800,color:C.label,fontFamily:"monospace"}}>₺{fmt2(hisse.fiyat)}</p>
+            <p style={{margin:"4px 0 0",fontSize:10,color:WA(0.45)}}>BİST verisi ~15 dk gecikmelidir; alarm da bu gecikmeyle çalışır.</p>
+          </div>
+
+          {durum==="basarili"?(
+            <div style={{textAlign:"center",padding:"10px 0"}}>
+              <p style={{margin:0,fontSize:24}}>✅</p>
+              <p style={{margin:"6px 0 0",fontSize:13,fontWeight:700,color:C.green}}>
+                {mod==="kap"?"Abonelik kuruldu!":"Alarm kuruldu!"}
+              </p>
+              <p style={{margin:"3px 0 0",fontSize:11,color:WA(0.5),lineHeight:1.5}}>{basariNotu}</p>
+              <button onClick={onClose} style={{marginTop:14,padding:"10px 22px",borderRadius:10,border:"none",background:"#3B82F6",color:"#fff",fontWeight:800,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>Kapat</button>
+            </div>
+          ):(
+            <div>
+              <div style={{display:"flex",gap:6,marginBottom:12}}>
+                {modBtn("hedef","Hedef Fiyat",()=>{setMod("hedef");setYon("ustunde");setDeger(hisse.fiyat!=null?String(hisse.fiyat):"");setHata("");})}
+                {modBtn("yuzde","Yüzde Değişim",()=>{setMod("yuzde");setYon("artis");setDeger("5");setHata("");})}
+                {modBtn("kap","KAP Bildirimi",()=>{setMod("kap");setHata("");})}
+              </div>
+
+              {mod==="hedef"&&(
+                <>
+                  <div style={{display:"flex",gap:6,marginBottom:8}}>
+                    {yonBtn("ustunde","▲ Üstüne çıkarsa",C.green,"rgba(74,222,128,0.12)")}
+                    {yonBtn("altinda","▼ Altına inerse",C.red,"rgba(248,113,113,0.12)")}
+                  </div>
+                  <div style={{position:"relative"}}>
+                    <input type="number" inputMode="decimal" value={deger} onChange={e=>setDeger(e.target.value)} placeholder="Hedef fiyat"
+                      style={{width:"100%",boxSizing:"border-box",padding:"11px 40px 11px 13px",fontSize:15,fontWeight:600,fontFamily:"monospace",background:WA(0.06),border:`1.5px solid ${WA(0.15)}`,borderRadius:10,color:C.label,outline:"none"}}/>
+                    <span style={{position:"absolute",right:11,top:"50%",transform:"translateY(-50%)",color:"#3B82F6",fontWeight:700,fontSize:13}}>₺</span>
+                  </div>
+                </>
+              )}
+
+              {mod==="yuzde"&&(
+                <>
+                  <div style={{display:"flex",gap:6,marginBottom:8}}>
+                    {yonBtn("artis","▲ Yükselirse",C.green,"rgba(74,222,128,0.12)")}
+                    {yonBtn("dusus","▼ Düşerse",C.red,"rgba(248,113,113,0.12)")}
+                  </div>
+                  <div style={{position:"relative"}}>
+                    <input type="number" inputMode="decimal" value={deger} onChange={e=>setDeger(e.target.value)} placeholder="Yüzde"
+                      style={{width:"100%",boxSizing:"border-box",padding:"11px 40px 11px 13px",fontSize:15,fontWeight:600,fontFamily:"monospace",background:WA(0.06),border:`1.5px solid ${WA(0.15)}`,borderRadius:10,color:C.label,outline:"none"}}/>
+                    <span style={{position:"absolute",right:11,top:"50%",transform:"translateY(-50%)",color:"#3B82F6",fontWeight:700,fontSize:13}}>%</span>
+                  </div>
+                  {/* Tavan/taban için hazır kısayol — BİST'e özgü, en sık istenen eşik */}
+                  <div style={{display:"flex",gap:6,marginTop:8}}>
+                    {["3","5","10"].map(v=>(
+                      <button key={v} onClick={()=>setDeger(v)} style={{
+                        flex:1,padding:"6px",borderRadius:8,border:`1px solid ${deger===v?"#3B82F6":WA(0.13)}`,
+                        background:deger===v?"rgba(59,130,246,0.12)":"transparent",
+                        color:deger===v?(TEMA==="acik"?"#2E6DA8":"#7DB2FF"):WA(0.55),
+                        fontWeight:700,fontSize:11,cursor:"pointer",fontFamily:"inherit",
+                      }}>%{v}{v==="10"?" (tavan/taban)":""}</button>
+                    ))}
+                  </div>
+                  <p style={{margin:"6px 2px 0",fontSize:10.5,color:WA(0.4)}}>Alarmı kurduğunuz andaki fiyata (₺{fmt2(hisse.fiyat)}) göre hesaplanır.</p>
+                </>
+              )}
+
+              {mod==="kap"&&(
+                <div style={{background:WA(0.04),border:`1px solid ${WA(0.1)}`,borderRadius:12,padding:"13px 14px"}}>
+                  <p style={{margin:0,fontSize:12.5,fontWeight:700,color:C.label}}>Yeni bildirim geldiğinde uyar</p>
+                  <p style={{margin:"7px 0 0",fontSize:11.5,color:WA(0.62),lineHeight:1.6}}>
+                    {hisse.ticker} için Kamuyu Aydınlatma Platformu'nda yeni bir bildirim yayınlandığında
+                    (finansal rapor, özel durum açıklaması, temettü ve bedelsiz gibi hak kullanımları)
+                    bildirim alırsınız.
+                  </p>
+                  <p style={{margin:"9px 0 0",fontSize:10.5,color:WA(0.45),lineHeight:1.55}}>
+                    Fiyat alarmlarından farklı olarak bu bir aboneliktir — bir kez tetiklendikten sonra
+                    kapanmaz, silene kadar izlemeye devam eder. Yalnızca <b>bundan sonra</b> yayınlanan
+                    bildirimler için uyarılırsınız; geçmiş bildirimler gönderilmez.
+                  </p>
+                </div>
+              )}
+
+              {hata&&<p style={{margin:"10px 2px 0",fontSize:11.5,color:C.red,lineHeight:1.5}}>{hata}</p>}
+
+              <div style={{display:"flex",gap:8,marginTop:14}}>
+                <button onClick={onClose} style={{
+                  flex:1,padding:"11px",borderRadius:10,border:`1px solid ${WA(0.15)}`,
+                  background:"transparent",color:WA(0.6),fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:"inherit",
+                }}>Vazgeç</button>
+                <button onClick={gonder} disabled={durum==="gonderiliyor"} style={{
+                  flex:1,padding:"11px",borderRadius:10,border:"none",
+                  background:"#3B82F6",color:"#fff",fontWeight:800,fontSize:13,cursor:"pointer",fontFamily:"inherit",
+                  opacity:durum==="gonderiliyor"?0.7:1,
+                }}>{durum==="gonderiliyor"?"Kuruluyor…":(mod==="kap"?"Aboneliği Kur":"Alarm Kur")}</button>
               </div>
             </div>
           )}
@@ -17886,7 +18134,7 @@ function App(){
             </div>
             <div style={{display:"flex",flexDirection:"column",minWidth:0}}>
               <span style={{fontSize:16,fontWeight:800,letterSpacing:"-0.01em",color:(TEMA==="acik"?"#16222E":"#EAF1FA")}}>Katılım <span style={{background:"linear-gradient(90deg,#1B9E7A,#2CCB9A)",WebkitBackgroundClip:"text",backgroundClip:"text",color:"transparent"}}>Plus</span></span>
-              <span style={{fontSize:9.5,fontWeight:600,color:(TEMA==="acik"?"#2E4256":"rgba(255,255,255,0.62)"),marginTop:1,whiteSpace:"nowrap"}}>{CV("Katılım Finansının Akıllı Asistanı")}</span>
+              <span style={{fontSize:10,fontWeight:600,color:(TEMA==="acik"?"#274762":"rgba(255,255,255,0.72)"),marginTop:1,whiteSpace:"nowrap"}}>{CV("Katılım Finansının Akıllı Asistanı")}</span>
             </div>
           </div>
           {/* Ana gezinme (alt bar sekmelerinin masaüstü karşılığı) */}
@@ -17900,37 +18148,64 @@ function App(){
                   borderLeft:aktif?"3px solid #5B9BD8":"3px solid transparent",
                 }}>
                   <AltBarIcon tip={t.tip} aktif={aktif}/>
-                  <span style={{fontSize:13.5,fontWeight:aktif?700:500,color:aktif?(TEMA==="acik"?"#16222E":"#EAF1FA"):(TEMA==="acik"?"#16222E":"rgba(255,255,255,0.85)")}}>{CV(t.label)}</span>
+                  <span style={{
+                    fontSize:14.5,
+                    fontWeight:aktif?800:600,
+                    letterSpacing:"0.005em",
+                    // 2026-07-30: Önceden pasif öğeler koyu temada
+                    // rgba(255,255,255,0.85), açık temada aynı #16222E ile
+                    // yazılıyordu ve gradyan arka planda siliniyordu. Artık
+                    // iki temada da tam opak renk + daha kalın punto.
+                    color:aktif
+                      ? (TEMA==="acik"?"#0F3B66":"#FFFFFF")
+                      : (TEMA==="acik"?"#1B2C3D":"#E4EDF8"),
+                  }}>{CV(t.label)}</span>
                 </div>
               );
             })}
           </div>
           {/* Hızlı erişim */}
           <div style={{marginTop:18,paddingTop:14,borderTop:`1px solid ${WA(0.07)}`}}>
-            <div style={{fontSize:9.5,fontWeight:800,letterSpacing:1,color:TEMA==="acik"?"#40566C":WA(0.35),padding:"0 12px 8px"}}>{CV("HIZLI ERİŞİM")}</div>
+            {/* 2026-07-30: Başlık 9,5 → 11 punto, harf aralığı 1 → 0,8
+                (büyüyünce 1 fazla dağıtıyordu) ve renk iki temada da
+                belirgin hale getirildi. */}
+            <div style={{fontSize:11,fontWeight:800,letterSpacing:0.8,color:TEMA==="acik"?"#274762":"rgba(255,255,255,0.62)",padding:"0 12px 9px"}}>{CV("HIZLI ERİŞİM")}</div>
             {[
               {key:"getiriKarsilastirma",label:"Getiri Karşılaştırma"},
               {key:"haftalikOzet",label:"Haftalık Piyasa Özeti"},
               {key:"finansalTakvim",label:"Finansal Takvim"},
               {key:"fiyatAlarmlarim",label:"Fiyat Alarmlarım"},
+              // 2026-07-30 eklenenler — masaüstünde yalnızca menü içinden
+              // zor bulunan, sık kullanılan ekranlar.
+              {key:"portfoyum",label:"Portföyüm"},
+              {key:"kiraSertifikasi",label:"Kira Sertifikası İhraçları"},
+              {key:"katilimBankalari",label:"Katılım Bankaları"},
+              {key:"kfkNedir",label:"KFK Nedir?"},
+              {key:"piyasaHaberleri",label:"Piyasa Haberleri"},
               {key:"sozluk",label:"Finans Sözlüğü"},
             ].map(m=>(
               <div key={m.key} className="kp-side-item" onClick={()=>nav(m.key)} style={{
-                display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:10,
+                display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderRadius:10,
                 background:screen===m.key?"rgba(91,155,216,0.14)":"transparent",
               }}>
-                <span style={{width:20,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon k={m.key} size={15}/></span>
-                <span style={{fontSize:12.5,fontWeight:screen===m.key?700:500,color:screen===m.key?(TEMA==="acik"?"#0F3B66":"#DCE9F7"):(TEMA==="acik"?"#16222E":"rgba(255,255,255,0.82)")}}>{CV(m.label)}</span>
+                <span style={{width:20,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon k={m.key} size={16}/></span>
+                <span style={{
+                  fontSize:13.5,
+                  fontWeight:screen===m.key?800:600,
+                  color:screen===m.key
+                    ? (TEMA==="acik"?"#0F3B66":"#FFFFFF")
+                    : (TEMA==="acik"?"#1B2C3D":"#E4EDF8"),
+                }}>{CV(m.label)}</span>
               </div>
             ))}
           </div>
           {/* Alt kısım: ayarlar + telif */}
           <div style={{marginTop:"auto",paddingTop:12,borderTop:`1px solid ${WA(0.07)}`}}>
             <div className="kp-side-item" onClick={()=>nav("ayarlar")} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:10,background:screen==="ayarlar"?"rgba(91,155,216,0.14)":"transparent"}}>
-              <span style={{width:20,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon k="ayarlar" size={15}/></span>
-              <span style={{fontSize:12.5,fontWeight:600,color:screen==="ayarlar"?(TEMA==="acik"?"#0F3B66":"#DCE9F7"):(TEMA==="acik"?"#16222E":"rgba(255,255,255,0.82)")}}>{CV("Ayarlar")}</span>
+              <span style={{width:20,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon k="ayarlar" size={16}/></span>
+              <span style={{fontSize:13.5,fontWeight:screen==="ayarlar"?800:600,color:screen==="ayarlar"?(TEMA==="acik"?"#0F3B66":"#FFFFFF"):(TEMA==="acik"?"#1B2C3D":"#E4EDF8")}}>{CV("Ayarlar")}</span>
             </div>
-            <div style={{fontSize:9.5,color:WA(0.4),padding:"10px 12px 0",lineHeight:1.5}}>© {new Date().getFullYear()} Katılım Plus</div>
+            <div style={{fontSize:10,color:TEMA==="acik"?"#5A7189":"rgba(255,255,255,0.45)",padding:"10px 12px 0",lineHeight:1.5}}>© {new Date().getFullYear()} Katılım Plus</div>
           </div>
         </div>
       )}
