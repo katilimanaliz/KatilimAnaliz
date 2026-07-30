@@ -630,22 +630,39 @@ function urdlAyristir(XLSX, wb) {
   return { bulunan, kesif, tarih };
 }
 
-// TCMB WCM sayfası çoğu zaman dosyanın kendisi değil, dosyaya bağlantı veren
-// bir HTML kabuğu döndürüyor (canlıda doğrulandı: "XLS yerine HTML dondu").
-// Bu fonksiyon HTML içinden gerçek XLS bağlantısını çıkarır.
-function urdlHtmldenXlsLinki(html) {
-  const linkler = [];
-  const re = /href\s*=\s*["']([^"']+)["']/gi;
+// TCMB WCM sayfası dosyanın kendisi değil, HTML kabuk döndürüyor. İlk
+// sürüm kabuktan tek link seçiyordu ve CANLIDA KENDİNE REFERANS YAKALADI:
+// "/…/Haftalik/XLS" ile biten navigasyon linki "xls" desenine uyduğu için
+// sayfa kendi kendini indirdi ("Ikinci istek de HTML dondu"). Artık:
+//   1) kendine/ayni-sayfaya referanslar eleniyor,
+//   2) TEK aday yerine öncelik sıralı ADAY LİSTESİ dönülüyor ve urdlOku
+//      bunları sırayla deneyip binary döneni kabul ediyor.
+// Öncelik: gerçek .xls/.xlsx uzantısı > WCM dosya deseni (MOD=AJPERES,
+// genelde /connect/<uuid>/ altında) > diğer "xls" geçenler.
+function urdlHtmldenXlsAdaylari(html, kendiUrl) {
+  const ham = [];
+  const re = /(?:href|src)\s*=\s*["']([^"']+)["']/gi;
   let m;
-  while ((m = re.exec(html)) !== null) linkler.push(m[1]);
-  // Öncelik 1: adresinde "xls" geçen bağlantı (uzantı ya da yol parçası)
-  // Öncelik 2: TCMB WCM dosya deseni (MOD=AJPERES) — uzantısız dosya linki
-  const aday =
-    linkler.find((h) => /xls/i.test(h)) ||
-    linkler.find((h) => /MOD=AJPERES/i.test(h));
-  if (!aday) return null;
-  if (/^https?:\/\//i.test(aday)) return aday;
-  return "https://www.tcmb.gov.tr" + (aday.startsWith("/") ? "" : "/") + aday;
+  while ((m = re.exec(html)) !== null) ham.push(m[1]);
+  const tam = (h) => /^https?:\/\//i.test(h)
+    ? h
+    : "https://www.tcmb.gov.tr" + (h.startsWith("/") ? "" : "/") + h;
+  const kendiNorm = decodeURIComponent(String(kendiUrl || "")).toLocaleLowerCase();
+  const benzersiz = [];
+  for (const h of ham) {
+    const t = tam(h);
+    const tNorm = decodeURIComponent(t).toLocaleLowerCase();
+    if (tNorm === kendiNorm) continue;                    // kendine referans
+    if (tNorm.endsWith("/xls")) continue;                 // ayni tur kabuk sayfalar
+    if (!/xls|MOD=AJPERES/i.test(t)) continue;
+    if (!benzersiz.includes(t)) benzersiz.push(t);
+  }
+  const puan = (t) =>
+    /\.xlsx?([?#]|$)/i.test(t) ? 0 :                      // gerçek dosya uzantısı
+    /MOD=AJPERES/i.test(t) && /\/connect\//i.test(t) ? 1 : // WCM dosya deseni
+    2;
+  benzersiz.sort((x, y) => puan(x) - puan(y));
+  return benzersiz.slice(0, 5);
 }
 
 // URDL verisini Redis-öncelikli getirir. Her adım kendi try/catch'inde:
@@ -666,22 +683,29 @@ async function urdlOku(teshis) {
     let xlsUrl = URDL_XLS_URL;
     // HTML dönerse (dosya yerine kabuk sayfa — canlıda görülen durum):
     // içinden gerçek XLS bağlantısını çıkar ve İKİNCİ istekle dosyayı indir.
-    if (buf.slice(0, 300).toString("utf8").toLocaleLowerCase().includes("<html")) {
-      const html = buf.toString("utf8");
-      const link = urdlHtmldenXlsLinki(html);
-      if (!link) {
-        teshis.urdl = { hata: "HTML dondu ve icinde XLS baglantisi bulunamadi", ilk300: html.slice(0, 300) };
+    const htmlMi = (b) => b.slice(0, 300).toString("utf8").toLocaleLowerCase().includes("<html");
+    if (htmlMi(buf)) {
+      const adaylar = urdlHtmldenXlsAdaylari(buf.toString("utf8"), URDL_XLS_URL);
+      if (adaylar.length === 0) {
+        teshis.urdl = { hata: "HTML dondu ve icinde XLS baglantisi bulunamadi" };
         return null;
       }
-      xlsUrl = link;
-      const r2 = await fetch(link, {
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; KatilimPlus/1.0)", Accept: "*/*" },
-        redirect: "follow",
-      });
-      if (!r2.ok) { teshis.urdl = { hata: `XLS baglantisi HTTP ${r2.status}`, xlsUrl: link }; return null; }
-      buf = Buffer.from(await r2.arrayBuffer());
-      if (buf.slice(0, 300).toString("utf8").toLocaleLowerCase().includes("<html")) {
-        teshis.urdl = { hata: "Ikinci istek de HTML dondu", xlsUrl: link };
+      const denenen = [];
+      let bulundu = false;
+      for (const link of adaylar) {
+        try {
+          const r2 = await fetch(link, {
+            headers: { "User-Agent": "Mozilla/5.0 (compatible; KatilimPlus/1.0)", Accept: "*/*" },
+            redirect: "follow",
+          });
+          if (!r2.ok) { denenen.push(`${link} → HTTP ${r2.status}`); continue; }
+          const b2buf = Buffer.from(await r2.arrayBuffer());
+          if (htmlMi(b2buf)) { denenen.push(`${link} → HTML`); continue; }
+          buf = b2buf; xlsUrl = link; bulundu = true; break;
+        } catch (e) { denenen.push(`${link} → ${e.message}`); }
+      }
+      if (!bulundu) {
+        teshis.urdl = { hata: "Hicbir aday binary dondurmedi", denenen };
         return null;
       }
     }
