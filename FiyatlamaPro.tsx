@@ -16314,6 +16314,9 @@ function PortfoyWidgetSatir({k, gizli, sonSatirMi, onTikla, onSil, acik, onAcikD
   const suruklemedeMi = useRef(false);
   const uzunBasmaZamanlayici = useRef<any>(null);
   const uzunBasmaOlduRef = useRef(false);
+  // Dokunmatik cihazlarda tarayıcı dokunuşu fare olayı olarak da taklit
+  // edebiliyor; bir kez touch görüldüyse mouse dalı tamamen devre dışı.
+  const dokunmaGorulduRef = useRef(false);
 
   useEffect(()=>{ setDx(acik ? -PORTFOY_SATIR_SIL_GENISLIK : 0); }, [acik]);
   useEffect(()=>()=>{ if (uzunBasmaZamanlayici.current) clearTimeout(uzunBasmaZamanlayici.current); }, []);
@@ -16334,7 +16337,36 @@ function PortfoyWidgetSatir({k, gizli, sonSatirMi, onTikla, onSil, acik, onAcikD
         <Trash2 size={18} color="#fff"/>
       </div>
       <div
+        // 2026-07-31: Masaüstü desteği. onMouseDown, dokunmatikteki
+        // onTouchStart ile aynı "basılı tutma" sayacını başlatır; taşıma
+        // moduna geçince üst bileşendeki mousemove/mouseup devralır.
+        // Dokunmatik cihazlarda tarayıcı dokunuşu ayrıca fare olayı olarak
+        // taklit edebildiği için, touch başladıysa mouse dalı atlanıyor
+        // (dokunmaGorulduRef) — aksi halde sayaç iki kez kurulurdu.
+        onMouseDown={(e)=>{
+          if (dokunmaGorulduRef.current) return;
+          if (e.button !== 0) return;                 // yalnızca sol tuş
+          basXRef.current=e.clientX; basYRef.current=e.clientY;
+          suruklemeBasladiRef.current=false;          // masaüstünde yatay swipe yok
+          suruklemedeMi.current=false;
+          uzunBasmaOlduRef.current=false;
+          if (onUzunBasma && !acik) {
+            zamanlayiciIptal();
+            uzunBasmaZamanlayici.current = setTimeout(()=>{
+              uzunBasmaOlduRef.current = true;
+              setDx(0);
+              onUzunBasma(k.id, basYRef.current);
+            }, PORTFOY_UZUN_BASMA_MS);
+          }
+        }}
+        onMouseMove={(e)=>{
+          if (uzunBasmaOlduRef.current) return;
+          if (Math.abs(e.clientX-basXRef.current) > 8 || Math.abs(e.clientY-basYRef.current) > 8) zamanlayiciIptal();
+        }}
+        onMouseUp={()=>{ if (!uzunBasmaOlduRef.current) zamanlayiciIptal(); }}
+        onMouseLeave={()=>{ if (!uzunBasmaOlduRef.current) zamanlayiciIptal(); }}
         onTouchStart={(e)=>{
+          dokunmaGorulduRef.current = true;
           const t = e.touches[0];
           basXRef.current=t.clientX; basYRef.current=t.clientY;
           suruklemeBasladiRef.current=true; suruklemedeMi.current=false;
@@ -16454,6 +16486,8 @@ function PortfoyWidget({liste, gizli, onGizliToggle, onDetay, onEkle, onSil, onG
     document.removeEventListener("touchmove", d.hareket as any);
     document.removeEventListener("touchend", d.bitir);
     document.removeEventListener("touchcancel", d.bitir);
+    document.removeEventListener("mousemove", d.hareket as any);
+    document.removeEventListener("mouseup", d.bitir);
     dinleyicilerRef.current = null;
   };
 
@@ -16524,10 +16558,19 @@ function PortfoyWidget({liste, gizli, onGizliToggle, onDetay, onEkle, onSil, onG
     setSurukleId(id);
 
     const merkezler = kutular.map(kt=>kt.ust + kt.yuk/2);
-    const hareket = (e:TouchEvent) => {
-      if (!e.touches || e.touches.length===0) return;
-      e.preventDefault();
-      const dy = e.touches[0].clientY - s.basY;
+    // 2026-07-31: Masaüstünde sürükleme ÇALIŞMIYORDU — mekanizma yalnızca
+    // touch olaylarına bağlıydı, fare olayları hiç dinlenmiyordu. Artık
+    // hareket/bitir hem TouchEvent hem MouseEvent kabul ediyor; aşağıda
+    // her iki olay ailesi de document'e bağlanıyor.
+    const olayY = (e:any):number|null => {
+      if (e.touches) return e.touches.length ? e.touches[0].clientY : null;
+      return typeof e.clientY === "number" ? e.clientY : null;
+    };
+    const hareket = (e:any) => {
+      const y = olayY(e);
+      if (y == null) return;
+      if (e.cancelable) e.preventDefault();
+      const dy = y - s.basY;
       setSurukleDy(dy);
       const merkez = merkezler[s.baslangicIndex] + dy;
       let hedef = s.baslangicIndex;
@@ -16554,6 +16597,8 @@ function PortfoyWidget({liste, gizli, onGizliToggle, onDetay, onEkle, onSil, onG
     document.addEventListener("touchmove", hareket, {passive:false});
     document.addEventListener("touchend", bitir);
     document.addEventListener("touchcancel", bitir);
+    document.addEventListener("mousemove", hareket);
+    document.addEventListener("mouseup", bitir);
   };
 
   // Bileşen taşıma sürerken sökülürse (ör. kullanıcı başka ekrana geçerse)
@@ -18596,7 +18641,13 @@ function App(){
             {/* Favorilerim */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
               <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Favori Hesaplamalarım")}</span>
-              <span onClick={()=>setFavoriDuzenleAcik(true)} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>Düzenle</span>
+              {/* 2026-07-31: "Tümü ›" eklendi — Piyasa Özeti başlığıyla aynı
+                  desen. Hesaplama araçları menüsüne gider. Düzenle rengi de
+                  oradaki gibi soluk yapıldı ki asıl eylem (Tümü) öne çıksın. */}
+              <div style={{display:"flex",alignItems:"center",gap:12}}>
+                <span onClick={()=>setFavoriDuzenleAcik(true)} style={{fontSize:11,fontWeight:700,color:WA(0.4),cursor:"pointer"}}>Düzenle</span>
+                <span onClick={()=>nav("hesaplaMenu")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
+              </div>
             </div>
             <div className="piyasa-scroll" style={{display:"flex",overflowX:"auto",gap:8,marginBottom:26,scrollSnapType:"x mandatory",WebkitOverflowScrolling:"touch",paddingBottom:2}}>
               {(()=>{
