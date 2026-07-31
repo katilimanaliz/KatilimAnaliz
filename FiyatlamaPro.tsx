@@ -16317,6 +16317,7 @@ function PortfoyWidgetSatir({k, gizli, sonSatirMi, onTikla, onSil, acik, onAcikD
   // Dokunmatik cihazlarda tarayıcı dokunuşu fare olayı olarak da taklit
   // edebiliyor; bir kez touch görüldüyse mouse dalı tamamen devre dışı.
   const dokunmaGorulduRef = useRef(false);
+  const fareBasiliRef = useRef(false);   // sol tuş basılı mı (masaüstü sürükleme)
 
   useEffect(()=>{ setDx(acik ? -PORTFOY_SATIR_SIL_GENISLIK : 0); }, [acik]);
   useEffect(()=>()=>{ if (uzunBasmaZamanlayici.current) clearTimeout(uzunBasmaZamanlayici.current); }, []);
@@ -16343,16 +16344,30 @@ function PortfoyWidgetSatir({k, gizli, sonSatirMi, onTikla, onSil, acik, onAcikD
         // Dokunmatik cihazlarda tarayıcı dokunuşu ayrıca fare olayı olarak
         // taklit edebildiği için, touch başladıysa mouse dalı atlanıyor
         // (dokunmaGorulduRef) — aksi halde sayaç iki kez kurulurdu.
+        // ── MASAÜSTÜ SÜRÜKLEME (2026-07-31, ikinci tur) ─────────────────
+        // İlk denemede fare olayları eklendi ama yine çalışmadı. İki sebep:
+        //  1) preventDefault yoktu → tarayıcı metin seçimi başlatıp sonraki
+        //     mousemove olaylarını yutuyordu,
+        //  2) masaüstünde de 420 ms basılı tutma bekleniyordu. Oysa uzun
+        //     basma jesti DOKUNMATİĞE özgü bir zorunluluk: parmakla sürükleme
+        //     sayfa kaydırmasıyla çakıştığı için ayırt edici bir bekleme
+        //     gerekiyor. Farede böyle bir çakışma YOK — birkaç piksel dikey
+        //     hareket niyeti zaten belli ediyor.
+        // Artık masaüstünde 5 px dikey hareket taşımayı ANINDA başlatıyor;
+        // basılı tutma da alternatif olarak korunuyor.
         onMouseDown={(e)=>{
           if (dokunmaGorulduRef.current) return;
           if (e.button !== 0) return;                 // yalnızca sol tuş
+          e.preventDefault();                         // metin seçimini engelle
           basXRef.current=e.clientX; basYRef.current=e.clientY;
+          fareBasiliRef.current = true;
           suruklemeBasladiRef.current=false;          // masaüstünde yatay swipe yok
           suruklemedeMi.current=false;
           uzunBasmaOlduRef.current=false;
           if (onUzunBasma && !acik) {
             zamanlayiciIptal();
             uzunBasmaZamanlayici.current = setTimeout(()=>{
+              if (!fareBasiliRef.current) return;     // tuş bırakılmışsa açma
               uzunBasmaOlduRef.current = true;
               setDx(0);
               onUzunBasma(k.id, basYRef.current);
@@ -16360,11 +16375,38 @@ function PortfoyWidgetSatir({k, gizli, sonSatirMi, onTikla, onSil, acik, onAcikD
           }
         }}
         onMouseMove={(e)=>{
-          if (uzunBasmaOlduRef.current) return;
-          if (Math.abs(e.clientX-basXRef.current) > 8 || Math.abs(e.clientY-basYRef.current) > 8) zamanlayiciIptal();
+          if (dokunmaGorulduRef.current || uzunBasmaOlduRef.current) return;
+          // e.buttons===1: sol tuş GERÇEKTEN basılı. Sürükleme satır dışında
+          // bittiğinde row'un onMouseUp'ı çalışmaz ve fareBasiliRef açık
+          // kalabilir; bu kontrol o durumda yanlış tetiklenmeyi önler.
+          if (e.buttons !== 1) { fareBasiliRef.current = false; return; }
+          if (!fareBasiliRef.current || !onUzunBasma || acik) return;
+          if (Math.abs(e.clientY - basYRef.current) > 5) {
+            zamanlayiciIptal();
+            uzunBasmaOlduRef.current = true;
+            suruklemedeMi.current = true;
+            setDx(0);
+            onUzunBasma(k.id, basYRef.current);
+          }
         }}
-        onMouseUp={()=>{ if (!uzunBasmaOlduRef.current) zamanlayiciIptal(); }}
-        onMouseLeave={()=>{ if (!uzunBasmaOlduRef.current) zamanlayiciIptal(); }}
+        onMouseUp={()=>{ fareBasiliRef.current=false; if (!uzunBasmaOlduRef.current) zamanlayiciIptal(); }}
+        onMouseLeave={(e)=>{
+          if (uzunBasmaOlduRef.current) return;
+          if (e.buttons !== 1) { fareBasiliRef.current=false; zamanlayiciIptal(); return; }
+          // Tuş hâlâ basılıyken satırdan çıkıldıysa bu bir sürüklemedir —
+          // iptal etmek yerine taşımayı başlat (hızlı fare hareketinde
+          // mousemove eşiği yakalanamadan mouseleave gelebiliyor).
+          if (fareBasiliRef.current && onUzunBasma && !acik) {
+            zamanlayiciIptal();
+            uzunBasmaOlduRef.current = true;
+            suruklemedeMi.current = true;
+            setDx(0);
+            onUzunBasma(k.id, basYRef.current);
+            return;
+          }
+          fareBasiliRef.current=false;
+          zamanlayiciIptal();
+        }}
         onTouchStart={(e)=>{
           dokunmaGorulduRef.current = true;
           const t = e.touches[0];
@@ -19517,9 +19559,12 @@ function App(){
                       sparkline dahil) — tıklanınca aynı grafik ekranı + alarm kurma açılır.
                       DÜZELTME (2026-07-23): Önceden alt kategorilerden bağımsız HER
                       sekmede tekrar tekrar görünüyordu (kullanıcı bildirdi, gereksiz
-                      tekrar). Artık yalnızca "Risk Göstergeleri" sekmesinde gösteriliyor
-                      — VIX/DXY zaten kavramsal olarak bir risk/duyarlılık göstergesi. */}
-                  {piyasaGostergeAltSekme==="risk"&&(<>
+                      tekrar). Yalnızca tek bir sekmede gösterilmeye başlandı.
+                      TAŞIMA (2026-07-31): "Risk Göstergeleri" sekmesi "MB Rezervleri"
+                      olarak yeniden adlandırılınca VIX/DXY orada yersiz kaldı — o sekme
+                      artık yalnızca TCMB rezerv kalemlerini içeriyor. Küresel piyasa
+                      duyarlılığı göstergeleri "Ekonomik Aktivite" sekmesine taşındı. */}
+                  {piyasaGostergeAltSekme==="aktivite"&&(<>
                     <p style={{margin:"16px 0 6px 4px",fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>Piyasa Duyarlılığı</p>
                     <div>
                       {(PIYASA_TABLO_VERISI["gostergeler"]||[]).map((r:any,sira:number)=>(
