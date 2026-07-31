@@ -612,6 +612,8 @@ function urdlSatirdakiIlkSayi(hucreler) {
 // dayanır, konum araması sessizce yanlış değer okurdu.
 function urdlAyristir(XLSX, wb) {
   const bulunan = {};
+  const eslesen = {};      // eşleşen satırların ham hücreleri (teşhis için)
+  const basliklar = [];    // ilk satırlar — sütun düzenini görmek için
   const kesif = [];
   let tarih = null;
   for (const sayfaAdi of wb.SheetNames) {
@@ -619,23 +621,31 @@ function urdlAyristir(XLSX, wb) {
     for (let i = 0; i < rows.length; i++) {
       const metin = urdlNorm(rows[i].filter((h) => typeof h === "string").join(" "));
       if (kesif.length < 60 && metin) kesif.push(`${sayfaAdi}#${i}: ${metin.slice(0, 110)}`);
+      if (i < 8 && basliklar.length < 8) basliklar.push(rows[i].slice(0, 12));
 
       if (!tarih) {
         const m = (rows[i] || []).map((h) => String(h ?? "")).join(" ").match(/(\d{2})[.\/](\d{2})[.\/](\d{4})/);
         if (m) tarih = `${m[1]}-${m[2]}-${m[3]}`;
       }
+      // 2026-07-31: Eşleşen satırın TÜM hücreleri teşhise yazılıyor. Canlıda
+      // swap 17,67 çıktı ama referans 12,8 — hangi sütunun okunduğunu görmeden
+      // düzeltmek tahmin olurdu. Sütun başlıkları da (ilk 3 satır) kaydediliyor.
+      const kaydet = (ad, deger) => {
+        bulunan[ad] = deger;
+        eslesen[ad] = { satir: i, sayfa: sayfaAdi, hucreler: rows[i].slice(0, 12) };
+      };
       if (bulunan.resmiRezerv == null && metin.includes("resmi rezerv varlik")) {
-        bulunan.resmiRezerv = urdlSatirdakiIlkSayi(rows[i]);
+        kaydet("resmiRezerv", urdlSatirdakiIlkSayi(rows[i]));
       }
       if (bulunan.swapVadeli == null && metin.includes("yurt ici para karsiliginda") && metin.includes("forward")) {
-        bulunan.swapVadeli = urdlSatirdakiIlkSayi(rows[i]);
+        kaydet("swapVadeli", urdlSatirdakiIlkSayi(rows[i]));
       }
       if (bulunan.netRezerv == null && metin.includes("net uluslararasi rezerv")) {
-        bulunan.netRezerv = urdlSatirdakiIlkSayi(rows[i]);
+        kaydet("netRezerv", urdlSatirdakiIlkSayi(rows[i]));
       }
     }
   }
-  return { bulunan, kesif, tarih };
+  return { bulunan, eslesen, basliklar, kesif, tarih };
 }
 
 // TCMB WCM sayfası dosyanın kendisi değil, HTML kabuk döndürüyor. İlk
@@ -804,7 +814,7 @@ async function urdlOku(teshis) {
       // xlsxKendisi ise okunacak=buf kalır, SheetJS doğrudan okur.
     }
     const wb = XLSX.read(okunacak, { type: "buffer" });
-    const { bulunan, kesif, tarih } = urdlAyristir(XLSX, wb);
+    const { bulunan, eslesen, basliklar, kesif, tarih } = urdlAyristir(XLSX, wb);
     const ozet = { tarih, resmiRezerv: bulunan.resmiRezerv ?? null, swapVadeli: bulunan.swapVadeli ?? null, netRezerv: bulunan.netRezerv ?? null };
     const kayit = { bulunan, tarih, ozet, ts: Date.now() };
     // Hiçbir kalem bulunamadıysa keşif dökümünü teşhise koy — ayrıştırıcıyı
@@ -814,7 +824,7 @@ async function urdlOku(teshis) {
       return null;
     }
     try { await redis.set(KV_URDL_KEY, kayit, { ex: URDL_TTL }); } catch {}
-    teshis.urdl = { kaynak: "xls", xlsUrl, ...ozet, sayfalar: wb.SheetNames };
+    teshis.urdl = { kaynak: "xls", xlsUrl, ...ozet, sayfalar: wb.SheetNames, eslesen, basliklar };
     return kayit;
   } catch (e) {
     teshis.urdl = { hata: e.message };
@@ -1730,7 +1740,12 @@ export default async function handler(req,res){
     {
       const urdl = await urdlOku(teshis);
       const b = urdl?.bulunan;
-      if (b?.swapVadeli != null) {
+      // ⚠️ TARİH ŞARTI (2026-07-31): Tarihi çıkarılamayan XLS verisi
+      // YAYIMLANMAZ. Bugün üç aylık yanlış rezerv rakamının fark edilmemesinin
+      // sebebi tam olarak ekranda tarih olmamasıydı. Ayrıca swap değeri
+      // referansla (Babuşcu 24.07: 12,8) doğrulanana kadar bu kapı kapalı
+      // kalıyor — teşhisteki "eslesen" alanı hangi sütunun okunduğunu gösterir.
+      if (b?.swapVadeli != null && urdl?.tarih) {
         const swapMutlak = Math.abs(b.swapVadeli);
         sonuclar["URDL_SWAP"] = { deger: swapMutlak, tarih: urdl.tarih };
         // Net rezerv önceliği: XLS'teki RESMİ rakam varsa o; yoksa Stand-By
