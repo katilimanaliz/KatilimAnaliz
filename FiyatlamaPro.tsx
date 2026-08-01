@@ -186,7 +186,7 @@ const ICON_MAP: Record<string, any> = {
   // kartlar ikonsuz görünüyordu. Zaten import edilmiş ikonlar kullanıldı,
   // yeni import riski alınmadı.
   katilimSektoru: Building2,
-  ekonomiSozluk: PieChart,
+  ekonomiSozluk: ScrollText,   // sözlük/terim listesi; BookOpen katılım sözlüğünde kullanılıyor
   kfkNedir: ShieldCheck,
   kiraSertifikasi: FileText,
   sozluk: BookOpen,
@@ -10222,11 +10222,16 @@ function EkonomiSozluk(){
         const ad=esNormalize(t.t), tanim=esNormalize(t.a), en=esNormalize(t.en||"");
         const havuz=`${ad} ${tanim} ${en}`;
         if(!kelimeler.every(k=>havuz.includes(k))) return null;
-        // Sıralama: terim adında geçenler üstte, adın başında geçenler en üstte
+        // Sıralama. TAM EŞLEŞME en üstte: kullanıcı "enflasyon" yazınca
+        // "Enflasyon Beklentisi" değil doğrudan "Enflasyon" gelmeli.
         let puan=0;
+        const sorgu=kelimeler.join(" ");
+        if(ad===sorgu) puan+=100;              // birebir aynı
+        if(ad.startsWith(sorgu)) puan+=20;     // sorguyla başlıyor
         if(kelimeler.every(k=>ad.includes(k))) puan+=10;
-        if(ad.startsWith(kelimeler[0])) puan+=5;
         if(kelimeler.every(k=>en.includes(k))) puan+=3;
+        // Kısa terim adı önde: "Faiz" > "Faiz Dışı Denge"
+        puan += Math.max(0, 6 - Math.floor(ad.length/8));
         return {t,puan};
       })
       .filter(Boolean) as {t:any,puan:number}[];
@@ -10248,7 +10253,9 @@ function EkonomiSozluk(){
       <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:12,
                    background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,
                    borderRadius:14,padding:"0 13px"}}>
-        <Icon k="sozluk" size={16} color={WA(0.4)}/>
+        <svg width="15" height="15" viewBox="0 0 24 24" style={{flexShrink:0,stroke:WA(0.4),fill:"none",strokeWidth:2,strokeLinecap:"round"} as any}>
+          <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
+        </svg>
         <input
           type="search" inputMode="search" enterKeyHint="search"
           autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
@@ -20821,7 +20828,7 @@ function App(){
               {key:"vadeTakibi", icon:"⏰", label:"Vade Takip & Hatırlatma Ajandam", desc:"Finansman ve ödeme vadelerini takip et, hatırlatma al", renk:C.green, bg:"rgba(74,222,128,0.15)"},
               {key:"katilimBankalari", icon:"🏛️", label:"Katılım Bankaları", desc:"Türkiye'deki katılım bankaları, kuruluş tarihleri ve bilgileri", renk:C.blue, bg:"rgba(91,155,216,0.15)"},
               {key:"katilimSektoru", icon:"🏦", label:"Katılım Bankacılığı Sektörü", desc:"Sektör payı, fon büyüklükleri ve kârlılık — BDDK resmî verisiyle", renk:"#5B9BD8", bg:"rgba(91,155,216,0.15)"},
-              {key:"ekonomiSozluk", icon:"📚", label:"Ekonomi Sözlüğü", desc:"152 ekonomi ve finans terimi — enflasyondan rezervlere, sade tanımlarla", renk:"#A78BFA", bg:"rgba(167,139,250,0.15)"},
+              {key:"ekonomiSozluk", icon:"📚", label:"Ekonomi Sözlüğü", desc:"196 ekonomi ve finans terimi — enflasyondan rezervlere, sade tanımlarla", renk:"#A78BFA", bg:"rgba(167,139,250,0.15)"},
               {key:"kfkNedir", icon:"🤝", label:"KFK Nedir?", desc:"Teminat yetersizliğinde işletmenize kefalet desteği — Katılım Finans Kefalet A.Ş.", renk:"#2CCB9A", bg:"rgba(44,203,154,0.15)"},
               {key:"kiraSertifikasi", icon:"📜", label:"Kira Sertifikası İhraçları", desc:"Türkiye'de sukuk ihraçları — SPK resmî verisiyle tür ve yıl bazında", renk:"#F5A623", bg:"rgba(245,166,35,0.15)"},
               {key:"sozluk",     icon:"📖", label:"Katılım Bankacılığı Sözlüğü",     desc:"Terim ve tanımları hızlıca ara", renk:"#60A5FA", bg:"rgba(96,165,250,0.15)"},
