@@ -9333,7 +9333,16 @@ function HaftalikPiyasaOzeti(){
   const donemBas=fmtTarih(gosterilen?.donem?.ilkTarih);
   const donemSon=fmtTarih(gosterilen?.donem?.sonTarih);
 
+  // 2026-07-31: Basamak sayısı büyüklüğe göre değişiyordu (1000+ için 0,
+  // 100+ için 2, altı için 4) — aynı tabloda "13.775" ile "1,1395" yan yana
+  // gelince okunması zorlaşıyordu. Kullanıcı isteğiyle her satır 2 haneye
+  // sabitlendi. Grafik etiketlerinde (fmtFiyatKisa) eski davranış korunuyor;
+  // orada dar alanda tam sayı daha okunaklı.
   const fmtFiyat=(v:number|null)=>{
+    if(v==null) return "—";
+    return v.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2});
+  };
+  const fmtFiyatKisa=(v:number|null)=>{
     if(v==null) return "—";
     const hane=v>=1000?0:(v>=100?2:4);
     return v.toLocaleString("tr-TR",{minimumFractionDigits:hane,maximumFractionDigits:hane});
@@ -9482,7 +9491,11 @@ function HaftalikPiyasaOzeti(){
               return(
                 <div key={g.kod} style={{display:"flex",alignItems:"center",padding:"11px 14px",borderBottom:i<satirlar.length-1?`1px solid ${WA(0.05)}`:"none"}}>
                   <span style={{flex:1,minWidth:0,fontSize:12.5,fontWeight:700,color:C.soft,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{g.ad}</span>
-                  <span style={{width:82,textAlign:"right",fontSize:12,fontFamily:"monospace",color:WA(0.55)}}>{fmtFiyat(g.ilk)}</span>
+                  {/* 2026-07-31: Başlangıç sütunu WA(0.55) ile çok soluktu,
+                      açık temada neredeyse okunmuyordu. Artık bitiş sütunuyla
+                      aynı punto ve kalınlıkta; yalnızca renk bir tık soluk
+                      kalıyor ki hangisinin güncel değer olduğu ayırt edilsin. */}
+                  <span style={{width:82,textAlign:"right",fontSize:12,fontFamily:"monospace",fontWeight:700,color:g.ilk!=null?(TEMA==="acik"?"#3D5771":"rgba(255,255,255,0.72)"):WA(0.35)}}>{fmtFiyat(g.ilk)}</span>
                   <span style={{width:82,textAlign:"right",fontSize:12,fontFamily:"monospace",fontWeight:700,color:g.son!=null?(TEMA==="acik"?C.label:"#fff"):WA(0.35)}}>{fmtFiyat(g.son)}</span>
                   <span style={{width:74,textAlign:"right",fontSize:12,fontWeight:800,color:poz?C.green:C.red}}>
                     {poz?"▲":"▼"} %{Math.abs(g.getiri).toFixed(2).replace(".",",")}
@@ -9515,7 +9528,7 @@ function HaftalikPiyasaOzeti(){
                       return (
                         <g key={i}>
                           <circle cx={x} cy={y} r={2.5} fill={C.blue}/>
-                          <text x={x} y={y-8} fontSize={9} fontWeight={700} textAnchor="middle" fill={WA(0.65)}>{fmtFiyat(p.deger as number)}</text>
+                          <text x={x} y={y-8} fontSize={9} fontWeight={700} textAnchor="middle" fill={WA(0.65)}>{fmtFiyatKisa(p.deger as number)}</text>
                         </g>
                       );
                     })}

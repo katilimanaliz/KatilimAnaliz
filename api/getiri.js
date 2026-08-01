@@ -79,6 +79,47 @@ async function yahooGetiri(sembol, range, p1, p2) {
 
 const yzd = (v) => (v == null ? null : Math.round(v * 10000) / 100);
 
+// ── BRENT: Alpha Vantage (2026-08-01) ─────────────────────────────────────
+// 23 Temmuz'da Yahoo'nun "BZ=F" sembolünün ICE'nin likit Brent kontratı DEĞİL,
+// NYMEX'te işlem gören düşük hacimli bir türev olduğu tespit edilmiş ve hem
+// ana ekran (piyasa-fiyatlar.js) hem Emtia sekmesi (gecmis.js) Alpha
+// Vantage'a geçirilmişti — ama BU DOSYA ATLANMIŞ. Sonuç: aynı uygulamada
+// iki farklı Brent fiyatı (ana sayfa 91,82 / haftalık özet 90,12).
+// Alpha Vantage verisi 2-3 gün gecikmeli olabildiği için pencereyi tam
+// dolduramazsa Yahoo'ya düşülüyor — eksik göstermektense yaklaşık göster.
+async function alphaVantageBrent(p1, p2) {
+  const anahtar = process.env.ALPHA_VANTAGE_KEY;
+  if (!anahtar) return null;
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), 6000);
+  try {
+    const r = await fetch(
+      `https://www.alphavantage.co/query?function=BRENT&interval=daily&apikey=${anahtar}`,
+      { signal: ac.signal }
+    );
+    clearTimeout(t);
+    if (!r.ok) return null;
+    const j = await r.json();
+    const ham = Array.isArray(j?.data) ? j.data : [];
+    // Alpha Vantage en yeniden eskiye sıralı verir; pencereye düşenleri al.
+    const noktalar = ham
+      .map((d) => ({ ts: Math.floor(new Date(d.date + "T00:00:00Z").getTime() / 1000), f: parseFloat(d.value) }))
+      .filter((d) => isFinite(d.f) && d.f > 0 && d.ts >= p1 && d.ts <= p2)
+      .sort((a, b) => a.ts - b.ts);
+    if (noktalar.length < 2) return null;
+    const ilk = noktalar[0], son = noktalar[noktalar.length - 1];
+    return {
+      getiri: (son.f - ilk.f) / ilk.f,
+      ad: "Brent Petrol",
+      ilk: ilk.f, son: son.f,
+      ilkTs: ilk.ts, sonTs: son.ts,
+    };
+  } catch {
+    clearTimeout(t);
+    return null;
+  }
+}
+
 // Ana enstrüman setini verilen aralık (veya sabit p1/p2 penceresi) için hesaplar.
 // genis=true → haftalık özet için ek küresel enstrümanlar da dahil edilir.
 async function hesaplaGetiriler(range, ekstraSemboller = [], p1, p2, genis = false) {
@@ -89,7 +130,11 @@ async function hesaplaGetiriler(range, ekstraSemboller = [], p1, p2, genis = fal
     yahooGetiri("SI=F", range, p1, p2),
     yahooGetiri("XU100.IS", range, p1, p2),
     yahooGetiri("XK100.IS", range, p1, p2),
-    genis ? yahooGetiri("BZ=F", range, p1, p2) : Promise.resolve(null),
+    genis
+      ? (p1 && p2
+          ? alphaVantageBrent(p1, p2).then((av) => av || yahooGetiri("BZ=F", range, p1, p2))
+          : yahooGetiri("BZ=F", range, p1, p2))
+      : Promise.resolve(null),
     genis ? yahooGetiri("EURUSD=X", range, p1, p2) : Promise.resolve(null),
     genis ? yahooGetiri("^GSPC", range, p1, p2) : Promise.resolve(null),
     ...ekstraSemboller.map((s) => yahooGetiri(s, range, p1, p2)),
@@ -137,7 +182,13 @@ async function hesaplaGetiriler(range, ekstraSemboller = [], p1, p2, genis = fal
     son: ekstraSonuclar[i]?.son ?? null,
   }));
 
-  const ref = usd || xu100 || eur;
+  // Dönem tarihleri ÖNCE BIST'ten alınıyor (2026-08-01 düzeltmesi).
+  // Önceden referans USD/TRY idi; forex 7/24 işlem gördüğü için Yahoo
+  // cumartesi/pazar damgalı mum da döndürebiliyor ve başlık "1 Ağustos"
+  // gibi hafta sonu tarihi gösteriyordu — oysa hafta cuma kapanışında
+  // bitiyor. Borsa endeksi yalnızca işlem günlerinde mum ürettiği için
+  // tarih etiketi olarak daha güvenilir.
+  const ref = xu100 || eur || usd;
   const donem = {
     ilkTarih: ref?.ilkTs ? new Date(ref.ilkTs * 1000).toISOString() : null,
     sonTarih: ref?.sonTs ? new Date(ref.sonTs * 1000).toISOString() : null,
@@ -217,8 +268,19 @@ async function haftalikOzet(req, res) {
   else if (gun === 0) pazartesiyeGeri = 6;   // Pazar → bu haftanın Pzt'si
   else pazartesiyeGeri = (gun - 1) + 7;      // Pzt–Cum → önceki haftanın Pzt'si
   const pzt = new Date(Date.UTC(trSimdi.getUTCFullYear(), trSimdi.getUTCMonth(), trSimdi.getUTCDate() - pazartesiyeGeri));
-  const p1 = Math.floor(pzt.getTime() / 1000);            // Pazartesi 00:00 UTC
-  const p2 = p1 + 5 * 86400 + 43200;                      // Cumartesi 12:00 UTC (Cuma kapanışı dahil)
+
+  // ⚠️ PENCERE DÜZELTMESİ (2026-08-01): Önceden p1 = Pazartesi 00:00 idi ve
+  // Yahoo'dan gelen İLK günlük mum PAZARTESİ KAPANIŞI oluyordu. Haftalık
+  // değişim pazartesi kapanışından cuma kapanışına ölçülüyordu — yani
+  // PAZARTESİ GÜNÜ İÇİNDEKİ HAREKET TAMAMEN KAYBOLUYORDU. Piyasa standardı
+  // önceki hafta CUMA KAPANIŞINDAN bu hafta cuma kapanışına ölçmektir.
+  // Artık pencere önceki Cuma 00:00'da başlıyor; ilk mum önceki cuma
+  // kapanışı, son mum bu cuma kapanışı oluyor.
+  // Tablodaki başlangıç sütunu bu yüzden pazartesi değil ÖNCEKİ CUMA
+  // tarihini gösterir — kasıtlıdır, getiri hesabının doğrusu budur.
+  const oncekiCuma = new Date(pzt.getTime() - 3 * 86400 * 1000);   // Pzt − 3 gün
+  const p1 = Math.floor(oncekiCuma.getTime() / 1000);     // Önceki Cuma 00:00 UTC
+  const p2 = Math.floor(pzt.getTime() / 1000) + 5 * 86400 + 43200; // Cumartesi 12:00 UTC
   const hafta = isoHafta(pzt);
 
   // Arşivi oku — hedef hafta zaten kayıtlıysa OLDUĞU GİBİ kullan.
@@ -231,9 +293,11 @@ async function haftalikOzet(req, res) {
     else if (typeof ham === "string") arsiv = JSON.parse(ham) || [];
   } catch {}
 
-  // v:2 → Brent/EURUSD/S&P500 ve haber başlıklarını içeren yeni format.
-  // Eski formatlı kayıt bulunursa bir kez yeniden hesaplanıp yükseltilir.
-  let guncel = arsiv.find((k) => k && k.hafta === hafta && k.v === 2 && Array.isArray(k.satirlar) && k.satirlar.length > 0);
+  // v:3 (2026-08-01) → pencere önceki Cuma kapanışından başlıyor, Brent
+  // Alpha Vantage'tan geliyor, dönem tarihi BIST referanslı. Sürüm
+  // artırılmazsa arşivdeki v:2 kayıtlar ESKİ YÖNTEMLE hesaplanmış hâlde
+  // kalır ve sekmeler arasında karışık yöntem görünürdü.
+  let guncel = arsiv.find((k) => k && k.hafta === hafta && k.v === 3 && Array.isArray(k.satirlar) && k.satirlar.length > 0);
 
   if (!guncel) {
     // Üç ayrı veri kaynağı (Yahoo, kendi tefas-proxy, kendi finans-haberleri)
@@ -248,7 +312,7 @@ async function haftalikOzet(req, res) {
       haftaninHaberleri(req.headers.host),
     ]);
     guncel = {
-      v: 2,
+      v: 3,
       hafta,
       donem,
       satirlar: getiriler.filter((g) => g.getiri != null),
@@ -266,8 +330,11 @@ async function haftalikOzet(req, res) {
     }
   }
 
+  // Eski sürümlü (v<3) arşiv kayıtları gösterilmiyor: farklı yöntemle
+  // hesaplandıkları için aynı ekranda yan yana durmaları yanıltıcı olur.
+  // Zamanla yerlerini v:3 kayıtlar alır.
   const gecmis = arsiv
-    .filter((k) => k && k.hafta !== hafta)
+    .filter((k) => k && k.hafta !== hafta && k.v === 3)
     .sort((a, b) => String(b.hafta).localeCompare(String(a.hafta)));
 
   res.status(200).json({ basarili: true, guncel, arsiv: gecmis });
