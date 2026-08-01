@@ -261,6 +261,15 @@ let DIL: "tr" | "en" = (() => { try { return localStorage.getItem("kp_dil") === 
 // Yer tutucu; Colab push hücresi build öncesi bunu gerçek "data:image/png;base64,..."
 // QR görseliyle değiştirir (qrcode kütüphanesi, https://apps.apple.com/app/id6788268835).
 // Yer tutucu dolmadıysa popup QR sütununu göstermez, kart yine çalışır.
+// ── Google Play QR (2026-08-01) ──────────────────────────────────────────
+// Uygulama 1 Ağustos 2026'da Google Play'de yayına girdi.
+// QR: Model 2, versiyon 4, hata düzeltme L, maske 0 — Play Store adresini
+// kodluyor. Üretildikten sonra bağımsız bir çözücüyle geri okunup URL'nin
+// birebir eşleştiği doğrulandı. Sabit boşaltılırsa kart yine çalışır,
+// yalnızca Play QR'ı gizlenir (düzen bozulmaz).
+const KP_QR_PLAY_B64 = "data:image/png;base64,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";
+const KP_PLAY_URL = "https://play.google.com/store/apps/details?id=com.katilimplus.app";
+
 const KP_QR_B64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAXIAAAFyCAAAAADNTw7VAAAFI0lEQVR4nO3dS47jOBQAwanB3P/KPUttCII06XQZHbEqlP8Jbh4kUT9//qH176e/wN9H8pzkOclzkuckz0mekzwneU7ynOQ5yXOS5yTPSZ6TPCd5TvKc5DnJc5LnJM9JnpM8J3lO8pzkOclzkuckz0mekzwneU7ynOQ5yXOS5yTPSZ77b/WJP1c+bn6V6fMZo+eNHj35VnfeZfR+c1Z5TvKc5DnJc5LnJM9JnpM8J3luefp87O9T1E53o6lyddIsfptVnpM8J3lO8pzkOclzkuckz0mee2H6fNye5FaPeI5e8TP462Q/39u/7WGV5yTPSZ6TPCd5TvKc5DnJc5LnjqbPO943w47m0M/fYcYqz0mekzwneU7ynOQ5yXOS5yTP/YLpc240m87ny9/OKs9JnpM8J3lO8pzkOclzkuckzx1Nn3fObN3fiWj1WsuTKfV906xVnpM8J3lO8pzkOclzkuckz0mee2H6vLOH0Pydb+8wtDqHvu+3PazynOQ5yXOS5yTPSZ6TPCd5TvLcz286Y3V+lu3oeScT5Kd+uVWekzwneU7ynOQ5yXOS5yTPSZ5bnj7v3Ivz5FzYk2s87xwZvcMqz0mekzwneU7ynOQ5yXOS5yTPvTB9jtyeKven2dH7jZ53+5rR/d9rleckz0mekzwneU7ynOQ5yXOS51647vP2ubDz+3iuvmL06PweoPvXeK7Ov3NWeU7ynOQ5yXOS5yTPSZ6TPCd5Lr7u885Ot3f22h1Z/VarrxixynOS5yTPSZ6TPCd5TvKc5DnJc8vHPu+cC3vnHii3z4Wdv3b+P2fefgHJc5LnJM9JnpM8J3lO8pzkuReOfd4+erj6Lu+7V0p7/Ncqz0mekzwneU7ynOQ5yXOS5yTPXb/uc/6/0bvMnzd/5/3jpqufsc+xz19L8pzkOclzkuckz0mekzwnee7ojiu3z4DdP6p6+1sVd2axynOS5yTPSZ6TPCd5TvKc5DnJc5fuuLLvzq5DJ/dPmT+6//1WWeU5yXOS5yTPSZ6TPCd5TvKc5LlL133e2Ylo9dNO3nl/9yT3+/x6kuckz0mekzwneU7ynOQ5yXPX97x97F/ZuT/xzf83/1bzR9+3x5FVnpM8J3lO8pzkOclzkuckz0meO7rf5+07cJ4cq5w7OVd35OTOn1Z5TvKc5DnJc5LnJM9JnpM8J3nuaNeh/Ucfd+5ycntno5E7ew09rPKc5DnJc5LnJM9JnpM8J3lO8tzRsc+jD95+xckUuD//npxpPGeV5yTPSZ6TPCd5TvKc5DnJc5LnXrju88SfwV8n7/I42SV3dZp1x5UvJXlO8pzkOclzkuckz0mekzy3PH0+7uySezK/3TkD9nFyjac9b7+A5DnJc5LnJM9JnpM8J3lO8twL0+fj5EzUkzuajJ53cs/OOXvefj3Jc5LnJM9JnpM8J3lO8pzkuaPp88TJtZsn8+D+Wbt3rvZ8WOU5yXOS5yTPSZ6TPCd5TvKc5LmPTZ+3d5Kduz1BOvP2q0iekzwneU7ynOQ5yXOS5yTPHU2ft6fF992ZZd/+jrirrPKc5DnJc5LnJM9JnpM8J3lO8twL0+ed3W9Xz6M9OWq5ug/u/LWrn7bKKs9JnpM8J3lO8pzkOclzkuckz33sfp9/L6s8J3lO8pzkOclzkuckz0mekzwneU7ynOQ5yXOS5yTPSZ6TPCd5TvKc5DnJc5LnJM9JnpM8J3lO8pzkOclzkuckz0mekzwneU7ynOQ5yXOS5yTP/Q+r2L/llT6O6wAAAABJRU5ErkJggg==";
 
 // ── SAFE AREA GARANTİSİ (native/Capacitor) ──
@@ -402,6 +411,10 @@ const EN_SOZLUK: Record<string, string> = {
   "Tümü": "All",
   "Dış Ticaret": "Foreign Trade",
   "Fiziki Altın": "Physical Gold",
+  "Google Play'den İndirin": "Get it on Google Play",
+  "Katılım Plus uygulaması yayında": "Katılım Plus app is live",
+  "App Store ve Google Play'de. Bildirimlerle takipte kalın.": "On the App Store and Google Play. Stay updated with notifications.",
+  "App Store ve Google Play'de yayında.": "Available on the App Store and Google Play.",
   "Katılım Hesabı Hesaplama": "Participation Account",
   "Katılım Hesabı Hesaplamaları": "Participation Account Calculations",
   // ── Ana sayfa ──
@@ -18381,7 +18394,7 @@ function App(){
               color:TEMA==="acik"?"#3A4E62":"rgba(255,255,255,0.6)",fontSize:14,fontWeight:700,lineHeight:"28px"}}>✕</button>
           </div>
           <div style={{fontSize:12.5,lineHeight:1.55,marginTop:10,color:TEMA==="acik"?"#2E4256":"#C7D4E2"}}>
-            {CV("Kâr payı oranları, piyasa verileri ve tüm hesaplama araçları her an yanında.")} {CV("iOS uygulaması App Store'da yayında.")}
+            {CV("Kâr payı oranları, piyasa verileri ve tüm hesaplama araçları her an yanında.")} {CV("App Store ve Google Play'de yayında.")}
           </div>
           <div style={{display:"flex",alignItems:"center",gap:14,marginTop:13,paddingTop:13,borderTop:`1px solid ${TEMA==="acik"?"rgba(22,34,46,0.09)":"rgba(255,255,255,0.08)"}`}}>
             <div style={{flex:1,display:"flex",flexDirection:"column",gap:7,minWidth:0}}>
@@ -18391,16 +18404,44 @@ function App(){
                 border:"1px solid rgba(255,255,255,0.18)",padding:"9px 10px",fontSize:12.5,fontWeight:700}}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="#FFFFFF" style={{flexShrink:0,marginTop:-2}} aria-hidden="true"><path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8.98-.2 1.92-.9 3.16-.81 1.79.14 3.04.86 3.81 2.17-3.42 2.11-2.87 6.3.65 7.66-.67 1.19-1.53 2.36-2.7 3.15zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/></svg> {CV("App Store'dan İndirin")}
               </a>
-              <div style={{fontSize:10.5,fontWeight:600,color:TEMA==="acik"?"#5A7086":"rgba(255,255,255,0.58)",textAlign:"center"}}>{CV("Android yakında")}</div>
+              {/* 2026-08-01: "Android yakında" yazısı gerçek Play Store
+                  butonuyla değiştirildi — uygulama artık yayında. */}
+              <a href={KP_PLAY_URL} target="_blank" rel="noopener noreferrer" style={{
+                display:"flex",alignItems:"center",justifyContent:"center",gap:7,textDecoration:"none",
+                background:TEMA==="acik"?"#16222E":"#000000",color:"#FFFFFF",borderRadius:11,
+                border:"1px solid rgba(255,255,255,0.18)",padding:"9px 10px",fontSize:12.5,fontWeight:700}}>
+                <svg width="15" height="15" viewBox="0 0 24 24" style={{flexShrink:0,marginTop:-2}} aria-hidden="true">
+                  <path fill="#00D8FF" d="M3.6 1.8c-.3.3-.5.8-.5 1.4v17.6c0 .6.2 1.1.5 1.4l.1.1 9.9-9.9v-.2L3.7 1.7l-.1.1z"/>
+                  <path fill="#FFCE00" d="M16.9 15.7l-3.3-3.3v-.2l3.3-3.3.1.1 3.9 2.2c1.1.6 1.1 1.7 0 2.3l-3.9 2.2-.1z"/>
+                  <path fill="#FF3A44" d="M17 15.6l-3.4-3.4-10 10c.4.4 1 .4 1.7.1l11.7-6.7"/>
+                  <path fill="#00E676" d="M17 8.8L5.3 2.1c-.7-.4-1.3-.3-1.7.1l10 10L17 8.8z"/>
+                </svg> {CV("Google Play'den İndirin")}
+              </a>
             </div>
-            {KP_QR_B64.indexOf("data:image")===0&&(
-              <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:5,flexShrink:0}}>
-                <div style={{background:"#FFFFFF",borderRadius:10,padding:5,border:`1px solid ${TEMA==="acik"?"rgba(22,34,46,0.12)":"rgba(255,255,255,0.14)"}`}}>
-                  <img src={KP_QR_B64} alt="App Store QR" style={{width:96,height:96,display:"block"}}/>
+            {/* İki QR yan yana. Play QR'ı sabiti boşsa yalnızca App Store
+                QR'ı görünür ve etiketi de ona göre değişir — düzen bozulmaz. */}
+            {(()=>{
+              const iosVar = KP_QR_B64.indexOf("data:image")===0;
+              const playVar = KP_QR_PLAY_B64.indexOf("data:image")===0;
+              if(!iosVar && !playVar) return null;
+              const qrKutu = (kaynak:string, etiket:string) => (
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,flexShrink:0}}>
+                  <div style={{background:"#FFFFFF",borderRadius:10,padding:4,border:`1px solid ${TEMA==="acik"?"rgba(22,34,46,0.12)":"rgba(255,255,255,0.14)"}`}}>
+                    <img src={kaynak} alt={etiket+" QR"} style={{width:playVar&&iosVar?74:96,height:playVar&&iosVar?74:96,display:"block"}}/>
+                  </div>
+                  <div style={{fontSize:9,fontWeight:700,color:TEMA==="acik"?"#5A7086":"rgba(255,255,255,0.58)"}}>{etiket}</div>
                 </div>
-                <div style={{fontSize:9.5,fontWeight:600,color:TEMA==="acik"?"#5A7086":"rgba(255,255,255,0.58)"}}>{CV("telefonunla okut")} →</div>
-              </div>
-            )}
+              );
+              return (
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:5,flexShrink:0}}>
+                  <div style={{display:"flex",gap:8}}>
+                    {iosVar&&qrKutu(KP_QR_B64,"App Store")}
+                    {playVar&&qrKutu(KP_QR_PLAY_B64,"Google Play")}
+                  </div>
+                  <div style={{fontSize:9.5,fontWeight:600,color:TEMA==="acik"?"#5A7086":"rgba(255,255,255,0.58)"}}>{CV("telefonunla okut")} →</div>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}
@@ -18472,15 +18513,25 @@ function App(){
                   background:TEMA==="acik"?"linear-gradient(100deg,#E9F1FA,#DCE9F6)":"linear-gradient(100deg,rgba(91,155,216,0.16),rgba(91,155,216,0.05))",
                   border:`1px solid ${TEMA==="acik"?"rgba(46,109,168,0.28)":"rgba(91,155,216,0.32)"}`,
                 }}>
+                  {/* 2026-08-01: Banner yalnızca App Store'a yönlendiriyordu;
+                      Android kullanıcısı yanlış mağazaya gidiyordu. Artık
+                      cihazın işletim sistemine göre doğru mağaza seçiliyor. */}
                   <span style={{fontSize:22,flexShrink:0}}>📲</span>
                   <div style={{flex:1,minWidth:0}}>
-                    <p style={{margin:0,fontSize:12.5,fontWeight:800,color:C.label,lineHeight:1.3}}>{CV("Katılım Plus iOS uygulaması yayında")}</p>
-                    <p style={{margin:"2px 0 0",fontSize:11,color:C.sub,lineHeight:1.35}}>{CV("App Store'dan indirin, bildirimlerle takipte kalın.")}</p>
+                    <p style={{margin:0,fontSize:12.5,fontWeight:800,color:C.label,lineHeight:1.3}}>{CV("Katılım Plus uygulaması yayında")}</p>
+                    <p style={{margin:"2px 0 0",fontSize:11,color:C.sub,lineHeight:1.35}}>{CV("App Store ve Google Play'de. Bildirimlerle takipte kalın.")}</p>
                   </div>
-                  <a href="https://apps.apple.com/app/id6788268835" target="_blank" rel="noopener noreferrer" style={{
-                    flexShrink:0,padding:"8px 14px",borderRadius:9,background:C.blue,color:"#fff",
-                    fontSize:11.5,fontWeight:800,textDecoration:"none",lineHeight:1,
-                  }}>{CV("İndir")}</a>
+                  {(()=>{
+                    const ua = String(navigator.userAgent||"");
+                    const androidMi = /Android/i.test(ua);
+                    const hedef = androidMi ? KP_PLAY_URL : "https://apps.apple.com/app/id6788268835";
+                    return (
+                      <a href={hedef} target="_blank" rel="noopener noreferrer" style={{
+                        flexShrink:0,padding:"8px 14px",borderRadius:9,background:C.blue,color:"#fff",
+                        fontSize:11.5,fontWeight:800,textDecoration:"none",lineHeight:1,
+                      }}>{CV("İndir")}</a>
+                    );
+                  })()}
                   <button onClick={()=>{setAppBannerKapali(true);try{localStorage.setItem("kp_appstore_banner","kapali");}catch{}}} style={{
                     flexShrink:0,width:26,height:26,borderRadius:13,border:"none",background:WA(0.08),
                     color:C.sub,cursor:"pointer",fontSize:12,fontWeight:700,lineHeight:1,padding:0,
