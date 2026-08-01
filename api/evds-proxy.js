@@ -96,8 +96,9 @@ const redis = new Redis({
 // artırılmazsa eski önbellek 6 saat boyunca hem yeni alanları göstermez hem de
 // ESKİ YANLIŞ rezerv rakamını döndürmeye devam eder.
 // v19 (2026-07-30 ikinci tur): REZERV_NET / REZERV_SWAP / REZERV_NET_SWAPSIZ eklendi.
-const KV_ANLIK_KEY = "evds:anlik:v19";
-const KV_TARIHSEL_PREFIX = "evds:tarihsel:v19:";
+// v20 (2026-08-01): Enflasyon beklentisi alanları eklendi.
+const KV_ANLIK_KEY = "evds:anlik:v20";
+const KV_TARIHSEL_PREFIX = "evds:tarihsel:v20:";
 
 // Vercel'in varsayılan fonksiyon süresi (Hobby planda genelde 10sn) artık 8 dış
 // isteğe (5 EVDS + 3 FRED) yetmiyor — bu yüzden ERR_CONNECTION_CLOSED alınıyordu
@@ -850,6 +851,20 @@ const GOSTERGE = [
   "TP.FE25.OKTG09",
   "TP.FE25.OKTG10",
   "TP.YKKE.TR",
+  // ── ENFLASYON BEKLENTİLERİ (2026-08-01) ─────────────────────────────────
+  // TCMB anketlerinden 12 ay sonrası yıllık TÜFE beklentisi. İkisi de AYLIK,
+  // bu yüzden GOSTERGE dizisine (frequency=5) güvenle eklenebiliyor —
+  // farklı frekanslı seri karıştırmak EVDS'te tüm isteği reddettiriyor.
+  //
+  // NOT: Bunlar ENDEKS DEĞİL, doğrudan YÜZDE. endeksYoYHesapla'dan geçmemeli.
+  // Canlı doğrulama (2026-07): PKA %23,95 — TCMB'nin Temmuz PKA raporundaki
+  // "12 ay sonrası TÜFE beklentisi yüzde 23,95" ifadesiyle birebir.
+  //
+  // Aylık TÜFE nokta tahmini (takvimde "beklenti" göstermek için) EVDS'te
+  // YOK — yalnızca aylık PDF raporunda. Beş ayrı katalog araması yapıldı,
+  // BEKA grubu tamamen "(Arşiv)", BEKODTUFE de arşiv. Aranmasın.
+  "TP.ENFBEK.PKA12ENF",   // Piyasa katılımcıları, 12 ay sonrası (%)
+  "TP.ENFBEK.HBA12ENF",   // Hanehalkı, 12 ay sonrası (%)
 ];
 
 // KÂR PAYI — HAFTALIK AKIM (2026-07-23) — EVDS menü keşfiyle doğrulandı:
@@ -1815,6 +1830,12 @@ export default async function handler(req,res){
     const gidaYoY = endeksYoYHesapla(gidaDizi, false);
     sonuclar["GOSTERGE_GIDA_YILLIK"]=gidaYoY.yillik;
     sonuclar["GOSTERGE_GIDA_YILLIK_SERI"]=gidaYoY.yillikSeri;
+
+    // Beklenti serileri doğrudan yüzde — endeks dönüşümü uygulanmıyor.
+    sonuclar["BEKLENTI_PIYASA_12AY"]=sonDeger(gostItems, "TP.ENFBEK.PKA12ENF");
+    sonuclar["BEKLENTI_PIYASA_12AY_SERI"]=tumDegerler(gostItems, "TP.ENFBEK.PKA12ENF").slice(-24);
+    sonuclar["BEKLENTI_HANE_12AY"]=sonDeger(gostItems, "TP.ENFBEK.HBA12ENF");
+    sonuclar["BEKLENTI_HANE_12AY_SERI"]=tumDegerler(gostItems, "TP.ENFBEK.HBA12ENF").slice(-24);
 
     const kiraDizi = tumDegerler(gostItems, "TP.YKKE.TR");
     const kiraYoY = endeksYoYHesapla(kiraDizi, false);

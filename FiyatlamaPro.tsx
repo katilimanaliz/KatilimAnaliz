@@ -10039,6 +10039,466 @@ function GetiriKarsilastirma(){
 // kullanıyor) kendi cümlelerimle yeniden yazıldı; kullanıcının isteği
 // üzerine hiçbir banka adı geçmiyor, "katılım bankaları" genel ifadesi
 // kullanılıyor (hem telif hem tarafsızlık açısından doğru).
+// ═══════════════════════════════════════════════════════════════════════════
+// KATILIM BANKACILIĞI SEKTÖRÜ (2026-08-01)
+// ═══════════════════════════════════════════════════════════════════════════
+// Kaynak: BDDK Aylık Bankacılık Sektörü Verileri → public/bddk-katilim.json
+//
+// NEDEN STATİK DOSYA: BDDK'nın sitesi robots.txt ile otomatik erişimi
+// reddediyor. Veri kamuya açık ve kullanılabilir, ama programatik olarak
+// çekmek kurumun açıkça belirttiği tercihe aykırı olurdu. Bunun yerine
+// bilanço elle indirilip JSON'a çevriliyor. Yan faydası: ek API isteği yok,
+// Vercel kotası etkilenmiyor, kaynak sunucusu yorulmuyor.
+//
+// YENİ DÖNEM EKLEME: JSON'daki "donemler" dizisine bir kayıt eklemek yeterli.
+// Ekran her şeyi son dönemden hesaplar, grafiği eldeki tüm noktalarla çizer,
+// yıllık değişimi 12 ay öncesiyle (yoksa en eski dönemle) kıyaslar.
+// Kodda hiçbir değişiklik gerekmez.
+//
+// TERMİNOLOJİ: BDDK ortak şablon kullanıyor (Mevduat/Krediler/Vadeli).
+// Ekranda katılım karşılıkları gösteriliyor; çeviri yaptığımız kaynak
+// notunda açıkça yazıyor — saklamak doğru olmazdı.
+const KB_AY = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
+function kbDonemAd(d:string){
+  const [y,a] = String(d||"").split("-");
+  const i = parseInt(a,10)-1;
+  return (KB_AY[i]||a) + " " + y;
+}
+function kbDonemKisa(d:string){
+  const [y,a] = String(d||"").split("-");
+  const i = parseInt(a,10)-1;
+  return (KB_AY[i]||a).slice(0,3) + " " + String(y).slice(2);
+}
+// Milyon TL girdiyi okunur birime çevirir (1.000.000 milyon = 1 trilyon)
+function kbTutar(milyonTL:number|null|undefined){
+  if(milyonTL==null || !isFinite(milyonTL)) return "—";
+  const m = Math.abs(milyonTL);
+  if(m >= 1000000) return (milyonTL/1000000).toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2})+" Tn ₺";
+  if(m >= 1000)    return (milyonTL/1000).toLocaleString("tr-TR",{minimumFractionDigits:0,maximumFractionDigits:0})+" Mr ₺";
+  return milyonTL.toLocaleString("tr-TR",{maximumFractionDigits:0})+" Mn ₺";
+}
+const kbYuzde=(v:number|null|undefined,b=2)=> (v==null||!isFinite(v))?"—":"%"+v.toLocaleString("tr-TR",{minimumFractionDigits:b,maximumFractionDigits:b});
+
+// JSON'u bir kez çekip belleğe alır; birden çok bileşen (ana sayfa özeti +
+// ekranın kendisi) aynı veriyi kullandığı için tekrar tekrar indirilmesin.
+let KB_ONBELLEK:any=null;
+let KB_ISTEK:Promise<any>|null=null;
+function kbVeriGetir(){
+  if(KB_ONBELLEK) return Promise.resolve(KB_ONBELLEK);
+  if(!KB_ISTEK){
+    // NATIVE NOTU: public/ altındaki dosyalar mutlak adresle çekilmeli,
+    // aksi halde WebView paketin içindeki eski kopyayı okur.
+    KB_ISTEK = fetch(`${API_BASE}/bddk-katilim.json`)
+      .then(r=>r.ok?r.json():null)
+      .then(j=>{ KB_ONBELLEK=j; return j; })
+      .catch(()=>null);
+  }
+  return KB_ISTEK;
+}
+
+// Son dönem + 12 ay öncesi (yoksa en eski) karşılaştırması
+function kbHesapla(veri:any){
+  const d = Array.isArray(veri?.donemler)?[...veri.donemler].sort((a,b)=>String(a.donem).localeCompare(String(b.donem))):[];
+  if(d.length===0) return null;
+  const son = d[d.length-1];
+  const hedefYil = (()=>{ const [y,a]=String(son.donem).split("-"); return `${parseInt(y,10)-1}-${a}`; })();
+  const onceki = d.find(x=>x.donem===hedefYil) || (d.length>1?d[0]:null);
+  const K=(o:any,k:string)=>o?.katilim?.[k]?.t ?? null;
+  const S=(o:any,k:string)=>o?.sektor?.[k]?.t ?? null;
+  const pay=(k:string,o=son)=> (K(o,k)!=null&&S(o,k))?K(o,k)!/S(o,k)!*100:null;
+  const yillik=(k:string)=> (onceki&&K(son,k)!=null&&K(onceki,k))?(K(son,k)!/K(onceki,k)!-1)*100:null;
+  const oran=(a:number|null,b:number|null)=> (a!=null&&b)?a/b*100:null;
+  return {
+    donem:son.donem, oncekiDonem:onceki?.donem||null, tumDonemler:d,
+    K:(k:string)=>K(son,k), S:(k:string)=>S(son,k), pay, yillik,
+    kirilim:(k:string,taraf:"katilim"|"sektor"="katilim")=>{
+      const o=son?.[taraf]?.[k]; if(!o||!o.t) return null;
+      return {tl:o.tl, yp:o.yp, tlPct:o.tl/o.t*100, ypPct:o.yp/o.t*100};
+    },
+    // Türetilmiş oranlar
+    roe:oran(K(son,"kar"),K(son,"ozkaynak")), roeS:oran(S(son,"kar"),S(son,"ozkaynak")),
+    roa:oran(K(son,"kar"),K(son,"aktif")),    roaS:oran(S(son,"kar"),S(son,"aktif")),
+    npl:oran(K(son,"takip"),(K(son,"kredi")||0)+(K(son,"takip")||0)),
+    nplS:oran(S(son,"takip"),(S(son,"kredi")||0)+(S(son,"takip")||0)),
+    karsilikOran:oran(K(son,"karsilik"),K(son,"takip")),
+    karsilikOranS:oran(S(son,"karsilik"),S(son,"takip")),
+    kullandirma:oran(K(son,"kredi"),K(son,"fon")), kullandirmaS:oran(S(son,"kredi"),S(son,"fon")),
+    cariOran:oran(K(son,"cari"),K(son,"fon")),     cariOranS:oran(S(son,"cari"),S(son,"fon")),
+    payTrend:d.map(x=>({donem:x.donem, deger:(x.katilim?.aktif?.t&&x.sektor?.aktif?.t)?x.katilim.aktif.t/x.sektor.aktif.t*100:null}))
+                .filter(x=>x.deger!=null),
+  };
+}
+
+// Ana sayfa özet kartı — aynı JSON'u kullanır (kbVeriGetir bellekte tutar,
+// ekranla birlikte iki kez indirilmez).
+function KatilimSektoruOzet({onAc}:{onAc:()=>void}){
+  const [veri,setVeri]=useState<any>(null);
+  useEffect(()=>{ kbVeriGetir().then(setVeri); },[]);
+  const h=useMemo(()=>kbHesapla(veri),[veri]);
+  if(!h) return null;   // veri yoksa blok hiç görünmez
+
+  const pay=h.pay("aktif");
+  const ilk=h.payTrend.length>1?h.payTrend[0].deger:null;
+  const fark=(pay!=null&&ilk!=null)?pay-ilk:null;
+  const sat=(ad:string,deger:string,sag:string,renk:string)=>(
+    <div style={{display:"flex",alignItems:"center",padding:"7px 0",
+                 borderTop:`1px solid ${WA(0.05)}`}}>
+      <span style={{flex:1,fontSize:11.5,color:C.soft}}>{ad}</span>
+      <span style={{fontSize:12,fontWeight:800,fontFamily:"monospace",marginRight:9,
+                    color:(TEMA==="acik"?C.label:"#fff")}}>{deger}</span>
+      <span style={{fontSize:10.5,fontWeight:700,width:62,textAlign:"right",color:renk}}>{sag}</span>
+    </div>
+  );
+  return (
+    <>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+        <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),
+                      textTransform:"uppercase",letterSpacing:0.5}}>{TR("Katılım Bankacılığı Sektörü")}</span>
+        <span onClick={onAc} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Aç")} ›</span>
+      </div>
+      <div className="press-card" onClick={onAc} style={{
+        cursor:"pointer",marginBottom:14,borderRadius:18,overflow:"hidden",
+        background:(TEMA==="acik"?"#FFFFFF":WA(0.05)),border:`1px solid ${WA(0.08)}`,
+      }}>
+        <div style={{display:"flex",alignItems:"center",gap:9,padding:"12px 14px 10px",
+                     borderBottom:`1px solid ${WA(0.08)}`}}>
+          <Icon k="katilimBankalari" size={20} color={C.blue}/>
+          <span style={{flex:1,fontSize:13,fontWeight:800,color:C.soft}}>Sektördeki Yeri</span>
+          <span style={{fontSize:10,color:WA(0.45)}}>{kbDonemKisa(h.donem)} · son veri</span>
+        </div>
+        <div style={{display:"flex",alignItems:"baseline",gap:8,padding:"13px 14px 9px"}}>
+          <span style={{fontSize:29,fontWeight:800,letterSpacing:-1.1,lineHeight:1,color:C.blue}}>{kbYuzde(pay)}</span>
+          <span style={{fontSize:10.5,color:WA(0.5),lineHeight:1.35}}>
+            aktif büyüklükte sektör payı{fark!=null&&<><br/>{fark>=0?"▲":"▼"} {Math.abs(fark).toLocaleString("tr-TR",{maximumFractionDigits:2})} puan</>}
+          </span>
+        </div>
+        <div style={{padding:"0 14px 12px"}}>
+          {sat("Aktif Büyüklük",kbTutar(h.K("aktif")),h.yillik("aktif")!=null?`▲${kbYuzde(h.yillik("aktif"),1)}`:"—",C.green)}
+          {sat("Toplanan Fon",kbTutar(h.K("fon")),h.yillik("fon")!=null?`▲${kbYuzde(h.yillik("fon"),1)}`:"—",C.green)}
+          {sat("Kullandırılan Fon",kbTutar(h.K("kredi")),h.yillik("kredi")!=null?`▲${kbYuzde(h.yillik("kredi"),1)}`:"—",C.green)}
+          {sat("Özkaynak Kârlılığı",kbYuzde(h.roe),`sektör ${kbYuzde(h.roeS,1)}`,WA(0.45))}
+        </div>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:10,
+                     borderTop:`1px solid ${WA(0.08)}`,fontSize:11.5,fontWeight:700,color:"#3B82F6"}}>
+          Tümünü gör ›
+        </div>
+      </div>
+    </>
+  );
+}
+
+function KatilimSektoru(){
+  const [veri,setVeri]=useState<any>(null);
+  const [yukleniyor,setYukleniyor]=useState(true);
+  useEffect(()=>{ kbVeriGetir().then(v=>{ setVeri(v); setYukleniyor(false); }); },[]);
+  const h = useMemo(()=>kbHesapla(veri),[veri]);
+
+  const KART={background:(TEMA==="acik"?"#FFFFFF":WA(0.05)),border:`1px solid ${WA(0.08)}`,borderRadius:15};
+  const bolumBas=(baslik:string)=>(
+    <div style={{display:"flex",alignItems:"center",gap:8,margin:"20px 0 9px 4px"}}>
+      <span style={{fontSize:11.5,fontWeight:800,color:WA(0.5),textTransform:"uppercase",letterSpacing:.6}}>{baslik}</span>
+      <span style={{flex:1,height:1,background:WA(0.08)}}/>
+    </div>
+  );
+  // Tutarlı satır: solda ad + not, sağda değer + değişim
+  const satir=(ad:string,not:string,deger:string,degisim?:{metin:string,renk:string})=>(
+    <div style={{...KART,padding:"13px 14px",marginBottom:9,display:"flex",alignItems:"center",gap:12}}>
+      <div style={{flex:1,minWidth:0}}>
+        <p style={{margin:0,fontSize:13.5,fontWeight:700,color:C.soft,lineHeight:1.25}}>{ad}</p>
+        {not&&<p style={{margin:"3px 0 0",fontSize:10.5,color:WA(0.5)}}>{not}</p>}
+      </div>
+      <div style={{textAlign:"right",flexShrink:0,whiteSpace:"nowrap"}}>
+        <p style={{margin:0,fontSize:16,fontWeight:800,fontFamily:"monospace",letterSpacing:-.4,color:(TEMA==="acik"?C.label:"#fff")}}>{deger}</p>
+        {degisim&&<p style={{margin:"2px 0 0",fontSize:11.5,fontWeight:700,color:degisim.renk}}>{degisim.metin}</p>}
+      </div>
+    </div>
+  );
+  // Katılım vs sektör karşılaştırma çubuğu. Tek başına bir oran anlamsız;
+  // sektörle yan yana durunca anlam kazanıyor.
+  const karsilastir=(ad:string,kat:number|null,sek:number|null,not:string,tersMi=false)=>{
+    if(kat==null||sek==null) return null;
+    const enb=Math.max(kat,sek,1);
+    const fark=kat-sek;
+    const iyiMi = tersMi ? fark<0 : fark>0;
+    const cubuk=(etiket:string,deger:number,renk:string)=>(
+      <div style={{display:"flex",alignItems:"center",gap:9}}>
+        <span style={{fontSize:10,color:WA(0.5),width:52,flexShrink:0}}>{etiket}</span>
+        <div style={{flex:1,height:16,background:WA(0.06),borderRadius:5,overflow:"hidden"}}>
+          <div style={{width:`${Math.max(6,deger/enb*100)}%`,height:"100%",background:renk,borderRadius:5,
+                       display:"flex",alignItems:"center",justifyContent:"flex-end",paddingRight:7,
+                       fontSize:10,fontWeight:800,color:"#fff"}}>{kbYuzde(deger)}</div>
+        </div>
+      </div>
+    );
+    return (
+      <div style={{...KART,padding:"13px 14px",marginBottom:9}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:9}}>
+          <span style={{fontSize:13,fontWeight:700,color:C.soft}}>{ad}</span>
+          <span style={{fontSize:10.5,fontWeight:700,color:Math.abs(fark)<0.5?WA(0.45):(iyiMi?C.green:"#E0A53D")}}>
+            {fark>0?"+":"−"}{Math.abs(fark).toLocaleString("tr-TR",{maximumFractionDigits:2})} puan
+          </span>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+          {cubuk("Katılım",kat,"#3B82F6")}
+          {cubuk("Sektör",sek,"#6B8299")}
+        </div>
+        {not&&<p style={{margin:"8px 0 0",fontSize:10,color:WA(0.5),lineHeight:1.45}}>{not}</p>}
+      </div>
+    );
+  };
+  // TL/döviz çubuğu + dilim genişliğine hizalı tutarlar
+  const kirilimCubuk=(k:{tl:number,yp:number,tlPct:number,ypPct:number}|null,yuk=26)=>{
+    if(!k) return null;
+    return (
+      <>
+        <div style={{display:"flex",height:yuk,borderRadius:8,overflow:"hidden"}}>
+          <div style={{width:`${k.tlPct}%`,background:"#3B82F6",display:"flex",alignItems:"center",
+                       justifyContent:"center",fontSize:11,fontWeight:700,color:"#fff"}}>TL {kbYuzde(k.tlPct,1)}</div>
+          <div style={{width:`${k.ypPct}%`,background:"#6B8299",display:"flex",alignItems:"center",
+                       justifyContent:"center",fontSize:11,fontWeight:700,color:"#fff"}}>Döviz {kbYuzde(k.ypPct,1)}</div>
+        </div>
+        <div style={{display:"flex",marginTop:5}}>
+          <span style={{width:`${k.tlPct}%`,fontSize:10,color:WA(0.5),textAlign:"center",fontFamily:"monospace",fontWeight:600}}>{kbTutar(k.tl)}</span>
+          <span style={{width:`${k.ypPct}%`,fontSize:10,color:WA(0.5),textAlign:"center",fontFamily:"monospace",fontWeight:600}}>{kbTutar(k.yp)}</span>
+        </div>
+      </>
+    );
+  };
+
+  if(yukleniyor) return <div style={{padding:"40px 16px",textAlign:"center",color:WA(0.45),fontSize:13}}>Yükleniyor…</div>;
+  if(!h) return (
+    <div style={{padding:"36px 20px",textAlign:"center"}}>
+      <p style={{fontSize:13.5,color:C.soft,margin:0}}>Sektör verisi şu anda yüklenemedi.</p>
+      <p style={{fontSize:11.5,color:WA(0.45),margin:"7px 0 0"}}>Bağlantını kontrol edip tekrar dene.</p>
+    </div>
+  );
+
+  const payTrend=h.payTrend;
+  const sonPay=h.pay("aktif");
+  const ilkPay=payTrend.length>1?payTrend[0].deger:null;
+  const payFark=(sonPay!=null&&ilkPay!=null)?sonPay-ilkPay:null;
+
+  // Aktif kompozisyonu — büyükten küçüğe, kalan "Diğer"e toplanıyor
+  const aktifTop=h.K("aktif")||1;
+  const kompKalem=[
+    {ad:"Kullandırılan Fon",  v:h.K("kredi"),    renk:"#3B82F6"},
+    {ad:"Menkul Kıymetler",   v:h.K("menkul"),   renk:"#5B9BD8"},
+    {ad:"Zorunlu Karşılıklar",v:h.K("zorunlu"),  renk:"#7FB3D9"},
+    {ad:"Bankalardan Alacaklar",v:h.K("bankalar"),renk:"#8FA6BC"},
+    {ad:"Finansal Kiralama",  v:h.K("leasing"),  renk:"#E0A53D"},
+    {ad:"TCMB'den Alacaklar", v:h.K("tcmb"),     renk:"#6B8299"},
+  ].filter(x=>x.v!=null) as {ad:string,v:number,renk:string}[];
+  const kompToplam=kompKalem.reduce((t,x)=>t+x.v,0);
+  const kompDiger=Math.max(0,aktifTop-kompToplam);
+
+  const leasingPay=h.pay("leasing");
+  const finansmanTop=(h.K("kredi")||0)+(h.K("leasing")||0);
+
+  return (
+    <div style={{padding:"0 14px 26px"}}>
+      {/* Dönem şeridi — TARİH HER ZAMAN GÖRÜNÜR. Bu haftanın dersi:
+          rakamın yanında tarihi olmayan veri sessizce bayatlıyor. */}
+      <div style={{...KART,padding:"11px 13px",marginBottom:14,display:"flex",
+                   alignItems:"center",justifyContent:"space-between"}}>
+        <span style={{fontSize:12.5,fontWeight:700,color:C.soft}}>{kbDonemAd(h.donem)} dönemi</span>
+        <span style={{fontSize:10,color:WA(0.45)}}>BDDK · aylık yayımlanır</span>
+      </div>
+
+      {/* SİGNATURE: sektör payı. Ekranın tek vurgusu bu; gerisi sakin. */}
+      <div style={{background:"linear-gradient(160deg,rgba(91,155,216,0.16),rgba(74,222,128,0.06))",
+                   border:"1px solid rgba(91,155,216,0.28)",borderRadius:20,padding:"18px 16px 15px",marginBottom:16}}>
+        <div style={{display:"flex",alignItems:"baseline",gap:9,marginBottom:3}}>
+          <span style={{fontSize:44,fontWeight:800,letterSpacing:-1.6,lineHeight:1,
+                        color:(TEMA==="acik"?C.label:"#fff"),fontVariantNumeric:"tabular-nums"}}>{kbYuzde(sonPay)}</span>
+          {payFark!=null&&(
+            <span style={{fontSize:12.5,fontWeight:800,color:payFark>=0?C.green:"#E0A53D"}}>
+              {payFark>=0?"▲":"▼"} {Math.abs(payFark).toLocaleString("tr-TR",{maximumFractionDigits:2})} puan
+            </span>
+          )}
+        </div>
+        <p style={{margin:"0 0 13px",fontSize:11.5,color:WA(0.5),lineHeight:1.45}}>
+          Katılım bankalarının bankacılık sektörü aktif büyüklüğü içindeki payı
+        </p>
+        <div style={{height:9,borderRadius:6,background:WA(0.09),overflow:"hidden"}}>
+          <div style={{width:`${sonPay||0}%`,height:"100%",borderRadius:6,
+                       background:"linear-gradient(90deg,#3B82F6,#5B9BD8)"}}/>
+        </div>
+        {payTrend.length>2&&(()=>{
+          // Mini seyir grafiği — JSON'a dönem eklendikçe kendiliğinden uzar
+          const dg=payTrend.map(x=>x.deger as number);
+          const enk=Math.min(...dg), enb=Math.max(...dg), aralik=(enb-enk)||1;
+          const G=300, Y=48, kn=(i:number)=>4+i*((G-8)/Math.max(1,dg.length-1));
+          const dn=(v:number)=>Y-6-((v-enk)/aralik)*(Y-16);
+          const cizgi=dg.map((v,i)=>`${i===0?"M":"L"}${kn(i).toFixed(1)},${dn(v).toFixed(1)}`).join(" ");
+          return (
+            <div style={{marginTop:12}}>
+              <svg viewBox={`0 0 ${G} ${Y}`} style={{width:"100%",height:Y,display:"block"}}>
+                <path d={`${cizgi} L${kn(dg.length-1).toFixed(1)},${Y} L4,${Y} Z`} fill="rgba(59,130,246,0.16)"/>
+                <path d={cizgi} fill="none" stroke="#3B82F6" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"/>
+                <circle cx={kn(dg.length-1)} cy={dn(dg[dg.length-1])} r={3.6} fill="#3B82F6"/>
+              </svg>
+              <div style={{display:"flex",justifyContent:"space-between",marginTop:2,fontSize:10,color:WA(0.45)}}>
+                <span>{kbDonemKisa(payTrend[0].donem)}</span>
+                <span>{kbDonemKisa(payTrend[payTrend.length-1].donem)}</span>
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* BÜYÜKLÜKLER */}
+      {satir("Aktif Büyüklük",`Sektör payı ${kbYuzde(h.pay("aktif"))}`,kbTutar(h.K("aktif")),
+             h.yillik("aktif")!=null?{metin:`▲ ${kbYuzde(h.yillik("aktif"),1)} yıllık`,renk:C.green}:undefined)}
+      {satir("Toplanan Fon",`Sektör payı ${kbYuzde(h.pay("fon"))}`,kbTutar(h.K("fon")),
+             h.yillik("fon")!=null?{metin:`▲ ${kbYuzde(h.yillik("fon"),1)} yıllık`,renk:C.green}:undefined)}
+      {satir("Kullandırılan Fon",`Sektör payı ${kbYuzde(h.pay("kredi"))}`,kbTutar(h.K("kredi")),
+             h.yillik("kredi")!=null?{metin:`▲ ${kbYuzde(h.yillik("kredi"),1)} yıllık`,renk:C.green}:undefined)}
+      {satir("Özkaynak",`Sektör payı ${kbYuzde(h.pay("ozkaynak"))}`,kbTutar(h.K("ozkaynak")),
+             h.yillik("ozkaynak")!=null?{metin:`▲ ${kbYuzde(h.yillik("ozkaynak"),1)} yıllık`,renk:C.green}:undefined)}
+
+      {/* KÂRLILIK */}
+      {bolumBas("Kârlılık")}
+      {satir("Dönem Kârı",`Sektör payı ${kbYuzde(h.pay("kar"))}`,kbTutar(h.K("kar")),
+             h.yillik("kar")!=null?{metin:`▲ ${kbYuzde(h.yillik("kar"),1)} yıllık`,renk:C.green}:undefined)}
+      {karsilastir("Özkaynak Kârlılığı (ROE)",h.roe,h.roeS,
+        "Özkaynak başına üretilen kâr. Dönem içi kârdır, yıllıklandırılmamıştır.")}
+      {karsilastir("Aktif Kârlılığı (ROA)",h.roa,h.roaS,"")}
+
+      {/* VARLIK KALİTESİ */}
+      {bolumBas("Varlık Kalitesi")}
+      {karsilastir("Takipteki Alacak Oranı",h.npl,h.nplS,
+        `${kbTutar(h.K("takip"))} takipteki alacak. Ayrılan karşılık ${kbTutar(h.K("karsilik"))} — takipteki alacağın ${kbYuzde(h.karsilikOran,0)}'i (sektör ${kbYuzde(h.karsilikOranS,0)}).`,
+        true)}
+
+      {/* FON YÖNETİMİ */}
+      {bolumBas("Fon Yönetimi")}
+      {karsilastir("Fon Kullandırma Oranı",h.kullandirma,h.kullandirmaS,
+        `Toplanan fonun ne kadarının finansmana dönüştüğü: ${kbTutar(h.K("fon"))} fonun ${kbTutar(h.K("kredi"))}'si kullandırılmış. Düşük oran daha yüksek likidite demektir.`)}
+      {karsilastir("Özel Cari Hesap Oranı",h.cariOran,h.cariOranS,
+        "Kâr payı ödenmeyen kaynağın payı; yüksekliği maliyet avantajıdır.")}
+
+      {/* ÖZGÜN VURGU — finansal kiralama */}
+      {leasingPay!=null&&leasingPay>50&&(
+        <div style={{background:"linear-gradient(150deg,rgba(224,165,61,0.16),rgba(224,165,61,0.04))",
+                     border:"1px solid rgba(224,165,61,0.3)",borderRadius:18,padding:16,margin:"14px 0 9px"}}>
+          <div style={{fontSize:34,fontWeight:800,color:"#E0A53D",letterSpacing:-1.2,lineHeight:1}}>{kbYuzde(leasingPay,1)}</div>
+          <div style={{fontSize:13,fontWeight:800,color:C.soft,margin:"7px 0 5px"}}>Finansal kiralamanın neredeyse tamamı</div>
+          <p style={{margin:0,fontSize:11,color:WA(0.5),lineHeight:1.5}}>
+            Sektördeki {kbTutar(h.S("leasing"))} finansal kiralama alacağının {kbTutar(h.K("leasing"))}'si
+            katılım bankalarında. Sebebi yapısal: konvansiyonel bankalar leasing'i ayrı şirketler
+            üzerinden yürütürken, katılım bankaları icâre işlemlerini doğrudan bilançosunda taşıyor.
+          </p>
+        </div>
+      )}
+
+      {/* TOPLANAN FON KIRILIMI */}
+      {bolumBas("Toplanan Fon Kırılımı")}
+      {(()=>{
+        const cari=h.K("cari"), katilma=h.K("katilma"), fon=h.K("fon");
+        if(!cari||!katilma||!fon) return null;
+        const cp=cari/fon*100, kp=katilma/fon*100;
+        return (
+          <div style={{...KART,padding:14}}>
+            <div style={{display:"flex",height:30,borderRadius:8,overflow:"hidden"}}>
+              <div style={{width:`${cp}%`,background:"#7FB3D9",display:"flex",alignItems:"center",
+                           justifyContent:"center",fontSize:11,fontWeight:700,color:"#fff"}}>Özel Cari {kbYuzde(cp,1)}</div>
+              <div style={{width:`${kp}%`,background:"#3B82F6",display:"flex",alignItems:"center",
+                           justifyContent:"center",fontSize:11,fontWeight:700,color:"#fff"}}>Katılma {kbYuzde(kp,1)}</div>
+            </div>
+            <div style={{display:"flex",marginTop:5}}>
+              <span style={{width:`${cp}%`,fontSize:10,color:WA(0.5),textAlign:"center",fontFamily:"monospace",fontWeight:600}}>{kbTutar(cari)}</span>
+              <span style={{width:`${kp}%`,fontSize:10,color:WA(0.5),textAlign:"center",fontFamily:"monospace",fontWeight:600}}>{kbTutar(katilma)}</span>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Özel Cari Hesap */}
+      <div style={{...KART,padding:"13px 14px",marginTop:9,marginBottom:9}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:9}}>
+          <span style={{fontSize:13,fontWeight:700,color:C.soft}}>Özel Cari Hesap</span>
+          {h.yillik("cari")!=null&&<span style={{fontSize:10.5,fontWeight:700,color:C.green}}>▲ {kbYuzde(h.yillik("cari"),1)} yıllık</span>}
+        </div>
+        <div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:10}}>
+          <span style={{fontSize:20,fontWeight:800,fontFamily:"monospace",letterSpacing:-.5,color:(TEMA==="acik"?C.label:"#fff")}}>{kbTutar(h.K("cari"))}</span>
+          <span style={{fontSize:10.5,color:WA(0.5)}}>sektör payı {kbYuzde(h.pay("cari"))}</span>
+        </div>
+        {kirilimCubuk(h.kirilim("cari"))}
+        <p style={{margin:"8px 0 0",fontSize:10,color:WA(0.5),lineHeight:1.45}}>
+          Kâr payı ödenmez, anapara garantilidir.
+        </p>
+      </div>
+
+      {/* Katılma Hesabı */}
+      <div style={{...KART,padding:"13px 14px",marginBottom:9}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:9}}>
+          <span style={{fontSize:13,fontWeight:700,color:C.soft}}>Katılma Hesabı</span>
+          {h.yillik("katilma")!=null&&<span style={{fontSize:10.5,fontWeight:700,color:C.green}}>▲ {kbYuzde(h.yillik("katilma"),1)} yıllık</span>}
+        </div>
+        <div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:10}}>
+          <span style={{fontSize:20,fontWeight:800,fontFamily:"monospace",letterSpacing:-.5,color:(TEMA==="acik"?C.label:"#fff")}}>{kbTutar(h.K("katilma"))}</span>
+          <span style={{fontSize:10.5,color:WA(0.5)}}>sektör payı {kbYuzde(h.pay("katilma"))}</span>
+        </div>
+        {kirilimCubuk(h.kirilim("katilma"))}
+        <p style={{margin:"8px 0 0",fontSize:10,color:WA(0.5),lineHeight:1.45}}>
+          Kâr-zarara katılır, getiri dönem sonunda belirlenir.
+        </p>
+      </div>
+
+      {/* KULLANDIRILAN FON KIRILIMI */}
+      {bolumBas("Kullandırılan Fon Kırılımı")}
+      <div style={{...KART,padding:14}}>
+        {kirilimCubuk(h.kirilim("kredi"))}
+        {finansmanTop>0&&(
+          <div style={{borderTop:`1px solid ${WA(0.08)}`,paddingTop:11,marginTop:11}}>
+            {[{ad:"Kullandırılan Fon",v:h.K("kredi")||0,renk:"#3B82F6"},
+              {ad:"Finansal Kiralama (icâre)",v:h.K("leasing")||0,renk:"#E0A53D"}].map(x=>(
+              <div key={x.ad} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",fontSize:11.5}}>
+                <i style={{width:8,height:8,borderRadius:3,background:x.renk,flexShrink:0}}/>
+                <span style={{flex:1,color:C.soft}}>{x.ad}</span>
+                <span style={{fontFamily:"monospace",fontWeight:700,fontSize:11.5,marginRight:9,color:(TEMA==="acik"?C.label:"#fff")}}>{kbTutar(x.v)}</span>
+                <span style={{fontSize:10.5,color:WA(0.5),width:44,textAlign:"right"}}>{kbYuzde(x.v/finansmanTop*100,1)}</span>
+              </div>
+            ))}
+            <p style={{margin:"6px 0 0",fontSize:10,color:WA(0.5),lineHeight:1.45}}>
+              Toplam finansman {kbTutar(finansmanTop)}. Ayrıca {kbTutar(h.K("gayrinakdi"))} gayrinakdi
+              kredi (teminat mektubu, akreditif) bilanço dışında.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* AKTİF KOMPOZİSYONU */}
+      {bolumBas("Aktifler Nerede")}
+      <div style={{...KART,padding:14}}>
+        <div style={{display:"flex",height:26,borderRadius:7,overflow:"hidden",marginBottom:11}}>
+          {kompKalem.map(x=><div key={x.ad} style={{width:`${x.v/aktifTop*100}%`,background:x.renk}}/>)}
+          {kompDiger>0&&<div style={{width:`${kompDiger/aktifTop*100}%`,background:WA(0.14)}}/>}
+        </div>
+        {[...kompKalem,{ad:"Diğer",v:kompDiger,renk:WA(0.14)}].map(x=>(
+          <div key={x.ad} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",fontSize:11.5}}>
+            <i style={{width:8,height:8,borderRadius:3,background:x.renk,flexShrink:0}}/>
+            <span style={{flex:1,color:C.soft}}>{x.ad}</span>
+            <span style={{fontFamily:"monospace",fontWeight:700,fontSize:11.5,marginRight:9,color:(TEMA==="acik"?C.label:"#fff")}}>{kbTutar(x.v)}</span>
+            <span style={{fontSize:10.5,color:WA(0.5),width:44,textAlign:"right"}}>{kbYuzde(x.v/aktifTop*100,1)}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* KAYNAK — terminoloji çevirisi burada açıkça yazıyor */}
+      <div style={{marginTop:14,padding:"11px 13px",background:"rgba(224,165,61,0.09)",
+                   border:"1px solid rgba(224,165,61,0.22)",borderRadius:12,
+                   fontSize:10.5,color:WA(0.5),lineHeight:1.5}}>
+        <b style={{color:C.soft}}>Kaynak:</b> BDDK Aylık Bankacılık Sektörü Verileri, {kbDonemAd(h.donem)}.
+        Veriler bankalardan derlenen resmî istatistiklerdir; BDDK yaklaşık iki ay gecikmeyle yayımlar.
+        BDDK ortak şablon kullanır, ekranda katılım bankacılığı karşılıkları gösterilir:
+        Mevduat → Toplanan Fon, Krediler → Kullandırılan Fon, Vadesiz Mevduat → Özel Cari Hesap,
+        Vadeli Mevduat → Katılma Hesabı.
+      </div>
+    </div>
+  );
+}
+
 function KfkNedir(){
   const kimlerYararlanir=["Gerçek ve tüzel KOBİ'ler","Esnaf ve sanatkârlar","Tarım işletmeleri","Kadın ve genç girişimciler","KOBİ dışı firmalar"];
   const paketler=[
@@ -11906,6 +12366,7 @@ const MENU = {
   haftalikOzet:{title:"Haftalık Piyasa Özeti",back:"home"},
   katilimBankalari:{title:"Katılım Bankaları",back:"araclarMenu"},
   kfkNedir:{title:"KFK Nedir?",back:"araclarMenu"},
+  katilimSektoru:{title:"Katılım Bankacılığı Sektörü",back:"araclarMenu"},
   kiraSertifikasi:{title:"Kira Sertifikası İhraçları",back:"araclarMenu"},
   portfoyum:{title:"Portföyüm",back:"araclarMenu"},
   fonDetay:{title:"Fon Detay",back:"portfoyum"},
@@ -12108,6 +12569,7 @@ const MENU_ARAMA_LIST=[
   {key:"haftalikOzet",       label:"Haftalık Piyasa Özeti",                       icon:"📰", grup:"Araçlar", alt:["haftalık","bülten","özet","piyasa","hafta"]},
   {key:"katilimBankalari",   label:"Katılım Bankaları",                          icon:"🏛️", grup:"Araçlar"},
   {key:"kfkNedir",           label:"KFK Nedir?",                                 icon:"🤝", grup:"Araçlar", alt:["kfk","kefalet","katılım finans kefalet","kgf","teminat","kobi"]},
+  {key:"katilimSektoru",     label:"Katılım Bankacılığı Sektörü",               icon:"🏦", grup:"Araçlar", alt:["sektör","bddk","pay","aktif","toplanan fon","kullandırılan fon","katılma hesabı","özel cari","roe","kârlılık"]},
   {key:"kiraSertifikasi",    label:"Kira Sertifikası İhraçları",                 icon:"📜", grup:"Araçlar", alt:["kira sertifikası","sukuk","ihraç","vekâlet","murabaha","icare","varlık kiralama","spk"]},
   {key:"hazineDoviz",        label:"Döviz Dönüştürücü",                          icon:"💱", grup:"Hesaplama Araçları", alt:["kur","dolar","euro","dolar kaç tl"]},
   {key:"piyasaMenu",         label:"Piyasa & Veriler",                           icon:"📊", grup:"Piyasa & Veriler", alt:["tüfe","enflasyon","gösterge","politika faizi","sofr","euribor","tlref","tlrefk","aofm","rezerv","cds","borsa","bist","altın","gümüş","emtia","kripto"]},
@@ -18630,6 +19092,7 @@ function App(){
               {key:"kiraSertifikasi",label:"Kira Sertifikası İhraçları"},
               {key:"katilimBankalari",label:"Katılım Bankaları"},
               {key:"kfkNedir",label:"KFK Nedir?"},
+              {key:"katilimSektoru",label:"Katılım Bankacılığı Sektörü"},
               {key:"piyasaHaberleri",label:"Piyasa Haberleri"},
               {key:"sozluk",label:"Finans Sözlüğü"},
             ].map(m=>(
@@ -19346,6 +19809,11 @@ function App(){
               <span style={{color:WA(0.3),fontSize:20,flexShrink:0}}>›</span>
             </div>
 
+            {/* ── KATILIM BANKACILIĞI SEKTÖRÜ — ana sayfa özet tablosu ──────────
+                Kullanıcı ekrana girmeden de resmi görsün diye dört satırlık özet.
+                Veri gelmezse blok hiç render edilmiyor (sessiz gizlenme). ── */}
+            <KatilimSektoruOzet onAc={()=>nav("katilimSektoru")}/>
+
             {/* Copyright — alt banda yapışık */}
             <p style={{margin:"auto 0 0",padding:"10px 0 4px",fontSize:10,color:WA(0.4),textAlign:"center"}}>
               © 2026 Katılım Plus · Tüm hakları saklıdır.
@@ -19643,6 +20111,18 @@ function App(){
                  seri:evdsMakro?.GOSTERGE_ENERJI_YILLIK_SERI, seriAd:"Enerji Enflasyonu Yıllık Değişim"},
                 {ad:"Kira Yenileme Referans Oranı (TÜFE 12 Ay Ort.)", deger:fmtPct(gY("TUFE_12AY_ORTALAMA")), tarih:gY("TUFE_12AY_ORTALAMA")?.tarih||"", canli:gY("TUFE_12AY_ORTALAMA")!=null,
                  seri:evdsMakro?.TUFE_12AY_ORTALAMA_SERI, seriAd:"TÜFE On İki Aylık Ortalamalara Göre Değişim"},
+                // ── ENFLASYON BEKLENTİLERİ (2026-08-01) ──────────────────────
+                // TCMB anketlerinden 12 ay sonrası yıllık TÜFE beklentisi.
+                // İkisi yan yana duruyor çünkü ARADAKİ FARK tek başına anlamlı:
+                // Temmuz 2026'da piyasa %23,95 beklerken hanehalkı %44,94
+                // bekliyordu — 21 puanlık bu ayrışma, enflasyon beklentilerinin
+                // ne kadar çıpalandığının göstergesi.
+                // ⚠️ Bunlar GERÇEKLEŞEN değil BEKLENTİ; ad alanında açıkça
+                // belirtiliyor ki üstteki TÜFE satırlarıyla karışmasın.
+                {ad:"Enflasyon Beklentisi — Piyasa (12 Ay Sonrası)", deger:fmtPct(gY("BEKLENTI_PIYASA_12AY")), tarih:gY("BEKLENTI_PIYASA_12AY")?.tarih||"", canli:gY("BEKLENTI_PIYASA_12AY")!=null,
+                 seri:evdsMakro?.BEKLENTI_PIYASA_12AY_SERI, seriAd:"Piyasa Katılımcıları 12 Ay Sonrası Enflasyon Beklentisi"},
+                {ad:"Enflasyon Beklentisi — Hanehalkı (12 Ay Sonrası)", deger:fmtPct(gY("BEKLENTI_HANE_12AY")), tarih:gY("BEKLENTI_HANE_12AY")?.tarih||"", canli:gY("BEKLENTI_HANE_12AY")!=null,
+                 seri:evdsMakro?.BEKLENTI_HANE_12AY_SERI, seriAd:"Hanehalkı 12 Ay Sonrası Enflasyon Beklentisi"},
               ];
 
               // ── Alt kategori 3: PARA POLİTİKASI VE FİNANSAL KOŞULLAR
@@ -19967,6 +20447,7 @@ function App(){
               {key:"getiriKarsilastirma", icon:"📊", label:"Getiri Karşılaştırma", desc:"Döviz, altın, gümüş, endeks getirilerini dönemsel karşılaştır", renk:"#F59E0B", bg:"rgba(245,158,11,0.15)"},
               {key:"vadeTakibi", icon:"⏰", label:"Vade Takip & Hatırlatma Ajandam", desc:"Finansman ve ödeme vadelerini takip et, hatırlatma al", renk:C.green, bg:"rgba(74,222,128,0.15)"},
               {key:"katilimBankalari", icon:"🏛️", label:"Katılım Bankaları", desc:"Türkiye'deki katılım bankaları, kuruluş tarihleri ve bilgileri", renk:C.blue, bg:"rgba(91,155,216,0.15)"},
+              {key:"katilimSektoru", icon:"🏦", label:"Katılım Bankacılığı Sektörü", desc:"Sektör payı, fon büyüklükleri ve kârlılık — BDDK resmî verisiyle", renk:"#5B9BD8", bg:"rgba(91,155,216,0.15)"},
               {key:"kfkNedir", icon:"🤝", label:"KFK Nedir?", desc:"Teminat yetersizliğinde işletmenize kefalet desteği — Katılım Finans Kefalet A.Ş.", renk:"#2CCB9A", bg:"rgba(44,203,154,0.15)"},
               {key:"kiraSertifikasi", icon:"📜", label:"Kira Sertifikası İhraçları", desc:"Türkiye'de sukuk ihraçları — SPK resmî verisiyle tür ve yıl bazında", renk:"#F5A623", bg:"rgba(245,166,35,0.15)"},
               {key:"sozluk",     icon:"📖", label:"Katılım Bankacılığı Sözlüğü",     desc:"Terim ve tanımları hızlıca ara", renk:"#60A5FA", bg:"rgba(96,165,250,0.15)"},
@@ -20183,6 +20664,7 @@ function App(){
         {screen==="vadeTakibi"&&<VadeTakibi/>}
         {screen==="katilimBankalari"&&<KatilimBankalari/>}
         {screen==="kfkNedir"&&<KfkNedir/>}
+        {screen==="katilimSektoru"&&<KatilimSektoru/>}
         {screen==="kiraSertifikasi"&&<KiraSertifikasiIhraclari/>}
         {screen==="getiriKarsilastirma"&&<GetiriKarsilastirma/>}
         {screen==="haftalikOzet"&&<HaftalikPiyasaOzeti/>}
