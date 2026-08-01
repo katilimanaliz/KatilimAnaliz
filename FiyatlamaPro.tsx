@@ -16329,6 +16329,170 @@ function PortfoyDegisimEtiket({deger, boyut=11}:{deger:number|null; boyut?:numbe
 // touch olaylarıyla kendi mekanizmamız yazıldı.
 const PORTFOY_SATIR_SIL_GENISLIK = 72;
 const PORTFOY_UZUN_BASMA_MS = 420;
+
+// ── YATAY ŞERİT SÜRÜKLEYEREK SIRALAMA (2026-08-01) ─────────────────────────
+// Ana sayfadaki "Piyasa Özeti" ve "Favori Hesaplamalarım" şeritleri için.
+// Dikey portföy listesindekiyle aynı fikir ama yatay eksende.
+//
+// NEDEN BASILI TUTMA (dokunmatikte): Şeritler yatay kaydırmalı. Parmakla
+// hemen sürüklemeye başlasaydık kaydırma jestiyle çakışırdı — ayırt edici
+// bir bekleme şart. Farede böyle bir çakışma YOK (tarayıcı fare sürüklemesinde
+// kaydırmaz), o yüzden masaüstünde 5 px hareket yeterli. Bu ayrım portföy
+// listesinde de aynı; oradaki dersin tekrarı.
+//
+// SÜRÜKLEME SIRASINDA: taşınan kart hafif büyür ve gölgelenir, diğerleri
+// hedef konuma göre kayar. Bırakılınca yeni sıra localStorage'a yazılır.
+function useYataySurukle(
+  anahtarlar: string[],
+  onSirala: (yeni: string[], tasinan: string) => void,
+  aktifMi: boolean,
+){
+  const [surukleAnahtar,setSurukleAnahtar]=useState<string|null>(null);
+  const [hedefIdx,setHedefIdx]=useState<number|null>(null);
+  const [kayma,setKayma]=useState(0);
+  const kutularRef=useRef<{anahtar:string;sol:number;gen:number;merkez:number}[]>([]);
+  const basXRef=useRef(0);
+  const zamanlayiciRef=useRef<any>(null);
+  const dokunmaGorulduRef=useRef(false);
+  const fareBasiliRef=useRef(false);
+  const eleRef=useRef<Record<string,HTMLDivElement|null>>({});
+  const dinleyiciRef=useRef<any>(null);
+
+  const zamanIptal=()=>{ if(zamanlayiciRef.current){ clearTimeout(zamanlayiciRef.current); zamanlayiciRef.current=null; } };
+
+  const temizle=()=>{
+    const d=dinleyiciRef.current;
+    if(d){
+      document.removeEventListener("touchmove",d.hareket as any);
+      document.removeEventListener("touchend",d.bitir);
+      document.removeEventListener("touchcancel",d.bitir);
+      document.removeEventListener("mousemove",d.hareket as any);
+      document.removeEventListener("mouseup",d.bitir);
+      dinleyiciRef.current=null;
+    }
+  };
+  useEffect(()=>temizle,[]);
+
+  const olayX=(e:any):number|null=>{
+    if(e.touches) return e.touches.length?e.touches[0].clientX:null;
+    return typeof e.clientX==="number"?e.clientX:null;
+  };
+
+  const basla=(anahtar:string, basX:number)=>{
+    if(!aktifMi || anahtarlar.length<2) return;
+    // Kart konumlarını sürükleme BAŞLARKEN bir kez ölç — her harekette
+    // getBoundingClientRect çağırmak hem yavaş hem de kartlar kaydıkça
+    // yanlış sonuç verir.
+    const kutular=anahtarlar.map(a=>{
+      const el=eleRef.current[a];
+      if(!el) return {anahtar:a,sol:0,gen:0,merkez:0};
+      const r=el.getBoundingClientRect();
+      return {anahtar:a,sol:r.left,gen:r.width,merkez:r.left+r.width/2};
+    });
+    kutularRef.current=kutular;
+    basXRef.current=basX;
+    const baslangicIdx=anahtarlar.indexOf(anahtar);
+    setSurukleAnahtar(anahtar);
+    setHedefIdx(baslangicIdx);
+    setKayma(0);
+    try{ (navigator as any).vibrate?.(18); }catch{}
+
+    const hareket=(e:any)=>{
+      const x=olayX(e);
+      if(x==null) return;
+      if(e.cancelable) e.preventDefault();
+      const dx=x-basXRef.current;
+      setKayma(dx);
+      const merkez=kutular[baslangicIdx].merkez+dx;
+      let yeni=baslangicIdx;
+      if(dx>0){ for(let i=baslangicIdx+1;i<kutular.length;i++){ if(merkez>=kutular[i].merkez) yeni=i; else break; } }
+      else if(dx<0){ for(let i=baslangicIdx-1;i>=0;i--){ if(merkez<=kutular[i].merkez) yeni=i; else break; } }
+      setHedefIdx(yeni);
+    };
+    const bitir=()=>{
+      temizle();
+      fareBasiliRef.current=false;
+      setHedefIdx(h=>{
+        if(h!=null && h!==baslangicIdx){
+          const yeni=anahtarlar.slice();
+          const [tasinanA]=yeni.splice(baslangicIdx,1);
+          yeni.splice(h,0,tasinanA);
+          onSirala(yeni,tasinanA);
+        }
+        return null;
+      });
+      setSurukleAnahtar(null);
+      setKayma(0);
+    };
+    dinleyiciRef.current={hareket,bitir};
+    document.addEventListener("touchmove",hareket,{passive:false});
+    document.addEventListener("touchend",bitir);
+    document.addEventListener("touchcancel",bitir);
+    document.addEventListener("mousemove",hareket);
+    document.addEventListener("mouseup",bitir);
+  };
+
+  // Her karta uygulanacak olay/görünüm bilgileri
+  const kartProps=(anahtar:string, idx:number)=>{
+    const tasiniyor=surukleAnahtar===anahtar;
+    const baslangicIdx=surukleAnahtar?anahtarlar.indexOf(surukleAnahtar):-1;
+    // Taşınmayan kartlar hedefe göre kayar (görsel geri bildirim)
+    let ofset=0;
+    if(surukleAnahtar && hedefIdx!=null && !tasiniyor && baslangicIdx>=0){
+      const gen=(kutularRef.current[idx]?.gen||100)+6;
+      if(baslangicIdx<hedefIdx && idx>baslangicIdx && idx<=hedefIdx) ofset=-gen;
+      else if(baslangicIdx>hedefIdx && idx>=hedefIdx && idx<baslangicIdx) ofset=gen;
+    }
+    return {
+      ref:(el:HTMLDivElement|null)=>{ eleRef.current[anahtar]=el; },
+      onTouchStart:(e:any)=>{
+        dokunmaGorulduRef.current=true;
+        if(!aktifMi) return;
+        const x=e.touches[0].clientX, y=e.touches[0].clientY;
+        basXRef.current=x;
+        zamanIptal();
+        const basY=y;
+        zamanlayiciRef.current=setTimeout(()=>basla(anahtar,x),PORTFOY_UZUN_BASMA_MS);
+        // Parmak kayarsa bu bir kaydırma jestidir, sıralama başlatma
+        const izle=(ev:TouchEvent)=>{
+          if(!ev.touches.length) return;
+          const dx=Math.abs(ev.touches[0].clientX-x), dy=Math.abs(ev.touches[0].clientY-basY);
+          if(dx>10||dy>10){ zamanIptal(); document.removeEventListener("touchmove",izle); }
+        };
+        document.addEventListener("touchmove",izle,{passive:true});
+        setTimeout(()=>document.removeEventListener("touchmove",izle),PORTFOY_UZUN_BASMA_MS+50);
+      },
+      onTouchEnd:zamanIptal,
+      onTouchCancel:zamanIptal,
+      onMouseDown:(e:any)=>{
+        if(dokunmaGorulduRef.current||!aktifMi) return;
+        if(e.button!==0) return;
+        e.preventDefault();          // metin seçimini engelle
+        basXRef.current=e.clientX;
+        fareBasiliRef.current=true;
+      },
+      onMouseMove:(e:any)=>{
+        if(dokunmaGorulduRef.current||surukleAnahtar||!aktifMi) return;
+        if(e.buttons!==1){ fareBasiliRef.current=false; return; }
+        if(!fareBasiliRef.current) return;
+        // Masaüstünde beklemeye gerek yok — 5 px yatay hareket yeterli
+        if(Math.abs(e.clientX-basXRef.current)>5) basla(anahtar,basXRef.current);
+      },
+      onMouseUp:()=>{ fareBasiliRef.current=false; },
+      stil:{
+        transform:`translateX(${tasiniyor?kayma:ofset}px)${tasiniyor?" scale(1.06)":""}`,
+        transition:tasiniyor?"none":"transform 0.16s ease",
+        zIndex:tasiniyor?30:1,
+        opacity:tasiniyor?0.92:1,
+        filter:tasiniyor?"drop-shadow(0 8px 18px rgba(0,0,0,0.32))":"none",
+        touchAction:tasiniyor?"none":"auto",
+      } as any,
+      tasiniyor,
+    };
+  };
+
+  return { kartProps, surukleniyorMu:surukleAnahtar!=null };
+}
 function PortfoyWidgetSatir({k, gizli, sonSatirMi, onTikla, onSil, acik, onAcikDegistir, onUzunBasma, surukleniyorMu}:{
   k: PortfoyKalemi; gizli: boolean; sonSatirMi: boolean; onTikla: ()=>void; onSil: (id:string)=>void; acik: boolean; onAcikDegistir: (acikMi:boolean)=>void;
   onUzunBasma?: (id:string, basY:number)=>void; surukleniyorMu?: boolean;
@@ -17956,6 +18120,27 @@ function App(){
     return ["taksitliTicari","soikReeskont","hazineDoviz","konutFinansman"];
   });
   const [favoriDuzenleAcik,setFavoriDuzenleAcik]=useState(false);
+  // Favori şeridi de aynı mantıkla: masaüstünde eklenen ek araçlar da
+  // sürüklenebilir, öne çekilen araç favorilere eklenir.
+  const favGorunen = useMemo(()=>{
+    let liste=[...favoriler];
+    if(genisEkran){
+      const hedef=Math.ceil((ekranW-SIDEBAR_W-40)/(100*icerikOlcek));
+      for(const h of HESAPLA_ARAC_LISTESI){
+        if(liste.length>=hedef) break;
+        if(!liste.includes(h.key)) liste.push(h.key);
+      }
+    }
+    return liste;
+  },[favoriler,genisEkran,ekranW,icerikOlcek]);
+
+  const favoriSirala=(yeniTam:string[],tasinan:string)=>{
+    const kume=new Set([...favoriler,tasinan]);
+    const yeni=yeniTam.filter(k=>kume.has(k));
+    setFavoriler(yeni);
+    try{ localStorage.setItem("katilimAnaliz_favoriler_v1",JSON.stringify(yeni)); }catch{}
+  };
+  const favoriSurukle=useYataySurukle(favGorunen,favoriSirala,true);
 
   // ── Portföyüm ────────────────────────────────────────────────────────────
   const [portfoy,setPortfoy]=useState<PortfoyKalemi[]>(()=>portfoyOku());
@@ -18145,6 +18330,35 @@ function App(){
     }catch{ return PIYASA_OZETI_VARSAYILAN; }
   });
   const [piyasaOzetiDuzenleAcik,setPiyasaOzetiDuzenleAcik]=useState(false);
+  // ── ŞERİTLERDE SÜRÜKLEYEREK SIRALAMA (2026-08-01) ──────────────────────
+  // Masaüstünde şerit, ekranı doldurmak için kataloğun devamındaki kartlarla
+  // tamamlanıyor. Bu kartlar kullanıcının kayıtlı seçimi DEĞİL — ama kullanıcı
+  // aralarında beğendiği birini öne çekmek isteyebilir. Bu yüzden onlar da
+  // sürüklenebiliyor ve öne çekilen kart KAYITLI LİSTEYE EKLENİYOR (örtük
+  // "bunu istiyorum" jesti). Dokunulmayan otomatik kartlar kayda geçmez.
+  const piyasaGorunen = useMemo(()=>{
+    let liste=piyasaOzetiSecim.map(sembol=>PIYASA_OZETI_KATALOG[sembol]).filter(Boolean);
+    if(genisEkran){
+      const hedef=Math.max(liste.length, Math.ceil((ekranW-SIDEBAR_W-40)/(114*icerikOlcek)));
+      for(const sembol of Object.keys(PIYASA_OZETI_KATALOG)){
+        if(liste.length>=hedef) break;
+        if(!piyasaOzetiSecim.includes(sembol)) liste=[...liste,PIYASA_OZETI_KATALOG[sembol]];
+      }
+    }
+    return liste;
+  },[piyasaOzetiSecim,genisEkran,ekranW,icerikOlcek]);
+
+  const piyasaOzetiSirala=(yeniTam:string[],tasinan:string)=>{
+    // Yeni kayıtlı liste: görünen sıradaki kartlardan yalnızca kullanıcının
+    // zaten seçtikleri + (varsa) yeni taşınan kart. Sıra görünen listeden
+    // alınır ki kullanıcı ekranda ne gördüyse o kaydedilsin.
+    const kume=new Set([...piyasaOzetiSecim,tasinan]);
+    const yeni=yeniTam.filter(k=>kume.has(k));
+    setPiyasaOzetiSecim(yeni);
+    try{ localStorage.setItem("kp_piyasa_ozeti_secim",JSON.stringify(yeni)); }catch{}
+  };
+  const piyasaSurukle=useYataySurukle(piyasaGorunen.map((k:any)=>k.sembol),piyasaOzetiSirala,true);
+
   const piyasaOzetiToggle=(sembol:string)=>{
     setPiyasaOzetiSecim(p=>{
       const yeni=p.includes(sembol)?p.filter(s=>s!==sembol):[...p,sembol];
@@ -18801,26 +19015,16 @@ function App(){
               </div>
             </div>
             <div className="piyasa-scroll" style={{display:"flex",overflowX:"auto",gap:6,marginBottom:26,scrollSnapType:"x mandatory",WebkitOverflowScrolling:"touch",paddingBottom:2}}>
-              {(()=>{
-                // Masaüstünde (genisEkran) varsayılan 10 kart geniş ekranı yarım
-                // bırakıyordu; şerit, ekranı dolduracak adede kadar kataloğun
-                // devamından kartlarla tamamlanır. Kullanıcının Düzenle seçimi
-                // AYNEN korunur (localStorage'a dokunulmaz, ekleme yalnızca
-                // görünümde). Mobil web ve native değişmez.
-                let liste=piyasaOzetiSecim.map(sembol=>PIYASA_OZETI_KATALOG[sembol]).filter(Boolean);
-                if(genisEkran){
-                  const hedef=Math.max(liste.length, Math.ceil((ekranW-SIDEBAR_W-40)/(114*icerikOlcek)));
-                  for(const sembol of Object.keys(PIYASA_OZETI_KATALOG)){
-                    if(liste.length>=hedef) break;
-                    if(!piyasaOzetiSecim.includes(sembol)) liste=[...liste,PIYASA_OZETI_KATALOG[sembol]];
-                  }
-                }
-                return liste.map((k:any)=>(
-                <div key={k.sembol} style={{flex:"0 0 108px",minWidth:0,scrollSnapAlign:"start"}}>
-                  <PiyasaOzetiKart ad={k.ad} sembol={k.sembol} dec={k.dec} onTikla={()=>setSeciliKur({kod:k.ad,ad:k.ad,sembol:k.sembol,birim:k.paraOnek})}/>
+              {piyasaGorunen.map((k:any,i:number)=>{
+                const sp:any=piyasaSurukle.kartProps(k.sembol,i);
+                return (
+                <div key={k.sembol} ref={sp.ref}
+                  onTouchStart={sp.onTouchStart} onTouchEnd={sp.onTouchEnd} onTouchCancel={sp.onTouchCancel}
+                  onMouseDown={sp.onMouseDown} onMouseMove={sp.onMouseMove} onMouseUp={sp.onMouseUp}
+                  style={{flex:"0 0 108px",minWidth:0,scrollSnapAlign:"start",position:"relative",...sp.stil}}>
+                  <PiyasaOzetiKart ad={k.ad} sembol={k.sembol} dec={k.dec} onTikla={()=>{ if(!sp.tasiniyor) setSeciliKur({kod:k.ad,ad:k.ad,sembol:k.sembol,birim:k.paraOnek}); }}/>
                 </div>
-                ));
-              })()}
+                );})}
               {piyasaOzetiSecim.length===0&&(
                 <div onClick={()=>setPiyasaOzetiDuzenleAcik(true)} style={{flex:"0 0 108px",display:"flex",alignItems:"center",justifyContent:"center",height:88,borderRadius:14,border:`1.5px dashed ${WA(0.2)}`,cursor:"pointer"}}>
                   <span style={{fontSize:11,color:WA(0.4),textAlign:"center",padding:"0 8px"}}>+ Kart Ekle</span>
@@ -18842,28 +19046,22 @@ function App(){
               </div>
             </div>
             <div className="piyasa-scroll" style={{display:"flex",overflowX:"auto",gap:8,marginBottom:26,scrollSnapType:"x mandatory",WebkitOverflowScrolling:"touch",paddingBottom:2}}>
-              {(()=>{
-                // Masaüstünde favori şeridi de ekranı dolduracak adede tamamlanır
-                // (araç listesinin başından, seçilmemiş olanlarla). Kayıtlı
-                // favoriler değişmez; mobil ve native etkilenmez.
-                let favListe=[...favoriler];
-                if(genisEkran){
-                  const hedef=Math.ceil((ekranW-SIDEBAR_W-40)/(100*icerikOlcek));
-                  for(const h of HESAPLA_ARAC_LISTESI){
-                    if(favListe.length>=hedef) break;
-                    if(!favListe.includes(h.key)) favListe.push(h.key);
-                  }
-                }
-                return favListe.map(key=>{
+              {favGorunen.map((key,i)=>{
                 const item=HESAPLA_ARAC_LISTESI.find(h=>h.key===key);
                 if(!item) return null;
                 const renk=KATEGORI_RENK[EKRAN_KATEGORI[item.key]];
+                const sf:any=favoriSurukle.kartProps(key,i);
                 return(
-                  <div className="press-tile" key={key} onClick={()=>nav(item.key,"home")} style={{
+                  <div className="press-tile" key={key} ref={sf.ref}
+                    onClick={()=>{ if(!sf.tasiniyor) nav(item.key,"home"); }}
+                    onTouchStart={sf.onTouchStart} onTouchEnd={sf.onTouchEnd} onTouchCancel={sf.onTouchCancel}
+                    onMouseDown={sf.onMouseDown} onMouseMove={sf.onMouseMove} onMouseUp={sf.onMouseUp}
+                    style={{
                     flex:"0 0 92px",scrollSnapAlign:"start",position:"relative",overflow:"hidden",
                     background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,
                     borderRadius:22,padding:"12px 6px",cursor:"pointer",minHeight:100,
                     display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:7,
+                    ...sf.stil,
                   }}>
                     {renk&&<div style={{position:"absolute",top:0,left:12,right:12,height:3,borderRadius:"0 0 3px 3px",background:`linear-gradient(90deg,transparent,${renk},transparent)`}}/>}
                     <div style={{height:44,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
@@ -18872,7 +19070,7 @@ function App(){
                     <span style={{fontSize:10.5,fontWeight:700,color:C.soft,textAlign:"center",lineHeight:1.2}}>{item.label}</span>
                   </div>
                 );
-              });})()}
+              })}
               {favoriler.length===0&&(
                 <div onClick={()=>setFavoriDuzenleAcik(true)} style={{flex:"1 0 auto",textAlign:"center",padding:"16px 0",color:WA(0.35),fontSize:12,cursor:"pointer"}}>
                   Henüz favori eklemedin — eklemek için dokun
