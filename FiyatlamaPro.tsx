@@ -182,6 +182,11 @@ const ICON_MAP: Record<string, any> = {
   getiriKarsilastirma: BarChart3,
   haftalikOzet: Newspaper,
   katilimBankalari: Landmark,
+  // 2026-08-01: Yeni ekranlar bu haritaya eklenmemişti; Araçlar menüsündeki
+  // kartlar ikonsuz görünüyordu. Zaten import edilmiş ikonlar kullanıldı,
+  // yeni import riski alınmadı.
+  katilimSektoru: Building2,
+  ekonomiSozluk: PieChart,
   kfkNedir: ShieldCheck,
   kiraSertifikasi: FileText,
   sozluk: BookOpen,
@@ -10358,7 +10363,7 @@ function KatilimSektoruOzet({onAc}:{onAc:()=>void}){
       }}>
         <div style={{display:"flex",alignItems:"center",gap:9,padding:"12px 14px 10px",
                      borderBottom:`1px solid ${WA(0.08)}`}}>
-          <Icon k="katilimBankalari" size={20} color={C.blue}/>
+          <Icon k="katilimSektoru" size={20} color={C.blue}/>
           <span style={{flex:1,fontSize:13,fontWeight:800,color:C.soft}}>Sektördeki Yeri</span>
           <span style={{fontSize:10,color:WA(0.45)}}>{kbDonemKisa(h.donem)} · son veri</span>
         </div>
@@ -10548,7 +10553,7 @@ function KatilimSektoru(){
           const enk=Math.min(...dgr), enb=Math.max(...dgr);
           const pay0=(enb-enk)*0.25 || 0.1;          // üstte/altta nefes payı
           const alt=enk-pay0, ust=enb+pay0, aralik=(ust-alt)||1;
-          const G=300, Y=86, SOL=6, SAG=G-6, UST=16, ALTK=Y-18;
+          const G=300, Y=92, SOL=6, SAG=G-6, UST=20, ALTK=Y-18;
           const n=dgr.length;
           const kn=(i:number)=>SOL+i*((SAG-SOL)/Math.max(1,n-1));
           const dn=(v:number)=>ALTK-((v-alt)/aralik)*(ALTK-UST);
@@ -10563,12 +10568,18 @@ function KatilimSektoru(){
                 <path d={cizgi} fill="none" stroke="#3B82F6" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"/>
                 {dgr.map((v,i)=>{
                   const sonMu=i===n-1, zirveMi=i===enbIdx&&!sonMu;
+                  // Nokta azken HEPSİ etiketlenir. Önceden yalnızca ilk, zirve
+                  // ve son yazılıyordu; yılbaşı tabanı olan Aralık noktası
+                  // etiketsiz kalıyor ve "+0,11 puan"ın nereden geldiği
+                  // grafikten okunamıyordu. Kalabalıklaşınca (8+ nokta)
+                  // seçici davranışa dönülür.
+                  const etiketli = n<=6 ? true : (sonMu||zirveMi||i===0);
                   return (
                     <g key={i}>
                       <circle cx={kn(i)} cy={dn(v)} r={sonMu?4:2.8}
                               fill={sonMu?"#3B82F6":(TEMA==="acik"?"#E9EEF4":"#16222E")}
                               stroke="#3B82F6" strokeWidth={sonMu?0:1.8}/>
-                      {(sonMu||zirveMi||i===0)&&(
+                      {etiketli&&(
                         <text x={kn(i)} y={dn(v)-9} fontSize={9.5} fontWeight={700}
                               textAnchor={i===0?"start":(sonMu?"end":"middle")}
                               fill={sonMu?"#3B82F6":WA(0.55)}>
