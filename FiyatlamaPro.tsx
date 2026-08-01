@@ -10320,6 +10320,44 @@ function EkonomiSozluk(){
   );
 }
 
+// ── BANKA BAZINDA VERİ (2026-08-01) ────────────────────────────────────────
+// Kaynak: KAP "Özet Finansal Bilgiler" sayfaları → public/katilim-bankalari.json
+//
+// ⚠️ SEKTÖR VERİSİYLE AYNI DÖNEM DEĞİL. Sektör verisi BDDK'dan ve aylık;
+// banka verisi KAP'tan ve çeyreklik, üstelik ~3 ay daha eski. Bankaların
+// toplamı ekrandaki sektör rakamını TUTMAZ. Bu yüzden açılan listede kendi
+// dönemi ayrıca yazılıyor ve "sektör payı" değil "banka içindeki pay"
+// gösteriliyor — iki farklı tabandan yüzde üretip kullanıcıyı yanıltmamak için.
+//
+// KAPSAM: aktif ve özkaynak 9/9 bankada var, toplanan fon 8/9 (Hayat Finans
+// eksik), dönem kârı yalnızca 2/9. Kâr satırı bu yüzden AÇILMIYOR — eksik
+// listeyi sıralama olarak sunmak yanıltıcı olurdu.
+let KB_BANKA:any=null; let KB_BANKA_ISTEK:Promise<any>|null=null;
+function kbBankaGetir(){
+  if(KB_BANKA) return Promise.resolve(KB_BANKA);
+  if(!KB_BANKA_ISTEK){
+    KB_BANKA_ISTEK = fetch(`${API_BASE}/katilim-bankalari.json`)
+      .then(r=>r.ok?r.json():null).then(j=>{ KB_BANKA=j; return j; }).catch(()=>null);
+  }
+  return KB_BANKA_ISTEK;
+}
+// Bir kalem için bankaları büyükten küçüğe sıralar; verisi olmayan banka atlanır
+function kbBankaSirala(veri:any, kalem:string){
+  const bl = Array.isArray(veri?.bankalar)?veri.bankalar:[];
+  const don = veri?.sonDonem || "2026-03";
+  const liste = bl.map((b:any)=>{
+    const d = b.donemler?.[don] || {};
+    const eski = b.donemler?.["2025-12"] || {};
+    const v = d[kalem] ?? eski[kalem] ?? null;
+    return v==null?null:{ad:b.ad, kisa:b.kisa, deger:v,
+      gecikmeli: d[kalem]==null,            // son dönemi yoksa eski dönem gösteriliyor
+      ikincil: !!b.ikincilKaynak, konsolideDegil: !!b.konsolideDegil};
+  }).filter(Boolean) as any[];
+  liste.sort((a,b)=>b.deger-a.deger);
+  const toplam = liste.reduce((t,x)=>t+x.deger,0);
+  return {liste, toplam, donem:don};
+}
+
 function KatilimSektoruOzet({onAc}:{onAc:()=>void}){
   const [veri,setVeri]=useState<any>(null);
   useEffect(()=>{ kbVeriGetir().then(setVeri); },[]);
@@ -10398,7 +10436,11 @@ function KatilimSektoruOzet({onAc}:{onAc:()=>void}){
 function KatilimSektoru(){
   const [veri,setVeri]=useState<any>(null);
   const [yukleniyor,setYukleniyor]=useState(true);
+  const [bankaVeri,setBankaVeri]=useState<any>(null);
+  const [acikKalem,setAcikKalem]=useState<string|null>(null);
   useEffect(()=>{ kbVeriGetir().then(v=>{ setVeri(v); setYukleniyor(false); }); },[]);
+  // Banka verisi ayrı dosyada; gelmezse satırlar açılmaz, ekranın geri kalanı çalışır
+  useEffect(()=>{ kbBankaGetir().then(setBankaVeri); },[]);
   const h = useMemo(()=>kbHesapla(veri),[veri]);
 
   // Açık temada #E9EEF4 — uygulamanın diğer ekranlarındaki kart zemini.
@@ -10410,19 +10452,79 @@ function KatilimSektoru(){
       <span style={{flex:1,height:1,background:WA(0.08)}}/>
     </div>
   );
-  // Tutarlı satır: solda ad + not, sağda değer + değişim
-  const satir=(ad:string,not:string,deger:string,degisim?:{metin:string,renk:string})=>(
-    <div style={{...KART,padding:"13px 14px",marginBottom:9,display:"flex",alignItems:"center",gap:12}}>
-      <div style={{flex:1,minWidth:0}}>
-        <p style={{margin:0,fontSize:13.5,fontWeight:700,color:C.soft,lineHeight:1.25}}>{ad}</p>
-        {not&&<p style={{margin:"3px 0 0",fontSize:10.5,color:WA(0.5)}}>{not}</p>}
+  // Tutarlı satır. `kalem` verilirse ve o kalem için banka verisi varsa satır
+  // AÇILABİLİR olur: dokununca altında bankalar büyükten küçüğe sıralanır.
+  // Veri yoksa ok işareti hiç gösterilmez — dokunulacakmış izlenimi vermesin.
+  const satir=(ad:string,not:string,deger:string,degisim?:{metin:string,renk:string},kalem?:string)=>{
+    const bankaVar = !!(kalem && bankaVeri && kbBankaSirala(bankaVeri,kalem).liste.length>2);
+    const acikMi = bankaVar && acikKalem===kalem;
+    return (
+    <div style={{...KART,marginBottom:9,overflow:"hidden"}}>
+      <div onClick={bankaVar?()=>setAcikKalem(acikMi?null:kalem!):undefined}
+           style={{padding:"13px 14px",display:"flex",alignItems:"center",gap:12,
+                   cursor:bankaVar?"pointer":"default"}}>
+        <div style={{flex:1,minWidth:0}}>
+          <p style={{margin:0,fontSize:13.5,fontWeight:700,color:C.soft,lineHeight:1.25}}>{ad}</p>
+          {not&&<p style={{margin:"3px 0 0",fontSize:10.5,color:WA(0.5)}}>{not}</p>}
+        </div>
+        <div style={{textAlign:"right",flexShrink:0,whiteSpace:"nowrap"}}>
+          <p style={{margin:0,fontSize:16,fontWeight:800,fontFamily:"monospace",letterSpacing:-.4,color:(TEMA==="acik"?C.label:"#fff")}}>{deger}</p>
+          {degisim&&<p style={{margin:"2px 0 0",fontSize:11.5,fontWeight:700,color:degisim.renk}}>{degisim.metin}</p>}
+        </div>
+        {bankaVar&&(
+          <span style={{color:acikMi?C.blue:WA(0.3),fontSize:15,flexShrink:0,marginLeft:-4,
+                        transform:acikMi?"rotate(90deg)":"none",transition:"transform 0.16s"}}>›</span>
+        )}
       </div>
-      <div style={{textAlign:"right",flexShrink:0,whiteSpace:"nowrap"}}>
-        <p style={{margin:0,fontSize:16,fontWeight:800,fontFamily:"monospace",letterSpacing:-.4,color:(TEMA==="acik"?C.label:"#fff")}}>{deger}</p>
-        {degisim&&<p style={{margin:"2px 0 0",fontSize:11.5,fontWeight:700,color:degisim.renk}}>{degisim.metin}</p>}
-      </div>
+      {acikMi&&bankaKirilimi(kalem!)}
     </div>
-  );
+    );
+  };
+
+  // Açılan banka listesi — yatay çubuk + tutar + listedeki pay
+  const bankaKirilimi=(kalem:string)=>{
+    const {liste,toplam,donem}=kbBankaSirala(bankaVeri,kalem);
+    if(!liste.length) return null;
+    const enb=liste[0].deger||1;
+    const eksikVar=liste.some(x=>x.ikincil||x.konsolideDegil||x.gecikmeli);
+    return (
+      <div style={{borderTop:`1px solid ${WA(0.08)}`,padding:"11px 14px 13px",
+                   background:(TEMA==="acik"?"rgba(22,34,46,0.03)":"rgba(0,0,0,0.16)")}}>
+        {/* ⚠️ Dönem farkı burada AÇIKÇA yazılıyor: sektör verisi daha güncel,
+            bankaların toplamı üstteki rakamı tutmaz. */}
+        <p style={{margin:"0 0 10px",fontSize:9.5,color:WA(0.45),lineHeight:1.4}}>
+          Banka bazında · {kbDonemAd(donem.replace("-","-"))} · KAP verisi
+          <span style={{color:"#E0A53D"}}> · sektör verisinden farklı dönem, toplamı tutmaz</span>
+        </p>
+        {liste.map((b:any,i:number)=>(
+          <div key={b.ad} style={{marginBottom:i===liste.length-1?0:9}}>
+            <div style={{display:"flex",alignItems:"baseline",gap:7,marginBottom:4}}>
+              <span style={{fontSize:9.5,color:WA(0.38),width:14,flexShrink:0,fontFamily:"monospace"}}>{i+1}</span>
+              <span style={{flex:1,fontSize:12,fontWeight:700,color:C.soft,minWidth:0,
+                            overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                {b.ad}{(b.ikincil||b.konsolideDegil||b.gecikmeli)&&<span style={{color:"#E0A53D"}}> *</span>}
+              </span>
+              <span style={{fontSize:11.5,fontWeight:800,fontFamily:"monospace",flexShrink:0,
+                            color:(TEMA==="acik"?C.label:"#fff")}}>{kbTutar(b.deger/1000)}</span>
+              <span style={{fontSize:10,color:WA(0.45),width:40,textAlign:"right",flexShrink:0}}>
+                {kbYuzde(b.deger/toplam*100,1)}
+              </span>
+            </div>
+            <div style={{height:5,borderRadius:3,background:WA(0.07),overflow:"hidden"}}>
+              <div style={{width:`${Math.max(2,b.deger/enb*100)}%`,height:"100%",borderRadius:3,
+                           background:i===0?"#3B82F6":(i<3?"#5B9BD8":"#6B8299")}}/>
+            </div>
+          </div>
+        ))}
+        {eksikVar&&(
+          <p style={{margin:"10px 0 0",fontSize:9,color:WA(0.42),lineHeight:1.45}}>
+            * Kuveyt Türk verisi bankanın kendi denetim raporundan (konsolide olmayan),
+            Hayat Finans ikincil kaynaktan; bazı bankaların son dönemi henüz yayımlanmadı.
+          </p>
+        )}
+      </div>
+    );
+  };
   // Katılım vs sektör karşılaştırma çubuğu. Tek başına bir oran anlamsız;
   // sektörle yan yana durunca anlam kazanıyor.
   const karsilastir=(ad:string,kat:number|null,sek:number|null,not:string,tersMi=false)=>{
@@ -10607,10 +10709,18 @@ function KatilimSektoru(){
       {/* BÜYÜKLÜKLER — değişim YILBAŞINDAN hesaplanıyor (bilanço büyüklükleri
           stok kalemidir; yılbaşı Aralık dönemine göre kıyaslanır) */}
       {bolumBas("Büyüklükler · yılbaşından değişim")}
-      {satir("Aktif Büyüklük",`Sektör payı ${kbYuzde(h.pay("aktif"))}`,kbTutar(h.K("aktif")),ytdEtiket("aktif"))}
-      {satir("Toplanan Fon",`Sektör payı ${kbYuzde(h.pay("fon"))}`,kbTutar(h.K("fon")),ytdEtiket("fon"))}
+      {bankaVeri&&(
+        <p style={{margin:"-4px 4px 9px",fontSize:10,color:WA(0.42)}}>
+          Satırlara dokunarak banka bazında dağılımı görebilirsin
+        </p>
+      )}
+      {satir("Aktif Büyüklük",`Sektör payı ${kbYuzde(h.pay("aktif"))}`,kbTutar(h.K("aktif")),ytdEtiket("aktif"),"aktif")}
+      {satir("Toplanan Fon",`Sektör payı ${kbYuzde(h.pay("fon"))}`,kbTutar(h.K("fon")),ytdEtiket("fon"),"fon")}
+      {/* Kullandırılan Fon ve Dönem Kârı satırları AÇILMIYOR: KAP özet tablosunda
+          "Krediler" ayrı bir kalem olarak yok, dönem kârı da yalnızca iki bankada
+          yayımlanmış. Eksik listeyi sıralama olarak sunmak yanıltıcı olurdu. */}
       {satir("Kullandırılan Fon",`Sektör payı ${kbYuzde(h.pay("kredi"))}`,kbTutar(h.K("kredi")),ytdEtiket("kredi"))}
-      {satir("Özkaynak",`Sektör payı ${kbYuzde(h.pay("ozkaynak"))}`,kbTutar(h.K("ozkaynak")),ytdEtiket("ozkaynak"))}
+      {satir("Özkaynak",`Sektör payı ${kbYuzde(h.pay("ozkaynak"))}`,kbTutar(h.K("ozkaynak")),ytdEtiket("ozkaynak"),"ozkaynak")}
 
       {/* KÂRLILIK */}
       {bolumBas("Kârlılık")}
