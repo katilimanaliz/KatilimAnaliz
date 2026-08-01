@@ -18159,6 +18159,57 @@ function App(){
       return yeni;
     });
   };
+  // ── SUNUCUDAN DUYURU ÇEKME (2026-08-01) ────────────────────────────────
+  // Uygulama KAPALIYKEN gelen bildirimler geçmişe kaydedilmiyordu; push
+  // dinleyicileri yalnızca uygulama açıkken ya da bildirime dokunulduğunda
+  // çalışıyor. Artık açılışta sunucudaki toplu duyuru arşivi çekilip yerel
+  // geçmişle birleştiriliyor.
+  //
+  // ÇİFT KAYIT KORUMASI: Aynı duyuru hem push dinleyicisinden hem sunucudan
+  // gelebilir. Sunucu kaydının id'si "duyuru_<ts>" biçiminde sabit olduğu
+  // için id kontrolü yeterli değil — push'tan gelen kaydın id'si farklı.
+  // Bu yüzden başlık+gövde ikilisi de karşılaştırılıyor.
+  //
+  // OKUNMA DURUMU: Sunucudan gelen duyurular okunmamış sayılır ki kullanıcı
+  // kaçırdığı bildirimi çan simgesindeki sayaçtan görsün. Kullanıcının daha
+  // önce sildiği duyurular geri gelmesin diye silinenlerin id'si ayrıca
+  // saklanıyor.
+  useEffect(()=>{
+    let iptal=false;
+    (async()=>{
+      try{
+        const r=await fetch(`${API_BASE}/api/bildirim?islem=duyurular`);
+        if(!r.ok) return;
+        const j=await r.json();
+        const gelen:any[]=Array.isArray(j?.duyurular)?j.duyurular:[];
+        if(iptal||gelen.length===0) return;
+
+        let silinen:string[]=[];
+        try{ silinen=JSON.parse(localStorage.getItem("kp_duyuru_silinen")||"[]"); }catch{}
+
+        setBildirimGecmisi(p=>{
+          const varOlan=new Set(p.map(b=>`${b.baslik}|${b.govde}`));
+          const mevcutId=new Set(p.map(b=>b.id));
+          const yeniler=gelen
+            .filter(d=>!silinen.includes(d.id))
+            .filter(d=>!mevcutId.has(d.id))
+            .filter(d=>!varOlan.has(`${d.baslik}|${d.govde}`))
+            .map(d=>({
+              id:d.id, baslik:d.baslik, govde:d.govde,
+              tarih:new Date(d.ts).toISOString(), okundu:false, kaynak:"duyuru",
+            }));
+          if(yeniler.length===0) return p;
+          const birlesik=[...yeniler,...p]
+            .sort((a,b)=>new Date(b.tarih).getTime()-new Date(a.tarih).getTime())
+            .slice(0,50);
+          try{ localStorage.setItem("kp_bildirim_gecmisi",JSON.stringify(birlesik)); }catch{}
+          return birlesik;
+        });
+      }catch{}
+    })();
+    return ()=>{ iptal=true; };
+  },[]);
+
   const bildirimOkunduIsaretle=()=>{
     setBildirimGecmisi(p=>{
       const yeni=p.map(b=>({...b,okundu:true}));
@@ -18168,6 +18219,14 @@ function App(){
   };
   // Tek bir bildirimi sil (listedeki × düğmesi).
   const bildirimSil=(id:string)=>{
+    // Sunucu kaynaklı duyuru silinirse id'si kaydediliyor; aksi halde bir
+    // sonraki açılışta arşivden tekrar çekilip geri gelirdi.
+    if(String(id).startsWith("duyuru_")){
+      try{
+        const eski=JSON.parse(localStorage.getItem("kp_duyuru_silinen")||"[]");
+        if(!eski.includes(id)) localStorage.setItem("kp_duyuru_silinen",JSON.stringify([...eski,id].slice(-100)));
+      }catch{}
+    }
     setBildirimGecmisi(p=>{
       const yeni=p.filter(b=>b.id!==id);
       try{ localStorage.setItem("kp_bildirim_gecmisi",JSON.stringify(yeni)); }catch{}
@@ -18177,6 +18236,14 @@ function App(){
   // Tüm geçmişi temizle. Geri alınamaz olduğu için modalde iki adımlı
   // onay isteniyor (ilk dokunuş "Emin misiniz?" der, ikincisi siler).
   const bildirimTumunuSil=()=>{
+    // Sunucudan gelen duyuruların hepsi de silinmiş sayılmalı.
+    try{
+      const duyuruIdler=bildirimGecmisi.filter(b=>String(b.id).startsWith("duyuru_")).map(b=>b.id);
+      if(duyuruIdler.length){
+        const eski=JSON.parse(localStorage.getItem("kp_duyuru_silinen")||"[]");
+        localStorage.setItem("kp_duyuru_silinen",JSON.stringify([...new Set([...eski,...duyuruIdler])].slice(-100)));
+      }
+    }catch{}
     setBildirimGecmisi([]);
     try{ localStorage.removeItem("kp_bildirim_gecmisi"); }catch{}
   };

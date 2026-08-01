@@ -47,6 +47,7 @@
 //   POST ?islem=alarm-listele { token }                    → {alarmlar:[...]}
 //   POST ?islem=alarm-sil     { token, id }
 //   POST ?islem=alarm-durum   { token, id, aktif } → KAP aboneliğini duraklat/başlat
+//   GET  ?islem=duyurular[&sonrasi=<ts>] → son toplu duyurular (geçmiş için)
 //
 //   BİST HİSSE ALARMLARI (2026-07-29 eklendi): Sembol "BIST:" önekiyle
 //   gelirse (örn. "BIST:ASELS") fiyat /api/hisse-proxy'den okunur. Detaylı
@@ -166,6 +167,26 @@ async function tekTokeneGonder(token, baslik, govde, veri) {
 const SON_BILDIRIM_ANAHTAR = "sonGonderilenBildirim";
 const BILDIRIM_TEKRAR_ONLE_SANIYE = 30 * 60; // 30 dakika
 
+// ── TOPLU DUYURU ARŞİVİ (2026-08-01) ───────────────────────────────────────
+// SORUN: Uygulama KAPALIYKEN gelen bildirimler geçmişe hiç kaydedilmiyordu.
+// Frontend yalnızca iki olayla kayıt tutuyor:
+//   notificationReceived        → sadece uygulama AÇIKKEN çalışır
+//   notificationActionPerformed → sadece bildirime DOKUNULURSA çalışır
+// Kullanıcı bildirimi kaçırır ya da kaydırıp atarsa uygulamada hiç izi
+// kalmıyordu — 1 Ağustos'ta 236 kişiye giden haftalık özet duyurusu
+// kimsenin geçmişinde görünmedi.
+//
+// ÇÖZÜM: Toplu duyurular herkese aynı gittiği için kullanıcı başına
+// saklamaya gerek yok — TEK bir Redis anahtarında son N duyuru tutuluyor.
+// Uygulama açılışta bu listeyi çekip kendi yerel geçmişiyle birleştiriyor.
+// Maliyet: duyuru başına tek yazma, kullanıcı sayısından bağımsız.
+//
+// Fiyat alarmları bu listeye GİRMEZ: onlar kişiye özel ve alarm kaydında
+// zaten tetiklenme bilgisi duruyor (ileride oradan da beslenebilir).
+const DUYURU_ARSIV_ANAHTAR = "duyuruArsiv";
+const DUYURU_ARSIV_BOYU = 20;      // saklanacak duyuru sayısı
+const DUYURU_ARSIV_GUN = 30;       // bundan eski duyurular istemciye verilmez
+
 async function bildirimGonder(req, res) {
   const gelenAnahtarHeader = req.headers["x-admin-key"];
   const gelenAnahtarQuery = req.query?.anahtar;
@@ -261,6 +282,26 @@ async function bildirimGonder(req, res) {
     console.error("Son gönderim izi kaydedilemedi (bildirim yine de gitti):", e.message);
   }
 
+  // Duyuru arşivine ekle — uygulama kapalıyken gelen bildirimlerin
+  // geçmişte görünmesini sağlayan kayıt. Hata olursa bildirim yine gider.
+  try {
+    let arsiv = [];
+    const ham = await redis.get(DUYURU_ARSIV_ANAHTAR);
+    if (Array.isArray(ham)) arsiv = ham;
+    else if (typeof ham === "string") { try { arsiv = JSON.parse(ham) || []; } catch {} }
+    const kayit = {
+      id: `duyuru_${Date.now()}`,
+      baslik,
+      govde,
+      ts: Date.now(),
+      alici: gonderilenToplam,
+    };
+    const yeni = [kayit, ...arsiv.filter((k) => k && k.id !== kayit.id)].slice(0, DUYURU_ARSIV_BOYU);
+    await redis.set(DUYURU_ARSIV_ANAHTAR, yeni);
+  } catch (e) {
+    console.error("Duyuru arşive yazılamadı (bildirim yine de gitti):", e.message);
+  }
+
   res.status(200).json({
     basarili: true,
     hedefTokenSayisi: tokenlar.length,
@@ -268,6 +309,40 @@ async function bildirimGonder(req, res) {
     temizlenenGecersizToken: gecersizTokenlar.length,
     ornekHatalar,
   });
+}
+
+// Uygulamanın açılışta çağırdığı uç: son toplu duyurular.
+//
+//   GET/POST ?islem=duyurular[&sonrasi=<ts>]
+//   → { basarili, duyurular: [{id, baslik, govde, ts}] }
+//
+// Kimlik doğrulaması YOK: içerik zaten tüm kullanıcılara push olarak gitmiş
+// genel duyurulardan ibaret, kişisel veri içermiyor. `alici` alanı (kaç
+// cihaza ulaştığı) istemciye VERİLMEZ — bu işletme bilgisi.
+//
+// ?sonrasi= verilirse yalnızca o zaman damgasından yeni olanlar döner;
+// istemci son gördüğü damgayı saklayıp gereksiz veri çekmez.
+async function duyurulariListele(req, res) {
+  res.setHeader("Cache-Control", "s-maxage=60, stale-while-revalidate=300");
+  try {
+    let arsiv = [];
+    const ham = await redis.get(DUYURU_ARSIV_ANAHTAR);
+    if (Array.isArray(ham)) arsiv = ham;
+    else if (typeof ham === "string") { try { arsiv = JSON.parse(ham) || []; } catch {} }
+
+    const sonrasi = Number(req.query?.sonrasi || req.body?.sonrasi || 0) || 0;
+    const enEski = Date.now() - DUYURU_ARSIV_GUN * 86400 * 1000;
+
+    const liste = arsiv
+      .filter((k) => k && k.ts && k.ts > enEski && k.ts > sonrasi)
+      .sort((a, b) => b.ts - a.ts)
+      .map((k) => ({ id: k.id, baslik: k.baslik, govde: k.govde, ts: k.ts }));
+
+    res.status(200).json({ basarili: true, duyurular: liste });
+  } catch (e) {
+    // Hata durumunda boş liste — uygulama açılışı bundan etkilenmemeli.
+    res.status(200).json({ basarili: false, duyurular: [], hata: e.message });
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1211,6 +1286,20 @@ export default async function handler(req, res) {
     return;
   }
 
+  // Duyuru listesi GET ile de çağrılabilmeli — uygulama açılışta basit bir
+  // fetch atıyor ve okuma işlemi için POST zorunluluğu gereksiz. (İlk sürümde
+  // bu blok POST kontrolünün ARKASINDA kalmıştı ve açılış isteği 405 alıyordu;
+  // testte yakalandı.)
+  if (islem === "duyurular") {
+    try {
+      await duyurulariListele(req, res);
+    } catch (e) {
+      console.error("bildirim.js duyuru hatası:", e);
+      res.status(200).json({ basarili: false, duyurular: [] });
+    }
+    return;
+  }
+
   if (req.method !== "POST") {
     res.status(405).json({ hata: "Sadece POST kabul edilir" });
     return;
@@ -1231,6 +1320,7 @@ export default async function handler(req, res) {
       await alarmTemizle(req, res);
     } else if (islem === "alarm-durum") {
       await alarmDurum(req, res);
+
     } else {
       res.status(400).json({ hata: "Geçersiz 'islem'." });
     }
