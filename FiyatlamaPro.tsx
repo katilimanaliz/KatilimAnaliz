@@ -18504,7 +18504,26 @@ function App(){
                 <div style={{marginBottom:10,position:"relative"}}>
                   <div style={{display:"flex",alignItems:"center",background:WA(0.07),borderRadius:12,border:menuAramaOdakli?`1.5px solid ${C.blue}`:`1px solid ${WA(0.12)}`,padding:"0 12px",boxShadow:menuAramaOdakli?`0 0 0 3px ${C.blueLight}`:"none",transition:"border-color 0.15s, box-shadow 0.15s"}}>
                     <span style={{fontSize:14,color:WA(0.4),marginRight:8}}>🔍</span>
+                    {/* ── OTOMATİK DOLDURMA KAPALI (2026-08-01) ────────────────
+                        Android'de (Gboard/Samsung klavye) bu alan bir "isim"
+                        alanı sanılıp sayfadaki başlık ("Hoş geldin") otomatik
+                        doldurma önerisi olarak kutunun üzerine biniyordu —
+                        kullanıcı ekranda iki kez "Hoş geldin" görüyordu,
+                        kutuya dokununca kayboluyordu. type="search" + autoComplete
+                        ve arkadaşları bu davranışı kapatıyor.
+                        name/id BİLEREK verilmedi: tarayıcılar isimlendirilmiş
+                        alanları geçmiş değerlerle eşleştirip yeniden öneri
+                        sunabiliyor. ── */}
                     <input
+                      type="search"
+                      inputMode="search"
+                      enterKeyHint="search"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
+                      data-form-type="other"
+                      aria-label={CV("Menülerde ara…")}
                       value={menuAramaQ}
                       onChange={e=>setMenuAramaQ(e.target.value)}
                       onFocus={()=>setMenuAramaOdakli(true)}
