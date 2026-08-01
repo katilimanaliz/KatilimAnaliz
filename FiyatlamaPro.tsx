@@ -10101,16 +10101,46 @@ function kbHesapla(veri:any){
   const d = Array.isArray(veri?.donemler)?[...veri.donemler].sort((a,b)=>String(a.donem).localeCompare(String(b.donem))):[];
   if(d.length===0) return null;
   const son = d[d.length-1];
-  const hedefYil = (()=>{ const [y,a]=String(son.donem).split("-"); return `${parseInt(y,10)-1}-${a}`; })();
-  const onceki = d.find(x=>x.donem===hedefYil) || (d.length>1?d[0]:null);
+  const [sonYil,sonAy] = String(son.donem).split("-");
+
+  // ── İKİ AYRI KARŞILAŞTIRMA TABANI (2026-08-01) ──────────────────────────
+  // STOK kalemleri (aktif, fon, özkaynak…) bilanço büyüklükleridir; birikimli
+  // değil, o ana ait fotoğraftır. Bunlar için YILBAŞINDAN değişim anlamlıdır:
+  // taban = önceki yılın Aralık dönemi.
+  //
+  // AKIM kalemi olan DÖNEM KÂRI ise yıl içinde birikir ve her Ocak SIFIRLANIR
+  // (2025-12: 85,6 Mr → 2026-03: 29,0 Mr). Onu Aralık'la kıyaslamak saçma bir
+  // düşüş üretirdi. Bu yüzden kâr GEÇEN YILIN AYNI DÖNEMİyle karşılaştırılır.
+  // Ekranda her iki etiket de açıkça yazılır ki hangi tabana göre olduğu
+  // belirsiz kalmasın.
+  const yilbasiKod = `${parseInt(sonYil,10)-1}-12`;
+  const gecenYilKod = `${parseInt(sonYil,10)-1}-${sonAy}`;
+  const yilbasi = d.find(x=>x.donem===yilbasiKod) || null;
+  const gecenYil = d.find(x=>x.donem===gecenYilKod) || null;
+  // Yılbaşı kaydı yoksa geri düşülecek taban (en eski dönem)
+  const onceki = yilbasi || gecenYil || (d.length>1?d[0]:null);
   const K=(o:any,k:string)=>o?.katilim?.[k]?.t ?? null;
   const S=(o:any,k:string)=>o?.sektor?.[k]?.t ?? null;
   const pay=(k:string,o=son)=> (K(o,k)!=null&&S(o,k))?K(o,k)!/S(o,k)!*100:null;
-  const yillik=(k:string)=> (onceki&&K(son,k)!=null&&K(onceki,k))?(K(son,k)!/K(onceki,k)!-1)*100:null;
+  // Stok kalemleri için yılbaşından; taban yoksa null (uydurma yapma).
+  const ytd=(k:string)=> (yilbasi&&K(son,k)!=null&&K(yilbasi,k))?(K(son,k)!/K(yilbasi,k)!-1)*100:null;
+  // Akım kalemi (kâr) için geçen yılın aynı dönemi.
+  const yillik=(k:string)=> (gecenYil&&K(son,k)!=null&&K(gecenYil,k))?(K(son,k)!/K(gecenYil,k)!-1)*100:null;
+  // Genel amaçlı: stokta ytd, kârda yıllık
+  const degisim=(k:string)=> k==="kar"?yillik(k):ytd(k);
   const oran=(a:number|null,b:number|null)=> (a!=null&&b)?a/b*100:null;
   return {
     donem:son.donem, oncekiDonem:onceki?.donem||null, tumDonemler:d,
-    K:(k:string)=>K(son,k), S:(k:string)=>S(son,k), pay, yillik,
+    K:(k:string)=>K(son,k), S:(k:string)=>S(son,k), pay, ytd, yillik, degisim,
+    yilbasiDonem:yilbasi?.donem||null, gecenYilDonem:gecenYil?.donem||null,
+    // Sektör payının yılbaşından değişimi (puan)
+    payYtd:(()=>{
+      if(!yilbasi) return null;
+      const a1=K(yilbasi,"aktif"), b1=S(yilbasi,"aktif");
+      const a2=K(son,"aktif"), b2=S(son,"aktif");
+      if(!a1||!b1||!a2||!b2) return null;
+      return (a2/b2*100)-(a1/b1*100);
+    })(),
     kirilim:(k:string,taraf:"katilim"|"sektor"="katilim")=>{
       const o=son?.[taraf]?.[k]; if(!o||!o.t) return null;
       return {tl:o.tl, yp:o.yp, tlPct:o.tl/o.t*100, ypPct:o.yp/o.t*100};
@@ -10131,6 +10161,160 @@ function kbHesapla(veri:any){
 
 // Ana sayfa özet kartı — aynı JSON'u kullanır (kbVeriGetir bellekte tutar,
 // ekranla birlikte iki kez indirilmez).
+// ═══════════════════════════════════════════════════════════════════════════
+// EKONOMİ SÖZLÜĞÜ (2026-08-01)
+// ═══════════════════════════════════════════════════════════════════════════
+// Mevcut "Katılım Bankacılığı Sözlüğü"nden AYRI bir ekran. Gerekçe: o sözlük
+// akad/fıkıh ve katılım ürünlerine odaklı (61 terim), bu ise genel ekonomi
+// ve finans terimleri (152 terim). İkisini birleştirmek her iki kitlenin de
+// aradığını bulmasını zorlaştırırdı.
+//
+// NEDEN JSON: FiyatlamaPro.tsx zaten 1,4 MB. 152 terimi gömmek dosyayı ~31 KB
+// büyütür ve her açılışta indirtirdi. Ayrı dosya yalnızca ekran açılınca
+// yükleniyor; terim eklemek de kod değişikliği gerektirmiyor.
+let ES_ONBELLEK:any=null; let ES_ISTEK:Promise<any>|null=null;
+function esVeriGetir(){
+  if(ES_ONBELLEK) return Promise.resolve(ES_ONBELLEK);
+  if(!ES_ISTEK){
+    // Native WebView'de göreli yol paketteki eski kopyayı okur — mutlak adres şart.
+    ES_ISTEK = fetch(`${API_BASE}/ekonomi-sozluk.json`)
+      .then(r=>r.ok?r.json():null).then(j=>{ ES_ONBELLEK=j; return j; }).catch(()=>null);
+  }
+  return ES_ISTEK;
+}
+// Türkçe arama: büyük/küçük ve aksan farkını yok sayar ("işsizlik" ↔ "issizlik")
+function esNormalize(x:string){
+  return String(x||"").toLocaleLowerCase("tr-TR")
+    .replace(/ı/g,"i").replace(/ş/g,"s").replace(/ğ/g,"g")
+    .replace(/ü/g,"u").replace(/ö/g,"o").replace(/ç/g,"c").replace(/â/g,"a");
+}
+
+function EkonomiSozluk(){
+  const [veri,setVeri]=useState<any>(null);
+  const [q,setQ]=useState("");
+  const [kategori,setKategori]=useState<string|null>(null);
+  const [acik,setAcik]=useState<string|null>(null);
+  useEffect(()=>{ esVeriGetir().then(setVeri); },[]);
+
+  const terimler:any[] = veri?.terimler||[];
+  const kategoriler = useMemo(()=>{
+    const m=new Map<string,number>();
+    terimler.forEach(t=>m.set(t.k,(m.get(t.k)||0)+1));
+    return [...m.entries()].sort((a,b)=>b[1]-a[1]);
+  },[terimler]);
+
+  const sonuc = useMemo(()=>{
+    // KELİME BAZLI ARAMA: sorgu kelimelere bölünüp HEPSİNİN geçmesi aranıyor.
+    // Tam ifade eşleşmesi kırılgandı — kullanıcı "fiyat düşmesi" yazdığında
+    // tanımda "fiyat seviyesinin düşmesi" yazan Deflasyon bulunamıyordu.
+    // Terim adı, tanım ve İngilizce karşılık birlikte taranıyor; kullanıcı
+    // terimin adını bilmeyip kavramı tarif edebilir.
+    const kelimeler = esNormalize(q.trim()).split(/\s+/).filter(Boolean);
+    if(kelimeler.length===0) return kategori?terimler.filter(t=>t.k===kategori):terimler;
+    const puanli = terimler
+      .filter(t=>!kategori || t.k===kategori)
+      .map(t=>{
+        const ad=esNormalize(t.t), tanim=esNormalize(t.a), en=esNormalize(t.en||"");
+        const havuz=`${ad} ${tanim} ${en}`;
+        if(!kelimeler.every(k=>havuz.includes(k))) return null;
+        // Sıralama: terim adında geçenler üstte, adın başında geçenler en üstte
+        let puan=0;
+        if(kelimeler.every(k=>ad.includes(k))) puan+=10;
+        if(ad.startsWith(kelimeler[0])) puan+=5;
+        if(kelimeler.every(k=>en.includes(k))) puan+=3;
+        return {t,puan};
+      })
+      .filter(Boolean) as {t:any,puan:number}[];
+    return puanli.sort((a,b)=>b.puan-a.puan).map(x=>x.t);
+  },[terimler,q,kategori]);
+
+  const cipRenk=(secili:boolean)=>({
+    background: secili ? C.blue : (TEMA==="acik"?"#E4EAF1":"#1C2A38"),
+    color: secili ? "#fff" : (TEMA==="acik"?C.label:"#A8C2DC"),
+    border:`1px solid ${secili?C.blue:WA(0.08)}`,
+  });
+
+  if(!veri) return <div style={{padding:"40px 16px",textAlign:"center",color:WA(0.45),fontSize:13}}>Yükleniyor…</div>;
+
+  return (
+    <div style={{padding:"0 14px 26px"}}>
+      {/* Arama — otomatik doldurma kapalı (Android klavyesi başlığı öneri
+          olarak kutuya bindiriyordu, aynı hatayı burada tekrarlamayalım) */}
+      <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:12,
+                   background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,
+                   borderRadius:14,padding:"0 13px"}}>
+        <Icon k="sozluk" size={16} color={WA(0.4)}/>
+        <input
+          type="search" inputMode="search" enterKeyHint="search"
+          autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+          data-form-type="other" aria-label="Terim ara"
+          value={q} onChange={e=>setQ(e.target.value)}
+          placeholder="Terim veya kavram ara…"
+          style={{flex:1,background:"transparent",border:"none",outline:"none",
+                  color:(TEMA==="acik"?C.label:"#fff"),fontSize:13.5,padding:"12px 0",
+                  WebkitAppearance:"none"} as any}/>
+        {q&&<span onClick={()=>setQ("")} style={{color:WA(0.4),fontSize:17,cursor:"pointer",padding:"0 2px"}}>×</span>}
+      </div>
+
+      {/* Kategori çipleri */}
+      <div className="piyasa-scroll" style={{display:"flex",gap:6,overflowX:"auto",marginBottom:14,paddingBottom:2}}>
+        <span onClick={()=>setKategori(null)} style={{...cipRenk(kategori===null),flexShrink:0,
+              borderRadius:20,padding:"7px 13px",fontSize:10.5,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
+          Tümü ({terimler.length})
+        </span>
+        {kategoriler.map(([k,n])=>(
+          <span key={k} onClick={()=>setKategori(kategori===k?null:k)} style={{...cipRenk(kategori===k),flexShrink:0,
+                borderRadius:20,padding:"7px 13px",fontSize:10.5,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
+            {k} ({n})
+          </span>
+        ))}
+      </div>
+
+      <p style={{margin:"0 0 10px 4px",fontSize:10.5,color:WA(0.45)}}>
+        {sonuc.length} terim{q?` · "${q}" için`:""}
+      </p>
+
+      {sonuc.length===0&&(
+        <div style={{padding:"30px 20px",textAlign:"center"}}>
+          <p style={{fontSize:13,color:C.soft,margin:0}}>Aradığın terim bulunamadı.</p>
+          <p style={{fontSize:11.5,color:WA(0.45),margin:"6px 0 0"}}>
+            Farklı bir kelime dene ya da kategorilerden birine göz at.
+          </p>
+        </div>
+      )}
+
+      {sonuc.map((t:any)=>{
+        const secili=acik===t.t;
+        return (
+          <div key={t.t} onClick={()=>setAcik(secili?null:t.t)} style={{
+            background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${secili?WA(0.18):WA(0.08)}`,
+            borderRadius:14,padding:"12px 14px",marginBottom:8,cursor:"pointer"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <span style={{flex:1,fontSize:13.5,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),lineHeight:1.3}}>{t.t}</span>
+              <span style={{fontSize:9.5,fontWeight:700,color:C.blue,background:(TEMA==="acik"?"rgba(91,155,216,0.12)":"rgba(91,155,216,0.16)"),
+                            borderRadius:6,padding:"3px 7px",flexShrink:0,whiteSpace:"nowrap"}}>{t.k}</span>
+              <span style={{color:WA(0.3),fontSize:13,flexShrink:0,
+                            transform:secili?"rotate(90deg)":"none",transition:"transform 0.15s"}}>›</span>
+            </div>
+            {secili&&(
+              <div style={{marginTop:9,paddingTop:9,borderTop:`1px solid ${WA(0.08)}`}}>
+                <p style={{margin:0,fontSize:12.5,color:C.soft,lineHeight:1.6}}>{t.a}</p>
+                {t.en&&<p style={{margin:"8px 0 0",fontSize:10.5,color:WA(0.45)}}>
+                  <b style={{color:WA(0.55)}}>EN:</b> {t.en}</p>}
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      <p style={{margin:"16px 4px 0",fontSize:10,color:WA(0.4),lineHeight:1.5,textAlign:"center"}}>
+        Tanımlar Katılım Plus tarafından hazırlanmıştır. Katılım bankacılığına özel
+        terimler için Katılım Bankacılığı Sözlüğü'ne bakabilirsin.
+      </p>
+    </div>
+  );
+}
+
 function KatilimSektoruOzet({onAc}:{onAc:()=>void}){
   const [veri,setVeri]=useState<any>(null);
   useEffect(()=>{ kbVeriGetir().then(setVeri); },[]);
@@ -10138,17 +10322,26 @@ function KatilimSektoruOzet({onAc}:{onAc:()=>void}){
   if(!h) return null;   // veri yoksa blok hiç görünmez
 
   const pay=h.pay("aktif");
-  const ilk=h.payTrend.length>1?h.payTrend[0].deger:null;
-  const fark=(pay!=null&&ilk!=null)?pay-ilk:null;
+  const fark=h.payYtd;   // yılbaşından değişim (puan) — taban açıkça etiketleniyor
   const sat=(ad:string,deger:string,sag:string,renk:string)=>(
     <div style={{display:"flex",alignItems:"center",padding:"7px 0",
-                 borderTop:`1px solid ${WA(0.05)}`}}>
+                 borderTop:`1px solid ${WA(0.06)}`}}>
       <span style={{flex:1,fontSize:11.5,color:C.soft}}>{ad}</span>
       <span style={{fontSize:12,fontWeight:800,fontFamily:"monospace",marginRight:9,
                     color:(TEMA==="acik"?C.label:"#fff")}}>{deger}</span>
       <span style={{fontSize:10.5,fontWeight:700,width:62,textAlign:"right",color:renk}}>{sag}</span>
     </div>
   );
+  // Sütun başlıkları — hangi sayının ne olduğu belirsiz kalmasındı
+  const baslikSat=(
+    <div style={{display:"flex",alignItems:"center",padding:"0 0 6px"}}>
+      <span style={{flex:1,fontSize:9.5,fontWeight:700,color:WA(0.42),textTransform:"uppercase",letterSpacing:.4}}>Kalem</span>
+      <span style={{fontSize:9.5,fontWeight:700,color:WA(0.42),marginRight:9,textTransform:"uppercase",letterSpacing:.4}}>Tutar</span>
+      <span style={{fontSize:9.5,fontWeight:700,color:WA(0.42),width:62,textAlign:"right",textTransform:"uppercase",letterSpacing:.4}}>Değişim</span>
+    </div>
+  );
+  const dg=(k:string)=>{ const v=h.degisim(k); return v==null?"—":`${v>=0?"▲":"▼"}${kbYuzde(Math.abs(v),1)}`; };
+  const dgRenk=(k:string)=>{ const v=h.degisim(k); return v==null?WA(0.4):(v>=0?C.green:"#E0A53D"); };
   return (
     <>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
@@ -10156,9 +10349,12 @@ function KatilimSektoruOzet({onAc}:{onAc:()=>void}){
                       textTransform:"uppercase",letterSpacing:0.5}}>{TR("Katılım Bankacılığı Sektörü")}</span>
         <span onClick={onAc} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Aç")} ›</span>
       </div>
+      {/* Açık temada komşu kartlarla (Haftalık Özet, Getiri Karşılaştırma) aynı
+          zemin kullanılıyor; önceden düz beyazdı ve tek başına sırıtıyordu. */}
       <div className="press-card" onClick={onAc} style={{
         cursor:"pointer",marginBottom:14,borderRadius:18,overflow:"hidden",
-        background:(TEMA==="acik"?"#FFFFFF":WA(0.05)),border:`1px solid ${WA(0.08)}`,
+        background:(TEMA==="acik"?"linear-gradient(135deg,#E9EEF4 0%,#E3E9F1 100%)":"linear-gradient(135deg,#16222E 0%,#131C27 100%)"),
+        border:`1px solid ${WA(0.08)}`,
       }}>
         <div style={{display:"flex",alignItems:"center",gap:9,padding:"12px 14px 10px",
                      borderBottom:`1px solid ${WA(0.08)}`}}>
@@ -10169,14 +10365,21 @@ function KatilimSektoruOzet({onAc}:{onAc:()=>void}){
         <div style={{display:"flex",alignItems:"baseline",gap:8,padding:"13px 14px 9px"}}>
           <span style={{fontSize:29,fontWeight:800,letterSpacing:-1.1,lineHeight:1,color:C.blue}}>{kbYuzde(pay)}</span>
           <span style={{fontSize:10.5,color:WA(0.5),lineHeight:1.35}}>
-            aktif büyüklükte sektör payı{fark!=null&&<><br/>{fark>=0?"▲":"▼"} {Math.abs(fark).toLocaleString("tr-TR",{maximumFractionDigits:2})} puan</>}
+            aktif büyüklükte sektör payı
+            {fark!=null&&<><br/><span style={{fontWeight:700,color:fark>=0?C.green:"#E0A53D"}}>
+              {fark>=0?"▲":"▼"} {Math.abs(fark).toLocaleString("tr-TR",{maximumFractionDigits:2})} puan
+            </span> yılbaşından</>}
           </span>
         </div>
         <div style={{padding:"0 14px 12px"}}>
-          {sat("Aktif Büyüklük",kbTutar(h.K("aktif")),h.yillik("aktif")!=null?`▲${kbYuzde(h.yillik("aktif"),1)}`:"—",C.green)}
-          {sat("Toplanan Fon",kbTutar(h.K("fon")),h.yillik("fon")!=null?`▲${kbYuzde(h.yillik("fon"),1)}`:"—",C.green)}
-          {sat("Kullandırılan Fon",kbTutar(h.K("kredi")),h.yillik("kredi")!=null?`▲${kbYuzde(h.yillik("kredi"),1)}`:"—",C.green)}
-          {sat("Özkaynak Kârlılığı",kbYuzde(h.roe),`sektör ${kbYuzde(h.roeS,1)}`,WA(0.45))}
+          {baslikSat}
+          {sat("Aktif Büyüklük",kbTutar(h.K("aktif")),dg("aktif"),dgRenk("aktif"))}
+          {sat("Toplanan Fon",kbTutar(h.K("fon")),dg("fon"),dgRenk("fon"))}
+          {sat("Kullandırılan Fon",kbTutar(h.K("kredi")),dg("kredi"),dgRenk("kredi"))}
+          {sat("Özkaynak",kbTutar(h.K("ozkaynak")),dg("ozkaynak"),dgRenk("ozkaynak"))}
+          <p style={{margin:"7px 0 0",fontSize:9.5,color:WA(0.4),textAlign:"right"}}>
+            değişim: yılbaşından beri
+          </p>
         </div>
         <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:10,
                      borderTop:`1px solid ${WA(0.08)}`,fontSize:11.5,fontWeight:700,color:"#3B82F6"}}>
@@ -10193,7 +10396,9 @@ function KatilimSektoru(){
   useEffect(()=>{ kbVeriGetir().then(v=>{ setVeri(v); setYukleniyor(false); }); },[]);
   const h = useMemo(()=>kbHesapla(veri),[veri]);
 
-  const KART={background:(TEMA==="acik"?"#FFFFFF":WA(0.05)),border:`1px solid ${WA(0.08)}`,borderRadius:15};
+  // Açık temada #E9EEF4 — uygulamanın diğer ekranlarındaki kart zemini.
+  // Düz beyaz, sayfa arka planından kopuk duruyordu.
+  const KART={background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,borderRadius:15};
   const bolumBas=(baslik:string)=>(
     <div style={{display:"flex",alignItems:"center",gap:8,margin:"20px 0 9px 4px"}}>
       <span style={{fontSize:11.5,fontWeight:800,color:WA(0.5),textTransform:"uppercase",letterSpacing:.6}}>{baslik}</span>
@@ -10265,6 +10470,13 @@ function KatilimSektoru(){
     );
   };
 
+  // Yılbaşından değişim etiketi — taban yoksa hiç gösterilmez (uydurma yok)
+  const ytdEtiket=(k:string)=>{
+    const v=h?.ytd(k);
+    if(v==null) return undefined;
+    return {metin:`${v>=0?"▲":"▼"} ${kbYuzde(Math.abs(v),1)} yılbaşından`, renk:v>=0?C.green:"#E0A53D"};
+  };
+
   if(yukleniyor) return <div style={{padding:"40px 16px",textAlign:"center",color:WA(0.45),fontSize:13}}>Yükleniyor…</div>;
   if(!h) return (
     <div style={{padding:"36px 20px",textAlign:"center"}}>
@@ -10275,8 +10487,7 @@ function KatilimSektoru(){
 
   const payTrend=h.payTrend;
   const sonPay=h.pay("aktif");
-  const ilkPay=payTrend.length>1?payTrend[0].deger:null;
-  const payFark=(sonPay!=null&&ilkPay!=null)?sonPay-ilkPay:null;
+  const payFark=h.payYtd;   // yılbaşından; taban kartta yazılı
 
   // Aktif kompozisyonu — büyükten küçüğe, kalan "Diğer"e toplanıyor
   const aktifTop=h.K("aktif")||1;
@@ -10316,50 +10527,88 @@ function KatilimSektoru(){
             </span>
           )}
         </div>
+        {/* Karşılaştırma tabanı AÇIKÇA yazılıyor. Önceden yalnızca "0,81 puan"
+            yazıyordu ve hangi döneme göre olduğu belirsizdi. */}
         <p style={{margin:"0 0 13px",fontSize:11.5,color:WA(0.5),lineHeight:1.45}}>
           Katılım bankalarının bankacılık sektörü aktif büyüklüğü içindeki payı
+          {payFark!=null&&h.yilbasiDonem&&<><br/><span style={{fontSize:10.5}}>
+            değişim {kbDonemAd(h.yilbasiDonem)} sonuna göre (yılbaşından)
+          </span></>}
         </p>
         <div style={{height:9,borderRadius:6,background:WA(0.09),overflow:"hidden"}}>
           <div style={{width:`${sonPay||0}%`,height:"100%",borderRadius:6,
                        background:"linear-gradient(90deg,#3B82F6,#5B9BD8)"}}/>
         </div>
-        {payTrend.length>2&&(()=>{
-          // Mini seyir grafiği — JSON'a dönem eklendikçe kendiliğinden uzar
-          const dg=payTrend.map(x=>x.deger as number);
-          const enk=Math.min(...dg), enb=Math.max(...dg), aralik=(enb-enk)||1;
-          const G=300, Y=48, kn=(i:number)=>4+i*((G-8)/Math.max(1,dg.length-1));
-          const dn=(v:number)=>Y-6-((v-enk)/aralik)*(Y-16);
-          const cizgi=dg.map((v,i)=>`${i===0?"M":"L"}${kn(i).toFixed(1)},${dn(v).toFixed(1)}`).join(" ");
+
+        {/* SEYİR GRAFİĞİ — her dönem noktalı ve etiketli. Ara dönemler
+            gizlenmiyor: Mart'ta zirve yapıp Haziran'da gerileme gibi
+            hareketler ancak böyle görünüyor. JSON'a dönem eklendikçe uzar. */}
+        {payTrend.length>1&&(()=>{
+          const dgr=payTrend.map(x=>x.deger as number);
+          const enk=Math.min(...dgr), enb=Math.max(...dgr);
+          const pay0=(enb-enk)*0.25 || 0.1;          // üstte/altta nefes payı
+          const alt=enk-pay0, ust=enb+pay0, aralik=(ust-alt)||1;
+          const G=300, Y=86, SOL=6, SAG=G-6, UST=16, ALTK=Y-18;
+          const n=dgr.length;
+          const kn=(i:number)=>SOL+i*((SAG-SOL)/Math.max(1,n-1));
+          const dn=(v:number)=>ALTK-((v-alt)/aralik)*(ALTK-UST);
+          const cizgi=dgr.map((v,i)=>`${i===0?"M":"L"}${kn(i).toFixed(1)},${dn(v).toFixed(1)}`).join(" ");
+          const enbIdx=dgr.indexOf(enb);
+          // Etiket kalabalığını önle: nokta çoksa her k'ıncı dönem yazılır
+          const adim=Math.max(1,Math.ceil(n/6));
           return (
-            <div style={{marginTop:12}}>
-              <svg viewBox={`0 0 ${G} ${Y}`} style={{width:"100%",height:Y,display:"block"}}>
-                <path d={`${cizgi} L${kn(dg.length-1).toFixed(1)},${Y} L4,${Y} Z`} fill="rgba(59,130,246,0.16)"/>
+            <div style={{marginTop:14}}>
+              <svg viewBox={`0 0 ${G} ${Y}`} style={{width:"100%",height:Y,display:"block",overflow:"visible"}}>
+                <path d={`${cizgi} L${kn(n-1).toFixed(1)},${ALTK} L${SOL},${ALTK} Z`} fill="rgba(59,130,246,0.15)"/>
                 <path d={cizgi} fill="none" stroke="#3B82F6" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"/>
-                <circle cx={kn(dg.length-1)} cy={dn(dg[dg.length-1])} r={3.6} fill="#3B82F6"/>
+                {dgr.map((v,i)=>{
+                  const sonMu=i===n-1, zirveMi=i===enbIdx&&!sonMu;
+                  return (
+                    <g key={i}>
+                      <circle cx={kn(i)} cy={dn(v)} r={sonMu?4:2.8}
+                              fill={sonMu?"#3B82F6":(TEMA==="acik"?"#E9EEF4":"#16222E")}
+                              stroke="#3B82F6" strokeWidth={sonMu?0:1.8}/>
+                      {(sonMu||zirveMi||i===0)&&(
+                        <text x={kn(i)} y={dn(v)-9} fontSize={9.5} fontWeight={700}
+                              textAnchor={i===0?"start":(sonMu?"end":"middle")}
+                              fill={sonMu?"#3B82F6":WA(0.55)}>
+                          {kbYuzde(v)}
+                        </text>
+                      )}
+                    </g>
+                  );
+                })}
+                {dgr.map((v,i)=>((i%adim===0||i===n-1)?(
+                  <text key={`e${i}`} x={kn(i)} y={Y-4} fontSize={8.5}
+                        textAnchor={i===0?"start":(i===n-1?"end":"middle")} fill={WA(0.42)}>
+                    {kbDonemKisa(payTrend[i].donem)}
+                  </text>
+                ):null))}
               </svg>
-              <div style={{display:"flex",justifyContent:"space-between",marginTop:2,fontSize:10,color:WA(0.45)}}>
-                <span>{kbDonemKisa(payTrend[0].donem)}</span>
-                <span>{kbDonemKisa(payTrend[payTrend.length-1].donem)}</span>
-              </div>
+              <p style={{margin:"6px 0 0",fontSize:9.5,color:WA(0.4),textAlign:"center"}}>
+                {n} dönem · sektör payının seyri
+              </p>
             </div>
           );
         })()}
       </div>
 
-      {/* BÜYÜKLÜKLER */}
-      {satir("Aktif Büyüklük",`Sektör payı ${kbYuzde(h.pay("aktif"))}`,kbTutar(h.K("aktif")),
-             h.yillik("aktif")!=null?{metin:`▲ ${kbYuzde(h.yillik("aktif"),1)} yıllık`,renk:C.green}:undefined)}
-      {satir("Toplanan Fon",`Sektör payı ${kbYuzde(h.pay("fon"))}`,kbTutar(h.K("fon")),
-             h.yillik("fon")!=null?{metin:`▲ ${kbYuzde(h.yillik("fon"),1)} yıllık`,renk:C.green}:undefined)}
-      {satir("Kullandırılan Fon",`Sektör payı ${kbYuzde(h.pay("kredi"))}`,kbTutar(h.K("kredi")),
-             h.yillik("kredi")!=null?{metin:`▲ ${kbYuzde(h.yillik("kredi"),1)} yıllık`,renk:C.green}:undefined)}
-      {satir("Özkaynak",`Sektör payı ${kbYuzde(h.pay("ozkaynak"))}`,kbTutar(h.K("ozkaynak")),
-             h.yillik("ozkaynak")!=null?{metin:`▲ ${kbYuzde(h.yillik("ozkaynak"),1)} yıllık`,renk:C.green}:undefined)}
+      {/* BÜYÜKLÜKLER — değişim YILBAŞINDAN hesaplanıyor (bilanço büyüklükleri
+          stok kalemidir; yılbaşı Aralık dönemine göre kıyaslanır) */}
+      {bolumBas("Büyüklükler · yılbaşından değişim")}
+      {satir("Aktif Büyüklük",`Sektör payı ${kbYuzde(h.pay("aktif"))}`,kbTutar(h.K("aktif")),ytdEtiket("aktif"))}
+      {satir("Toplanan Fon",`Sektör payı ${kbYuzde(h.pay("fon"))}`,kbTutar(h.K("fon")),ytdEtiket("fon"))}
+      {satir("Kullandırılan Fon",`Sektör payı ${kbYuzde(h.pay("kredi"))}`,kbTutar(h.K("kredi")),ytdEtiket("kredi"))}
+      {satir("Özkaynak",`Sektör payı ${kbYuzde(h.pay("ozkaynak"))}`,kbTutar(h.K("ozkaynak")),ytdEtiket("ozkaynak"))}
 
       {/* KÂRLILIK */}
       {bolumBas("Kârlılık")}
-      {satir("Dönem Kârı",`Sektör payı ${kbYuzde(h.pay("kar"))}`,kbTutar(h.K("kar")),
-             h.yillik("kar")!=null?{metin:`▲ ${kbYuzde(h.yillik("kar"),1)} yıllık`,renk:C.green}:undefined)}
+      {/* ⚠️ Dönem kârı AKIM kalemidir: yıl içinde birikir, her Ocak sıfırlanır.
+          Bu yüzden yılbaşıyla değil, GEÇEN YILIN AYNI DÖNEMİyle kıyaslanıyor. */}
+      {satir("Dönem Kârı",`${kbDonemAd(h.donem)} itibarıyla kümülatif · sektör payı ${kbYuzde(h.pay("kar"))}`,
+             kbTutar(h.K("kar")),
+             h.yillik("kar")!=null?{metin:`${h.yillik("kar")!>=0?"▲":"▼"} ${kbYuzde(Math.abs(h.yillik("kar")!),1)} geçen yıla göre`,
+                                    renk:h.yillik("kar")!>=0?C.green:"#E0A53D"}:undefined)}
       {karsilastir("Özkaynak Kârlılığı (ROE)",h.roe,h.roeS,
         "Özkaynak başına üretilen kâr. Dönem içi kârdır, yıllıklandırılmamıştır.")}
       {karsilastir("Aktif Kârlılığı (ROA)",h.roa,h.roaS,"")}
@@ -10417,7 +10666,7 @@ function KatilimSektoru(){
       <div style={{...KART,padding:"13px 14px",marginTop:9,marginBottom:9}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:9}}>
           <span style={{fontSize:13,fontWeight:700,color:C.soft}}>Özel Cari Hesap</span>
-          {h.yillik("cari")!=null&&<span style={{fontSize:10.5,fontWeight:700,color:C.green}}>▲ {kbYuzde(h.yillik("cari"),1)} yıllık</span>}
+          {h.ytd("cari")!=null&&<span style={{fontSize:10.5,fontWeight:700,color:h.ytd("cari")!>=0?C.green:"#E0A53D"}}>{h.ytd("cari")!>=0?"▲":"▼"} {kbYuzde(Math.abs(h.ytd("cari")!),1)} yılbaşından</span>}
         </div>
         <div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:10}}>
           <span style={{fontSize:20,fontWeight:800,fontFamily:"monospace",letterSpacing:-.5,color:(TEMA==="acik"?C.label:"#fff")}}>{kbTutar(h.K("cari"))}</span>
@@ -10433,7 +10682,7 @@ function KatilimSektoru(){
       <div style={{...KART,padding:"13px 14px",marginBottom:9}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:9}}>
           <span style={{fontSize:13,fontWeight:700,color:C.soft}}>Katılma Hesabı</span>
-          {h.yillik("katilma")!=null&&<span style={{fontSize:10.5,fontWeight:700,color:C.green}}>▲ {kbYuzde(h.yillik("katilma"),1)} yıllık</span>}
+          {h.ytd("katilma")!=null&&<span style={{fontSize:10.5,fontWeight:700,color:h.ytd("katilma")!>=0?C.green:"#E0A53D"}}>{h.ytd("katilma")!>=0?"▲":"▼"} {kbYuzde(Math.abs(h.ytd("katilma")!),1)} yılbaşından</span>}
         </div>
         <div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:10}}>
           <span style={{fontSize:20,fontWeight:800,fontFamily:"monospace",letterSpacing:-.5,color:(TEMA==="acik"?C.label:"#fff")}}>{kbTutar(h.K("katilma"))}</span>
@@ -12367,6 +12616,7 @@ const MENU = {
   katilimBankalari:{title:"Katılım Bankaları",back:"araclarMenu"},
   kfkNedir:{title:"KFK Nedir?",back:"araclarMenu"},
   katilimSektoru:{title:"Katılım Bankacılığı Sektörü",back:"araclarMenu"},
+  ekonomiSozluk:{title:"Ekonomi Sözlüğü",back:"araclarMenu"},
   kiraSertifikasi:{title:"Kira Sertifikası İhraçları",back:"araclarMenu"},
   portfoyum:{title:"Portföyüm",back:"araclarMenu"},
   fonDetay:{title:"Fon Detay",back:"portfoyum"},
@@ -12570,6 +12820,7 @@ const MENU_ARAMA_LIST=[
   {key:"katilimBankalari",   label:"Katılım Bankaları",                          icon:"🏛️", grup:"Araçlar"},
   {key:"kfkNedir",           label:"KFK Nedir?",                                 icon:"🤝", grup:"Araçlar", alt:["kfk","kefalet","katılım finans kefalet","kgf","teminat","kobi"]},
   {key:"katilimSektoru",     label:"Katılım Bankacılığı Sektörü",               icon:"🏦", grup:"Araçlar", alt:["sektör","bddk","pay","aktif","toplanan fon","kullandırılan fon","katılma hesabı","özel cari","roe","kârlılık"]},
+  {key:"ekonomiSozluk",      label:"Ekonomi Sözlüğü",                           icon:"📚", grup:"Araçlar", alt:["ekonomi","terim","sözlük","enflasyon","gsyh","faiz","tanım","kavram","makro"]},
   {key:"kiraSertifikasi",    label:"Kira Sertifikası İhraçları",                 icon:"📜", grup:"Araçlar", alt:["kira sertifikası","sukuk","ihraç","vekâlet","murabaha","icare","varlık kiralama","spk"]},
   {key:"hazineDoviz",        label:"Döviz Dönüştürücü",                          icon:"💱", grup:"Hesaplama Araçları", alt:["kur","dolar","euro","dolar kaç tl"]},
   {key:"piyasaMenu",         label:"Piyasa & Veriler",                           icon:"📊", grup:"Piyasa & Veriler", alt:["tüfe","enflasyon","gösterge","politika faizi","sofr","euribor","tlref","tlrefk","aofm","rezerv","cds","borsa","bist","altın","gümüş","emtia","kripto"]},
@@ -19093,6 +19344,7 @@ function App(){
               {key:"katilimBankalari",label:"Katılım Bankaları"},
               {key:"kfkNedir",label:"KFK Nedir?"},
               {key:"katilimSektoru",label:"Katılım Bankacılığı Sektörü"},
+              {key:"ekonomiSozluk",label:"Ekonomi Sözlüğü"},
               {key:"piyasaHaberleri",label:"Piyasa Haberleri"},
               {key:"sozluk",label:"Finans Sözlüğü"},
             ].map(m=>(
@@ -20448,6 +20700,7 @@ function App(){
               {key:"vadeTakibi", icon:"⏰", label:"Vade Takip & Hatırlatma Ajandam", desc:"Finansman ve ödeme vadelerini takip et, hatırlatma al", renk:C.green, bg:"rgba(74,222,128,0.15)"},
               {key:"katilimBankalari", icon:"🏛️", label:"Katılım Bankaları", desc:"Türkiye'deki katılım bankaları, kuruluş tarihleri ve bilgileri", renk:C.blue, bg:"rgba(91,155,216,0.15)"},
               {key:"katilimSektoru", icon:"🏦", label:"Katılım Bankacılığı Sektörü", desc:"Sektör payı, fon büyüklükleri ve kârlılık — BDDK resmî verisiyle", renk:"#5B9BD8", bg:"rgba(91,155,216,0.15)"},
+              {key:"ekonomiSozluk", icon:"📚", label:"Ekonomi Sözlüğü", desc:"152 ekonomi ve finans terimi — enflasyondan rezervlere, sade tanımlarla", renk:"#A78BFA", bg:"rgba(167,139,250,0.15)"},
               {key:"kfkNedir", icon:"🤝", label:"KFK Nedir?", desc:"Teminat yetersizliğinde işletmenize kefalet desteği — Katılım Finans Kefalet A.Ş.", renk:"#2CCB9A", bg:"rgba(44,203,154,0.15)"},
               {key:"kiraSertifikasi", icon:"📜", label:"Kira Sertifikası İhraçları", desc:"Türkiye'de sukuk ihraçları — SPK resmî verisiyle tür ve yıl bazında", renk:"#F5A623", bg:"rgba(245,166,35,0.15)"},
               {key:"sozluk",     icon:"📖", label:"Katılım Bankacılığı Sözlüğü",     desc:"Terim ve tanımları hızlıca ara", renk:"#60A5FA", bg:"rgba(96,165,250,0.15)"},
@@ -20665,6 +20918,7 @@ function App(){
         {screen==="katilimBankalari"&&<KatilimBankalari/>}
         {screen==="kfkNedir"&&<KfkNedir/>}
         {screen==="katilimSektoru"&&<KatilimSektoru/>}
+        {screen==="ekonomiSozluk"&&<EkonomiSozluk/>}
         {screen==="kiraSertifikasi"&&<KiraSertifikasiIhraclari/>}
         {screen==="getiriKarsilastirma"&&<GetiriKarsilastirma/>}
         {screen==="haftalikOzet"&&<HaftalikPiyasaOzeti/>}
