@@ -10079,7 +10079,15 @@ function kbTutar(milyonTL:number|null|undefined){
   if(milyonTL==null || !isFinite(milyonTL)) return "—";
   const m = Math.abs(milyonTL);
   if(m >= 1000000) return (milyonTL/1000000).toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2})+" Tn ₺";
-  if(m >= 1000)    return (milyonTL/1000).toLocaleString("tr-TR",{minimumFractionDigits:0,maximumFractionDigits:0})+" Mr ₺";
+  if(m >= 1000){
+    // 100 milyarın ALTINDA bir ondalık gösteriliyor. Önceden hepsi tam sayıya
+    // yuvarlanıyordu ve dönem kârı listesinde 3,3 ile 3,0 ikisi de "3 Mr",
+    // 2,5 ise "3 Mr" görünüyordu — sıralama okunuyor ama değerler ayırt
+    // edilemiyordu. Büyük tutarlarda (100 Mr üstü) ondalık gereksiz gürültü.
+    const mr = milyonTL/1000;
+    const hane = Math.abs(mr) < 100 ? 1 : 0;
+    return mr.toLocaleString("tr-TR",{minimumFractionDigits:hane,maximumFractionDigits:hane})+" Mr ₺";
+  }
   return milyonTL.toLocaleString("tr-TR",{maximumFractionDigits:0})+" Mn ₺";
 }
 const kbYuzde=(v:number|null|undefined,b=2)=> (v==null||!isFinite(v))?"—":"%"+v.toLocaleString("tr-TR",{minimumFractionDigits:b,maximumFractionDigits:b});
