@@ -10352,10 +10352,17 @@ function kbBankaGetir(){
 function kbBankaSirala(veri:any, kalem:string){
   const bl = Array.isArray(veri?.bankalar)?veri.bankalar:[];
   const don = veri?.sonDonem || "2026-03";
+  // ⚠️ AKIM/STOK AYRIMI BURADA DA GEÇERLİ.
+  // Stok kalemlerinde (aktif, fon, kredi, özkaynak) son dönem yoksa bir önceki
+  // döneme düşmek makul — bilanço fotoğrafı yavaş değişir, yaklaşık doğru kalır.
+  // KÂR'da bu YASAK: dönem kârı yıl içinde birikip her Ocak sıfırlanır. TOM'un
+  // 2025 tam yıl zararını (−1,97 Mr) diğerlerinin 2026 ilk çeyrek kârıyla aynı
+  // listeye koymak tamamen yanlış bir sıralama üretiyordu (testte yakalandı).
+  const akimMi = kalem === "kar";
   const liste = bl.map((b:any)=>{
     const d = b.donemler?.[don] || {};
-    const eski = b.donemler?.["2025-12"] || {};
-    const v = d[kalem] ?? eski[kalem] ?? null;
+    const eski = akimMi ? {} : (b.donemler?.["2025-12"] || {});
+    const v = d[kalem] ?? (eski as any)[kalem] ?? null;
     return v==null?null:{ad:b.ad, kisa:b.kisa, deger:v,
       gecikmeli: d[kalem]==null,            // son dönemi yoksa eski dönem gösteriliyor
       ikincil: !!b.ikincilKaynak, konsolideDegil: !!b.konsolideDegil};
@@ -10492,7 +10499,10 @@ function KatilimSektoru(){
   const bankaKirilimi=(kalem:string)=>{
     const {liste,toplam,donem}=kbBankaSirala(bankaVeri,kalem);
     if(!liste.length) return null;
-    const enb=liste[0].deger||1;
+    // Çubuk ölçeği MUTLAK değere göre; TOM Katılım zarar açıkladığı için
+    // negatif değer gelebiliyor ve ölçek bozulmamalı.
+    const enb=Math.max(...liste.map((x:any)=>Math.abs(x.deger)))||1;
+    const negatifVar=liste.some((x:any)=>x.deger<0);
     const eksikVar=liste.some(x=>x.ikincil||x.konsolideDegil||x.gecikmeli);
     return (
       <div style={{borderTop:`1px solid ${WA(0.08)}`,padding:"11px 14px 13px",
@@ -10512,21 +10522,44 @@ function KatilimSektoru(){
                 {b.ad}{(b.ikincil||b.konsolideDegil||b.gecikmeli)&&<span style={{color:"#E0A53D"}}> *</span>}
               </span>
               <span style={{fontSize:11.5,fontWeight:800,fontFamily:"monospace",flexShrink:0,
-                            color:(TEMA==="acik"?C.label:"#fff")}}>{kbTutar(b.deger/1000)}</span>
+                            color:b.deger<0?"#F87171":(TEMA==="acik"?C.label:"#fff")}}>{kbTutar(b.deger/1000)}</span>
               <span style={{fontSize:10,color:WA(0.45),width:40,textAlign:"right",flexShrink:0}}>
-                {kbYuzde(b.deger/toplam*100,1)}
+                {b.deger<0?"zarar":kbYuzde(b.deger/toplam*100,1)}
               </span>
             </div>
             <div style={{height:5,borderRadius:3,background:WA(0.07),overflow:"hidden"}}>
-              <div style={{width:`${Math.max(2,b.deger/enb*100)}%`,height:"100%",borderRadius:3,
-                           background:i===0?"#3B82F6":(i<3?"#5B9BD8":"#6B8299")}}/>
+              <div style={{width:`${Math.max(2,Math.abs(b.deger)/enb*100)}%`,height:"100%",borderRadius:3,
+                           background:b.deger<0?"#F87171":(i===0?"#3B82F6":(i<3?"#5B9BD8":"#6B8299"))}}/>
             </div>
           </div>
         ))}
+        {/* Kalem başına kaynak ve eksik banka bilgisi. Liste tam değilse
+            kaç bankanın verisi olduğu AÇIKÇA yazılıyor — eksik bir sıralamayı
+            tam sanmak yanlış çıkarıma yol açar. */}
+        {liste.length<9&&(
+          <p style={{margin:"10px 0 0",fontSize:9.5,color:"#E0A53D",lineHeight:1.45}}>
+            ⚠ {liste.length} bankanın verisi gösteriliyor; {9-liste.length} banka bu kalemi
+            henüz açıklamadı. Sıralama eksik listeye göredir.
+          </p>
+        )}
+        {kalem==="kredi"&&(
+          <p style={{margin:"8px 0 0",fontSize:9,color:WA(0.42),lineHeight:1.45}}>
+            Kaynak: TKBB Veri Peteği. Bu tanım finansal kiralamayı da kapsar;
+            bankaların kendi açıkladığı "nakdi kredi" rakamından farklı olabilir.
+          </p>
+        )}
+        {kalem==="kar"&&(
+          <p style={{margin:"8px 0 0",fontSize:9,color:WA(0.42),lineHeight:1.45}}>
+            2026 ilk çeyrek net kârı. Kaynak: TKBB Veri Peteği, solo finansal tablolar.
+            Albaraka Türk'ün konsolide kârı 1,34 milyar TL'dir; dokuz bankada aynı
+            tanımın kullanılabilmesi için solo rakam gösterilmektedir.
+            {negatifVar&&" TOM Katılım bu dönemde zarar açıklamıştır."}
+          </p>
+        )}
         {eksikVar&&(
-          <p style={{margin:"10px 0 0",fontSize:9,color:WA(0.42),lineHeight:1.45}}>
-            * Kuveyt Türk verisi bankanın kendi denetim raporundan (konsolide olmayan),
-            Hayat Finans ikincil kaynaktan; bazı bankaların son dönemi henüz yayımlanmadı.
+          <p style={{margin:"8px 0 0",fontSize:9,color:WA(0.42),lineHeight:1.45}}>
+            * Kuveyt Türk verisi bankanın kendi denetim raporundan (konsolide olmayan);
+            Hayat Finans ve TOM Katılım için TKBB derlemesi kullanılmıştır.
           </p>
         )}
       </div>
@@ -10723,10 +10756,11 @@ function KatilimSektoru(){
       )}
       {satir("Aktif Büyüklük",`Sektör payı ${kbYuzde(h.pay("aktif"))}`,kbTutar(h.K("aktif")),ytdEtiket("aktif"),"aktif")}
       {satir("Toplanan Fon",`Sektör payı ${kbYuzde(h.pay("fon"))}`,kbTutar(h.K("fon")),ytdEtiket("fon"),"fon")}
-      {/* Kullandırılan Fon ve Dönem Kârı satırları AÇILMIYOR: KAP özet tablosunda
-          "Krediler" ayrı bir kalem olarak yok, dönem kârı da yalnızca iki bankada
-          yayımlanmış. Eksik listeyi sıralama olarak sunmak yanıltıcı olurdu. */}
-      {satir("Kullandırılan Fon",`Sektör payı ${kbYuzde(h.pay("kredi"))}`,kbTutar(h.K("kredi")),ytdEtiket("kredi"))}
+      {/* Kullandırılan fon verisi TKBB Veri Peteği'nden (Mart 2026); dokuz banka
+          için tek ve aynı tanım. TKBB'nin tanımı finansal kiralamayı da kapsıyor,
+          bu yüzden bankaların kendi açıkladığı "nakdi kredi" rakamından farklı
+          olabilir — açılan listede kaynak yazılı. */}
+      {satir("Kullandırılan Fon",`Sektör payı ${kbYuzde(h.pay("kredi"))}`,kbTutar(h.K("kredi")),ytdEtiket("kredi"),"kredi")}
       {satir("Özkaynak",`Sektör payı ${kbYuzde(h.pay("ozkaynak"))}`,kbTutar(h.K("ozkaynak")),ytdEtiket("ozkaynak"),"ozkaynak")}
 
       {/* KÂRLILIK */}
@@ -10736,7 +10770,8 @@ function KatilimSektoru(){
       {satir("Dönem Kârı",`${kbDonemAd(h.donem)} itibarıyla kümülatif · sektör payı ${kbYuzde(h.pay("kar"))}`,
              kbTutar(h.K("kar")),
              h.yillik("kar")!=null?{metin:`${h.yillik("kar")!>=0?"▲":"▼"} ${kbYuzde(Math.abs(h.yillik("kar")!),1)} geçen yıla göre`,
-                                    renk:h.yillik("kar")!>=0?C.green:"#E0A53D"}:undefined)}
+                                    renk:h.yillik("kar")!>=0?C.green:"#E0A53D"}:undefined,
+             "kar")}
       {karsilastir("Özkaynak Kârlılığı (ROE)",h.roe,h.roeS,
         "Özkaynak başına üretilen kâr. Dönem içi kârdır, yıllıklandırılmamıştır.")}
       {karsilastir("Aktif Kârlılığı (ROA)",h.roa,h.roaS,"")}
