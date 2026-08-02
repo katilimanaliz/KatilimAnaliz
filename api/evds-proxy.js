@@ -120,7 +120,7 @@ const CACHE_TTL_SANIYE = 6 * 3600; // 6 saat, Redis TTL saniye cinsinden ister
 
 // ── SPK KİRA SERTİFİKASI (v11) ─────────────────────────────────────────────
 const SPK_BASE = "https://ws.spk.gov.tr/BorclanmaAraclari/api";
-const KV_SPK_SUKUK_KEY = "spk:sukuk:v2";   // v1→v2: ihraccilar alani eklendi, eski onbellek gecersiz kilinmali
+const KV_SPK_SUKUK_KEY = "spk:sukuk:v3";   // v1→v2: ihraccilar alani eklendi. v2→v3: sonAy artik BOS AYI SAYMIYOR (bkz. spkYilOzeti) — eski onbellekteki hatali sonAy/degisimYuzde/aylikOrtalama degerleri gecersiz kilinmali
 const SPK_CACHE_TTL = 12 * 3600;   // 12 saat — veri ayda bir güncelleniyor
 const SPK_YIL_SAYISI = 5;          // trend grafiği için kaç yıl geriye gidilsin
 
@@ -159,17 +159,34 @@ async function spkSukukYilCek(yil){
 // Bir yılın satırlarından toplamları çıkarır. sonAySiniri verilirse yalnızca
 // o aya kadar olan satırlar toplanır — yıl-içi karşılaştırmanın DÜRÜST
 // olabilmesi için şart: 7 aylık 2026 ile 12 aylık 2025 kıyaslanamaz.
+//
+// ⚠️ 2 AĞUSTOS 2026'DA YAKALANAN HATA — sonAy'ın tanımı değişti.
+// SPK, henüz VERİSİ OLMAYAN ay için de satır döndürüyor:
+//     {"ay":8,"donem":"2026 / 08","toplam":0,"yurtIci":0,"yurtDisi":0}
+// Eski kod "gelen en büyük ay" mantığıyla sonAy=8 diyordu. Sonuç:
+//   • Ekranda "İLK 8 AY" yazıyordu (ayın 2. günü!)
+//   • gecenYilAyniDonem 2025'in 8 AYINI topluyordu → taban şişti
+//   • degisimYuzde %99 yerine %58 görünüyordu
+//   • aylikOrtalama 7 yerine 8'e bölünüyordu (%14 düşük)
+// Artık sonAy = TOPLAMI SIFIRDAN BÜYÜK olan en son ay.
+// Aradaki (sondan önceki) sıfır aylar korunur: max alındığı için onlar zaten
+// sınırın altında kalır ve toplamlara dahil edilmeye devam eder. Yalnızca
+// SONDAKİ boş aylar sayılmaz — ki istenen davranış budur.
 function spkYilOzeti(satirlar, sonAySiniri){
   const turToplam = {};
   for(const t of SPK_SUKUK_TURLERI) turToplam[t.anahtar] = 0;
   let toplam = 0, yurtIci = 0, yurtDisi = 0, sonAy = 0;
   for(const s of (satirlar||[])){
     const ay = spkSayi(s.ay);
-    if(sonAySiniri && ay > sonAySiniri) continue;
-    toplam   += spkSayi(s.kiraSertifikasiToplam);
+    // sonAySiniri === 0 geçerli bir sınırdır ("hiç dolu ay yok") — bu yüzden
+    // truthy kontrolü DEĞİL, null kontrolü yapılıyor. Aksi halde yılın en
+    // başında geçen yılın TAMAMI taban olarak toplanırdı.
+    if(sonAySiniri != null && ay > sonAySiniri) continue;
+    const ayToplam = spkSayi(s.kiraSertifikasiToplam);
+    toplam   += ayToplam;
     yurtIci  += spkSayi(s.kiraSertifikasiToplamYurtIci);
     yurtDisi += spkSayi(s.kiraSertifikasiToplamYurtDisi);
-    if(ay > sonAy) sonAy = ay;
+    if(ayToplam > 0 && ay > sonAy) sonAy = ay;
     for(const t of SPK_SUKUK_TURLERI) turToplam[t.anahtar] += spkSayi(s[t.alan + "Toplam"]);
   }
   return { toplam, yurtIci, yurtDisi, sonAy, turToplam };
@@ -1201,6 +1218,17 @@ export default async function handler(req,res){
       const buYilOzet = spkYilOzeti(buYilSatirlar);
       const sonAy = buYilOzet.sonAy;
 
+      // Teşhis: SPK'nın döndürdüğü en büyük ay ile FİİLEN SAYILAN son ay
+      // farklıysa, aradaki fark boş (toplam:0) satırlardır. Bu iki sayı
+      // birbirinden ayrıldığında ekrandaki "N aylık" etiketi ve kıyas tabanı
+      // kayar; ileride benzer bir sapma olursa buradan görülür.
+      const spkGelenEnBuyukAy = (buYilSatirlar||[]).reduce((m,s)=>Math.max(m, spkSayi(s.ay)), 0);
+      spkTeshis.sonAyHesabi = {
+        gelenEnBuyukAy: spkGelenEnBuyukAy,
+        sayilanSonAy: sonAy,
+        bosSondakiAy: Math.max(0, spkGelenEnBuyukAy - sonAy),
+      };
+
       // İHRAÇÇI BAZINDA SPK ONAYLARI — yalnızca güncel yıl için çekiliyor.
       // Başarısız olursa ekranın geri kalanı çalışmaya devam etsin diye
       // hata yutuluyor (bölüm frontend'de gizlenir).
@@ -1229,13 +1257,21 @@ export default async function handler(req,res){
         pay: buYilOzet.toplam > 0 ? (buYilOzet.turToplam[t.anahtar] / buYilOzet.toplam * 100) : 0,
       })).sort((a,b)=> b.toplam - a.toplam);
 
-      const aylik = (buYilSatirlar||[]).map(s=>({
-        ay: spkSayi(s.ay),
-        donem: s.donem || null,
-        toplam: spkSayi(s.kiraSertifikasiToplam),
-        yurtIci: spkSayi(s.kiraSertifikasiToplamYurtIci),
-        yurtDisi: spkSayi(s.kiraSertifikasiToplamYurtDisi),
-      })).sort((a,b)=> a.ay - b.ay);
+      // SPK, verisi henüz gelmemiş ay için de sıfırlı satır döndürüyor
+      // (2 Ağustos 2026'da "2026 / 08" satırı toplam:0 olarak geliyordu).
+      // Bu satırlar grafikte hayalet bir boş sütun çiziyor — sondaki boş
+      // ayları kırpıyoruz. sonAy'a kadar olanlar (aradaki gerçek sıfırlar
+      // dahil) aynen korunuyor.
+      const aylik = (buYilSatirlar||[])
+        .map(s=>({
+          ay: spkSayi(s.ay),
+          donem: s.donem || null,
+          toplam: spkSayi(s.kiraSertifikasiToplam),
+          yurtIci: spkSayi(s.kiraSertifikasiToplamYurtIci),
+          yurtDisi: spkSayi(s.kiraSertifikasiToplamYurtDisi),
+        }))
+        .sort((a,b)=> a.ay - b.ay)
+        .filter(r => r.ay <= sonAy);
 
       // Yıllık trend — her yılın TAM toplamı (bu yıl hariç, o kısmi).
       const yillik = ham.map(h=>{
