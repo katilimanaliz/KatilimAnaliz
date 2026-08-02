@@ -10388,12 +10388,22 @@ function KatilimSektoruOzet({onAc}:{onAc:()=>void}){
 
   const pay=h.pay("aktif");
   const fark=h.payYtd;   // yılbaşından değişim (puan) — taban açıkça etiketleniyor
-  const sat=(ad:string,deger:string,sag:string,renk:string)=>(
+  // PAY sütunu (2026-08-02): tek bir "aktifte %9,33" rakamı, kalemler arasındaki
+  // FARKI gizliyordu. Dört payın hepsi gösterilince şu görünür hale geliyor:
+  //   toplanan fon %10,61  >  aktif %9,33  >  kullandırılan fon %7,99  >  özkaynak %7,72
+  // Katılım bankaları payından FAZLA fon topluyor, payından AZ fon kullandırıyor
+  // (2,6 puanlık fark) — ekranın alt kısmındaki "%67,0 vs sektör %89,0" bulgusunun
+  // ana sayfaya taşınmış hali. Pay anlık hesaplanıyor (katilim.t / sektor.t),
+  // JSON'a yeni alan eklemek gerekmiyor; yeni dönem eklenince kendiliğinden güncellenir.
+  const sat=(ad:string,deger:string,payMetin:string,sag:string,renk:string)=>(
     <div style={{display:"flex",alignItems:"center",padding:"7px 0",
                  borderTop:`1px solid ${WA(0.06)}`}}>
-      <span style={{flex:1,fontSize:11.5,color:C.soft}}>{ad}</span>
+      <span style={{flex:1,minWidth:0,fontSize:11.5,color:C.soft,
+                    overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ad}</span>
       <span style={{fontSize:12,fontWeight:800,fontFamily:"monospace",marginRight:9,
                     color:(TEMA==="acik"?C.label:"#fff")}}>{deger}</span>
+      <span style={{fontSize:10.5,fontWeight:700,fontFamily:"monospace",width:50,
+                    textAlign:"right",marginRight:9,color:C.blue}}>{payMetin}</span>
       <span style={{fontSize:10.5,fontWeight:700,width:62,textAlign:"right",color:renk}}>{sag}</span>
     </div>
   );
@@ -10402,9 +10412,12 @@ function KatilimSektoruOzet({onAc}:{onAc:()=>void}){
     <div style={{display:"flex",alignItems:"center",padding:"0 0 6px"}}>
       <span style={{flex:1,fontSize:9.5,fontWeight:700,color:WA(0.42),textTransform:"uppercase",letterSpacing:.4}}>Kalem</span>
       <span style={{fontSize:9.5,fontWeight:700,color:WA(0.42),marginRight:9,textTransform:"uppercase",letterSpacing:.4}}>Tutar</span>
+      <span style={{fontSize:9.5,fontWeight:700,color:WA(0.42),width:50,textAlign:"right",marginRight:9,textTransform:"uppercase",letterSpacing:.4}}>Pay</span>
       <span style={{fontSize:9.5,fontWeight:700,color:WA(0.42),width:62,textAlign:"right",textTransform:"uppercase",letterSpacing:.4}}>Değişim</span>
     </div>
   );
+  // Sektör toplamı eksikse h.pay() null döner ve "—" yazılır — uydurma yapılmaz.
+  const py=(k:string)=>kbYuzde(h.pay(k),2);
   const dg=(k:string)=>{ const v=h.degisim(k); return v==null?"—":`${v>=0?"▲":"▼"}${kbYuzde(Math.abs(v),1)}`; };
   const dgRenk=(k:string)=>{ const v=h.degisim(k); return v==null?WA(0.4):(v>=0?C.green:"#E0A53D"); };
   return (
@@ -10438,12 +10451,12 @@ function KatilimSektoruOzet({onAc}:{onAc:()=>void}){
         </div>
         <div style={{padding:"0 14px 12px"}}>
           {baslikSat}
-          {sat("Aktif Büyüklük",kbTutar(h.K("aktif")),dg("aktif"),dgRenk("aktif"))}
-          {sat("Toplanan Fon",kbTutar(h.K("fon")),dg("fon"),dgRenk("fon"))}
-          {sat("Kullandırılan Fon",kbTutar(h.K("kredi")),dg("kredi"),dgRenk("kredi"))}
-          {sat("Özkaynak",kbTutar(h.K("ozkaynak")),dg("ozkaynak"),dgRenk("ozkaynak"))}
+          {sat("Aktif Büyüklük",kbTutar(h.K("aktif")),py("aktif"),dg("aktif"),dgRenk("aktif"))}
+          {sat("Toplanan Fon",kbTutar(h.K("fon")),py("fon"),dg("fon"),dgRenk("fon"))}
+          {sat("Kullandırılan Fon",kbTutar(h.K("kredi")),py("kredi"),dg("kredi"),dgRenk("kredi"))}
+          {sat("Özkaynak",kbTutar(h.K("ozkaynak")),py("ozkaynak"),dg("ozkaynak"),dgRenk("ozkaynak"))}
           <p style={{margin:"7px 0 0",fontSize:9.5,color:WA(0.4),textAlign:"right"}}>
-            değişim: yılbaşından beri
+            pay: sektördeki payı · değişim: yılbaşından beri
           </p>
         </div>
         <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:10,
