@@ -10548,6 +10548,14 @@ function KatilimSektoru(){
             bankaların kendi açıkladığı "nakdi kredi" rakamından farklı olabilir.
           </p>
         )}
+        {(kalem==="ozkaynak"||kalem==="aktif"||kalem==="fon")&&(
+          <p style={{margin:"8px 0 0",fontSize:9,color:WA(0.42),lineHeight:1.45}}>
+            Kaynak: KAP Özet Finansal Bilgiler (konsolide). TOM Katılım ve Hayat Finans
+            için KAP'ta ilgili dönem yayımlanmadığından TKBB Veri Peteği (solo)
+            kullanılmıştır; bu iki banka için rakamlar diğerleriyle tam aynı esasta
+            olmayabilir.
+          </p>
+        )}
         {kalem==="kar"&&(
           <p style={{margin:"8px 0 0",fontSize:9,color:WA(0.42),lineHeight:1.45}}>
             2026 ilk çeyrek net kârı. Kaynak: TKBB Veri Peteği, solo finansal tablolar.
