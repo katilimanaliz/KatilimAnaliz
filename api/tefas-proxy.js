@@ -153,7 +153,12 @@ async function fonGecmisGetir(req, res) {
   const cacheAnahtar = `fon:gecmis:${kod}:${fonolojiPeriod}`;
   try {
     const onbellek = await kv.get(cacheAnahtar).catch(() => null);
-    if (onbellek) {
+    // ⚠️ BOŞ SONUÇ ÖNBELLEKLENMEZ (2026-08-03): /timeseries geçişinde alan
+    // adı tutmayınca boş "noktalar" 10 dakika saklanıyor ve düzeltmenin
+    // etkisi görünmüyordu. Boş kayıt varsa yok sayılıp yeniden çekiliyor.
+    // ?yapi=1 teşhisi de önbelleği tamamen atlar.
+    const bosKayit = !onbellek?.noktalar?.length;
+    if (onbellek && !bosKayit && req.query?.yapi !== "1") {
       res.setHeader("Cache-Control", "max-age=0, s-maxage=300, stale-while-revalidate=300");
       return res.status(200).json(onbellek);
     }
@@ -185,6 +190,36 @@ async function fonGecmisGetir(req, res) {
       return res.status(r.status).json({ success: false, error: `Fonoloji ${r.status}` });
     }
     const d = await r.json().catch(() => null);
+
+    // ── GEÇİCİ YAPI TEŞHİSİ (2026-08-03) ─────────────────────────────────
+    //   ?gecmis=1&kod=VPA&donem=1a&yapi=1
+    // /timeseries yanıtının alan adlarını bilmiyoruz; doküman ?include=nav
+    // diyor ama dönen anahtarı göstermiyor. Aşağıdaki üçlü tahmin tutmazsa
+    // grafik SESSİZCE boş çiziliyor. Bu uç yalnız YAPIYI döndürür (anahtar
+    // adları, dizi uzunlukları, ilk elemanın alanları) — veri seti değil.
+    // ⚠️ Alan adı kesinleşince bu blok silinecek.
+    if (req.query?.yapi === "1") {
+      const yapiCikar = (o, derinlik = 0) => {
+        if (Array.isArray(o)) {
+          return { tip: "dizi", uzunluk: o.length,
+                   ilkEleman: o[0] && typeof o[0] === "object" ? Object.keys(o[0]).sort() : (o[0] ?? null) };
+        }
+        if (o && typeof o === "object") {
+          if (derinlik > 2) return { tip: "nesne", anahtarlar: Object.keys(o).sort() };
+          const c = {};
+          for (const k of Object.keys(o)) c[k] = yapiCikar(o[k], derinlik + 1);
+          return { tip: "nesne", alanlar: c };
+        }
+        return { tip: typeof o, ornek: typeof o === "string" ? o.slice(0, 40) : o };
+      };
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(200).json({
+        istekUrl: `/v1/funds/${kod}/timeseries?include=nav&period=${fonolojiPeriod}`,
+        httpDurum: r.status,
+        yapi: yapiCikar(d),
+      });
+    }
+
     const hamNoktalar = d?.nav ?? d?.timeseries?.nav ?? d?.points ?? [];
     const noktalar = (Array.isArray(hamNoktalar) ? hamNoktalar : [])
       .filter((p) => typeof (p?.price ?? p?.value) === "number")
@@ -193,7 +228,10 @@ async function fonGecmisGetir(req, res) {
     const oncekiKapanis = noktalar.length > 1 ? noktalar[noktalar.length - 2].fiyat : null;
 
     const paket = { success: true, kod, donem: donemGiris, noktalar, guncelFiyat, oncekiKapanis };
-    try { await kv.set(cacheAnahtar, paket, { ex: FON_GECMIS_CACHE_TTL_SANIYE }); } catch {}
+    // Boş sonuç YAZILMAZ — geçici bir arıza 10 dakika kalıcı hale gelmesin.
+    if (noktalar.length) {
+      try { await kv.set(cacheAnahtar, paket, { ex: FON_GECMIS_CACHE_TTL_SANIYE }); } catch {}
+    }
 
     res.setHeader("Cache-Control", "max-age=0, s-maxage=300, stale-while-revalidate=300");
     return res.status(200).json(paket);
