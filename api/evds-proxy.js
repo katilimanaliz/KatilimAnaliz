@@ -118,6 +118,53 @@ async function fetchZamanli(url, opsiyonlar={}, msTimeout=8000){
 }
 const CACHE_TTL_SANIYE = 6 * 3600; // 6 saat, Redis TTL saniye cinsinden ister
 
+// ── HIZ SINIRI + CDN ÖNBELLEĞİ (2026-08-02 güvenlik taraması) ──────────────
+// Bu uç kimlik doğrulaması olmadan herkese açık. Kötü niyetli biri saniyede
+// yüzlerce istek atarsa uygulama "çökmez" ama FATURA çöker: her istek bir
+// serverless çağrısı + Upstash komutu demek.
+//
+// İki katmanlı savunma kuruldu:
+//   1) CDN önbelleği (asıl kalkan) — Cache-Control ile Vercel'in kenar
+//      sunucusu aynı URL'e gelen tekrarları fonksiyonu HİÇ uyandırmadan
+//      yanıtlar. Saldırıda saniyede 1000 istek gelse bile fonksiyon URL
+//      başına 2 dakikada bir kez çalışır.
+//   2) IP başına hız sınırı — CDN'i atlatan (rastgele parametreli) istekler
+//      için son savunma.
+//
+// Not: buradaki süre backend önbelleğinden (6-12 saat) çok daha kısa tutuldu;
+// amaç tazelik kaybetmeden ani yük emmek.
+const HIZ_SINIRI_ADET   = 60;   // IP başına dakikada izin verilen istek
+const HIZ_SINIRI_PENCERE = 60;  // saniye
+const EDGE_TTL          = 120;  // CDN önbelleği (saniye)
+const EDGE_SWR          = 600;  // bayat yanıtı sunarken arkada tazele (saniye)
+
+// İstemci IP'si. Vercel gerçek IP'yi x-forwarded-for başlığına koyar; ilk
+// değer istemcidir, sonrakiler proxy zinciridir.
+function istemciIp(req){
+  const x = req.headers["x-forwarded-for"];
+  if(typeof x === "string" && x) return x.split(",")[0].trim();
+  return req.headers["x-real-ip"] || "bilinmeyen";
+}
+
+// Dakikalık sayaç. Pencere anahtarı zamandan türetiliyor, ayrı temizlik
+// gerekmiyor: TTL dolunca kendisi siliniyor.
+//
+// ÖNEMLİ: Redis'e ulaşılamazsa İZİN VERİLİR (fail-open). Aksi halde Upstash
+// kesintisi tüm kullanıcıları kilitler — çaresi hastalıktan kötü olurdu.
+async function hizSiniriAsildiMi(req){
+  try{
+    const ip = istemciIp(req);
+    if(ip === "bilinmeyen") return false;
+    const pencere = Math.floor(Date.now() / (HIZ_SINIRI_PENCERE * 1000));
+    const anahtar = `rl:${ip}:${pencere}`;
+    const sayac = await redis.incr(anahtar);
+    if(sayac === 1) await redis.expire(anahtar, HIZ_SINIRI_PENCERE * 2);
+    return sayac > HIZ_SINIRI_ADET;
+  }catch{
+    return false;   // fail-open
+  }
+}
+
 // ── SPK KİRA SERTİFİKASI (v11) ─────────────────────────────────────────────
 const SPK_BASE = "https://ws.spk.gov.tr/BorclanmaAraclari/api";
 const KV_SPK_SUKUK_KEY = "spk:sukuk:v3";   // v1→v2: ihraccilar alani eklendi. v2→v3: sonAy artik BOS AYI SAYMIYOR (bkz. spkYilOzeti) — eski onbellekteki hatali sonAy/degisimYuzde/aylikOrtalama degerleri gecersiz kilinmali
@@ -1167,6 +1214,36 @@ async function evdsFetch(url,apiKey){
 export default async function handler(req,res){
   res.setHeader("Access-Control-Allow-Origin","*");
   if(req.method==="OPTIONS") return res.status(200).end();
+
+  // ── HIZ SINIRI ────────────────────────────────────────────────────────────
+  // Her şeyden önce çalışır; sınır aşılmışsa hiçbir dış servise gidilmez.
+  if(await hizSiniriAsildiMi(req)){
+    res.setHeader("Retry-After", String(HIZ_SINIRI_PENCERE));
+    res.setHeader("Cache-Control","no-store");   // 429 asla önbelleklenmesin
+    return res.status(429).json({
+      hata: "Çok fazla istek gönderildi. Lütfen biraz sonra tekrar deneyin.",
+      limit: `${HIZ_SINIRI_ADET}/${HIZ_SINIRI_PENCERE}sn`,
+    });
+  }
+
+  // ── CDN ÖNBELLEĞİ ─────────────────────────────────────────────────────────
+  // res.json sarmalanıyor: yalnızca BAŞARILI yanıtlara önbellek başlığı
+  // ekleniyor. Hata yanıtlarının CDN'de takılıp kalması, hatayı geçici
+  // olmaktan çıkarıp dakikalarca sürekli hale getirirdi.
+  // Bir şube kendi Cache-Control'ünü ayarlarsa ona dokunulmuyor.
+  const _json = res.json.bind(res);
+  res.json = (govde)=>{
+    const kod = res.statusCode || 200;
+    if(kod >= 200 && kod < 300 && !res.getHeader("Cache-Control")){
+      res.setHeader("Cache-Control",
+        `public, s-maxage=${EDGE_TTL}, stale-while-revalidate=${EDGE_SWR}`);
+    }
+    return _json(govde);
+  };
+
+  // debug=1 önbelleği atlamak için var; CDN'in bunu da atlaması gerekiyor,
+  // yoksa "önbelleksiz sorgu" yine bayat yanıt döndürür.
+  if(req.query.debug === "1") res.setHeader("Cache-Control","no-store");
 
   // ── SPK KİRA SERTİFİKASI İHRAÇLARI (v11): /api/evds-proxy?spk=sukuk ──────
   // EVDS_KEY kontrolünden ÖNCE, çünkü bu şube TCMB'ye hiç gitmiyor — SPK'nın
