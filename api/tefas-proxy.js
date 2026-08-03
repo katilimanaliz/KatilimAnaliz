@@ -402,89 +402,9 @@ async function herkesOku(req, res) {
   }
 }
 
-// ── GEÇİCİ TEŞHİS UCU (2026-08-03) ──────────────────────────────────────────
-//   GET /api/tefas-proxy?tani=katilim
-//
-// NEDEN VAR: Fonoloji 3 Ağustos'ta ?katilim=1 sunucu-taraflı süzgecini
-// duyurdu (434 fon). Mimariyi buna göre yeniden yazmadan önce üç şeyi
-// ölçmemiz gerekiyor:
-//   1) Kaç kayıt dönüyor, _meta.capped var mı
-//   2) current_price her kayıtta dolu mu (doluysa tekil çekim fazı gereksiz)
-//   3) Kategori dağılımı — bizim ekranda 279, onlarda 434; fark emeklilik
-//      fonlarından mı geliyor yoksa listemiz eksik mi?
-//
-// NEDEN BU YOLLA: API anahtarı Vercel ortam değişkeninde ve panelde maskeli;
-// dışarıdan elle sorgulanamıyor. Bu uç anahtarı SUNUCUDA kullanıp yalnız
-// ÖZET döndürüyor — anahtar hiçbir yere sızmıyor, ham veri seti de
-// dışarı verilmiyor (yeniden dağıtım kısıtı).
-//
-// KOTA KORUMASI: Sonuç 1 saat KV'de tutuluyor. Uç kimlik doğrulamasız olduğu
-// için, olmasaydı tekrar tekrar çağrılıp kota yakılabilirdi.
-//
-// ⚠️ ÖLÇÜM BİTİNCE BU BLOK SİLİNECEK.
-const TANI_KV_ANAHTAR = "tefas:tani:katilim:v1";
-const TANI_TTL = 3600;
-
-async function taniKatilim(req, res) {
-  res.setHeader("Cache-Control", "no-store");
-  try {
-    const onbellek = await kv.get(TANI_KV_ANAHTAR).catch(() => null);
-    if (onbellek && req.query?.taze !== "1") {
-      return res.status(200).json({ ...onbellek, onbellekten: true });
-    }
-
-    const API_KEY = process.env.FONOLOJI_KEY;
-    if (!API_KEY) return res.status(500).json({ hata: "FONOLOJI_KEY tanımlı değil" });
-
-    const url = "https://fonoloji.com/v1/funds?katilim=1&limit=500";
-    const r = await fetch(url, { headers: { "X-API-Key": API_KEY, Accept: "application/json" } });
-    const govde = await r.json().catch(() => null);
-
-    const kayitlar = govde?.items ?? govde?.funds ?? govde?.data ?? (Array.isArray(govde) ? govde : []);
-    const ilk = kayitlar[0] || null;
-
-    const kategoriDagilim = {};
-    let fiyatliAdet = 0, katilimAlaniOlan = 0;
-    for (const f of kayitlar) {
-      const k = f?.category || f?.fund_type || "(bos)";
-      kategoriDagilim[k] = (kategoriDagilim[k] || 0) + 1;
-      if (typeof f?.current_price === "number") fiyatliAdet++;
-      if (f && ("katilim" in f)) katilimAlaniOlan++;
-    }
-
-    const ozet = {
-      istekUrl: url,
-      httpDurum: r.status,
-      adet: kayitlar.length,
-      // Kırpılma bayrağı ve gerçek maliyet — asıl aradığımız iki değer.
-      meta: govde?._meta ?? null,
-      ratelimit: {
-        cost: r.headers.get("x-ratelimit-cost"),
-        kalanAylik: r.headers.get("x-ratelimit-remaining-monthly"),
-        limitAylik: r.headers.get("x-ratelimit-limit-monthly"),
-        kalanGunluk: r.headers.get("x-ratelimit-remaining-daily"),
-        limitGunluk: r.headers.get("x-ratelimit-limit-daily"),
-      },
-      fiyatliKayit: `${fiyatliAdet}/${kayitlar.length}`,
-      katilimAlaniOlan: `${katilimAlaniOlan}/${kayitlar.length}`,
-      ilkKaydinAlanlari: ilk ? Object.keys(ilk).sort() : null,
-      // Ham veri DEĞİL, yalnız dağılım. Yeniden dağıtım kısıtı nedeniyle
-      // fon listesinin kendisi bu uçtan hiç dönmüyor.
-      kategoriDagilim,
-      olcumZamani: new Date().toISOString(),
-    };
-
-    try { await kv.set(TANI_KV_ANAHTAR, ozet, { ex: TANI_TTL }); } catch {}
-    return res.status(200).json(ozet);
-  } catch (e) {
-    return res.status(500).json({ hata: e.message });
-  }
-}
-
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
 
-  if (req.query?.tani === "katilim") return taniKatilim(req, res);
   if (req.query?.gecmis === "1") return fonGecmisGetir(req, res);
   if (req.query?.detay === "1") return fonDetayGetir(req, res);
 
