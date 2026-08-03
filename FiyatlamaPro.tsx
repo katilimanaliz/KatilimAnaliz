@@ -748,25 +748,29 @@ const C = TEMA === "acik" ? ACIK_TEMA : KOYU_TEMA;
 // boyutları hiç değişmez. useOlculenGenislik bunu ResizeObserver ile yapar;
 // pencere yeniden boyutlandırıldığında da kendini günceller.
 function useOlculenGenislik(varsayilan = 300) {
-  const ref = useRef<HTMLDivElement | null>(null);
   const [genislik, setGenislik] = useState(varsayilan);
-  useEffect(() => {
-    const el = ref.current;
+  const gozlemciRef = useRef<ResizeObserver | null>(null);
+  // ⚠️ CALLBACK REF — useEffect(...,[]) DEĞİL. İlk sürümde effect kullanıldı ve
+  // grafik masaüstünde ölçülemedi: bileşen ilk bağlandığında veri henüz
+  // gelmemiş oluyor, grafik "Veri yüklenemedi" dalına düşüyor ve ref.current
+  // null kalıyordu. Effect bir daha çalışmadığı için gözlemci hiç kurulmuyor,
+  // genişlik varsayılan 320'de takılıyordu. Callback ref, DOM düğümü ne zaman
+  // bağlanırsa o zaman çalışır — veri sonradan gelse de ölçüm yapılır.
+  const ref = useCallback((el: HTMLDivElement | null) => {
+    if (gozlemciRef.current) { gozlemciRef.current.disconnect(); gozlemciRef.current = null; }
     if (!el) return;
     const olc = () => {
       const w = Math.round(el.clientWidth);
-      // 0 gelirse (henüz yerleşmemiş/gizli sekme) varsayılanı koru — aksi
-      // halde grafik sıfır genişlikte çizilip kaybolurdu.
+      // 0 gelirse (gizli sekme / henüz yerleşmemiş) varsayılanı koru —
+      // aksi halde grafik sıfır genişlikte çizilip kaybolurdu.
       if (w > 0) setGenislik(w);
     };
     olc();
-    if (typeof ResizeObserver === "undefined") {
-      window.addEventListener("resize", olc);
-      return () => window.removeEventListener("resize", olc);
+    if (typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver(olc);
+      ro.observe(el);
+      gozlemciRef.current = ro;
     }
-    const ro = new ResizeObserver(olc);
-    ro.observe(el);
-    return () => ro.disconnect();
   }, []);
   return [ref, genislik] as const;
 }
@@ -2010,10 +2014,16 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
     if (grafik.length < 2) return <div style={{height:160,display:"flex",alignItems:"center",justifyContent:"center",color:C.sub,fontSize:12}}>Veri yüklenemedi</div>;
 
     const w = grafikW, h = 160, pad = 4;
+    // ETİKET PAYI (2026-08-03): Çizim alanı viewBox'ın TAMAMINI kullanınca
+    // zirve etiketi üstteki dönem düğmelerine, dip etiketi de alttaki tarih
+    // satırına biniyordu (mobilde "66 ₺" ile "2026-08-03" üst üste çıkıyordu).
+    // Çizgi artık [UST_PAY, h-ALT_PAY] bandına sıkıştırılıyor; etiketler bu
+    // bandın dışındaki boşluğa yazılıyor. Alan dolgusu tabana kadar iniyor.
+    const UST_PAY = 18, ALT_PAY = 22;
     const prices = grafik.map(p => p.kapanis);
     const min = Math.min(...prices) * 0.999;
     const max = Math.max(...prices) * 1.001;
-    const scaleY = (v: number) => h - ((v - min) / (max - min)) * h;
+    const scaleY = (v: number) => UST_PAY + (h - UST_PAY - ALT_PAY) * (1 - (v - min) / (max - min));
     const stepX = (w - pad*2) / (grafik.length - 1 || 1);
     const cizgiRenk = (grafik[grafik.length-1]?.kapanis >= grafik[0]?.kapanis) ? "#4ade80" : "#f87171";
 
@@ -2333,10 +2343,16 @@ function FonDetay({ fon: fonProp, onGeri, settings }: { fon: any, onGeri: () => 
   const SVGGrafik = () => {
     if (grafik.length < 2) return <div style={{height:160,display:"flex",alignItems:"center",justifyContent:"center",color:C.sub,fontSize:12}}>Veri yüklenemedi</div>;
     const w = fonGrafikW, h = 160, pad = 4;
+    // ETİKET PAYI (2026-08-03): Çizim alanı viewBox'ın TAMAMINI kullanınca
+    // zirve etiketi üstteki dönem düğmelerine, dip etiketi de alttaki tarih
+    // satırına biniyordu (mobilde "66 ₺" ile "2026-08-03" üst üste çıkıyordu).
+    // Çizgi artık [UST_PAY, h-ALT_PAY] bandına sıkıştırılıyor; etiketler bu
+    // bandın dışındaki boşluğa yazılıyor. Alan dolgusu tabana kadar iniyor.
+    const UST_PAY = 18, ALT_PAY = 22;
     const fiyatlar = grafik.map(p => p.fiyat);
     const min = Math.min(...fiyatlar) * 0.999;
     const max = Math.max(...fiyatlar) * 1.001;
-    const scaleY = (v: number) => h - ((v - min) / (max - min)) * h;
+    const scaleY = (v: number) => UST_PAY + (h - UST_PAY - ALT_PAY) * (1 - (v - min) / (max - min));
     const stepX = (w - pad*2) / (grafik.length - 1 || 1);
     const cizgiRenk = (grafik[grafik.length-1]?.fiyat >= grafik[0]?.fiyat) ? "#4ade80" : "#f87171";
     const pathPuanlari = grafik.map((p, i) => `${pad + i * stepX},${scaleY(p.fiyat)}`).join(" L ");
