@@ -136,9 +136,16 @@ async function fonDetayGetir(req, res) {
     const paket = { success: true, ...fon };
     try { await kv.set(cacheAnahtar, paket, { ex: FON_DETAY_CACHE_TTL_SANIYE }); } catch {}
 
-    res.setHeader("Cache-Control", "max-age=0, s-maxage=300, stale-while-revalidate=300");
+    // ⚠️ BOŞ YANIT CDN'DE ÖNBELLEKLENMEZ (2026-08-03). Bugün bu tuzağa iki kez
+    // düşüldü: /timeseries eşlemesi yanlışken boş "noktalar" hem Redis'te hem
+    // Vercel kenar önbelleğinde 5 dakika takılı kaldı; düzeltmenin etkisi
+    // görünmediği için hata kodda sanıldı. Veri yoksa taze sorulsun.
+    res.setHeader("Cache-Control", noktalar.length
+      ? "max-age=0, s-maxage=300, stale-while-revalidate=300"
+      : "no-store");
     return res.status(200).json(paket);
   } catch (e) {
+    res.setHeader("Cache-Control", "no-store");   // hata da takılmasın
     return res.status(500).json({ success: false, error: String(e.message || e) });
   }
 }
@@ -156,9 +163,8 @@ async function fonGecmisGetir(req, res) {
     // ⚠️ BOŞ SONUÇ ÖNBELLEKLENMEZ (2026-08-03): /timeseries geçişinde alan
     // adı tutmayınca boş "noktalar" 10 dakika saklanıyor ve düzeltmenin
     // etkisi görünmüyordu. Boş kayıt varsa yok sayılıp yeniden çekiliyor.
-    // ?yapi=1 teşhisi de önbelleği tamamen atlar.
     const bosKayit = !onbellek?.noktalar?.length;
-    if (onbellek && !bosKayit && req.query?.yapi !== "1") {
+    if (onbellek && !bosKayit) {
       res.setHeader("Cache-Control", "max-age=0, s-maxage=300, stale-while-revalidate=300");
       return res.status(200).json(onbellek);
     }
@@ -191,36 +197,17 @@ async function fonGecmisGetir(req, res) {
     }
     const d = await r.json().catch(() => null);
 
-    // ── GEÇİCİ YAPI TEŞHİSİ (2026-08-03) ─────────────────────────────────
-    //   ?gecmis=1&kod=VPA&donem=1a&yapi=1
-    // /timeseries yanıtının alan adlarını bilmiyoruz; doküman ?include=nav
-    // diyor ama dönen anahtarı göstermiyor. Aşağıdaki üçlü tahmin tutmazsa
-    // grafik SESSİZCE boş çiziliyor. Bu uç yalnız YAPIYI döndürür (anahtar
-    // adları, dizi uzunlukları, ilk elemanın alanları) — veri seti değil.
-    // ⚠️ Alan adı kesinleşince bu blok silinecek.
-    if (req.query?.yapi === "1") {
-      const yapiCikar = (o, derinlik = 0) => {
-        if (Array.isArray(o)) {
-          return { tip: "dizi", uzunluk: o.length,
-                   ilkEleman: o[0] && typeof o[0] === "object" ? Object.keys(o[0]).sort() : (o[0] ?? null) };
-        }
-        if (o && typeof o === "object") {
-          if (derinlik > 2) return { tip: "nesne", anahtarlar: Object.keys(o).sort() };
-          const c = {};
-          for (const k of Object.keys(o)) c[k] = yapiCikar(o[k], derinlik + 1);
-          return { tip: "nesne", alanlar: c };
-        }
-        return { tip: typeof o, ornek: typeof o === "string" ? o.slice(0, 40) : o };
-      };
-      res.setHeader("Cache-Control", "no-store");
-      return res.status(200).json({
-        istekUrl: `/v1/funds/${kod}/timeseries?include=nav&period=${fonolojiPeriod}`,
-        httpDurum: r.status,
-        yapi: yapiCikar(d),
-      });
-    }
-
-    const hamNoktalar = d?.nav ?? d?.timeseries?.nav ?? d?.points ?? [];
+    // ── NAV SERİSİNİN YERİ (2026-08-03'te ölçüldü) ───────────────────────
+    // /timeseries yanıtı BİR KATMAN DAHA DERİN — ilk geçiş denemesinde bunu
+    // ıskaladık ve grafik sessizce boş çizildi:
+    //   { code, blocks:["nav"], nav:{ code, period, points:[…] }, realReturnPct }
+    // Yani seri d.nav DEĞİL, d.nav.points. Nokta alanları eskisiyle aynı
+    // (date / price / investor_count / total_value), dolayısıyla eşleme
+    // değişmiyor; yalnızca bir seviye iniliyor.
+    // Yedek yollar: API biçimi ileride düzleşirse veya /history'ye dönülürse
+    // kırılmasın diye eski şekiller de deneniyor.
+    const hamNoktalar = d?.nav?.points ?? d?.timeseries?.nav?.points
+                     ?? (Array.isArray(d?.nav) ? d.nav : null) ?? d?.points ?? [];
     const noktalar = (Array.isArray(hamNoktalar) ? hamNoktalar : [])
       .filter((p) => typeof (p?.price ?? p?.value) === "number")
       .map((p) => ({ tarih: p.date ?? p.tarih, fiyat: p.price ?? p.value }));
