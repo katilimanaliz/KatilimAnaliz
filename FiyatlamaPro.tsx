@@ -730,6 +730,27 @@ const ACIK_TEMA = {
 };
 const C = TEMA === "acik" ? ACIK_TEMA : KOYU_TEMA;
 
+// ═══ GRAFİK ÖLÇEKLEME (2026-08-03) ══════════════════════════════════════════
+// MASAÜSTÜ HATASI: viewBox'lı SVG'lere width:"100%" + SABİT SAYISAL height
+// verilip preserveAspectRatio belirtilmezse, tarayıcı varsayılan olarak
+// "xMidYMid meet" uygular: en-boy oranı korunmak ZORUNDA olduğu için grafik
+// sabit yüksekliğe sığacak şekilde küçülür ve geniş kartın ORTASINDA minicik
+// kalır. Mobilde fark edilmiyordu çünkü kart genişliği zaten viewBox'a yakın.
+//
+// preserveAspectRatio="none" ÇÖZÜM DEĞİL: yatayda gererek metinleri ve
+// daireleri deforme eder. Doğru çözüm yüksekliği "auto" bırakmak — grafik
+// oranını koruyarak büyür — ve genişliğe bir tavan koymak, aksi halde geniş
+// ekranda gereksiz yere devasa olur (1900px genişlik ≈ 580px yükseklik).
+const GRAFIK_MAKS_GEN = 520;
+const GRAFIK_STIL = {
+  width: "100%",
+  maxWidth: GRAFIK_MAKS_GEN,
+  height: "auto",
+  display: "block",
+  margin: "0 auto",
+  overflow: "visible",
+} as const;
+
 // ═══ KART ÜST RENK VURGUSU (kategori bazlı) ════════════════════════════════
 // Her hesaplama kategorisi kendi rengini alır (ikonlar DEĞİŞMEZ — sadece kartın
 // üst kenarında ince, ortadan dışa doğru yumuşayan bir gradient çizgi olur).
@@ -9538,7 +9559,7 @@ function HaftalikPiyasaOzeti(){
                 const getY=(v:number)=>PAD_TOP+PLOT_H-((v-minV)/aralikV)*PLOT_H;
                 const pts=trendHaftalar.map((p,i)=>`${PAD_SIDE+i*barW+barW/2},${getY(p.deger as number)}`).join(" ");
                 return (
-                  <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} style={{overflow:"visible"}}>
+                  <svg viewBox={`0 0 ${W} ${H}`} style={GRAFIK_STIL as any}>
                     <polyline points={pts} fill="none" stroke={C.blue} strokeWidth={2}/>
                     {trendHaftalar.map((p,i)=>{
                       const x=PAD_SIDE+i*barW+barW/2;
@@ -10734,7 +10755,7 @@ function KatilimSektoru(){
           const adim=Math.max(1,Math.ceil(n/6));
           return (
             <div style={{marginTop:14}}>
-              <svg viewBox={`0 0 ${G} ${Y}`} style={{width:"100%",height:Y,display:"block",overflow:"visible"}}>
+              <svg viewBox={`0 0 ${G} ${Y}`} style={GRAFIK_STIL as any}>
                 <path d={`${cizgi} L${kn(n-1).toFixed(1)},${ALTK} L${SOL},${ALTK} Z`} fill="rgba(59,130,246,0.15)"/>
                 <path d={cizgi} fill="none" stroke="#3B82F6" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"/>
                 {dgr.map((v,i)=>{
@@ -12273,7 +12294,7 @@ function GostergeGrafikModal({ad,seri,birim,onClose}:{ad:string,seri:{tarih:stri
           <button onClick={onClose} style={{background:WA(0.1),border:"none",width:32,height:32,borderRadius:16,fontSize:20,cursor:"pointer",color:C.label}}>×</button>
         </div>
         <div style={{padding:"18px 20px 24px",overflowY:"auto"}}>
-          <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} style={{overflow:"visible"}}>
+          <svg viewBox={`0 0 ${W} ${H}`} style={GRAFIK_STIL as any}>
             <line x1={PAD} y1={sifirY} x2={W-PAD} y2={sifirY} stroke={WA(0.15)} strokeWidth={1}/>
             {seri.map((s,i)=>{
               const x=PAD+i*barGenislik;
