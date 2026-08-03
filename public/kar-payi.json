@@ -81,9 +81,9 @@
   ],
   "finansman": {
     "guncelleme": {
-      "konut": "2026-07-28",
-      "tasit": "2026-07-28",
-      "ihtiyac": "2026-07-28"
+      "konut": "2026-08-03",
+      "tasit": "2026-08-03",
+      "ihtiyac": "2026-08-03"
     },
     "bankalar": [
       {
@@ -97,8 +97,8 @@
       },
       {
         "ad": "Albaraka Türk",
-        "konut60": 2.8,
-        "konut120": 2.8,
+        "konut60": 2.9,
+        "konut120": 2.9,
         "tasit12": 3.55,
         "tasit24": 3.21,
         "ihtiyac12": 4.0,
@@ -115,10 +115,10 @@
       },
       {
         "ad": "Türkiye Finans",
-        "konut60": 3.55,
-        "konut120": 3.41,
-        "tasit12": 4.23,
-        "tasit24": 4.12,
+        "konut60": 3.09,
+        "konut120": 2.95,
+        "tasit12": 3.63,
+        "tasit24": 3.52,
         "ihtiyac12": 4.05,
         "ihtiyac24": 3.99
       },
@@ -137,8 +137,8 @@
         "konut120": 2.89,
         "tasit12": 3.49,
         "tasit24": 3.49,
-        "ihtiyac12": 4.39,
-        "ihtiyac24": 4.29
+        "ihtiyac12": 4.99,
+        "ihtiyac24": 4.99
       },
       {
         "ad": "Emlak Katılım",
