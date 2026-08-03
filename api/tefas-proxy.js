@@ -166,17 +166,29 @@ async function fonGecmisGetir(req, res) {
     // fonFetch.js'deki cron taramasıyla AYNI paylaşılan sıraya girer — toplam
     // istek hızı Fonoloji'nin dakikalık sınırının altında kalır.
     await siraliBekle();
+    // ── /history → /timeseries GEÇİŞİ (2026-08-03) ───────────────────────
+    // Fonoloji eski tekil fon uçlarını 15 Ağustos 2026, 05:00 (TSİ) itibarıyla
+    // kaldırıyor; /history de listede. Sonrasında 410 dönecek ve fon detay
+    // grafiği (Getiri İzleme + Portföyüm) çalışmayı bırakırdı.
+    //
+    // Yeni uç ?include= ile blok seçtiriyor; NAV serisi için include=nav
+    // yeterli. Kota açısından fark yok: her ikisi de TEK FON kaydı = 1 kota,
+    // kaç NAV noktası döndüğü maliyeti değiştirmiyor.
+    //
+    // Yanıt biçimi değişebileceği için hem yeni (timeseries.nav) hem eski
+    // (points) şekli okunuyor — geçiş sırasında ikisi de gelirse kırılmasın.
     const r = await fetch(
-      `https://fonoloji.com/v1/funds/${encodeURIComponent(kod)}/history?period=${fonolojiPeriod}`,
+      `https://fonoloji.com/v1/funds/${encodeURIComponent(kod)}/timeseries?include=nav&period=${fonolojiPeriod}`,
       { headers: { "X-API-Key": API_KEY, "Accept": "application/json" } }
     );
     if (!r.ok) {
       return res.status(r.status).json({ success: false, error: `Fonoloji ${r.status}` });
     }
     const d = await r.json().catch(() => null);
-    const noktalar = (d?.points || [])
-      .filter((p) => typeof p.price === "number")
-      .map((p) => ({ tarih: p.date, fiyat: p.price }));
+    const hamNoktalar = d?.nav ?? d?.timeseries?.nav ?? d?.points ?? [];
+    const noktalar = (Array.isArray(hamNoktalar) ? hamNoktalar : [])
+      .filter((p) => typeof (p?.price ?? p?.value) === "number")
+      .map((p) => ({ tarih: p.date ?? p.tarih, fiyat: p.price ?? p.value }));
     const guncelFiyat = noktalar.length ? noktalar[noktalar.length - 1].fiyat : null;
     const oncekiKapanis = noktalar.length > 1 ? noktalar[noktalar.length - 2].fiyat : null;
 
