@@ -83,6 +83,61 @@ const redis = new Redis({
   token: process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN,
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// HIZ SINIRI (2026-08-02 güvenlik taraması)
+// ═══════════════════════════════════════════════════════════════════════════
+// Bu dosyadaki "gonder" ve "alarm-kontrol" uçları admin anahtarıyla korunuyor
+// (doğru yapılmış). Ancak "kaydet", "alarm-ekle" ve kardeşleri KİMLİK
+// DOĞRULAMASIZ olmak ZORUNDA — uygulamanın kullanıcı hesabı yok, push token
+// tek kimlik. Bu da onları kötüye kullanıma açık bırakıyor:
+//
+//   • kaydet      → pushTokens kümesine sınırsız çöp kayıt
+//   • alarm-ekle  → fiyatAlarmlari dizisini sınırsız şişirme
+//
+// İkincisi daha ciddi: alarmlar TEK bir Redis anahtarında JSON dizi olarak
+// duruyor. Token başına 20 sınırı var ama saldırgan sınırsız sahte token
+// üretebilir; her ekleme dev diziyi baştan yazar ve alarm-kontrol turu her
+// alarm için fiyat çekmeye çalışır. Fatura ve cron süresi birlikte patlar.
+//
+// Fail-open: Redis'e ulaşılamazsa istek GEÇER. Upstash kesintisinde tüm
+// kullanıcıları kilitlemek, çareyi hastalıktan kötü yapardı.
+const HIZ_SINIRI_ADET = 30;      // IP başına dakikada izin verilen yazma isteği
+const HIZ_SINIRI_PENCERE = 60;   // saniye
+
+function istemciIp(req) {
+  const x = req.headers["x-forwarded-for"];
+  if (typeof x === "string" && x) return x.split(",")[0].trim();
+  return req.headers["x-real-ip"] || "bilinmeyen";
+}
+
+async function hizSiniriAsildiMi(req) {
+  try {
+    const ip = istemciIp(req);
+    if (ip === "bilinmeyen") return false;
+    const pencere = Math.floor(Date.now() / (HIZ_SINIRI_PENCERE * 1000));
+    const sayac = await redis.incr(`rl:bildirim:${ip}:${pencere}`);
+    if (sayac === 1) await redis.expire(`rl:bildirim:${ip}:${pencere}`, HIZ_SINIRI_PENCERE * 2);
+    return sayac > HIZ_SINIRI_ADET;
+  } catch {
+    return false; // fail-open
+  }
+}
+
+// FCM kayıt token'ı biçimi. Gerçek token'lar uzun, noktalı ve
+// harf/rakam/-/_/: karakterlerinden oluşur. Bu kontrol "aaa" gibi çöp
+// kayıtları eler; meşru token'ları elemez.
+//
+// NOT: Ham APNs hex token'ları (64-200 hex) bu testten ÖNCE
+// hamTokeniDonustur ile FCM biçimine çevriliyor, dolayısıyla buraya
+// çevrilmiş hâlleriyle geliyorlar.
+const FCM_TOKEN_REGEX = /^[A-Za-z0-9_:.\-]{100,4096}$/;
+
+// Tüm alarmlar TEK anahtarda tutulduğu için toplam boy da sınırlanmalı;
+// token başına 20 sınırı sahte token üretimine karşı tek başına yetmiyor.
+// Mevcut ölçek (474 indirme) düşünüldüğünde bu sınır çok uzak, ama
+// kötüye kullanımda tavan görevi görüyor.
+const MAKS_TOPLAM_ALARM = 5000;
+
 async function tokenKaydet(req, res) {
   let { token, platform, eskiToken } = req.body || {};
 
@@ -97,6 +152,15 @@ async function tokenKaydet(req, res) {
 
   if (!token || typeof token !== "string") {
     res.status(400).json({ hata: "Geçerli bir 'token' alanı gerekli" });
+    return;
+  }
+
+  // BİÇİM DOĞRULAMASI (2026-08-02): Önceden herhangi bir metin kabul
+  // ediliyordu; {"token":"a"} ile Redis kümesi çöple doldurulabilirdi.
+  // Şişen küme her "gonder" çağrısında 500'lük gruplar hâlinde FCM'e
+  // gönderilmeye çalışılır — hem maliyet hem gecikme.
+  if (!FCM_TOKEN_REGEX.test(token)) {
+    res.status(400).json({ hata: "Token biçimi geçersiz" });
     return;
   }
 
@@ -715,6 +779,11 @@ async function alarmEkle(req, res) {
           if (kapSayisi >= MAKS_KAP_ALARM_TOKEN_BASINA) {
             return { hataKodu: 429, hata: `En fazla ${MAKS_KAP_ALARM_TOKEN_BASINA} KAP bildirim aboneliği kurabilirsiniz.` };
           }
+          // Küresel tavan — fiyat alarmı yolundakiyle aynı gerekçe.
+          if (alarmlar.length >= MAKS_TOPLAM_ALARM) {
+            console.error("KURESEL ALARM TAVANI ASILDI (kap):", alarmlar.length);
+            return { hataKodu: 503, hata: "Sistem şu anda yeni alarm kabul edemiyor. Lütfen daha sonra tekrar deneyin." };
+          }
           const zatenVar = alarmlar.some((a) => a.token === token && a.tip === "kap" && a.sembol === sembol && a.aktif);
           if (zatenVar) return { hataKodu: 409, hata: "Bu hisse için zaten bir KAP bildirim aboneliğiniz var." };
 
@@ -808,6 +877,14 @@ async function alarmEkle(req, res) {
         const aktifSayisi = alarmlar.filter((a) => a.token === token && a.aktif).length;
         if (aktifSayisi >= MAKS_AKTIF_ALARM_TOKEN_BASINA) {
           return { hataKodu: 429, hata: `En fazla ${MAKS_AKTIF_ALARM_TOKEN_BASINA} aktif alarm kurabilirsiniz. Lütfen önce birkaçını silin.` };
+        }
+
+        // KÜRESEL TAVAN (2026-08-02): Token başına sınır, sahte token üreten
+        // bir saldırgana karşı işe yaramaz. Alarmların tamamı TEK anahtarda
+        // durduğu için dizinin toplam boyu da sınırlanmalı.
+        if (alarmlar.length >= MAKS_TOPLAM_ALARM) {
+          console.error("KURESEL ALARM TAVANI ASILDI:", alarmlar.length);
+          return { hataKodu: 503, hata: "Sistem şu anda yeni alarm kabul edemiyor. Lütfen daha sonra tekrar deneyin." };
         }
 
         const yeniAlarm = {
@@ -1273,6 +1350,25 @@ export default async function handler(req, res) {
   }
 
   const islem = req.query?.islem;
+
+  // ── HIZ SINIRI ─────────────────────────────────────────────────────────
+  // "gonder" ve "alarm-kontrol" MUAF: ikisi de admin anahtarıyla korunuyor
+  // ve alarm-kontrol dış zamanlayıcıdan hep AYNI IP ile geliyor. Sınıra
+  // dahil edilirlerse meşru cron turu engellenebilirdi.
+  //
+  // Geri kalan uçlar (kaydet, alarm-ekle/sil/listele/durum/temizle,
+  // duyurular) kimlik doğrulamasız olduğu için sınıra tabi.
+  if (islem !== "gonder" && islem !== "alarm-kontrol") {
+    if (await hizSiniriAsildiMi(req)) {
+      res.setHeader("Retry-After", String(HIZ_SINIRI_PENCERE));
+      res.setHeader("Cache-Control", "no-store");
+      res.status(429).json({
+        hata: "Çok fazla istek gönderildi. Lütfen biraz sonra tekrar deneyin.",
+        limit: `${HIZ_SINIRI_ADET}/${HIZ_SINIRI_PENCERE}sn`,
+      });
+      return;
+    }
+  }
 
   // alarm-kontrol dış zamanlayıcılardan GET olarak da çağrılabilmeli (bazı
   // ücretsiz servisler yalnızca GET destekler) — diğer tüm işlemler POST ister.
