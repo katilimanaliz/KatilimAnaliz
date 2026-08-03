@@ -737,19 +737,39 @@ const C = TEMA === "acik" ? ACIK_TEMA : KOYU_TEMA;
 // sabit yüksekliğe sığacak şekilde küçülür ve geniş kartın ORTASINDA minicik
 // kalır. Mobilde fark edilmiyordu çünkü kart genişliği zaten viewBox'a yakın.
 //
-// preserveAspectRatio="none" ÇÖZÜM DEĞİL: yatayda gererek metinleri ve
-// daireleri deforme eder. Doğru çözüm yüksekliği "auto" bırakmak — grafik
-// oranını koruyarak büyür — ve genişliğe bir tavan koymak, aksi halde geniş
-// ekranda gereksiz yere devasa olur (1900px genişlik ≈ 580px yükseklik).
-const GRAFIK_MAKS_GEN = 520;
-const GRAFIK_STIL = {
-  width: "100%",
-  maxWidth: GRAFIK_MAKS_GEN,
-  height: "auto",
-  display: "block",
-  margin: "0 auto",
-  overflow: "visible",
-} as const;
+// DENENEN VE YETERSİZ KALAN ÇÖZÜM: height:"auto" + maxWidth. Grafik büyüdü ama
+// tavana takılıp geniş ekranda hâlâ ortada ada gibi kaldı.
+//
+// preserveAspectRatio="none" DA ÇÖZÜM DEĞİL: yatayda gererek metinleri ve
+// daireleri deforme eder.
+//
+// DOĞRU ÇÖZÜM: viewBox genişliğini KABIN GERÇEK GENİŞLİĞİNE eşitlemek. O zaman
+// ölçek 1:1 olur — çizgi tüm genişliğe yayılır, yükseklik sabit kalır, yazı
+// boyutları hiç değişmez. useOlculenGenislik bunu ResizeObserver ile yapar;
+// pencere yeniden boyutlandırıldığında da kendini günceller.
+function useOlculenGenislik(varsayilan = 300) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [genislik, setGenislik] = useState(varsayilan);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const olc = () => {
+      const w = Math.round(el.clientWidth);
+      // 0 gelirse (henüz yerleşmemiş/gizli sekme) varsayılanı koru — aksi
+      // halde grafik sıfır genişlikte çizilip kaybolurdu.
+      if (w > 0) setGenislik(w);
+    };
+    olc();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", olc);
+      return () => window.removeEventListener("resize", olc);
+    }
+    const ro = new ResizeObserver(olc);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return [ref, genislik] as const;
+}
 
 // ═══ KART ÜST RENK VURGUSU (kategori bazlı) ════════════════════════════════
 // Her hesaplama kategorisi kendi rengini alır (ikonlar DEĞİŞMEZ — sadece kartın
@@ -1919,6 +1939,11 @@ const hs = {
 
 // ─── HİSSE DETAY PANELİ ────────────────────────────────────────────────────
 function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
+  // viewBox kabin gercek genisligine esitleniyor — bkz. useOlculenGenislik.
+  // preserveAspectRatio="none" KALDIRILDI: yatay germe, eklenen fiyat
+  // etiketlerini masaustunde okunmaz hale getiriyordu (viewBox 320 -> ~1800px,
+  // yani 5,6 kat yatay gerilme, dikeyde hic yok).
+  const [grafikRef, grafikW] = useOlculenGenislik(320);
   const [grafik, setGrafik]       = useState<any[]>([]);
   const [grafikYukl, setGrafikYukl] = useState(true);
   const [donem, setDonem]         = useState<"1a"|"3a"|"1y">("1a");
@@ -1984,7 +2009,7 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
   const SVGGrafik = () => {
     if (grafik.length < 2) return <div style={{height:160,display:"flex",alignItems:"center",justifyContent:"center",color:C.sub,fontSize:12}}>Veri yüklenemedi</div>;
 
-    const w = 320, h = 130, pad = 4;
+    const w = grafikW, h = 160, pad = 4;
     const prices = grafik.map(p => p.kapanis);
     const min = Math.min(...prices) * 0.999;
     const max = Math.max(...prices) * 1.001;
@@ -1997,7 +2022,7 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
     const areaPath = `M ${pad},${h} L ${pathPuanlari} L ${pad + (grafik.length-1)*stepX},${h} Z`;
 
     return (
-      <div style={{position:"relative"}}>
+      <div ref={grafikRef} style={{position:"relative"}}>
         {/* Tooltip */}
         {tooltip && (
           <div style={{
@@ -2009,7 +2034,7 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
             <span style={{fontWeight:700,color:"#4ade80"}}>K:{tooltip.p.kapanis?.toLocaleString("tr-TR")} ₺</span>
           </div>
         )}
-        <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{width:"100%",height:160,overflow:"visible",cursor:"crosshair"}}
+        <svg viewBox={`0 0 ${w} ${h}`} style={{width:"100%",height:h,display:"block",overflow:"visible",cursor:"crosshair"}}
           onMouseLeave={()=>setTooltip(null)}
           onClick={(e)=>{
             const rect = (e.target as SVGElement).closest("svg")!.getBoundingClientRect();
@@ -2041,6 +2066,41 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
 
           {/* Çizgi */}
           <path d={linePath} fill="none" stroke={cizgiRenk} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round"/>
+
+
+          {/* ── FİYAT ETİKETLERİ (2026-08-03) ────────────────────────────
+              Önceden grafikte hiçbir sayı yoktu; değer görmek için noktaya
+              dokunmak/tıklamak gerekiyordu. Artık en yüksek, en düşük ve son
+              fiyat kalıcı olarak yazılı. Kenardaki etiketler taşmasın diye
+              textAnchor konuma göre seçiliyor. */}
+          {(()=>{ 
+            const enB=prices.indexOf(Math.max(...prices));
+            const enK=prices.indexOf(Math.min(...prices));
+            const son=grafik.length-1;
+            const yaz=(i:number,konum:"ust"|"alt")=>{
+              const x=pad+i*stepX, y=scaleY(prices[i]);
+              const hiza = i<=1 ? "start" : (i>=grafik.length-2 ? "end" : "middle");
+              return (
+                <text key={`et${i}${konum}`} x={x} y={konum==="ust"?y-7:y+13} fontSize={10.5}
+                      fontWeight={700} textAnchor={hiza as any}
+                      fill={TEMA==="acik"?"#16222E99":"#ffffffAA"}>
+                  {prices[i].toLocaleString("tr-TR",{maximumFractionDigits:2})+" ₺"}
+                </text>
+              );
+            };
+            return (
+              <g>
+                {yaz(enB,"ust")}
+                {enK!==enB&&yaz(enK,"alt")}
+                <circle cx={pad+son*stepX} cy={scaleY(prices[son])} r={3.2}
+                        fill={cizgiRenk} stroke={TEMA==="acik"?"#fff":"#0F1720"} strokeWidth={1.4}/>
+                {son!==enB&&son!==enK&&yaz(son,"ust")}
+              </g>
+            );
+          })()}
+
+          
+
 
           {/* Seçili nokta vurgusu */}
           {tooltip && (() => {
@@ -2221,6 +2281,8 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
 
 // ─── FON DETAY — grafik ekranı (HisseDetay ile aynı desen) ─────────────────
 function FonDetay({ fon: fonProp, onGeri, settings }: { fon: any, onGeri: () => void, settings?: any }) {
+  // viewBox kabin gercek genisligine esitleniyor — bkz. useOlculenGenislik
+  const [fonGrafikRef, fonGrafikW] = useOlculenGenislik(320);
   const [grafik, setGrafik] = useState<any[]>([]);
   const [grafikYukl, setGrafikYukl] = useState(true);
   const [donem, setDonem] = useState<"1a"|"3a"|"1y">("1a");
@@ -2270,7 +2332,7 @@ function FonDetay({ fon: fonProp, onGeri, settings }: { fon: any, onGeri: () => 
 
   const SVGGrafik = () => {
     if (grafik.length < 2) return <div style={{height:160,display:"flex",alignItems:"center",justifyContent:"center",color:C.sub,fontSize:12}}>Veri yüklenemedi</div>;
-    const w = 320, h = 130, pad = 4;
+    const w = fonGrafikW, h = 160, pad = 4;
     const fiyatlar = grafik.map(p => p.fiyat);
     const min = Math.min(...fiyatlar) * 0.999;
     const max = Math.max(...fiyatlar) * 1.001;
@@ -2282,14 +2344,14 @@ function FonDetay({ fon: fonProp, onGeri, settings }: { fon: any, onGeri: () => 
     const areaPath = `M ${pad},${h} L ${pathPuanlari} L ${pad + (grafik.length-1)*stepX},${h} Z`;
 
     return (
-      <div style={{position:"relative"}}>
+      <div ref={fonGrafikRef} style={{position:"relative"}}>
         {tooltip && (
           <div style={{position:"absolute",top:0,left:0,right:0,background:"rgba(0,0,0,0.75)",borderRadius:6,padding:"4px 8px",fontSize:10,color:"#fff",display:"flex",gap:10,justifyContent:"center",zIndex:10}}>
             <span style={{color:"#aaa"}}>{tooltip.p.tarih}</span>
             <span style={{fontWeight:700,color:"#4ade80"}}>{tooltip.p.fiyat?.toLocaleString("tr-TR",{minimumFractionDigits:4,maximumFractionDigits:6})} ₺</span>
           </div>
         )}
-        <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{width:"100%",height:160,overflow:"visible",cursor:"crosshair"}}
+        <svg viewBox={`0 0 ${w} ${h}`} style={{width:"100%",height:h,display:"block",overflow:"visible",cursor:"crosshair"}}
           onMouseLeave={()=>setTooltip(null)}
           onClick={(e)=>{
             const rect = (e.target as SVGElement).closest("svg")!.getBoundingClientRect();
@@ -2316,6 +2378,32 @@ function FonDetay({ fon: fonProp, onGeri, settings }: { fon: any, onGeri: () => 
           </defs>
           <path d={areaPath} fill="url(#fonAlanGradient)" stroke="none"/>
           <path d={linePath} fill="none" stroke={cizgiRenk} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round"/>
+          {/* ── FİYAT ETİKETLERİ (2026-08-03) — bkz. HisseDetay'daki not */}
+          {(()=>{
+            const enB=fiyatlar.indexOf(Math.max(...fiyatlar));
+            const enK=fiyatlar.indexOf(Math.min(...fiyatlar));
+            const son=grafik.length-1;
+            const yaz=(i:number,konum:"ust"|"alt")=>{
+              const x=pad+i*stepX, y=scaleY(fiyatlar[i]);
+              const hiza = i<=1 ? "start" : (i>=grafik.length-2 ? "end" : "middle");
+              return (
+                <text key={`fet${i}${konum}`} x={x} y={konum==="ust"?y-7:y+13} fontSize={10.5}
+                      fontWeight={700} textAnchor={hiza as any}
+                      fill={TEMA==="acik"?"#16222E99":"#ffffffAA"}>
+                  {fiyatlar[i].toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:4})+" ₺"}
+                </text>
+              );
+            };
+            return (
+              <g>
+                {yaz(enB,"ust")}
+                {enK!==enB&&yaz(enK,"alt")}
+                <circle cx={pad+son*stepX} cy={scaleY(fiyatlar[son])} r={3.2}
+                        fill={cizgiRenk} stroke={TEMA==="acik"?"#fff":"#0F1720"} strokeWidth={1.4}/>
+                {son!==enB&&son!==enK&&yaz(son,"ust")}
+              </g>
+            );
+          })()}
           {tooltip && (() => {
             const idx = grafik.findIndex(p => p.tarih === tooltip.p.tarih);
             if (idx < 0) return null;
@@ -9240,6 +9328,8 @@ KATILIM_BANKALARI.sort((a,b)=>a.kisa.localeCompare(b.kisa,'tr'));
 // Veri: /api/getiri?aralik=1hafta (ilk/son fiyatlar dahil) + TEFAS haftalık
 // para piyasası fonu ortalaması.
 function HaftalikPiyasaOzeti(){
+  // viewBox genisligi kaba gore olculuyor — bkz. useOlculenGenislik notu
+  const [trendGrafikRef,trendGrafikW]=useOlculenGenislik(320);
   const [ozet,setOzet]=useState<any>(null);       // {guncel, arsiv:[...]}
   const [seciliHafta,setSeciliHafta]=useState<string|null>(null); // null = bu hafta
   const [yukleniyor,setYukleniyor]=useState(true);
@@ -9553,13 +9643,14 @@ function HaftalikPiyasaOzeti(){
                 const minV=Math.min(...degerler)*0.995;
                 const maxV=Math.max(...degerler)*1.005;
                 const aralikV=(maxV-minV)||1;
-                const W=320,PAD_SIDE=8,PAD_TOP=18,PAD_BOTTOM=8,PLOT_H=84;
+                const W=trendGrafikW,PAD_SIDE=8,PAD_TOP=18,PAD_BOTTOM=8,PLOT_H=84;
                 const H=PAD_TOP+PLOT_H+PAD_BOTTOM;
                 const barW=(W-PAD_SIDE*2)/trendHaftalar.length;
                 const getY=(v:number)=>PAD_TOP+PLOT_H-((v-minV)/aralikV)*PLOT_H;
                 const pts=trendHaftalar.map((p,i)=>`${PAD_SIDE+i*barW+barW/2},${getY(p.deger as number)}`).join(" ");
                 return (
-                  <svg viewBox={`0 0 ${W} ${H}`} style={GRAFIK_STIL as any}>
+                  <div ref={trendGrafikRef}>
+                  <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:H,display:"block",overflow:"visible"}}>
                     <polyline points={pts} fill="none" stroke={C.blue} strokeWidth={2}/>
                     {trendHaftalar.map((p,i)=>{
                       const x=PAD_SIDE+i*barW+barW/2;
@@ -9572,6 +9663,7 @@ function HaftalikPiyasaOzeti(){
                       );
                     })}
                   </svg>
+                  </div>
                 );
               })()}
               <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
@@ -10490,6 +10582,8 @@ function KatilimSektoruOzet({onAc}:{onAc:()=>void}){
 }
 
 function KatilimSektoru(){
+  // viewBox genişliği kaba göre ölçülüyor — bkz. useOlculenGenislik notu
+  const [payGrafikRef,payGrafikG]=useOlculenGenislik();
   const [veri,setVeri]=useState<any>(null);
   const [yukleniyor,setYukleniyor]=useState(true);
   const [bankaVeri,setBankaVeri]=useState<any>(null);
@@ -10745,7 +10839,7 @@ function KatilimSektoru(){
           const enk=Math.min(...dgr), enb=Math.max(...dgr);
           const pay0=(enb-enk)*0.25 || 0.1;          // üstte/altta nefes payı
           const alt=enk-pay0, ust=enb+pay0, aralik=(ust-alt)||1;
-          const G=300, Y=92, SOL=6, SAG=G-6, UST=20, ALTK=Y-18;
+          const G=payGrafikG, Y=92, SOL=6, SAG=G-6, UST=20, ALTK=Y-18;
           const n=dgr.length;
           const kn=(i:number)=>SOL+i*((SAG-SOL)/Math.max(1,n-1));
           const dn=(v:number)=>ALTK-((v-alt)/aralik)*(ALTK-UST);
@@ -10754,8 +10848,8 @@ function KatilimSektoru(){
           // Etiket kalabalığını önle: nokta çoksa her k'ıncı dönem yazılır
           const adim=Math.max(1,Math.ceil(n/6));
           return (
-            <div style={{marginTop:14}}>
-              <svg viewBox={`0 0 ${G} ${Y}`} style={GRAFIK_STIL as any}>
+            <div ref={payGrafikRef} style={{marginTop:14}}>
+              <svg viewBox={`0 0 ${G} ${Y}`} style={{width:"100%",height:Y,display:"block",overflow:"visible"}}>
                 <path d={`${cizgi} L${kn(n-1).toFixed(1)},${ALTK} L${SOL},${ALTK} Z`} fill="rgba(59,130,246,0.15)"/>
                 <path d={cizgi} fill="none" stroke="#3B82F6" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"/>
                 {dgr.map((v,i)=>{
@@ -12278,7 +12372,9 @@ function GostergeGrafikModal({ad,seri,birim,onClose}:{ad:string,seri:{tarih:stri
   const minV=isYuzde ? Math.min(0,...degerler) : Math.min(...degerler)*0.98;
   const maxV=isYuzde ? Math.max(...degerler) : Math.max(...degerler)*1.02;
   const aralik=(maxV-minV)||1;
-  const W=320,H=160,PAD=8,barGenislik=(W-PAD*2)/seri.length;
+  // viewBox genisligi kaba gore olculuyor — bkz. useOlculenGenislik notu
+  const [modalGrafikRef,modalGrafikW]=useOlculenGenislik(320);
+  const W=modalGrafikW,H=160,PAD=8,barGenislik=(W-PAD*2)/seri.length;
   const getY=(v:number)=>H-PAD-((v-minV)/aralik)*(H-PAD*2);
   const sifirY=isYuzde ? getY(0) : H-PAD;
   const fmtDeger=(v:number)=> isYuzde ? `%${v.toFixed(2).replace(".",",")}` : `$${(v/1000).toFixed(2).replace(".",",")} Mr`;
@@ -12293,8 +12389,8 @@ function GostergeGrafikModal({ad,seri,birim,onClose}:{ad:string,seri:{tarih:stri
           </div>
           <button onClick={onClose} style={{background:WA(0.1),border:"none",width:32,height:32,borderRadius:16,fontSize:20,cursor:"pointer",color:C.label}}>×</button>
         </div>
-        <div style={{padding:"18px 20px 24px",overflowY:"auto"}}>
-          <svg viewBox={`0 0 ${W} ${H}`} style={GRAFIK_STIL as any}>
+        <div ref={modalGrafikRef} style={{padding:"18px 20px 24px",overflowY:"auto"}}>
+          <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:H,display:"block",overflow:"visible"}}>
             <line x1={PAD} y1={sifirY} x2={W-PAD} y2={sifirY} stroke={WA(0.15)} strokeWidth={1}/>
             {seri.map((s,i)=>{
               const x=PAD+i*barGenislik;
