@@ -1,5 +1,4 @@
 {
-  "_not_crons": "CRON TANIMLARI 2026-08-03'TE KALDIRILDI. Sebep: (1) Buradaki 10 tanim aylardir tetiklenmiyordu — 3 Agustos olcumunde Fonoloji kotasindan ay boyunca yalnizca 3 kayit harcanmisti, veri 31 Temmuz'da donmustu. (2) Vercel Hobby cron'lari gunde en fazla bir kez calisir ve belirtilen SAAT ICINDE rastgele bir anda tetiklenir; UTC disinda saat dilimi desteklemez. (3) Fon cekimi artik tek istekte 434 kayit = 434 kota harcadigi icin, Vercel cron'u BIR GUN calismaya baslarsa cron-job.org'daki 2 taramanin ustune biner ve aylik 30.000 kota asilir. Zamanlama tamamen cron-job.org'a tasindi (alarm sistemi icin zaten kurulu, dakika hassasiyetli, saat dilimi destekli, basarisiz calismayi gosteriyor). Kurulum: https://www.katilimplus.com/api/tefas-proxy?cron=1 adresine hafta ici 09:00 ve 10:00 TSI'de GET, 'Authorization: Bearer <CRON_SECRET>' basligiyla. ?parca= parametresi ARTIK GEREKSIZ — parcali mimari kaldirildi, fonVerisiCek parcaNo'yu yok sayiyor.",
   "rewrites": [
     {
       "source": "/((?!api/).*)",
