@@ -17610,6 +17610,19 @@ function PortfoyWidgetSatir({k, gizli, sonSatirMi, onTikla, onSil, onDuzenle, ac
   const dokunmaGorulduRef = useRef(false);
   const fareBasiliRef = useRef(false);   // sol tuş basılı mı (masaüstü sürükleme)
 
+  // ⚠️ BU İKİ SATIR AŞAĞIYA ALINAMAZ (2026-08-04'te öğrenildi).
+  // Panel genişliği düğme sayısına göre değişiyor: takip kaleminde yalnız Sil,
+  // portföy kaleminde Düzenle + Sil. Kaydırma mesafesi de buna eşit olmalı,
+  // yoksa panel ya yarım açılır ya da altında boşluk kalır.
+  //
+  // İlk yazımda tanım render gövdesinin sonuna, aşağıdaki useEffect'in ALTINA
+  // konmuştu. `const` hoisting yapmadığı için her render'da ReferenceError
+  // (temporal dead zone) fırlıyor, bileşen çöküyor ve UYGULAMA TAMAMEN BEYAZ
+  // AÇILIYORDU. Derleme hatası vermiyor — yalnız çalışma anında patlıyor.
+  const izlemeModu = k.alis==null;
+  const panelGenislik = (!izlemeModu && onDuzenle)
+    ? PORTFOY_SATIR_PANEL_GENISLIK : PORTFOY_SATIR_SIL_GENISLIK;
+
   useEffect(()=>{ setDx(acik ? -panelGenislik : 0); }, [acik, panelGenislik]);
   useEffect(()=>()=>{ if (uzunBasmaZamanlayici.current) clearTimeout(uzunBasmaZamanlayici.current); }, []);
 
@@ -17618,12 +17631,6 @@ function PortfoyWidgetSatir({k, gizli, sonSatirMi, onTikla, onSil, onDuzenle, ac
   };
 
   const meta = PORTFOY_TUR_META[k.tur];
-  const izlemeModu = k.alis==null;
-  // Panel genişliği düğme sayısına göre: takip kaleminde yalnız Sil,
-  // portföy kaleminde Düzenle + Sil. Kaydırma mesafesi de buna eşit
-  // olmalı, yoksa panel ya yarım açılır ya da altında boşluk kalır.
-  const panelGenislik = (!izlemeModu && onDuzenle)
-    ? PORTFOY_SATIR_PANEL_GENISLIK : PORTFOY_SATIR_SIL_GENISLIK;
 
   return (
     <div style={{position:"relative",overflow:"hidden",borderBottom:sonSatirMi?"none":`1px solid ${C.border}`}}>
