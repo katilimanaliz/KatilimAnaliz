@@ -23,6 +23,11 @@ const redis = new Redis({
 });
 const KV_TTL_SANIYE = 900; // 15 dakika
 
+// Bir serinin "bayat" sayılması için gereken gecikme. Hafta sonu + resmî
+// tatil üst üste gelirse Cuma kapanışı Salı sabahı 4 günlük görünebilir,
+// bu yüzden eşik cömert tutuldu; asıl yakalanmak istenen 8+ günlük sapma.
+const BAYATLIK_ESIGI_GUN = 5;
+
 function originIzinliMi(origin) {
   if (!origin) return false;
   if (/^https:\/\/katilim-analiz(-[a-z0-9-]+)?\.vercel\.app$/i.test(origin)) return true;
@@ -140,16 +145,61 @@ async function alphaVantageBrentCek() {
   return { noktalar: noktalar, guncelFiyat: guncelFiyat, oncekiKapanis: oncekiKapanis };
 }
 
+// Bir serinin en yeni noktasının kaç gün geride kaldığı.
+function seriGecikmesiGun(noktalar) {
+  if (!noktalar || !noktalar.length) return Infinity;
+  const son = noktalar[noktalar.length - 1]?.tarih;
+  if (!son) return Infinity;
+  const t = Date.parse(son + "T00:00:00Z");
+  if (!isFinite(t)) return Infinity;
+  return Math.floor((Date.now() - t) / 86400000);
+}
+
 async function veriHesapla(sembol) {
   const GRAM_ONS = 31.1034768;
 
+  // ── BRENT: ALPHA VANTAGE ARTIK BİRİNCİL DEĞİL, YEDEK (2026-08-04) ────────
+  // ÖNCEKİ DAVRANIŞ: BZ=F için Yahoo'ya HİÇ gidilmiyordu; Alpha Vantage'ın
+  // BRENT ucu birincil kaynaktı ve yalnız o çökerse Yahoo devreye giriyordu.
+  //
+  // SORUN: AV'nin BRENT ucu piyasa verisi değil, referans/makro serisi —
+  // gecikmeli yayınlanıyor. 4 Ağustos'ta seri 27 Temmuz'da bitiyordu, yani
+  // 8 gün geride. Uygulamadaki diğer TÜM semboller Yahoo'dan canlı geldiği
+  // için Brent tek başına bayat kalıyordu ve bu hiçbir yerde belli olmuyordu.
+  //
+  // İKİNCİ ETKİ: AV yolu `slice(0, 30)` ile 30 KAYIT alıyor; bunlar iş günü
+  // olduğu için ~42 takvim gününe yayılıyor. Ekranda "Son 30 Gün" yazarken
+  // grafik 41 günü gösteriyordu. Yahoo'nun `range=1mo` çağrısı ise 30 takvim
+  // günü döndürüyor — yani Yahoo'ya geçmek etiketi de doğruya çeviriyor.
+  //
+  // ÜÇÜNCÜ ETKİ: `oncekiKapanis` serinin sondan ikinci noktası olduğu için
+  // "Günlük Değişim" 24→27 Temmuz hareketini (−%8,46) bugünün hareketi gibi
+  // gösteriyordu.
+  //
+  // YENİ SIRA: Yahoo önce. Yahoo boş dönerse VEYA serisi belirgin şekilde
+  // bayatsa AV'ye düşülüyor — AV'nin eklenmiş olmasının bir sebebi vardı,
+  // o güvenlik ağı korunuyor.
   if (sembol === "BZ=F") {
+    let yahooSonuc = null;
+    try {
+      yahooSonuc = await dogrudanCek(sembol);
+    } catch { /* aşağıda AV denenecek */ }
+
+    const yahooTaze = yahooSonuc
+      && yahooSonuc.noktalar.length > 1
+      && seriGecikmesiGun(yahooSonuc.noktalar) <= BAYATLIK_ESIGI_GUN;
+
+    if (yahooTaze) return { ...yahooSonuc, kaynak: "yahoo" };
+
     try {
       const av = await alphaVantageBrentCek();
-      if (av.guncelFiyat != null) return av;
+      if (av.guncelFiyat != null) {
+        return { ...av, kaynak: "alpha-vantage", gecikmeGun: seriGecikmesiGun(av.noktalar) };
+      }
     } catch (e) {
-      // Alpha Vantage basarisiz olursa asagidaki eski Yahoo yoluna dusulur
+      // AV de başarısızsa Yahoo'dan ne geldiyse onu döndür (boş bile olsa).
     }
+    if (yahooSonuc) return { ...yahooSonuc, kaynak: "yahoo-bayat", gecikmeGun: seriGecikmesiGun(yahooSonuc.noktalar) };
   }
 
   if (sembol === "GRAM_ALTIN" || sembol === "GRAM_GUMUS") {
@@ -242,7 +292,9 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "sembol parametresi gerekli" });
   }
 
-  const kvAnahtar = `gecmis:v1:${sembol}`;
+  // v1 → v2 (2026-08-04): Brent kaynak sırası değişti; eski önbellekteki
+  // Alpha Vantage kaydının TTL'i dolana kadar beklenmesin.
+  const kvAnahtar = `gecmis:v2:${sembol}`;
   const debugMi = debug === "1";
 
   try {
