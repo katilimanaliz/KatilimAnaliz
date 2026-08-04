@@ -16642,6 +16642,64 @@ type PortfoyKalemi = {
   eklenmeFiyat?: number | null; // 2026-07-29: eklendiği andaki fiyat — DONDURULMUŞ, tazelenmez. "Eklendiğinden beri %" bunun üzerinden hesaplanır. Eski kayıtlarda portfoyOku() içindeki tek seferlik geçişle fiyat alanından kopyalanır (o tarihe kadar fiyat hiç tazelenmiyordu, yani zaten eklenme fiyatıydı).
 };
 
+// ── SON ALIŞI DÜZENLEME (2026-08-04) ───────────────────────────────────────
+// SORUN: Alış fiyatı yanlış girildiğinde tek çare kalemi silip yeniden
+// eklemekti — bu da alış tarihini, eklenme referansını (eklenmeFiyat) ve
+// varsa önceki alış partilerini birlikte siliyordu.
+//
+// ⚠️ NEDEN "SON ALIŞ": Bir kalem birden fazla alış taşıyabiliyor
+// (portfoyBirlestir aynı ürünü tek satırda birleştirip AĞIRLIKLI ORTALAMA
+// hesaplıyor). Kullanıcıya yalnız ortalamayı düzenletmek `alis` ile
+// `alisKalemleri`'ni tutarsız bırakırdı ve bir sonraki ekleme yanlış ortalama
+// üretirdi — sessiz veri bozulması. Bunun yerine SON parti düzenleniyor,
+// ortalama partilerden yeniden hesaplanıyor. Pratikteki ihtiyaç da bu:
+// "az önce yanlış fiyat girdim".
+//
+// Eski kayıtlarda alisKalemleri hiç olmayabilir; o durumda mevcut alış tek
+// parti kabul edilip sentezleniyor.
+function portfoyPartileriCikar(k: PortfoyKalemi): {tarih:string; fiyat:number; miktar:number; kaynak:"otomatik"|"elle"}[] {
+  if (Array.isArray(k.alisKalemleri) && k.alisKalemleri.length) return k.alisKalemleri.map(p=>({...p}));
+  if (k.alis && k.miktar != null) {
+    return [{ tarih: k.alis.tarih, fiyat: k.alis.fiyat, miktar: k.miktar, kaynak: k.alis.kaynak }];
+  }
+  return [];
+}
+
+// Partilerden toplam miktar ve ağırlıklı ortalama fiyatı türetir.
+function portfoyPartiOzet(partiler: {fiyat:number; miktar:number}[]): {miktar:number; ortalama:number}|null {
+  const gecerli = partiler.filter(p => isFinite(p.fiyat) && isFinite(p.miktar) && p.miktar > 0);
+  if (!gecerli.length) return null;
+  const miktar = gecerli.reduce((t,p)=>t+p.miktar, 0);
+  if (!(miktar > 0)) return null;
+  const ortalama = gecerli.reduce((t,p)=>t+p.fiyat*p.miktar, 0) / miktar;
+  return { miktar, ortalama };
+}
+
+// Son partiyi verilen değerlerle değiştirip kalemi yeniden kurar.
+function portfoySonAlisGuncelle(
+  k: PortfoyKalemi,
+  yeni: { miktar: number; fiyat: number; tarih: string }
+): PortfoyKalemi {
+  const partiler = portfoyPartileriCikar(k);
+  if (!partiler.length) return k;
+  partiler[partiler.length - 1] = {
+    tarih: yeni.tarih,
+    fiyat: yeni.fiyat,
+    miktar: yeni.miktar,
+    kaynak: "elle",          // elle düzeltildi; otomatik tarihsel fiyat değil
+  };
+  const ozet = portfoyPartiOzet(partiler);
+  if (!ozet) return k;
+  // alis.tarih olarak SON partinin tarihi kullanılıyor — mevcut birleştirme
+  // mantığıyla aynı (en son alış tarihi gösterilir).
+  return {
+    ...k,
+    miktar: ozet.miktar,
+    alisKalemleri: partiler,
+    alis: { tarih: partiler[partiler.length-1].tarih, fiyat: ozet.ortalama, kaynak: "elle" },
+  };
+}
+
 const PORTFOY_LS_KEY = "kp_portfoy";
 const PORTFOY_GIZLI_LS_KEY = "kp_portfoy_gizli";
 
@@ -17365,7 +17423,12 @@ function PortfoyDegisimEtiket({deger, boyut=11}:{deger:number|null; boyut?:numbe
 // liste içinde yukarı/aşağı sürüklenebilir (bkz. PortfoyWidget'taki sürükleme
 // mantığı). HTML5 drag-and-drop iOS WKWebView'de çalışmadığı için tamamen
 // touch olaylarıyla kendi mekanizmamız yazıldı.
+// Kaydırma panelindeki düğmelerin TOPLAM genişliği. 2026-08-04'te "Düzenle"
+// eklenince tek düğmelik 72 px iki düğme için 144 px'e çıktı. Takip
+// kalemlerinde (alış yok) düzenlenecek bir şey olmadığı için panel yine tek
+// düğme kalır — genişlik satır bazında seçiliyor.
 const PORTFOY_SATIR_SIL_GENISLIK = 72;
+const PORTFOY_SATIR_PANEL_GENISLIK = 144;
 const PORTFOY_UZUN_BASMA_MS = 420;
 
 // ── YATAY ŞERİT SÜRÜKLEYEREK SIRALAMA (2026-08-01) ─────────────────────────
@@ -17531,8 +17594,8 @@ function useYataySurukle(
 
   return { kartProps, surukleniyorMu:surukleAnahtar!=null };
 }
-function PortfoyWidgetSatir({k, gizli, sonSatirMi, onTikla, onSil, acik, onAcikDegistir, onUzunBasma, surukleniyorMu}:{
-  k: PortfoyKalemi; gizli: boolean; sonSatirMi: boolean; onTikla: ()=>void; onSil: (id:string)=>void; acik: boolean; onAcikDegistir: (acikMi:boolean)=>void;
+function PortfoyWidgetSatir({k, gizli, sonSatirMi, onTikla, onSil, onDuzenle, acik, onAcikDegistir, onUzunBasma, surukleniyorMu}:{
+  k: PortfoyKalemi; gizli: boolean; sonSatirMi: boolean; onTikla: ()=>void; onSil: (id:string)=>void; onDuzenle?: (k:PortfoyKalemi)=>void; acik: boolean; onAcikDegistir: (acikMi:boolean)=>void;
   onUzunBasma?: (id:string, basY:number)=>void; surukleniyorMu?: boolean;
 }){
   const [dx, setDx] = useState(0);
@@ -17547,7 +17610,7 @@ function PortfoyWidgetSatir({k, gizli, sonSatirMi, onTikla, onSil, acik, onAcikD
   const dokunmaGorulduRef = useRef(false);
   const fareBasiliRef = useRef(false);   // sol tuş basılı mı (masaüstü sürükleme)
 
-  useEffect(()=>{ setDx(acik ? -PORTFOY_SATIR_SIL_GENISLIK : 0); }, [acik]);
+  useEffect(()=>{ setDx(acik ? -panelGenislik : 0); }, [acik, panelGenislik]);
   useEffect(()=>()=>{ if (uzunBasmaZamanlayici.current) clearTimeout(uzunBasmaZamanlayici.current); }, []);
 
   const zamanlayiciIptal = () => {
@@ -17556,14 +17619,31 @@ function PortfoyWidgetSatir({k, gizli, sonSatirMi, onTikla, onSil, acik, onAcikD
 
   const meta = PORTFOY_TUR_META[k.tur];
   const izlemeModu = k.alis==null;
+  // Panel genişliği düğme sayısına göre: takip kaleminde yalnız Sil,
+  // portföy kaleminde Düzenle + Sil. Kaydırma mesafesi de buna eşit
+  // olmalı, yoksa panel ya yarım açılır ya da altında boşluk kalır.
+  const panelGenislik = (!izlemeModu && onDuzenle)
+    ? PORTFOY_SATIR_PANEL_GENISLIK : PORTFOY_SATIR_SIL_GENISLIK;
 
   return (
     <div style={{position:"relative",overflow:"hidden",borderBottom:sonSatirMi?"none":`1px solid ${C.border}`}}>
-      <div onClick={()=>{onSil(k.id);onAcikDegistir(false);}} style={{
-        position:"absolute",top:0,right:0,bottom:0,width:PORTFOY_SATIR_SIL_GENISLIK,
-        background:C.red,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",
-      }}>
-        <Trash2 size={18} color="#fff"/>
+      {/* Kaydırma paneli. Düzenle YALNIZ alış bilgisi olan kalemlerde çıkar —
+          takip kaleminde (alis==null) düzenlenecek bir alan yok. */}
+      <div style={{position:"absolute",top:0,right:0,bottom:0,display:"flex"}}>
+        {!izlemeModu && onDuzenle && (
+          <div onClick={()=>{onDuzenle(k);onAcikDegistir(false);}} style={{
+            width:PORTFOY_SATIR_SIL_GENISLIK, background:C.blue,
+            display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",
+          }}>
+            <Pencil size={17} color="#fff"/>
+          </div>
+        )}
+        <div onClick={()=>{onSil(k.id);onAcikDegistir(false);}} style={{
+          width:PORTFOY_SATIR_SIL_GENISLIK, background:C.red,
+          display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",
+        }}>
+          <Trash2 size={18} color="#fff"/>
+        </div>
       </div>
       <div
         // 2026-07-31: Masaüstü desteği. onMouseDown, dokunmatikteki
@@ -17661,15 +17741,15 @@ function PortfoyWidgetSatir({k, gizli, sonSatirMi, onTikla, onSil, acik, onAcikD
           if(!suruklemeBasladiRef.current) return;
           const delta = t.clientX - basXRef.current;
           if (Math.abs(delta) > 4) suruklemedeMi.current = true;
-          const taban = acik ? -PORTFOY_SATIR_SIL_GENISLIK : 0;
-          setDx(Math.min(0, Math.max(-PORTFOY_SATIR_SIL_GENISLIK, taban + delta)));
+          const taban = acik ? -panelGenislik : 0;
+          setDx(Math.min(0, Math.max(-panelGenislik, taban + delta)));
         }}
         onTouchEnd={()=>{
           zamanlayiciIptal();
           if (uzunBasmaOlduRef.current) { suruklemedeMi.current = true; return; } // bitişi PortfoyWidget yönetiyor
           suruklemeBasladiRef.current=false;
-          const acilsinMi = dx < -PORTFOY_SATIR_SIL_GENISLIK/2;
-          setDx(acilsinMi ? -PORTFOY_SATIR_SIL_GENISLIK : 0);
+          const acilsinMi = dx < -panelGenislik/2;
+          setDx(acilsinMi ? -panelGenislik : 0);
           onAcikDegistir(acilsinMi);
         }}
         onClick={()=>{
@@ -17705,8 +17785,8 @@ function PortfoyWidgetSatir({k, gizli, sonSatirMi, onTikla, onSil, acik, onAcikD
     </div>
   );
 }
-function PortfoyWidget({liste, gizli, onGizliToggle, onDetay, onEkle, onSil, onGrafik, onSirala}:{
-  liste: PortfoyKalemi[]; gizli: boolean; onGizliToggle: ()=>void; onDetay: (k?: PortfoyKalemi, sekme?: "portfoy"|"takip") => void; onEkle: ()=>void; onSil: (id:string)=>void; onGrafik: ()=>void; onSirala: (yeniListe: PortfoyKalemi[])=>void;
+function PortfoyWidget({liste, gizli, onGizliToggle, onDetay, onEkle, onSil, onDuzenle, onGrafik, onSirala}:{
+  liste: PortfoyKalemi[]; gizli: boolean; onGizliToggle: ()=>void; onDetay: (k?: PortfoyKalemi, sekme?: "portfoy"|"takip") => void; onEkle: ()=>void; onSil: (id:string)=>void; onDuzenle?: (k:PortfoyKalemi)=>void; onGrafik: ()=>void; onSirala: (yeniListe: PortfoyKalemi[])=>void;
 }){
   // Fiyatsız (alış bilgisi girilmemiş) kalemler Takip Listem'e, alış bilgili
   // kalemler Portföyüm'e düşer — tam detay ekranıyla aynı ayrım kuralı.
@@ -18033,6 +18113,7 @@ function PortfoyWidget({liste, gizli, onGizliToggle, onDetay, onEkle, onSil, onG
                   sonSatirMi={i===aktifListe.length-1}
                   onTikla={()=>onDetay(k)}
                   onSil={onSil}
+                  onDuzenle={onDuzenle}
                   acik={acikSwipeId===k.id}
                   onAcikDegistir={(acikMi:boolean)=>setAcikSwipeId(acikMi?k.id:null)}
                   onUzunBasma={aktifListe.length>1 ? surukleBasla : undefined}
@@ -18061,6 +18142,103 @@ function PortfoyWidget({liste, gizli, onGizliToggle, onDetay, onEkle, onSil, onG
 // ─── PORTFÖYÜM — Ekleme akışı ───────────────────────────────────────────────
 // tür seç → [altınsa alt tür seç] → ara/seç → miktar (opsiyonel) → alış
 // bilgisi (opsiyonel, miktar girildiyse). Her adımda "atla" mümkün.
+// Son alışı düzenleme penceresi. Yalnız alış bilgisi OLAN kalemler için
+// açılır (takip kalemlerinde düzenlenecek bir şey yok).
+function PortfoyDuzenleModal({kalem, onKapat, onKaydet}:{
+  kalem: PortfoyKalemi; onKapat:()=>void; onKaydet:(g:{miktar:number;fiyat:number;tarih:string})=>void;
+}){
+  const partiler = portfoyPartileriCikar(kalem);
+  const son = partiler[partiler.length-1];
+  const cokParti = partiler.length > 1;
+  const dec = kalem.dec ?? 2;
+  const onek = kalem.paraOnek ?? "₺";
+
+  const [miktarInput,setMiktarInput] = useState(son ? String(son.miktar) : "");
+  const [fiyatInput,setFiyatInput]   = useState(son ? String(son.fiyat) : "");
+  const [tarihInput,setTarihInput]   = useState(son ? String(son.tarih).slice(0,10) : "");
+  const [hata,setHata] = useState<string|null>(null);
+
+  const sayi=(x:string)=>{ const v=parseFloat(String(x).replace(",",".")); return isFinite(v)?v:NaN; };
+  const mi=sayi(miktarInput), fi=sayi(fiyatInput);
+
+  // Yeni ortalamayı KAYDETMEDEN önce gösteriyoruz — çok partili kalemde
+  // kullanıcı neyi değiştirdiğini görmeden onaylamak zorunda kalmasın.
+  const onizleme = (isFinite(mi)&&mi>0&&isFinite(fi)&&fi>0)
+    ? portfoyPartiOzet([...partiler.slice(0,-1), {fiyat:fi, miktar:mi}])
+    : null;
+
+  const kaydet=()=>{
+    if (!isFinite(mi) || mi<=0) { setHata("Miktar sıfırdan büyük olmalı."); return; }
+    if (!isFinite(fi) || fi<=0) { setHata("Alış fiyatı sıfırdan büyük olmalı."); return; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(tarihInput)) { setHata("Tarih GG bilgisi eksik (YYYY-AA-GG)."); return; }
+    onKaydet({miktar:mi, fiyat:fi, tarih:tarihInput});
+  };
+
+  const alanStil:any = {
+    width:"100%", padding:"11px 12px", fontSize:15, borderRadius:10,
+    border:`1px solid ${C.border}`, background:C.card, color:C.label, outline:"none",
+    boxSizing:"border-box", fontFamily:"inherit",
+  };
+  const etiketStil:any = { fontSize:11.5, fontWeight:700, color:C.sub, display:"block", marginBottom:5 };
+
+  return (
+    <div onClick={onKapat} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",
+      display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:1000}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:C.bg,width:"100%",maxWidth:520,
+        borderTopLeftRadius:16,borderTopRightRadius:16,padding:"18px 18px 26px",maxHeight:"88vh",overflowY:"auto"}}>
+
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+          <div style={{fontSize:17,fontWeight:800,color:C.label}}>Alışı Düzenle</div>
+          <button onClick={onKapat} style={{background:"none",border:"none",fontSize:22,color:C.sub,cursor:"pointer",lineHeight:1}}>×</button>
+        </div>
+        <div style={{fontSize:12.5,color:C.sub,marginBottom:cokParti?10:16}}>{kalem.ad}</div>
+
+        {cokParti && (
+          <div style={{background:WA(0.06),borderRadius:10,padding:"10px 12px",marginBottom:16,
+                       fontSize:12,color:C.sub,lineHeight:1.5}}>
+            Bu kalemde <b style={{color:C.label}}>{partiler.length} alış</b> var.
+            Düzenlenen <b style={{color:C.label}}>sonuncusu</b>; ortalama maliyet
+            kaydedince yeniden hesaplanır.
+          </div>
+        )}
+
+        <div style={{marginBottom:12}}>
+          <span style={etiketStil}>MİKTAR ({kalem.birim})</span>
+          <input value={miktarInput} onChange={e=>{setMiktarInput(e.target.value);setHata(null);}}
+                 inputMode="decimal" style={alanStil}/>
+        </div>
+        <div style={{marginBottom:12}}>
+          <span style={etiketStil}>ALIŞ FİYATI ({onek})</span>
+          <input value={fiyatInput} onChange={e=>{setFiyatInput(e.target.value);setHata(null);}}
+                 inputMode="decimal" style={alanStil}/>
+        </div>
+        <div style={{marginBottom:14}}>
+          <span style={etiketStil}>ALIŞ TARİHİ</span>
+          <input type="date" value={tarihInput} onChange={e=>{setTarihInput(e.target.value);setHata(null);}}
+                 style={alanStil}/>
+        </div>
+
+        {onizleme && cokParti && (
+          <div style={{fontSize:12,color:C.sub,marginBottom:14,textAlign:"center"}}>
+            Yeni ortalama maliyet:{" "}
+            <b style={{color:C.label}}>
+              {onek}{onizleme.ortalama.toLocaleString("tr-TR",{minimumFractionDigits:dec,maximumFractionDigits:dec})}
+            </b>
+            {" · "}toplam {onizleme.miktar.toLocaleString("tr-TR",{maximumFractionDigits:4})} {kalem.birim}
+          </div>
+        )}
+
+        {hata && <div style={{fontSize:12.5,color:C.red,marginBottom:12,textAlign:"center"}}>{hata}</div>}
+
+        <button onClick={kaydet} style={{width:"100%",padding:"13px 0",fontSize:15,fontWeight:800,
+          borderRadius:12,border:"none",background:C.blue,color:"#fff",cursor:"pointer"}}>
+          Kaydet
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function PortfoyEkleModal({onKapat, onEklendi}:{onKapat:()=>void; onEklendi:(k:PortfoyKalemi)=>void}){
   const [asama, setAsama] = useState<"tur"|"altinAlt"|"ara"|"miktar"|"alis">("tur");
   const [tur, setTur] = useState<PortfoyKalemi["tur"]|null>(null);
@@ -18461,8 +18639,8 @@ function PortfoyEkleModal({onKapat, onEklendi}:{onKapat:()=>void; onEklendi:(k:P
 }
 
 // ─── PORTFÖYÜM — Piyasa & Veriler altındaki tam detay ekranı ──────────────
-function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onKalemTikla, initialSekme}:{
-  liste: PortfoyKalemi[]; gizli: boolean; onGizliToggle: ()=>void; onEkle: ()=>void; onSil: (id:string)=>void; onKalemTikla: (k:PortfoyKalemi)=>void; initialSekme?: "portfoy"|"takip";
+function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onDuzenle, onKalemTikla, initialSekme}:{
+  liste: PortfoyKalemi[]; gizli: boolean; onGizliToggle: ()=>void; onEkle: ()=>void; onSil: (id:string)=>void; onDuzenle?: (k:PortfoyKalemi)=>void; onKalemTikla: (k:PortfoyKalemi)=>void; initialSekme?: "portfoy"|"takip";
 }){
   // 2026-07-29: Çağıran taraf bir sekme belirtmediyse, HANGİSİNDE VERİ VARSA o
   // sekme açılır (ana sayfa kartıyla aynı kural).
@@ -18686,6 +18864,13 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onKalem
                   ? (k.fiyat==null ? "—" : (gizli?"₺••••":portfoyFmtDeger(k.fiyat||0, k)))
                   : (gizli?"₺••••":portfoyFmtDeger(portfoyGuncelDeger(k), k))}
               </span>
+              {/* Düzenle YALNIZ alış bilgisi olan kalemde (Takip sekmesinde
+                  alis==null, düzenlenecek alan yok). Ana sayfa kartındaki
+                  kaydırmalı panelle aynı kural. */}
+              {onDuzenle && k.alis!=null && (
+                <Pencil size={13} color={PORTFOY_ETIKET} style={{cursor:"pointer",flexShrink:0}}
+                        onClick={(e:any)=>{e.stopPropagation();onDuzenle(k);}}/>
+              )}
               <Trash2 size={13} color={PORTFOY_ETIKET} style={{cursor:"pointer",flexShrink:0}} onClick={(e)=>{e.stopPropagation();onSil(k.id);}}/>
             </div>
 
@@ -19196,6 +19381,10 @@ function App(){
     try{ return localStorage.getItem(PORTFOY_GIZLI_LS_KEY)==="1"; }catch{ return false; }
   });
   const [portfoyEkleAcik,setPortfoyEkleAcik]=useState(false);
+  // Düzenlenen kalem (null = pencere kapalı). Kalemin KENDİSİ değil id'si
+  // üzerinden çalışılıyor; fiyat tazelemesi listeyi yeniden kurabildiği için
+  // saklanan nesne bayatlayabilir.
+  const [portfoyDuzenleId,setPortfoyDuzenleId]=useState<string|null>(null);
   const [portfoyGrafikAcik,setPortfoyGrafikAcik]=useState(false);
   const [portfoyBaslangicSekme,setPortfoyBaslangicSekme]=useState<"portfoy"|"takip">("portfoy");
   const portfoyGizliDegistir=()=>{
@@ -19211,6 +19400,16 @@ function App(){
       portfoyYaz(yeni);
       return yeni;
     });
+  };
+  // Son alışı düzenle → partiler yeniden kurulur, ortalama maliyet yeniden
+  // hesaplanır (bkz. portfoySonAlisGuncelle).
+  const portfoyAlisGuncelle=(id:string, g:{miktar:number;fiyat:number;tarih:string})=>{
+    setPortfoy(liste=>{
+      const yeni=liste.map(k=> k.id===id ? portfoySonAlisGuncelle(k,g) : k);
+      portfoyYaz(yeni);
+      return yeni;
+    });
+    setPortfoyDuzenleId(null);
   };
   const portfoySil=(id:string)=>{
     setPortfoy(liste=>{
@@ -20031,6 +20230,9 @@ function App(){
       {piyasaOzetiDuzenleAcik&&<PiyasaOzetiDuzenleModal secili={piyasaOzetiSecim} onToggle={piyasaOzetiToggle} onClose={()=>setPiyasaOzetiDuzenleAcik(false)}/>}
       {secilikur&&<KurGrafikModal kur={secilikur} onClose={()=>setSeciliKur(null)}/>}
       {portfoyEkleAcik&&<PortfoyEkleModal onKapat={()=>setPortfoyEkleAcik(false)} onEklendi={portfoyEkle}/>}
+      {(()=>{ const dk = portfoyDuzenleId ? portfoy.find(x=>x.id===portfoyDuzenleId) : null;
+        return dk ? <PortfoyDuzenleModal kalem={dk} onKapat={()=>setPortfoyDuzenleId(null)}
+                      onKaydet={(g)=>portfoyAlisGuncelle(dk.id,g)}/> : null; })()}
       {gostergeTablo&&<GostergeTabloModal ad={gostergeTablo.ad} seri={gostergeTablo.seri||[]} birim={gostergeTablo.birim} onClose={()=>setGostergeTablo(null)}/>}
       {gostergeUyari&&<div style={{position:"fixed",top:64,left:`calc(50% + ${SIDEBAR_W/2}px)`,transform:"translateX(-50%)",background:C.thead,color:"#fff",borderRadius:20,padding:"10px 20px",fontSize:13,fontWeight:600,zIndex:700,boxShadow:"0 4px 14px rgba(0,0,0,0.35)"}}>{gostergeUyari}</div>}
       {hakkindaAcik&&<HakkindaModal onClose={()=>setHakkindaAcik(false)}/>}
@@ -20186,6 +20388,7 @@ function App(){
               onDetay={(k?:PortfoyKalemi, sekme?:"portfoy"|"takip")=>{ setPortfoyBaslangicSekme(sekme || (k && k.alis==null ? "takip" : "portfoy")); nav("portfoyum","home"); }}
               onEkle={()=>setPortfoyEkleAcik(true)}
               onSil={portfoySil}
+              onDuzenle={(k:PortfoyKalemi)=>setPortfoyDuzenleId(k.id)}
               onGrafik={()=>setPortfoyGrafikAcik(true)}
               onSirala={portfoySirala}
             />
@@ -21056,6 +21259,7 @@ function App(){
               onGizliToggle={portfoyGizliDegistir}
               onEkle={()=>setPortfoyEkleAcik(true)}
               onSil={portfoySil}
+              onDuzenle={(k:PortfoyKalemi)=>setPortfoyDuzenleId(k.id)}
               onKalemTikla={portfoyKalemTikla}
               initialSekme={portfoyBaslangicSekme}
             />
