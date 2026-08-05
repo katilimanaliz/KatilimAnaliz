@@ -246,6 +246,68 @@ function mapFon(f, vakif, takasAraligi) {
     ytd:      parseFloat(((f.return_ytd || 0) * 100).toFixed(2)),
     yillik:   parseFloat(((f.return_1y  || 0) * 100).toFixed(2)),
     yillikHesap: f.return_1d ? parseFloat(((f.return_1d / takasAraligi) * 252 * 100).toFixed(2)) : null,
+
+    // ── ZATEN GELEN AMA KULLANILMAYAN ALANLAR (2026-08-05 eklendi) ─────────
+    // Fonoloji liste ucu fon başına 42 alan döndürüyor; bunların 27'si
+    // haritalanmadığı için kotayla çekilip atılıyordu. Hepsi aşağıda.
+    // ⚠️ EK KOTA MALİYETİ YOK — veri zaten aynı yanıtta geliyordu.
+
+    // Yüzde alanları API'de ONDALIK oran (0.0915 = %9,15). Getirilerle aynı
+    // dönüşüm uygulanıyor; null gelen alan null kalıyor ki ekranda "—" çıksın.
+    altiAylik:    (typeof f.return_6m === "number") ? parseFloat((f.return_6m * 100).toFixed(2)) : null,
+    // Enflasyondan arındırılmış yıllık getiri. Türkiye'de nominal getiriden
+    // çok daha anlamlı — nominal %60, reel %5 olabiliyor.
+    reelYillik:   (typeof f.real_return_1y === "number") ? parseFloat((f.real_return_1y * 100).toFixed(2)) : null,
+
+    // ── KARŞILAŞTIRMA BAYRAKLARI ──────────────────────────────────────────
+    // API bunları hazır hesaplayıp gönderiyor. "Bu fon altını/enflasyonu/
+    // mevduatı yendi mi?" — katılım fonu bakan birinin ilk sorusu.
+    yendi: {
+      altin:    f.beats_altin    ?? null,
+      bist100:  f.beats_bist100  ?? null,
+      kategori: f.beats_kategori ?? null,
+      mevduat:  f.beats_mevduat  ?? null,
+      tufe:     f.beats_tufe     ?? null,
+    },
+
+    // ── RİSK GÖSTERGELERİ ─────────────────────────────────────────────────
+    // riskSkoru: TEFAS'ın resmî 1–7 ölçeği (1 en düşük risk).
+    // sharpe/volatilite: 90 günlük. maksDusus: son 1 yılın en derin düşüşü.
+    riskSkoru:  (typeof f.risk_score === "number") ? f.risk_score : null,
+    sharpe90:   (typeof f.sharpe_90 === "number") ? parseFloat(f.sharpe_90.toFixed(2)) : null,
+    volatilite90: (typeof f.volatility_90 === "number") ? parseFloat((f.volatility_90 * 100).toFixed(2)) : null,
+    maksDusus1y:  (typeof f.max_drawdown_1y === "number") ? parseFloat((f.max_drawdown_1y * 100).toFixed(2)) : null,
+
+    // ── PARA AKIŞI ────────────────────────────────────────────────────────
+    // Fona net giriş/çıkış. Pozitif = para giriyor. Fonoloji'nin ayrı
+    // /insights/flow ucuna gerek yok, veri burada.
+    akis: {
+      hafta: (typeof f.flow_1w === "number") ? f.flow_1w : null,
+      ay:    (typeof f.flow_1m === "number") ? f.flow_1m : null,
+      ucAy:  (typeof f.flow_3m === "number") ? f.flow_3m : null,
+    },
+
+    // ── PORTFÖY KIRILIMI (yüzde) ──────────────────────────────────────────
+    // Fonun neye yatırdığı. Katılım fonlarında ÖZELLİKLE önemli:
+    // devlet tahvili/hazine bonosu dolu bir "katılım" fonu şüphe uyandırır.
+    // portfoyTarihi kırılımın ait olduğu tarih — fiyat tarihinden eskidir.
+    dagilim: {
+      hisse:        f.stock ?? null,
+      altin:        f.gold ?? null,
+      devletTahvili: f.government_bond ?? null,
+      ozelTahvil:   f.corporate_bond ?? null,
+      eurobond:     f.eurobond ?? null,
+      hazineBonosu: f.treasury_bill ?? null,
+      nakit:        f.cash ?? null,
+      diger:        f.other ?? null,
+    },
+    portfoyTarihi: f.portfolio_date || null,
+
+    // ── KİMLİK / DURUM ────────────────────────────────────────────────────
+    isin:      f.isin || null,
+    kapUrl:    f.kap_url || null,
+    islemDurumu: f.trading_status || null,   // "AKTİF" vb.
+    ilkGorulme: f.first_seen || null,        // fonun TEFAS'ta ilk görüldüğü tarih
   };
 }
 

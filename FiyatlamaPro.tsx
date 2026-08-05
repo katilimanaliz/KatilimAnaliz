@@ -2530,6 +2530,170 @@ function FonDetay({ fon: fonProp, onGeri, settings }: { fon: any, onGeri: () => 
         </div>
       </div>
 
+      {/* ═══ FONOLOJİ'DEN GELEN AMA GÖSTERİLMEYEN VERİLER (2026-08-05) ═══════
+          Liste taraması fon başına 42 alan çekiyordu, 27'si haritalanmadığı
+          için kotayla alınıp atılıyordu. Artık hepsi mapFon'da (bkz.
+          fonFetch.js) ve aşağıda gösteriliyor. EK KOTA MALİYETİ YOK.
+          Her blok, verisi yoksa HİÇ render edilmiyor — eski kayıtlarda ve
+          alanı boş gelen fonlarda boş kutu görünmesin diye. */}
+
+      {/* ── KARŞILAŞTIRMA ROZETLERİ ─────────────────────────────────────────
+          beats_* alanları API'de hazır hesaplanıyor. "Bu fon enflasyonu
+          yendi mi?" katılım fonu bakan birinin ilk sorusu. */}
+      {fon.yendi && Object.values(fon.yendi).some((v:any)=>v!=null) && (
+        <div style={{padding:"0 14px",marginBottom:14}}>
+          <div style={{fontSize:11,fontWeight:700,color:C.sub,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>
+            Son 1 Yılda Geçtikleri
+          </div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+            {([["tufe","Enflasyon"],["mevduat","Mevduat"],["altin","Altın"],["bist100","BIST 100"],["kategori","Kategori"]] as [string,string][])
+              .filter(([k])=>fon.yendi[k]!=null)
+              .map(([k,ad])=>{
+                const gecti = fon.yendi[k]===true;
+                return (
+                  <span key={k} style={{
+                    fontSize:11.5, fontWeight:700, padding:"5px 10px", borderRadius:20,
+                    background: gecti ? "rgba(74,222,128,0.14)" : "rgba(248,113,113,0.12)",
+                    border:`1px solid ${gecti ? "rgba(74,222,128,0.35)" : "rgba(248,113,113,0.3)"}`,
+                    color: gecti ? C.green : C.red,
+                  }}>{gecti ? "✓" : "✕"} {ad}</span>
+                );
+              })}
+          </div>
+        </div>
+      )}
+
+      {/* ── REEL GETİRİ ─────────────────────────────────────────────────────
+          Türkiye'de nominal getiri tek başına yanıltıcı: %167 nominal,
+          %104 reel olabiliyor. Fark enflasyonun yediği kısım. */}
+      {typeof fon.reelYillik === "number" && (
+        <div style={{padding:"0 14px",marginBottom:14}}>
+          <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,padding:"12px 14px",
+                       display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+            <div style={{minWidth:0}}>
+              <div style={{fontSize:12,fontWeight:700,color:C.text}}>Reel Yıllık Getiri</div>
+              <div style={{fontSize:10.5,color:C.sub2,marginTop:2}}>Enflasyondan arındırılmış</div>
+            </div>
+            <div style={{fontSize:19,fontWeight:800,flexShrink:0,
+                         color:fon.reelYillik>0?C.green:fon.reelYillik<0?C.red:C.sub}}>
+              {degStr(fon.reelYillik,2)}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── PORTFÖY DAĞILIMI ────────────────────────────────────────────────
+          ⚠️ Katılım fonlarında ÖZELLİKLE önemli: devlet tahvili / hazine
+          bonosu kalemi dolu bir "katılım" fonu kullanıcı için gerçek bir
+          uyarı işaretidir. O yüzden sıfır olmayan her kalem gösteriliyor. */}
+      {fon.dagilim && Object.values(fon.dagilim).some((v:any)=>typeof v==="number" && v>0) && (()=>{
+        const KALEMLER: [string,string,string][] = [
+          ["hisse","Hisse Senedi","#4A9EDE"],
+          ["altin","Altın","#D4A017"],
+          ["devletTahvili","Devlet Tahvili","#E06C6C"],
+          ["hazineBonosu","Hazine Bonosu","#E08A5C"],
+          ["ozelTahvil","Özel Sektör Tahvili","#B07CC6"],
+          ["eurobond","Eurobond","#5CA9A0"],
+          ["nakit","Nakit / Vadeli","#7C8DA0"],
+          ["diger","Diğer","#9AA6B2"],
+        ];
+        const dolu = KALEMLER.filter(([k])=>typeof fon.dagilim[k]==="number" && fon.dagilim[k]>0);
+        if(!dolu.length) return null;
+        return (
+          <div style={{padding:"0 14px",marginBottom:14}}>
+            <div style={{fontSize:11,fontWeight:700,color:C.sub,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>
+              Portföy Dağılımı
+              {fon.portfoyTarihi && <span style={{fontWeight:400,textTransform:"none",letterSpacing:0}}> · {fon.portfoyTarihi}</span>}
+            </div>
+            <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,padding:"12px 14px"}}>
+              {/* Tek satırlık yığılmış çubuk */}
+              <div style={{display:"flex",height:9,borderRadius:5,overflow:"hidden",marginBottom:12}}>
+                {dolu.map(([k,,renk])=>(
+                  <div key={k} style={{width:`${fon.dagilim[k]}%`,background:renk}}/>
+                ))}
+              </div>
+              {dolu.map(([k,ad,renk],i)=>(
+                <div key={k} style={{display:"flex",alignItems:"center",gap:8,
+                                     padding:"5px 0",borderTop:i>0?`1px solid ${WA(0.05)}`:"none"}}>
+                  <span style={{width:9,height:9,borderRadius:3,background:renk,flexShrink:0}}/>
+                  <span style={{flex:1,fontSize:12.5,color:C.sub,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ad}</span>
+                  <span style={{fontSize:12.5,fontWeight:700,color:C.text,fontFamily:"monospace"}}>
+                    %{fon.dagilim[k].toLocaleString("tr-TR",{maximumFractionDigits:2})}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── PARA AKIŞI ──────────────────────────────────────────────────────
+          Fona net giriş/çıkış. Pozitif = para giriyor. Yatırımcı ilgisinin
+          en doğrudan göstergesi; getiri rakamının anlatmadığı şeyi anlatır. */}
+      {fon.akis && Object.values(fon.akis).some((v:any)=>typeof v==="number") && (()=>{
+        const fmtAkis=(v:number)=>{
+          const m=Math.abs(v);
+          const s=m>=1e9 ? (m/1e9).toLocaleString("tr-TR",{maximumFractionDigits:2})+" Mr"
+                : m>=1e6 ? (m/1e6).toLocaleString("tr-TR",{maximumFractionDigits:1})+" Mn"
+                : m.toLocaleString("tr-TR",{maximumFractionDigits:0});
+          return (v<0?"−":"+")+s+" ₺";
+        };
+        return (
+          <div style={{padding:"0 14px",marginBottom:14}}>
+            <div style={{fontSize:11,fontWeight:700,color:C.sub,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>
+              Para Giriş / Çıkışı
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+              {([["hafta","1 Hafta"],["ay","1 Ay"],["ucAy","3 Ay"]] as [string,string][])
+                .filter(([k])=>typeof fon.akis[k]==="number")
+                .map(([k,ad])=>(
+                  <div key={k} style={{background:C.card,borderRadius:10,border:`1px solid ${C.border}`,padding:"10px 8px",textAlign:"center"}}>
+                    <div style={{fontSize:10,color:C.sub,marginBottom:4}}>{ad}</div>
+                    <div style={{fontSize:12.5,fontWeight:800,fontFamily:"monospace",
+                                 color:fon.akis[k]>0?C.green:fon.akis[k]<0?C.red:C.sub}}>
+                      {fmtAkis(fon.akis[k])}
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── RİSK GÖSTERGELERİ ───────────────────────────────────────────────
+          riskSkoru TEFAS'ın resmî 1–7 ölçeği (1 = en düşük risk).
+          sharpe/volatilite 90 günlük, maksDusus son 1 yılın en derin düşüşü. */}
+      {(fon.riskSkoru!=null || fon.sharpe90!=null || fon.volatilite90!=null || fon.maksDusus1y!=null) && (
+        <div style={{padding:"0 14px",marginBottom:14}}>
+          <div style={{fontSize:11,fontWeight:700,color:C.sub,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>
+            Risk Göstergeleri
+          </div>
+          <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,overflow:"hidden"}}>
+            {([
+              ["Risk Değeri", fon.riskSkoru!=null ? `${fon.riskSkoru} / 7` : null,
+               fon.riskSkoru!=null ? (fon.riskSkoru<=2?"Düşük":fon.riskSkoru<=4?"Orta":fon.riskSkoru<=5?"Orta-Yüksek":"Yüksek") : null],
+              ["Sharpe Oranı (90g)", fon.sharpe90!=null ? fon.sharpe90.toLocaleString("tr-TR",{maximumFractionDigits:2}) : null,
+               "Birim risk başına getiri"],
+              ["Volatilite (90g)", fon.volatilite90!=null ? "%"+fon.volatilite90.toLocaleString("tr-TR",{maximumFractionDigits:2}) : null,
+               "Fiyat dalgalanması"],
+              ["En Sert Düşüş (1y)", fon.maksDusus1y!=null ? "%"+Math.abs(fon.maksDusus1y).toLocaleString("tr-TR",{maximumFractionDigits:2}) : null,
+               "Zirveden dibe kayıp"],
+            ] as [string,string|null,string|null][])
+              .filter(([,v])=>v!=null)
+              .map(([ad,deger,alt],i,arr)=>(
+                <div key={ad} style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+                                      padding:"10px 14px",borderBottom:i<arr.length-1?`1px solid ${C.border}`:"none"}}>
+                  <div style={{minWidth:0}}>
+                    <div style={{fontSize:13,color:C.sub}}>{ad}</div>
+                    {alt && <div style={{fontSize:10,color:C.sub2,marginTop:1}}>{alt}</div>}
+                  </div>
+                  <span style={{fontSize:13.5,fontWeight:700,color:C.text,marginLeft:12,fontFamily:"monospace",flexShrink:0}}>{deger}</span>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
+
       {hesapAcik && (
         <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.5)",zIndex:800,display:"flex",alignItems:"flex-end",...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}}
           onClick={()=>setHesapAcik(false)}>
