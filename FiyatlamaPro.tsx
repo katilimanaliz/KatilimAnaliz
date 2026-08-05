@@ -2202,10 +2202,21 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
       {/* Değişimler */}
       <div style={{margin:"0 0 10px",padding:"0 14px"}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          {/* ⚠️ 3 AY BURAYA EKLENMEZ (2026-08-05).
+              donemEtiket kutusu grafiğin dönem seçicisine bağlı; kullanıcı
+              "3 Ay" seçtiğinde ORADA çıkıyor ve değeri GRAFİKTEN hesaplanıyor
+              (grafik[0].kapanis). TradingView'ın Perf.3M değeri ise biraz farklı
+              bir başlangıç fiyatı kullanıyor — TKFEN'de %35,51 (grafik) ile
+              %29,08 (TV) yan yana düşmüştü. Aynı dönem için iki farklı rakam
+              göstermek kullanıcının hangisine güveneceğini bilememesine yol açar.
+              6 Ay ve Yılbaşından ise başka hiçbir yerde görünmediği için
+              çakışma yaratmadan buraya alındı. */}
           {[
             ["Günlük", hisse.degisim1g],
             ["Haftalık", hisse.degisim1h],
             [donemEtiket, donemGetiri],
+            ["6 Ay", hisse.degisim6a],
+            ["Yılbaşından", hisse.degisimYtd],
             ["Yıllık", hisse.degisim1y],
           ].map(([lbl, val]: any) => (
             <div key={lbl} style={{background:C.card,borderRadius:10,padding:"10px 12px",border:`1px solid ${C.border}`}}>
@@ -2306,33 +2317,6 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
           </div>
         );
       })()}
-
-      {/* ── EK DÖNEM GETİRİLERİ (2026-08-05) ──────────────────────────────
-          Üstteki kutular günlük/haftalık/aylık/yıllık gösteriyordu; 3 ay,
-          6 ay ve yılbaşından beri eksikti. Üçü de TradingView'dan geliyor. */}
-      {(typeof hisse.degisim3a === "number" || typeof hisse.degisim6a === "number"
-        || typeof hisse.degisimYtd === "number") && (
-        <div style={{padding:"18px 14px 0"}}>
-          <div style={{fontSize:11,fontWeight:700,color:C.sub,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>
-            Diğer Dönemler
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-            {([["degisim3a","3 Ay"],["degisim6a","6 Ay"],["degisimYtd","Yılbaşından"]] as [string,string][])
-              .filter(([k])=>typeof (hisse as any)[k] === "number")
-              .map(([k,ad])=>{
-                const v = (hisse as any)[k];
-                return (
-                  <div key={k} style={{background:C.card,borderRadius:10,border:`1px solid ${C.border}`,padding:"10px 8px",textAlign:"center"}}>
-                    <div style={{fontSize:10,color:C.sub,marginBottom:4}}>{ad}</div>
-                    <div style={{fontSize:13,fontWeight:800,color:v>0?C.green:v<0?C.red:C.sub}}>
-                      {(v>0?"+":"")+v.toFixed(2)}%
-                    </div>
-                  </div>
-                );
-              })}
-          </div>
-        </div>
-      )}
 
       {/* KAP BİLDİRİMLERİ — bildirim yoksa bölüm hiç görünmez. */}
       {kapBildirim.length > 0 && (
