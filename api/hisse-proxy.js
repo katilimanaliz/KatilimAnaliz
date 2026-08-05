@@ -305,6 +305,26 @@ const TV_SUTUNLAR = [
   "price_earnings_ttm",   // 10 F/K
   "price_book_fq",        // 11 PD/DD
   "return_on_equity",     // 12 ROE
+  // ── 2026-08-05'te EKLENEN SÜTUNLAR ────────────────────────────────────
+  // Hepsi ?debug=tvtest ile CANLI DOĞRULANDI (60 kayıtta dolu oran):
+  //   sector 60/60 · industry 60/60 · debt_to_equity 60/60 · 52h yüksek/düşük
+  //   60/60 · Perf.3M/6M/YTD 60/60 · beta 60/60 · net marj 58/60 ·
+  //   EPS 59/60 · ort. hacim 60/60 · temettü 60/60
+  // Sütun EKLEMEK istek sayısını artırmaz — TradingView tarayıcısı tek POST;
+  // yalnızca yanıt boyutu büyür.
+  "sector",                        // 13 İngilizce; SEKTOR_TR ile çevriliyor
+  "industry",                      // 14 sektörün alt kırılımı
+  "debt_to_equity",                // 15 ⭐ katılım uygunluğunun finansal kriteri
+  "price_52_week_high",            // 16
+  "price_52_week_low",             // 17
+  "Perf.3M",                       // 18
+  "Perf.6M",                       // 19
+  "Perf.YTD",                      // 20
+  "beta_1_year",                   // 21
+  "net_margin_ttm",                // 22 net kâr marjı %
+  "earnings_per_share_basic_ttm",  // 23 hisse başına kâr
+  "average_volume_10d_calc",       // 24 10 günlük ortalama hacim
+  "dividends_yield_current",       // 25 ⚠️ ÖLÇEK DOĞRULANMADI, bkz. normalize
 ];
 
 // Midas verisi ne kadar eskiyse "bayat" sayılsın (dakika). Seans içinde Midas
@@ -391,7 +411,31 @@ function tradingViewNormalize(tvJson, isimMap, katilimSet) {
         fk: sayi(d[10]),
         pddd: sayi(d[11]),
         roe: sayi(d[12]),
-        temetu: null,
+        // ── 2026-08-05 EKLENENLER ─────────────────────────────────────────
+        // sektor ARTIK BOŞ DEĞİL: frontend'deki SEKTOR_TR haritası bu
+        // İngilizce değerleri Türkçeye çeviriyor ("Electronic Technology"
+        // → "Elektronik"). Harita zaten vardı, sütun istenmiyordu.
+        sektorEn: (typeof d[13] === "string" && d[13]) ? d[13] : null,
+        endustri: (typeof d[14] === "string" && d[14]) ? d[14] : null,
+        borcOzkaynak: sayi(d[15]),
+        yuksek52h:    sayi(d[16]),
+        dusuk52h:     sayi(d[17]),
+        degisim3a:    yuvarla(d[18]),
+        degisim6a:    yuvarla(d[19]),
+        degisimYtd:   yuvarla(d[20]),
+        beta:         sayi(d[21]) == null ? null : parseFloat(d[21].toFixed(2)),
+        netMarj:      yuvarla(d[22]),
+        hisseBasiKar: sayi(d[23]) == null ? null : parseFloat(d[23].toFixed(2)),
+        ortHacim10g:  sayi(d[24]),
+        // ⚠️ TEMETTÜ VERİMİ — ÖLÇEK DOĞRULANMADI (2026-08-05)
+        // ?debug=tvtest çıktısında ASELS 0.067 döndü. Bu %0,067 mi %6,7 mi
+        // belirsiz; ikinci aday sütunda (dividend_yield_recent) 0,12 ile 5,90
+        // yan yanaydı, yani TradingView'ın iki alanı farklı ölçek kullanıyor
+        // olabilir. Değer OLDUĞU GİBİ geçiriliyor, dönüştürülmüyor.
+        // ⚠️ Ekranda göstermeden önce BIMAS gibi temettü verimi kamuya açık
+        // bir hisseyle karşılaştırılıp teyit edilmeli. Yanlış ölçek "%0,07"
+        // yerine "%6,7" yazdırır — kullanıcı için ciddi yanılgı.
+        temetu: sayi(d[25]),
         katilimEndeksi: katilimSet.has(kod),
       };
     })
@@ -399,64 +443,7 @@ function tradingViewNormalize(tvJson, isimMap, katilimSet) {
     .sort((a, b) => (b.piyasaDegeri || 0) - (a.piyasaDegeri || 0));
 }
 
-// ── GEÇİCİ SÜTUN YOKLAMA TEŞHİSİ (2026-08-05) ──────────────────────────────
-//   GET /api/hisse-proxy?debug=tvtest
-//
-// NEDEN VAR: Ekranda "Sektör" ve "Temettü Verimi" satırları HEP BOŞ — çünkü
-// tradingViewNormalize bu ikisini `sektor:""` ve `temetu:null` olarak sabit
-// yazıyor; TradingView bunları veriyor olabilir ama TV_SUTUNLAR'da istenmiyor.
-// Ayrıca katılım uygunluğunun asıl kriteri olan borç/özkaynak oranı da yok
-// (kodun kendi notunda THYAO/TCELL'in "yüksek faizli borç" yüzünden endeks
-// dışı olduğu yazılı — o oranı göstermek kullanıcıya NEDENİNİ anlatır).
-//
-// ⚠️ SÜTUN KİMLİKLERİ TAHMİN EDİLEMEZ. Yanlış bir sütun adı isteğin TAMAMINI
-// bozabilir ve bu uç ana ekranlardan birini besliyor. Bu yüzden adaylar
-// CANLI AKIŞA HİÇ DOKUNULMADAN, ayrı bir istekte tek tek yoklanıyor:
-// TV_SUTUNLAR değişmiyor, kullanıcılar etkilenmiyor.
-//
-// Rapor her aday için "kaç kayıtta gerçek değer döndü" bilgisini verir.
-// Sonuç görülünce çalışan sütunlar TV_SUTUNLAR'a eklenecek ve BU BLOK SİLİNECEK.
-const TV_ADAY_SUTUNLAR = [
-  "sector",                    // boş "Sektör" alanı için
-  "industry",                  // sector tutmazsa alternatif
-  "dividends_yield_current",   // boş "Temettü Verimi" alanı için
-  "dividend_yield_recent",     // alternatif isimlendirme
-  "debt_to_equity",            // ⭐ katılım uygunluğunun asıl finansal kriteri
-  "total_debt",                // debt_to_equity yoksa elle hesaplamak için
-  "price_52_week_high",
-  "price_52_week_low",
-  "Perf.3M",
-  "Perf.6M",
-  "Perf.YTD",
-  "beta_1_year",
-  "average_volume_10d_calc",
-  "net_margin_ttm",
-  "earnings_per_share_basic_ttm",
-  "number_of_employees",
-];
-
-// Bir sütun listesini TradingView'a sorar; hata olursa fırlatmaz, raporlar.
-async function tvSutunYokla(sutunlar) {
-  const govde = {
-    filter: [{ left: "type", operation: "equal", right: "stock" }],
-    options: { lang: "tr" },
-    symbols: { query: { types: [] }, tickers: [] },
-    columns: ["name", ...sutunlar],
-    sort: { sortBy: "market_cap_basic", sortOrder: "desc" },
-    range: [0, 60],   // yoklama için 60 kayıt yeter
-  };
-  const r = await fetchZamanAsimli(
-    "https://scanner.tradingview.com/turkey/scan",
-    { method: "POST", headers: { "Content-Type": "application/json", "User-Agent": "Mozilla/5.0" },
-      body: JSON.stringify(govde) },
-    12000
-  );
-  if (!r.ok) return { ok: false, durum: r.status, govde: (await r.text()).slice(0, 300) };
-  const j = await r.json();
-  return { ok: true, satirlar: j?.data || [] };
-}
-
-
+// ─── CORS: sadece kendi domain(ler)imize izin ver ───────────────────────────
 function originIzinliMi(origin) {
   if (!origin) return false;
   if (/^https:\/\/katilim-analiz(-[a-z0-9-]+)?\.vercel\.app$/i.test(origin)) return true;
@@ -479,53 +466,6 @@ export default async function handler(req, res) {
   corsAyarla(req, res);
   try {
     const debug = req.query.debug === "1";
-
-    // ── SÜTUN YOKLAMA (?debug=tvtest) ───────────────────────────────────────
-    // Önce hepsi birlikte denenir (tek istek). Toplu istek reddedilirse
-    // sütunlar TEK TEK yoklanır — hangisinin sorunlu olduğu böyle bulunur.
-    if (req.query.debug === "tvtest") {
-      const rapor = {};
-      const toplu = await tvSutunYokla(TV_ADAY_SUTUNLAR);
-
-      if (toplu.ok) {
-        // Sütun i, d dizisinde i+1'de (0 = name)
-        TV_ADAY_SUTUNLAR.forEach((ad, i) => {
-          const degerler = toplu.satirlar.map(s => s?.d?.[i + 1]);
-          const dolu = degerler.filter(v => v != null && v !== "");
-          rapor[ad] = {
-            calisti: true,
-            doluOran: `${dolu.length}/${degerler.length}`,
-            ornekler: dolu.slice(0, 3),
-            tip: dolu.length ? typeof dolu[0] : null,
-          };
-        });
-        return res.status(200).json({
-          mod: "toplu",
-          not: "doluOran yuksek olan sutunlar TV_SUTUNLAR'a eklenebilir",
-          ornekHisseler: toplu.satirlar.slice(0, 3).map(s => s?.d?.[0]),
-          rapor,
-        });
-      }
-
-      // Toplu istek reddedildi → tek tek dene
-      for (const ad of TV_ADAY_SUTUNLAR) {
-        const tek = await tvSutunYokla([ad]);
-        if (!tek.ok) { rapor[ad] = { calisti: false, durum: tek.durum, govde: tek.govde }; continue; }
-        const degerler = tek.satirlar.map(s => s?.d?.[1]);
-        const dolu = degerler.filter(v => v != null && v !== "");
-        rapor[ad] = {
-          calisti: true,
-          doluOran: `${dolu.length}/${degerler.length}`,
-          ornekler: dolu.slice(0, 3),
-          tip: dolu.length ? typeof dolu[0] : null,
-        };
-      }
-      return res.status(200).json({
-        mod: "tek-tek",
-        topluIstekHatasi: { durum: toplu.durum, govde: toplu.govde },
-        rapor,
-      });
-    }
 
     // ── TEŞHİS: TradingView ham yanıtı (?debug=tv) ──────────────────────────
     // Sütun KİMLİKLERİNİN gerçekten doğru olduğunu tahminle değil canlı
@@ -641,6 +581,22 @@ export default async function handler(req, res) {
           fk:           h.PriceEarning || null,
           pddd:         h.PriceBookValue || null,
           roe:          h.ReturnOnEquity != null ? h.ReturnOnEquity * 100 : null,
+          // Midas bu alanları vermiyor. TradingView ile AYNI ŞEKLİ üretmek için
+          // null olarak ekleniyor — frontend "alan hiç yok" ile "değer yok"
+          // ayrımını yapmak zorunda kalmasın. TERCIH="tradingview" olduğundan
+          // bu yol zaten yalnızca TV çöktüğünde devreye giriyor.
+          sektorEn:     null,
+          endustri:     null,
+          borcOzkaynak: null,
+          yuksek52h:    null,
+          dusuk52h:     null,
+          degisim3a:    null,
+          degisim6a:    null,
+          degisimYtd:   null,
+          beta:         null,
+          netMarj:      null,
+          hisseBasiKar: null,
+          ortHacim10g:  null,
           temetu:       null,
           katilimEndeksi: katilimSet.has(kod),
         };
