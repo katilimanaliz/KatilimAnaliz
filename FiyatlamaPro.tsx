@@ -2222,17 +2222,42 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
       <div style={{padding:"0 14px"}}>
         <div style={{fontSize:11,fontWeight:700,color:C.sub,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>{TR("Temel Göstergeler")}</div>
         <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,overflow:"hidden"}}>
-          {[
-            ["Sektör", hisse.sektor ? (SEKTOR_TR[hisse.sektor] || hisse.sektor) : "—"],
+          {([
+            // ── SEKTÖR ARTIK DOLU (2026-08-05) ────────────────────────────
+            // TradingView'ın "sector" sütunu istenmediği için bu satır hep
+            // "—" gösteriyordu. SEKTOR_TR çeviri haritası ZATEN vardı, yani
+            // alan baştan çalışacak şekilde tasarlanmış, sadece veri gelmiyordu.
+            // sektorEn yeni alan; eski kayıtlar için hisse.sektor'e düşülüyor.
+            ["Sektör", (()=>{ const sk = hisse.sektorEn || hisse.sektor;
+              return sk ? (SEKTOR_TR[sk] || sk) : "—"; })()],
+            ["Endüstri", hisse.endustri || "—"],
             ["F/K Oranı", hisse.fk ? hisse.fk.toFixed(2) : "—"],
             ["PD/DD Oranı", hisse.pddd ? hisse.pddd.toFixed(2) : "—"],
             ["ROE (Özkaynak Getirisi)", hisse.roe ? hisse.roe.toFixed(2) + "%" : "—"],
-            ["Temettü Verimi", hisse.temetu ? hisse.temetu.toFixed(2) + "%" : "—"],
+            // ⭐ BORÇ/ÖZKAYNAK — katılım uygunluğunun FİNANSAL kriteri.
+            // Katılım endeksleri yalnız sektöre bakmıyor; faizli borç oranı
+            // yüksek şirketler de dışarıda kalıyor (THYAO, TCELL gibi).
+            // Bu satır kullanıcıya "neden uygun değil" sorusunun cevabını verir.
+            ["Borç / Özkaynak", typeof hisse.borcOzkaynak === "number"
+              ? hisse.borcOzkaynak.toLocaleString("tr-TR",{maximumFractionDigits:2}) : "—"],
+            ["Net Kâr Marjı", typeof hisse.netMarj === "number" ? hisse.netMarj.toFixed(2) + "%" : "—"],
+            ["Hisse Başına Kâr", typeof hisse.hisseBasiKar === "number"
+              ? hisse.hisseBasiKar.toLocaleString("tr-TR",{maximumFractionDigits:2}) + " ₺" : "—"],
+            ["Beta (1 yıl)", typeof hisse.beta === "number" ? hisse.beta.toFixed(2) : "—"],
+            // ⚠️ TEMETTÜ VERİMİ SATIRI KALDIRILDI (2026-08-05).
+            // TradingView'ın dividends_yield_current sütunu BİST'te güvenilir
+            // değil: 5 Ağustos ölçümünde QNBTR (temettü dağıtan banka) ve
+            // HEDEF için 0 döndü, ASELS için 0,067 — bu değerin %0,07 mi
+            // %6,7 mi olduğu da belirsiz. "Temettü Verimi %0" yazmak bilgi
+            // vermek değil, YANLIŞ bilgi vermektir. Veri backend'de duruyor
+            // (hisse.temetu); güvenilir bir kaynak bulunursa satır geri gelir.
             ["Gün İçi Yüksek", hisse.yuksek ? hisse.yuksek.toLocaleString("tr-TR") + " ₺" : "—"],
             ["Gün İçi Düşük", hisse.dusuk ? hisse.dusuk.toLocaleString("tr-TR") + " ₺" : "—"],
             ["Hacim", hisse.hacim ? hisse.hacim.toLocaleString("tr-TR") + " lot" : "—"],
+            ["Ort. Hacim (10 gün)", typeof hisse.ortHacim10g === "number"
+              ? Math.round(hisse.ortHacim10g).toLocaleString("tr-TR") + " lot" : "—"],
             ["Katılım Endeksi", hisse.katilimEndeksi ? "✅ Katılım Endeksinde" : "❌ Katılım Endeksinde değil"],
-          ].map(([lbl, val], i, arr) => (
+          ] as [string,string][]).map(([lbl, val], i, arr) => (
             <div key={lbl as string} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"11px 14px",borderBottom:i<arr.length-1?`1px solid ${C.border}`:"none"}}>
               <span style={{fontSize:13,color:C.sub}}>{lbl}</span>
               <span style={{fontSize:13,fontWeight:600,color:C.text}}>{val}</span>
@@ -2240,6 +2265,74 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
           ))}
         </div>
       </div>
+
+      {/* ── 52 HAFTA ARALIĞI (2026-08-05) ─────────────────────────────────
+          Fiyatın yıllık bandın neresinde olduğunu tek bakışta gösterir.
+          "346 ₺" tek başına anlamsız; "167–450 bandında %63'te" anlamlı.
+          Veri yoksa (Midas yolu) blok hiç render edilmiyor. */}
+      {typeof hisse.yuksek52h === "number" && typeof hisse.dusuk52h === "number"
+        && hisse.yuksek52h > hisse.dusuk52h && typeof hisse.fiyat === "number" && (()=>{
+        const alt = hisse.dusuk52h, ust = hisse.yuksek52h;
+        const oran = Math.min(100, Math.max(0, ((hisse.fiyat - alt) / (ust - alt)) * 100));
+        const fmt = (v:number)=>v.toLocaleString("tr-TR",{maximumFractionDigits:2});
+        return (
+          <div style={{padding:"18px 14px 0"}}>
+            <div style={{fontSize:11,fontWeight:700,color:C.sub,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>
+              52 Hafta Aralığı
+            </div>
+            <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,padding:"14px 16px"}}>
+              <div style={{position:"relative",height:6,borderRadius:3,background:WA(0.1),marginBottom:10}}>
+                <div style={{position:"absolute",left:0,top:0,bottom:0,width:`${oran}%`,
+                             borderRadius:3,background:C.blue}}/>
+                {/* Güncel fiyat işaretçisi */}
+                <div style={{position:"absolute",left:`${oran}%`,top:-4,width:14,height:14,marginLeft:-7,
+                             borderRadius:7,background:C.blue,border:`2px solid ${C.card}`}}/>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div>
+                  <div style={{fontSize:9.5,color:C.sub2}}>EN DÜŞÜK</div>
+                  <div style={{fontSize:12.5,fontWeight:700,color:C.text,fontFamily:"monospace"}}>{fmt(alt)} ₺</div>
+                </div>
+                <div style={{textAlign:"center"}}>
+                  <div style={{fontSize:9.5,color:C.sub2}}>BANTTAKİ YERİ</div>
+                  <div style={{fontSize:12.5,fontWeight:800,color:C.blue,fontFamily:"monospace"}}>%{oran.toFixed(0)}</div>
+                </div>
+                <div style={{textAlign:"right"}}>
+                  <div style={{fontSize:9.5,color:C.sub2}}>EN YÜKSEK</div>
+                  <div style={{fontSize:12.5,fontWeight:700,color:C.text,fontFamily:"monospace"}}>{fmt(ust)} ₺</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── EK DÖNEM GETİRİLERİ (2026-08-05) ──────────────────────────────
+          Üstteki kutular günlük/haftalık/aylık/yıllık gösteriyordu; 3 ay,
+          6 ay ve yılbaşından beri eksikti. Üçü de TradingView'dan geliyor. */}
+      {(typeof hisse.degisim3a === "number" || typeof hisse.degisim6a === "number"
+        || typeof hisse.degisimYtd === "number") && (
+        <div style={{padding:"18px 14px 0"}}>
+          <div style={{fontSize:11,fontWeight:700,color:C.sub,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>
+            Diğer Dönemler
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+            {([["degisim3a","3 Ay"],["degisim6a","6 Ay"],["degisimYtd","Yılbaşından"]] as [string,string][])
+              .filter(([k])=>typeof (hisse as any)[k] === "number")
+              .map(([k,ad])=>{
+                const v = (hisse as any)[k];
+                return (
+                  <div key={k} style={{background:C.card,borderRadius:10,border:`1px solid ${C.border}`,padding:"10px 8px",textAlign:"center"}}>
+                    <div style={{fontSize:10,color:C.sub,marginBottom:4}}>{ad}</div>
+                    <div style={{fontSize:13,fontWeight:800,color:v>0?C.green:v<0?C.red:C.sub}}>
+                      {(v>0?"+":"")+v.toFixed(2)}%
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
 
       {/* KAP BİLDİRİMLERİ — bildirim yoksa bölüm hiç görünmez. */}
       {kapBildirim.length > 0 && (
