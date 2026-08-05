@@ -19843,7 +19843,23 @@ function App(){
   const portfoyKalemTikla=(k: PortfoyKalemi)=>{
     if(k.tur==="hisse"){ irHisseFonDetay("hisse", k.kod, "portfoyum"); }
     else if(k.tur==="fon"){ setPendingFonDetay(k); nav("fonDetay", "portfoyum"); }
-    else if(k.tur==="altin"){ if(k.altinCarpan!=null){ setSeciliKur({kod:k.ad, ad:k.ad, sembol:"GRAM_ALTIN", birim:"₺"}); } }
+    // ── ALTIN KALEMLERİNDE GRAFİK AÇILMAZ (2026-08-05) ────────────────────
+    // ÖNCEKİ HATA: Burada sembol SABİT "GRAM_ALTIN" geçiliyordu. Hangi altın
+    // ürünü olursa olsun (22 ayar, çeyrek, ata, gümüş…) açılan grafik 24 ayar
+    // SAF gram altını gösteriyordu. Kullanıcı listede ₺5.769 (AYAR22, AltinAPI)
+    // görürken pencerede ₺6.601 (GRAM_ALTIN, Yahoo GC=F × USD/TRY) görüyordu —
+    // %14 fark. Günlük ve aylık yüzdeler de doğal olarak tutmuyordu.
+    //
+    // NEDEN DOĞRU SEMBOLÜ GEÇMİYORUZ: PORTFOY_ALTIN_TURLERI'ndeki 14 ürünün
+    // TAMAMI AltinAPI sembolü (ALTIN, AYAR22, CEYREK_YENI, ONS…). /api/gecmis
+    // yalnızca Yahoo sembollerini ve GRAM_ALTIN/GRAM_GUMUS'u tanıyor; AltinAPI'nin
+    // geçmiş verisi yok (altinapi:v3 anahtarı sadece anlık fiyat tutuyor).
+    // Sembolü doğru geçirseydik grafik bomboş gelirdi.
+    //
+    // Bu davranış "Fiziki Altın" ekranıyla da tutarlı: orada da grafik açılmıyor.
+    // ⚠️ Buraya tekrar GRAM_ALTIN yazmayın — yanlış ürünün grafiğini göstermek,
+    // grafik göstermemekten kötüdür.
+    else if(k.tur==="altin"){ /* grafik verisi yok — bilinçli olarak açılmıyor */ }
     else { setSeciliKur({kod:k.ad, ad:k.ad, sembol:k.kod, birim: k.paraOnek||"$"}); }
   };
   const back=()=>{
