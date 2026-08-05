@@ -399,7 +399,64 @@ function tradingViewNormalize(tvJson, isimMap, katilimSet) {
     .sort((a, b) => (b.piyasaDegeri || 0) - (a.piyasaDegeri || 0));
 }
 
-// ─── CORS: sadece kendi domain(ler)imize izin ver ───────────────────────────
+// ── GEÇİCİ SÜTUN YOKLAMA TEŞHİSİ (2026-08-05) ──────────────────────────────
+//   GET /api/hisse-proxy?debug=tvtest
+//
+// NEDEN VAR: Ekranda "Sektör" ve "Temettü Verimi" satırları HEP BOŞ — çünkü
+// tradingViewNormalize bu ikisini `sektor:""` ve `temetu:null` olarak sabit
+// yazıyor; TradingView bunları veriyor olabilir ama TV_SUTUNLAR'da istenmiyor.
+// Ayrıca katılım uygunluğunun asıl kriteri olan borç/özkaynak oranı da yok
+// (kodun kendi notunda THYAO/TCELL'in "yüksek faizli borç" yüzünden endeks
+// dışı olduğu yazılı — o oranı göstermek kullanıcıya NEDENİNİ anlatır).
+//
+// ⚠️ SÜTUN KİMLİKLERİ TAHMİN EDİLEMEZ. Yanlış bir sütun adı isteğin TAMAMINI
+// bozabilir ve bu uç ana ekranlardan birini besliyor. Bu yüzden adaylar
+// CANLI AKIŞA HİÇ DOKUNULMADAN, ayrı bir istekte tek tek yoklanıyor:
+// TV_SUTUNLAR değişmiyor, kullanıcılar etkilenmiyor.
+//
+// Rapor her aday için "kaç kayıtta gerçek değer döndü" bilgisini verir.
+// Sonuç görülünce çalışan sütunlar TV_SUTUNLAR'a eklenecek ve BU BLOK SİLİNECEK.
+const TV_ADAY_SUTUNLAR = [
+  "sector",                    // boş "Sektör" alanı için
+  "industry",                  // sector tutmazsa alternatif
+  "dividends_yield_current",   // boş "Temettü Verimi" alanı için
+  "dividend_yield_recent",     // alternatif isimlendirme
+  "debt_to_equity",            // ⭐ katılım uygunluğunun asıl finansal kriteri
+  "total_debt",                // debt_to_equity yoksa elle hesaplamak için
+  "price_52_week_high",
+  "price_52_week_low",
+  "Perf.3M",
+  "Perf.6M",
+  "Perf.YTD",
+  "beta_1_year",
+  "average_volume_10d_calc",
+  "net_margin_ttm",
+  "earnings_per_share_basic_ttm",
+  "number_of_employees",
+];
+
+// Bir sütun listesini TradingView'a sorar; hata olursa fırlatmaz, raporlar.
+async function tvSutunYokla(sutunlar) {
+  const govde = {
+    filter: [{ left: "type", operation: "equal", right: "stock" }],
+    options: { lang: "tr" },
+    symbols: { query: { types: [] }, tickers: [] },
+    columns: ["name", ...sutunlar],
+    sort: { sortBy: "market_cap_basic", sortOrder: "desc" },
+    range: [0, 60],   // yoklama için 60 kayıt yeter
+  };
+  const r = await fetchZamanAsimli(
+    "https://scanner.tradingview.com/turkey/scan",
+    { method: "POST", headers: { "Content-Type": "application/json", "User-Agent": "Mozilla/5.0" },
+      body: JSON.stringify(govde) },
+    12000
+  );
+  if (!r.ok) return { ok: false, durum: r.status, govde: (await r.text()).slice(0, 300) };
+  const j = await r.json();
+  return { ok: true, satirlar: j?.data || [] };
+}
+
+
 function originIzinliMi(origin) {
   if (!origin) return false;
   if (/^https:\/\/katilim-analiz(-[a-z0-9-]+)?\.vercel\.app$/i.test(origin)) return true;
@@ -422,6 +479,53 @@ export default async function handler(req, res) {
   corsAyarla(req, res);
   try {
     const debug = req.query.debug === "1";
+
+    // ── SÜTUN YOKLAMA (?debug=tvtest) ───────────────────────────────────────
+    // Önce hepsi birlikte denenir (tek istek). Toplu istek reddedilirse
+    // sütunlar TEK TEK yoklanır — hangisinin sorunlu olduğu böyle bulunur.
+    if (req.query.debug === "tvtest") {
+      const rapor = {};
+      const toplu = await tvSutunYokla(TV_ADAY_SUTUNLAR);
+
+      if (toplu.ok) {
+        // Sütun i, d dizisinde i+1'de (0 = name)
+        TV_ADAY_SUTUNLAR.forEach((ad, i) => {
+          const degerler = toplu.satirlar.map(s => s?.d?.[i + 1]);
+          const dolu = degerler.filter(v => v != null && v !== "");
+          rapor[ad] = {
+            calisti: true,
+            doluOran: `${dolu.length}/${degerler.length}`,
+            ornekler: dolu.slice(0, 3),
+            tip: dolu.length ? typeof dolu[0] : null,
+          };
+        });
+        return res.status(200).json({
+          mod: "toplu",
+          not: "doluOran yuksek olan sutunlar TV_SUTUNLAR'a eklenebilir",
+          ornekHisseler: toplu.satirlar.slice(0, 3).map(s => s?.d?.[0]),
+          rapor,
+        });
+      }
+
+      // Toplu istek reddedildi → tek tek dene
+      for (const ad of TV_ADAY_SUTUNLAR) {
+        const tek = await tvSutunYokla([ad]);
+        if (!tek.ok) { rapor[ad] = { calisti: false, durum: tek.durum, govde: tek.govde }; continue; }
+        const degerler = tek.satirlar.map(s => s?.d?.[1]);
+        const dolu = degerler.filter(v => v != null && v !== "");
+        rapor[ad] = {
+          calisti: true,
+          doluOran: `${dolu.length}/${degerler.length}`,
+          ornekler: dolu.slice(0, 3),
+          tip: dolu.length ? typeof dolu[0] : null,
+        };
+      }
+      return res.status(200).json({
+        mod: "tek-tek",
+        topluIstekHatasi: { durum: toplu.durum, govde: toplu.govde },
+        rapor,
+      });
+    }
 
     // ── TEŞHİS: TradingView ham yanıtı (?debug=tv) ──────────────────────────
     // Sütun KİMLİKLERİNİN gerçekten doğru olduğunu tahminle değil canlı
