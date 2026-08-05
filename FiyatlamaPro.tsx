@@ -10509,6 +10509,84 @@ function kbBankaSirala(veri:any, kalem:string){
   return {liste, toplam, donem:don};
 }
 
+// ── SİTE ALT BİLGİSİ (2026-08-05) ──────────────────────────────────────────
+// NEDEN VAR: (1) Gizlilik politikası App Store'a bildirilen zorunlu bağlantı;
+// kullanıcının uygulama içinden de ulaşabilmesi gerekiyor. (2) 26 blog yazısı
+// ve 190+ sözlük sayfası var — her sayfanın altından bunlara iç bağlantı
+// vermek arama motoru görünürlüğünü doğrudan etkiliyor. (3) Geri bildirim
+// kanalı yoktu; kullanıcı hata bildiremiyordu.
+//
+// ⚠️ YALNIZCA WEB'DE GÖSTERİLİYOR. Native uygulamada alt navigasyon çubuğu
+// zaten var; uzun bir alt bilgi orada yer kaplar ve mağaza yönergeleri
+// açısından da gereksiz. IS_NATIVE ile ayrılıyor.
+//
+// ⚠️ BURAYA YALNIZCA VAR OLAN SAYFALAR BAĞLANIR. "Kullanım Şartları" ve ayrı
+// bir "KVKK Aydınlatma" sayfası YOK — kırık bağlantı vermemek için eklenmedi.
+// /gizlilik sayfası KVKK m.11 haklarını zaten içeriyor.
+function SiteAltBilgi({onEkran}:{onEkran:(sc:string)=>void}){
+  if (IS_NATIVE) return null;
+
+  const baslikStil:any = {
+    fontSize:10.5, fontWeight:800, letterSpacing:0.6, textTransform:"uppercase",
+    color:WA(0.42), margin:"0 0 8px",
+  };
+  const bagStil:any = {
+    display:"block", fontSize:12.5, color:WA(0.62), textDecoration:"none",
+    padding:"3px 0", cursor:"pointer", background:"none", border:"none",
+    textAlign:"left", fontFamily:"inherit",
+  };
+
+  const sutun = (baslik:string, ogeler:{ad:string; ekran?:string; href?:string}[]) => (
+    <div style={{minWidth:130, flex:"1 1 130px"}}>
+      <p style={baslikStil}>{baslik}</p>
+      {ogeler.map(o => o.href
+        ? <a key={o.ad} href={o.href} style={bagStil}>{o.ad}</a>
+        : <button key={o.ad} onClick={()=>o.ekran && onEkran(o.ekran)} style={bagStil}>{o.ad}</button>
+      )}
+    </div>
+  );
+
+  return (
+    <footer style={{borderTop:`1px solid ${C.border}`, marginTop:26, paddingTop:20}}>
+      <div style={{marginBottom:18}}>
+        <div style={{fontSize:14, fontWeight:800, color:C.label}}>
+          Katılım <span style={{color:"#1F9D63"}}>Plus</span>
+        </div>
+        <div style={{fontSize:11.5, color:WA(0.45), marginTop:2}}>
+          Katılım finansının akıllı asistanı
+        </div>
+      </div>
+
+      <div style={{display:"flex", flexWrap:"wrap", gap:"18px 24px"}}>
+        {sutun("Hesaplamalar", [
+          {ad:"Kâr Payı",           ekran:"vadeliKatilim"},
+          {ad:"Konut Finansmanı",   ekran:"konutFinansman"},
+          {ad:"Taşıt Finansmanı",   ekran:"tasitFinansman"},
+          {ad:"İhtiyaç Finansmanı", ekran:"yatirimFonuFinansman"},
+        ])}
+        {sutun("Bilgi", [
+          {ad:"Ekonomi Sözlüğü",       ekran:"ekonomiSozluk"},
+          {ad:"Katılım Bankaları",     ekran:"katilimBankalari"},
+          {ad:"Sektör Verileri",       ekran:"katilimSektoru"},
+          {ad:"Kira Sertifikası",      ekran:"kiraSertifikasi"},
+        ])}
+        {sutun("Yasal", [
+          {ad:"Gizlilik Politikası", href:"/gizlilik"},
+          {ad:"İletişim",            href:"mailto:katilimplus2026@gmail.com"},
+        ])}
+      </div>
+
+      <p style={{margin:"20px 0 0", fontSize:10.5, color:WA(0.38), lineHeight:1.6}}>
+        Bu uygulamadaki hesaplamalar bilgilendirme amaçlıdır; kesin teklif, resmî belge
+        veya hukuki taahhüt niteliği taşımaz ve yatırım danışmanlığı kapsamında değildir.
+      </p>
+      <p style={{margin:"10px 0 0", fontSize:10.5, color:WA(0.38)}}>
+        © 2026 Katılım Plus · Tüm hakları saklıdır.
+      </p>
+    </footer>
+  );
+}
+
 function KatilimSektoruOzet({onAc}:{onAc:()=>void}){
   const [veri,setVeri]=useState<any>(null);
   useEffect(()=>{ kbVeriGetir().then(setVeri); },[]);
@@ -20601,10 +20679,13 @@ function App(){
                 Veri gelmezse blok hiç render edilmiyor (sessiz gizlenme). ── */}
             <KatilimSektoruOzet onAc={()=>nav("katilimSektoru")}/>
 
-            {/* Copyright — alt banda yapışık */}
-            <p style={{margin:"auto 0 0",padding:"10px 0 4px",fontSize:10,color:WA(0.4),textAlign:"center"}}>
-              © 2026 Katılım Plus · Tüm hakları saklıdır.
-            </p>
+            {/* Alt bilgi. Native'de SiteAltBilgi null döner; o durumda eski
+                sade copyright satırı gösteriliyor. */}
+            {IS_NATIVE
+              ? <p style={{margin:"auto 0 0",padding:"10px 0 4px",fontSize:10,color:WA(0.4),textAlign:"center"}}>
+                  © 2026 Katılım Plus · Tüm hakları saklıdır.
+                </p>
+              : <SiteAltBilgi onEkran={(sc)=>nav(sc)}/>}
           </div>
         )}
 
