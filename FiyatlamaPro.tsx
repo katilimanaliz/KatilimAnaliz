@@ -15832,6 +15832,12 @@ function pushTokenAl():string|null{
   try{ return localStorage.getItem("kp_push_token"); }catch{ return null; }
 }
 
+// Tetiklendikten sonra KAPANMAYAN alarm türleri. Bunlar listede farklı
+// gösterilir (durum metni, ikon) ve duraklat/devam düğmesi yalnızca bunlarda
+// vardır — tetiklenmiş bir fiyat alarmını yeniden açmak eşik hâlâ sağlandığı
+// için anında tekrar tetiklenmeye yol açardı.
+const ABONELIK_TIPLERI = ["kap","endeks","zekat"];
+
 // ─── FİYAT ALARMLARIM EKRANI ─────────────────────────────────────────────────
 function FiyatAlarmlarim(){
   const token=pushTokenAl();
@@ -15873,6 +15879,19 @@ function FiyatAlarmlarim(){
     if(a.tip==="kap"){
       return "Yeni KAP bildirimi yayınlandığında";
     }
+    // 2026-08-06: Yeni abonelik türleri. Bunlar da fiyat alanları boş geldiği
+    // için ALTTAKİ yuzde dalına düşmemeli — KAP'ta yaşanan çökme aynısı olurdu.
+    if(a.tip==="endeks"){
+      return a.endeksDurum===false
+        ? "Katılım Endeksi'ne eklenirse"
+        : "Katılım Endeksi'nden çıkarılırsa";
+    }
+    if(a.tip==="zekat"){
+      const t=a.zekatTarihi;
+      if(!t) return "Zekât gününde";
+      const d=new Date(t+"T00:00:00Z");
+      return `Zekât günün: ${d.toLocaleDateString("tr-TR",{day:"numeric",month:"long",year:"numeric",timeZone:"UTC"})}`;
+    }
     if(a.tip==="hedef"){
       const h=a.hedefFiyat;
       return `${a.yon==="ustunde"?"≥":"≤"} ${h!=null?h.toLocaleString("tr-TR",{maximumFractionDigits:4}):"—"}`;
@@ -15884,6 +15903,16 @@ function FiyatAlarmlarim(){
   // Abonelikler (KAP) tetiklendikten sonra da aktif kalır; bu yüzden
   // "Tetiklendi" yerine kaç bildirim gönderildiğini yazıyoruz.
   const durumMetni=(a:any)=>{
+    if(a.tip==="endeks"||a.tip==="zekat"){
+      const n=a.bildirimSayisi||0;
+      const sayac=n>0?` · ${n} bildirim gönderildi`:"";
+      if(!a.aktif){
+        return a.kapaliSebep==="token-gecersiz"
+          ? `Durduruldu · bildirim izni kalkmış${sayac}`
+          : `Duraklatıldı${sayac}`;
+      }
+      return `Abonelik · izleniyor${sayac}`;
+    }
     if(a.tip==="kap"){
       const n=a.bildirimSayisi||0;
       const sayac=n>0?` · ${n} bildirim gönderildi`:"";
@@ -15919,12 +15948,12 @@ function FiyatAlarmlarim(){
           <p style={{margin:"4px 0 0",fontSize:11.5,color:WA(0.3),lineHeight:1.55}}>Piyasa ekranında bir enstrümana dokunup "🔔 Alarm Kur"a basarak ekleyebilirsiniz. Hisse detayındaki çan simgesinden ayrıca KAP bildirim aboneliği kurabilirsiniz.</p>
         </div>
       ):alarmlar.map((a:any)=>(
-        <div key={a.id} style={{background:WA(0.04),border:`1px solid ${(a.tip==="kap"||a.aktif)?WA(0.08):"rgba(74,222,128,0.25)"}`,borderRadius:14,padding:"13px 14px",marginBottom:10,display:"flex",alignItems:"center",gap:10}}>
-          <span style={{fontSize:20,flexShrink:0}}>{a.tip==="kap"?"📄":(a.aktif?"🔔":"✅")}</span>
+        <div key={a.id} style={{background:WA(0.04),border:`1px solid ${(ABONELIK_TIPLERI.includes(a.tip)||a.aktif)?WA(0.08):"rgba(74,222,128,0.25)"}`,borderRadius:14,padding:"13px 14px",marginBottom:10,display:"flex",alignItems:"center",gap:10}}>
+          <span style={{fontSize:20,flexShrink:0}}>{a.tip==="kap"?"📄":a.tip==="endeks"?"☪":a.tip==="zekat"?"🌙":(a.aktif?"🔔":"✅")}</span>
           <div style={{flex:1,minWidth:0}}>
             <p style={{margin:0,fontSize:13.5,fontWeight:700,color:C.soft}}>{a.ad}</p>
             <p style={{margin:"2px 0 0",fontSize:11.5,color:WA(0.55)}}>{kosulMetni(a)}</p>
-            <p style={{margin:"3px 0 0",fontSize:10,color:a.tip==="kap"?WA(0.4):(a.aktif?WA(0.35):C.green)}}>
+            <p style={{margin:"3px 0 0",fontSize:10,color:ABONELIK_TIPLERI.includes(a.tip)?WA(0.4):(a.aktif?WA(0.35):C.green)}}>
               {durumMetni(a)}
             </p>
           </div>
@@ -15933,7 +15962,7 @@ function FiyatAlarmlarim(){
                 Fiyat alarmlarında yok — tetiklenmiş bir alarmı yeniden açmak
                 eşik hâlâ sağlandığı için anında tekrar tetiklenmesine yol açar,
                 backend de bunu reddediyor. */}
-            {a.tip==="kap"&&(
+            {ABONELIK_TIPLERI.includes(a.tip)&&(
               <button onClick={()=>durumDegistir(a.id, !a.aktif)} disabled={degisiyor===a.id} style={{
                 background:a.aktif?WA(0.07):"rgba(74,222,128,0.12)",
                 border:`1px solid ${a.aktif?WA(0.16):"rgba(74,222,128,0.35)"}`,
@@ -17505,7 +17534,7 @@ function AltinAlarmModal({urun, onClose}:{urun:{ad:string, sembol:string, bid:nu
 //   2) Üçüncü bir mod var: KAP BİLDİRİMİ. Bu bir eşik alarmı değil, ABONELİK —
 //      tetiklenince kapanmaz, o hisseye yeni bildirim geldikçe uyarır.
 function HisseAlarmModal({hisse, onClose}:{hisse:{ticker:string, sirket?:string, fiyat?:number|null}, onClose:()=>void}){
-  const [mod,setMod]=useState<"hedef"|"yuzde"|"kap">("hedef");
+  const [mod,setMod]=useState<"hedef"|"yuzde"|"kap"|"endeks">("hedef");
   const [yon,setYon]=useState<"ustunde"|"altinda"|"artis"|"dusus">("ustunde");
   const [deger,setDeger]=useState("");   // asagida varsayilanHedef ile dolduruluyor
   const [durum,setDurum]=useState<"bos"|"gonderiliyor"|"basarili"|"hata">("bos");
@@ -17562,6 +17591,8 @@ function HisseAlarmModal({hisse, onClose}:{hisse:{ticker:string, sirket?:string,
     let govde:any={token, sembol, ad, tip:mod, yon};
     if(mod==="kap"){
       govde={token, sembol, ad, tip:"kap", yon:"yeni"};
+    }else if(mod==="endeks"){
+      govde={token, sembol, ad, tip:"endeks", yon:"degisim"};
     }else{
       const n=parseFloat(String(deger).replace(",","."));
       if(!n||n<=0){ setHata("Geçerli bir değer girin."); return; }
@@ -17576,6 +17607,8 @@ function HisseAlarmModal({hisse, onClose}:{hisse:{ticker:string, sirket?:string,
           setDurum("basarili");
           setBasariNotu(mod==="kap"
             ? "Bundan sonra yayınlanacak yeni KAP bildirimleri için uyarılacaksınız. Aboneliği Fiyat Alarmlarım ekranından duraklatabilir ya da silebilirsiniz."
+            : mod==="endeks"
+            ? (d?.not || "Endeks üyeliği değiştiğinde bildirim alacaksınız.")
             : "Koşul sağlandığında bildirim alacaksınız.");
           olayGonder("alarm_kuruldu",{sembol,tip:mod,yon});
         } else { setDurum("bos"); setHata(d?.hata||"Alarm kurulamadı."); }
@@ -17605,7 +17638,7 @@ function HisseAlarmModal({hisse, onClose}:{hisse:{ticker:string, sirket?:string,
             <div style={{textAlign:"center",padding:"10px 0"}}>
               <p style={{margin:0,fontSize:24}}>✅</p>
               <p style={{margin:"6px 0 0",fontSize:13,fontWeight:700,color:C.green}}>
-                {mod==="kap"?"Abonelik kuruldu!":"Alarm kuruldu!"}
+                {(mod==="kap"||mod==="endeks")?"Abonelik kuruldu!":"Alarm kuruldu!"}
               </p>
               <p style={{margin:"3px 0 0",fontSize:11,color:WA(0.5),lineHeight:1.5}}>{basariNotu}</p>
               <button onClick={onClose} style={{marginTop:14,padding:"10px 22px",borderRadius:10,border:"none",background:"#3B82F6",color:"#fff",fontWeight:800,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>Kapat</button>
@@ -17616,6 +17649,7 @@ function HisseAlarmModal({hisse, onClose}:{hisse:{ticker:string, sirket?:string,
                 {modBtn("hedef","Hedef Fiyat",()=>{setMod("hedef");setYon("ustunde");setDeger(varsayilanHedef("ustunde"));setHata("");})}
                 {modBtn("yuzde","Yüzde Değişim",()=>{setMod("yuzde");setYon("artis");setDeger("5");setHata("");})}
                 {modBtn("kap","KAP Bildirimi",()=>{setMod("kap");setHata("");})}
+                {modBtn("endeks","Katılım Endeksi",()=>{setMod("endeks");setHata("");})}
               </div>
 
               {mod==="hedef"&&(
@@ -17697,6 +17731,26 @@ function HisseAlarmModal({hisse, onClose}:{hisse:{ticker:string, sirket?:string,
                 </div>
               )}
 
+              {mod==="endeks"&&(
+                <div style={{background:WA(0.04),border:`1px solid ${WA(0.1)}`,borderRadius:12,padding:"13px 14px"}}>
+                  <p style={{margin:0,fontSize:12.5,fontWeight:700,color:C.label}}>Endeks üyeliği değişirse uyar</p>
+                  <p style={{margin:"7px 0 0",fontSize:11.5,color:WA(0.62),lineHeight:1.6}}>
+                    {hisse.ticker} Katılım Endeksi'nden <b>çıkarılırsa</b> ya da endekse
+                    <b> eklenirse</b> bildirim alırsınız. Endeks periyodik olarak revize edilir;
+                    bir hissenin kapsam dışına çıkması sessizce gerçekleşir.
+                  </p>
+                  <p style={{margin:"9px 0 0",fontSize:10.5,color:WA(0.45),lineHeight:1.55}}>
+                    Bu bir aboneliktir — tetiklendikten sonra kapanmaz, hisse tekrar girerse yine
+                    haber verilir. <b>Fiyat Alarmlarım</b> ekranından duraklatabilir ya da
+                    silebilirsiniz.
+                  </p>
+                  <p style={{margin:"7px 0 0",fontSize:10.5,color:WA(0.45),lineHeight:1.55}}>
+                    Endeks listesi 12 saatte bir yenilenir; bildirim <b>yarım güne kadar</b>
+                    gecikebilir. Endeks üyeliği yatırım tavsiyesi değildir.
+                  </p>
+                </div>
+              )}
+
               {hata&&<p style={{margin:"10px 2px 0",fontSize:11.5,color:C.red,lineHeight:1.5}}>{hata}</p>}
 
               <div style={{display:"flex",gap:8,marginTop:14}}>
@@ -17708,7 +17762,7 @@ function HisseAlarmModal({hisse, onClose}:{hisse:{ticker:string, sirket?:string,
                   flex:1,padding:"11px",borderRadius:10,border:"none",
                   background:"#3B82F6",color:"#fff",fontWeight:800,fontSize:13,cursor:"pointer",fontFamily:"inherit",
                   opacity:durum==="gonderiliyor"?0.7:1,
-                }}>{durum==="gonderiliyor"?"Kuruluyor…":(mod==="kap"?"Aboneliği Kur":"Alarm Kur")}</button>
+                }}>{durum==="gonderiliyor"?"Kuruluyor…":((mod==="kap"||mod==="endeks")?"Aboneliği Kur":"Alarm Kur")}</button>
               </div>
             </div>
           )}

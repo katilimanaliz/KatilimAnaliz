@@ -136,6 +136,58 @@ const FCM_TOKEN_REGEX = /^[A-Za-z0-9_:.\-]{100,4096}$/;
 // token başına 20 sınırı sahte token üretimine karşı tek başına yetmiyor.
 // Mevcut ölçek (474 indirme) düşünüldüğünde bu sınır çok uzak, ama
 // kötüye kullanımda tavan görevi görüyor.
+// ── KATILIM ENDEKSİ ÜYELİĞİ (2026-08-06) ────────────────────────────────────
+// Kullanıcı portföyündeki bir hisse Katılım Endeksi'nden çıktığında haber
+// alsın diye. Endeks periyodik revize ediliyor; kimse kullanıcıya bunu
+// söylemiyor, kendi fark etmesi gerekiyordu.
+//
+// NEDEN AYRI ÖNBELLEK: Yukarıdaki bistVerisiGetir() Redis anlık görüntüsünü
+// okuyor ama o anahtar YALNIZCA FİYAT tutuyor — katilimEndeksi bayrağı orada
+// yok. Bayrak için hisse-proxy'nin TAM çıktısı gerekiyor ve o HTTP çağrısı
+// pahalı (bkz. yukarıdaki CPU notu). Endeks üç ayda bir revize edildiğine
+// göre 12 saatlik önbellek fazlasıyla yeterli: abone sayısı ne olursa olsun
+// günde en fazla 2 HTTP çağrısı.
+const KV_ENDEKS_UYELER_KEY = "endeks:uyeler:v1";
+const ENDEKS_ONBELLEK_SN = 12 * 3600;
+// Endekste her zaman en az bu kadar hisse vardır. Daha azı gelirse veri
+// BOZUKTUR (ör. hisse-proxy alan adını değiştirdi, bayrak hiç gelmedi) —
+// o durumda güncelleme YAPILMAZ. Aksi halde tek bir yukarı akış değişikliği
+// bütün abonelere "hisseniz endeksten çıktı" diye YANLIŞ bildirim gönderirdi.
+const ENDEKS_ASGARI_UYE = 20;
+
+async function endeksUyeleriOku() {
+  try {
+    const c = await redis.get(KV_ENDEKS_UYELER_KEY);
+    if (c && Array.isArray(c.uyeler) && c.uyeler.length >= ENDEKS_ASGARI_UYE) {
+      return new Set(c.uyeler);
+    }
+  } catch (e) {
+    console.error("Endeks onbellegi okunamadi:", e.message);
+  }
+  try {
+    const r = await fetchZamanli(
+      `${API_TABAN}/api/hisse-proxy`,
+      { headers: { Accept: "application/json", "User-Agent": "KatilimPlus-Alarm/1.0" } },
+      12000
+    );
+    if (!r.ok) return null;
+    const j = await r.json();
+    if (!j?.success || !Array.isArray(j.data) || j.data.length < 100) return null;
+    const uyeler = j.data
+      .filter((h) => h?.katilimEndeksi && h?.ticker)
+      .map((h) => String(h.ticker).toUpperCase());
+    if (uyeler.length < ENDEKS_ASGARI_UYE) {
+      console.error("Endeks uye sayisi supheli, guncelleme yapilmadi:", uyeler.length);
+      return null;
+    }
+    await redis.set(KV_ENDEKS_UYELER_KEY, { uyeler, ts: Date.now() }, { ex: ENDEKS_ONBELLEK_SN });
+    return new Set(uyeler);
+  } catch (e) {
+    console.error("Endeks uyeleri alinamadi:", e.message);
+    return null;
+  }
+}
+
 const MAKS_TOPLAM_ALARM = 5000;
 
 // ── ZEKÂT HATIRLATMASI (2026-08-06) ─────────────────────────────────────────
@@ -670,6 +722,7 @@ async function bistTekFiyat(sembol) {
 const KV_KAP_TUM_KEY = "kap:tum:v3";
 const MAKS_KAP_ALARM_TOKEN_BASINA = 15;
 const KAP_TUR_BASINA_MAKS_BILDIRIM = 3;   // tek turda bir hisse için en fazla kaç yeni bildirim duyurulsun
+const MAKS_ENDEKS_ALARM_TOKEN_BASINA = 20;   // endeks aboneliği kalıcı, fiyat alarmlarından ayrı sayılıyor
 
 async function kapTumOku(isitmaYapilsinMi = true) {
   try {
@@ -777,6 +830,8 @@ async function alarmEkle(req, res) {
   // KAP alarmında "yon" anlamsız — istemci göndermese de kabul ediyoruz.
   if (tip === "kap" && !yon) yon = "yeni";
   // Zekât hatırlatmasında sembol/ad/yon sabit — istemcinin göndermesi gerekmez.
+  // Endeks aboneliğinde "yon" anlamsız — istemci göndermese de kabul ediyoruz.
+  if (tip === "endeks" && !yon) yon = "degisim";
   if (tip === "zekat") {
     sembol = ZEKAT_SEMBOL;
     ad = ad || "Zekât Günü";
@@ -927,6 +982,74 @@ async function alarmEkle(req, res) {
       });
     } catch (e) {
       res.status(500).json({ hata: "KAP alarmı oluşturulamadı", detay: e.message });
+    }
+    return;
+  }
+
+  // ── KATILIM ENDEKSİ ABONELİĞİ ───────────────────────────────────────────
+  // Fiyat çekilmez; kuruluş anındaki üyelik durumu referans olarak kaydedilir.
+  // Sonraki turlarda bu değerle karşılaştırılır, DEĞİŞTİĞİNDE bildirim gider.
+  if (tip === "endeks") {
+    if (!sembol.startsWith(BIST_ONEK)) {
+      res.status(400).json({ hata: "Endeks aboneliği yalnızca BİST hisseleri için kurulabilir (sembol 'BIST:' önekli olmalı)" });
+      return;
+    }
+    const kod = sembol.slice(BIST_ONEK.length).toUpperCase();
+    const uyeler = await endeksUyeleriOku();
+    if (!uyeler) {
+      res.status(502).json({ hata: "Katılım Endeksi listesi şu an alınamadı, abonelik oluşturulamadı. Lütfen biraz sonra tekrar deneyin." });
+      return;
+    }
+    const suAnUye = uyeler.has(kod);
+
+    try {
+      const { basarili, sonuc } = await kilitliCalistir(
+        redis, ALARM_KILIT_ANAHTAR, 15,
+        async () => {
+          const alarmlar = await alarmlariOku();
+          const endeksSayisi = alarmlar.filter((a) => a.token === token && a.tip === "endeks" && a.aktif).length;
+          if (endeksSayisi >= MAKS_ENDEKS_ALARM_TOKEN_BASINA) {
+            return { hataKodu: 429, hata: `En fazla ${MAKS_ENDEKS_ALARM_TOKEN_BASINA} endeks aboneliği kurabilirsiniz.` };
+          }
+          if (alarmlar.length >= MAKS_TOPLAM_ALARM) {
+            console.error("KURESEL ALARM TAVANI ASILDI (endeks):", alarmlar.length);
+            return { hataKodu: 503, hata: "Sistem şu anda yeni abonelik kabul edemiyor. Lütfen daha sonra tekrar deneyin." };
+          }
+          const zatenVar = alarmlar.some((a) => a.token === token && a.tip === "endeks" && a.sembol === sembol && a.aktif);
+          if (zatenVar) return { hataKodu: 409, hata: "Bu hisse için zaten bir endeks aboneliğiniz var." };
+
+          const yeniAlarm = {
+            id: randomUUID(),
+            token, sembol, ad,
+            tip: "endeks",
+            yon: "degisim",
+            endeksDurum: suAnUye,
+            hedefFiyat: null,
+            yuzde: null,
+            baslangicFiyat: null,
+            bildirimSayisi: 0,
+            olusturulmaTs: Date.now(),
+            aktif: true,
+            tetiklenmeTs: null,
+            tetiklenmeFiyat: null,
+          };
+          await redis.set(ALARM_KV_ANAHTAR, [...alarmlar, yeniAlarm]);
+          return { alarm: yeniAlarm };
+        },
+        { denemeSayisi: 10, bekleMs: 300 }
+      );
+      if (!basarili) { res.status(409).json({ hata: "Şu anda başka bir alarm işlemi sürüyor, lütfen tekrar deneyin." }); return; }
+      if (sonuc?.hataKodu) { res.status(sonuc.hataKodu).json({ hata: sonuc.hata }); return; }
+      res.status(200).json({
+        basarili: true,
+        alarm: sonuc.alarm,
+        suAnUye,
+        not: suAnUye
+          ? "Bu hisse şu an Katılım Endeksi'nde. Endeksten çıkarılırsa bildirim alacaksınız."
+          : "Bu hisse şu an Katılım Endeksi'nde değil. Endekse eklenirse bildirim alacaksınız.",
+      });
+    } catch (e) {
+      res.status(500).json({ hata: "Endeks aboneliği oluşturulamadı", detay: e.message });
     }
     return;
   }
@@ -1271,7 +1394,7 @@ async function alarmKontrol(req, res) {
         // filtreye EKLENMEZSE alarmFiyatTablosu "ZEKAT" sembolü için boşuna
         // fiyat aramaya çalışır ve her turda hata üretir.
         const kapAlarmlar = aktifAlarmlar.filter((a) => a.tip === "kap");
-        const fiyatAlarmlar = aktifAlarmlar.filter((a) => a.tip !== "kap" && a.tip !== "zekat");
+        const fiyatAlarmlar = aktifAlarmlar.filter((a) => a.tip !== "kap" && a.tip !== "zekat" && a.tip !== "endeks");
 
         // Aynı sembolü birden fazla alarm izliyorsa fiyatı TEK kere çekelim.
         const benzersizSemboller = [...new Set(fiyatAlarmlar.map((a) => a.sembol))];
@@ -1286,10 +1409,19 @@ async function alarmKontrol(req, res) {
           if (!kapListe) kapNot = "KAP listesi alinamadi — KAP alarmlari bu turda atlandi";
         }
 
+        // Endeks üye listesi de TEK kere; 12 saatlik önbellekten geliyor.
+        const endeksAlarmlar = aktifAlarmlar.filter((a) => a.tip === "endeks");
+        let endeksUyeler = null, endeksNot = null;
+        if (endeksAlarmlar.length > 0) {
+          endeksUyeler = await endeksUyeleriOku();
+          if (!endeksUyeler) endeksNot = "Endeks listesi alinamadi — endeks abonelikleri bu turda atlandi";
+        }
+
         let tetiklenen = 0;
         let gonderilenBildirim = 0;
         let kapTetiklenen = 0;
         let zekatTetiklenen = 0;
+        let endeksTetiklenen = 0;
         let olenAbonelik = 0;   // token gecersiz oldugu icin kapanan abonelik sayisi
         let gecersizKurulumKapatilan = 0;   // kurulusunda kosulu zaten saglanan (eski) hedef alarmlari
         const gonderimHatalari = [];
@@ -1352,6 +1484,55 @@ async function alarmKontrol(req, res) {
             guncelListe.push({
               ...alarm,
               zekatTarihi: sonraki || alarm.zekatTarihi,
+              bildirimSayisi: (alarm.bildirimSayisi || 0) + 1,
+              tetiklenmeTs: Date.now(),
+            });
+            continue;
+          }
+
+          // ── KATILIM ENDEKSİ ABONELİĞİ ────────────────────────────────────
+          // Üyelik durumu kayıttakinden FARKLIYSA bildirim gider. Tetiklense
+          // de AKTİF KALIR — hisse çıkıp sonra tekrar girerse yine haber
+          // verilsin. Liste alınamadıysa kayıt olduğu gibi bırakılır; asla
+          // "çıktı" varsayılmaz (yanlış bildirim, hiç bildirimden kötüdür).
+          if (alarm.tip === "endeks") {
+            if (!endeksUyeler) { guncelListe.push(alarm); continue; }
+            const kod = String(alarm.sembol || "").slice(BIST_ONEK.length).toUpperCase();
+            const suAnUye = endeksUyeler.has(kod);
+            const oncekiDurum = alarm.endeksDurum;
+            if (typeof oncekiDurum !== "boolean" || suAnUye === oncekiDurum) {
+              // İlk kez görülen bozuk kayıtta durumu sessizce sabitle.
+              guncelListe.push(typeof oncekiDurum === "boolean" ? alarm : { ...alarm, endeksDurum: suAnUye });
+              continue;
+            }
+
+            endeksTetiklenen++;
+            const baslik = suAnUye ? `☪ ${alarm.ad} Katılım Endeksi'ne eklendi` : `⚠️ ${alarm.ad} Katılım Endeksi'nden çıkarıldı`;
+            const govde = suAnUye
+              ? `${alarm.ad} artık Katılım Endeksi kapsamında. Endeks periyodik olarak revize edilir.`
+              : `${alarm.ad} artık Katılım Endeksi kapsamında değil. Portföyünüzü gözden geçirmek isteyebilirsiniz.`;
+            const gonderildi = await tekTokeneGonder(
+              alarm.token, baslik, govde,
+              { tip: "endeks-degisimi", sembol: alarm.sembol, alarmId: alarm.id, uye: String(suAnUye) }
+            );
+            if (gonderildi === true) gonderilenBildirim++;
+            else if (gonderildi && gonderildi.hata) {
+              gonderimHatalari.push({ alarm: alarm.ad, tokenIlk10: (alarm.token || "").slice(0, 10), hata: gonderildi.hata });
+            }
+
+            const olduMu = !!(gonderildi && gonderildi.hata &&
+              String(gonderildi.hata).includes("registration-token-not-registered"));
+            if (olduMu) {
+              olenAbonelik++;
+              guncelListe.push({ ...alarm, aktif: false, kapaliSebep: "token-gecersiz", tetiklenmeTs: Date.now() });
+              continue;
+            }
+            // Durum GÖNDERİM SONUCUNDAN BAĞIMSIZ güncelleniyor: gönderim
+            // başarısızsa bile eski durumda bırakılırsa her turda tekrar
+            // tekrar denenir ve kullanıcı sonunda üst üste bildirim alır.
+            guncelListe.push({
+              ...alarm,
+              endeksDurum: suAnUye,
               bildirimSayisi: (alarm.bildirimSayisi || 0) + 1,
               tetiklenmeTs: Date.now(),
             });
@@ -1481,6 +1662,8 @@ async function alarmKontrol(req, res) {
           tetiklenen,
           kapTetiklenen,
           zekatTetiklenen,
+          endeksAlarmi: endeksAlarmlar.length,
+          endeksTetiklenen,
           olenAbonelik,
           gecersizKurulumKapatilan,
           gonderilenBildirim,
@@ -1490,6 +1673,7 @@ async function alarmKontrol(req, res) {
           ...(bistMeta ? { bistMeta } : {}),
           ...(bistNot ? { bistNot } : {}),
           ...(kapNot ? { kapNot } : {}),
+          ...(endeksNot ? { endeksNot } : {}),
         };
       },
       { denemeSayisi: 3, bekleMs: 1000 }
