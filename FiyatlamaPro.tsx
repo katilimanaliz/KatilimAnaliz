@@ -1752,6 +1752,12 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
                       <span style={{fontSize:12,fontWeight:800,color:vakif?FC.green:FC.blue}}>
                         {fon.kod}{vakif&&<span style={{fontSize:8,color:FC.green,opacity:0.8}}>★</span>}
                       </span>
+                      {/* TEFAS'ta işlem görmeyen fonlar listede de belli olsun —
+                          kullanıcı detaya girmeden anlamalı (bkz. FonDetay'daki not). */}
+                      {fon.islemDurumu && fon.islemDurumu !== "AKTİF" && (
+                        <span title={fon.islemDurumu}
+                          style={{fontSize:8,fontWeight:800,color:FC.red,lineHeight:1}}>⚠ İŞLEM YOK</span>
+                      )}
 
                     </div>
                     <div onClick={(e)=>{ if(onFonGrafikAc){ e.stopPropagation(); onFonGrafikAc(fon); } }} style={{flex:1,minWidth:0,paddingRight:2,textAlign:"left",cursor:onFonGrafikAc?"pointer":"default"}}>
@@ -2524,6 +2530,21 @@ function FonDetay({ fon: fonProp, onGeri, settings }: { fon: any, onGeri: () => 
             <div style={{fontSize:20,fontWeight:900,color:C.text}}>{fon.kod}</div>
             <div style={{fontSize:12,color:C.sub,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{fon.ad}</div>
             {fon.yonetici && <div style={{fontSize:10.5,color:C.sub2,marginTop:1}}>{fon.yonetici}</div>}
+            {/* ── TEFAS'TA İŞLEM GÖRMÜYOR UYARISI (2026-08-06) ──────────────
+                islemDurumu alanı Fonoloji'den geliyordu ama hiçbir yerde
+                gösterilmiyordu. ZA2 örneğinde fon TEFAS'tan çekilmişti —
+                üç ayda %79 küçülmüş, yatırımcılar çıkıyor — ama ekranda
+                normal bir fon gibi duruyordu. Kullanıcı listede görüp
+                "yatırım yapayım" diyebilir, oysa alınıp satılamıyor.
+                ⚠️ Eşleşme "AKTİF" DIŞINDAKİ her değeri uyarı sayıyor;
+                Fonoloji yeni bir durum metni eklerse sessizce kaçırmayalım. */}
+            {fon.islemDurumu && fon.islemDurumu !== "AKTİF" && (
+              <div style={{display:"inline-block",marginTop:6,padding:"3px 9px",borderRadius:6,
+                           background:"rgba(248,113,113,0.14)",border:`1px solid ${C.red}`,
+                           fontSize:10.5,fontWeight:700,color:C.red}}>
+                ⚠ {fon.islemDurumu}
+              </div>
+            )}
           </div>
           <div style={{textAlign:"right",flexShrink:0}}>
             <div style={{fontSize:20,fontWeight:800,color:C.text}}>
@@ -2592,7 +2613,12 @@ function FonDetay({ fon: fonProp, onGeri, settings }: { fon: any, onGeri: () => 
         </div>
       </div>
 
-      <div style={{padding:"0 14px"}}>
+      {/* ⚠️ marginBottom ŞART (2026-08-06): Masaüstünde içeriğe CSS "zoom"
+          uygulanıyor (icerikOlcek 1.12/1.22, bkz. App). zoom alt piksel
+          yuvarlaması yaptığı için sıfır boşluklu bitişik bloklar üst üste
+          binebiliyor — "Portföy Dağılımı" başlığı "Fon Büyüklüğü" satırının
+          üstüne düşüyordu. Aşağıdaki bölümlerin hepsinde de marginTop var. */}
+      <div style={{padding:"0 14px",marginBottom:18}}>
         <div style={{fontSize:11,fontWeight:700,color:C.sub,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>Temel Bilgiler</div>
         <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,overflow:"hidden"}}>
           {[
@@ -2631,7 +2657,7 @@ function FonDetay({ fon: fonProp, onGeri, settings }: { fon: any, onGeri: () => 
           Türkiye'de nominal getiri tek başına yanıltıcı: %167 nominal,
           %104 reel olabiliyor. Fark enflasyonun yediği kısım. */}
       {typeof fon.reelYillik === "number" && (
-        <div style={{padding:"0 14px",marginBottom:14}}>
+        <div style={{padding:"0 14px",marginTop:18,marginBottom:0}}>
           <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,padding:"12px 14px",
                        display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
             <div style={{minWidth:0}}>
@@ -2664,7 +2690,7 @@ function FonDetay({ fon: fonProp, onGeri, settings }: { fon: any, onGeri: () => 
         const dolu = KALEMLER.filter(([k])=>typeof fon.dagilim[k]==="number" && fon.dagilim[k]>0);
         if(!dolu.length) return null;
         return (
-          <div style={{padding:"0 14px",marginBottom:14}}>
+          <div style={{padding:"0 14px",marginTop:18,marginBottom:0}}>
             <div style={{fontSize:11,fontWeight:700,color:C.sub,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>
               Portföy Dağılımı
               {fon.portfoyTarihi && <span style={{fontWeight:400,textTransform:"none",letterSpacing:0}}> · {fon.portfoyTarihi}</span>}
@@ -2705,7 +2731,7 @@ function FonDetay({ fon: fonProp, onGeri, settings }: { fon: any, onGeri: () => 
           return (y>0?"+":"")+y.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2})+"%";
         };
         return (
-          <div style={{padding:"0 14px",marginBottom:14}}>
+          <div style={{padding:"0 14px",marginTop:18,marginBottom:0}}>
             <div style={{fontSize:11,fontWeight:700,color:C.sub,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>
               Fon Büyüklüğü Değişimi
             </div>
@@ -2730,7 +2756,7 @@ function FonDetay({ fon: fonProp, onGeri, settings }: { fon: any, onGeri: () => 
           riskSkoru TEFAS'ın resmî 1–7 ölçeği (1 = en düşük risk).
           sharpe/volatilite 90 günlük, maksDusus son 1 yılın en derin düşüşü. */}
       {(fon.riskSkoru!=null || fon.sharpe90!=null || fon.volatilite90!=null || fon.maksDusus1y!=null) && (
-        <div style={{padding:"0 14px",marginBottom:14}}>
+        <div style={{padding:"0 14px",marginTop:18,marginBottom:0}}>
           <div style={{fontSize:11,fontWeight:700,color:C.sub,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>
             Risk Göstergeleri
           </div>

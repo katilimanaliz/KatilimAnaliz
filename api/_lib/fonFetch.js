@@ -217,9 +217,36 @@ async function fetchTeshisli(url, opts, deneme = 2, msTimeout = 8000) {
   return { res: null, hata: sonHata };
 }
 
+// ── FONUN YAŞI YETMEYEN DÖNEMLER (2026-08-06) ──────────────────────────────
+// SORUN: Fonoloji, geçmişi yetmeyen dönemler için bazen null bazen 0
+// döndürüyor. KHP örneği (ilk görülme 2026-04-15, yani 3,7 aylık):
+//   altiAylik: null ✓   reelYillik: null ✓   ama  yillik: 0  ve  maksDusus1y: 0
+// Uygulama 0'ı "%0,00 değişim" diye gösteriyordu — kullanıcı "bu fon bir yılda
+// hiç kazandırmamış" diye okur, oysa gerçek "fon bir yaşında bile değil".
+// Bu, sıfırdan ayırt edilemeyen sessiz bir yanlış bilgi.
+//
+// ⚠️ Yalnız YAŞ YETMİYORSA null'a çevriliyor. Yaşı yeten bir fonun gerçek
+// sıfır getirisi korunur — aksi halde meşru veriyi silmiş olurduk.
+function fonYasiGun(f) {
+  const t = f?.first_seen ? Date.parse(f.first_seen) : NaN;
+  if (!isFinite(t)) return null;                 // tarih yoksa eleme yapma
+  return Math.floor((Date.now() - t) / 86400000);
+}
+// yasGun null ise (tarih bilinmiyor) değer olduğu gibi geçer.
+function donemGecerliMi(yasGun, gerekliGun) {
+  return yasGun == null ? true : yasGun >= gerekliGun;
+}
+
 function mapFon(f, vakif, takasAraligi) {
   let yonetici = (f.management_company || "").trim();
   if (!yonetici || vakif) yonetici = "Vakıf Katılım Portföy Yönetimi A.Ş.";
+  const yasGun = fonYasiGun(f);
+  // Dönem yetmiyorsa null; yetiyorsa yüzdeye çevrilmiş değer.
+  const donem = (ham, gerekliGun, basamak = 2) => {
+    if (!donemGecerliMi(yasGun, gerekliGun)) return null;
+    if (typeof ham !== "number") return null;
+    return parseFloat((ham * 100).toFixed(basamak));
+  };
   return {
     kod:      f.code || "",
     ad:       f.name || "",
@@ -240,11 +267,11 @@ function mapFon(f, vakif, takasAraligi) {
     takasAraligi: takasAraligi,
     gunluk:   parseFloat(((f.return_1d  || 0) * 100).toFixed(4)),
     gunlukNorm: f.return_1d ? parseFloat(((f.return_1d / takasAraligi) * 100).toFixed(4)) : 0,
-    haftalik: parseFloat(((f.return_1w  || 0) * 100).toFixed(2)),
-    aylik:    parseFloat(((f.return_1m  || 0) * 100).toFixed(2)),
-    uc_aylik: parseFloat(((f.return_3m  || 0) * 100).toFixed(2)),
-    ytd:      parseFloat(((f.return_ytd || 0) * 100).toFixed(2)),
-    yillik:   parseFloat(((f.return_1y  || 0) * 100).toFixed(2)),
+    haftalik: donem(f.return_1w,    7),
+    aylik:    donem(f.return_1m,   30),
+    uc_aylik: donem(f.return_3m,   90),
+    ytd:      donem(f.return_ytd,   1),   // yılbaşından beri — yaş şartı yok
+    yillik:   donem(f.return_1y,  365),
     yillikHesap: f.return_1d ? parseFloat(((f.return_1d / takasAraligi) * 252 * 100).toFixed(2)) : null,
 
     // ── ZATEN GELEN AMA KULLANILMAYAN ALANLAR (2026-08-05 eklendi) ─────────
@@ -254,10 +281,10 @@ function mapFon(f, vakif, takasAraligi) {
 
     // Yüzde alanları API'de ONDALIK oran (0.0915 = %9,15). Getirilerle aynı
     // dönüşüm uygulanıyor; null gelen alan null kalıyor ki ekranda "—" çıksın.
-    altiAylik:    (typeof f.return_6m === "number") ? parseFloat((f.return_6m * 100).toFixed(2)) : null,
+    altiAylik:    donem(f.return_6m, 180),
     // Enflasyondan arındırılmış yıllık getiri. Türkiye'de nominal getiriden
     // çok daha anlamlı — nominal %60, reel %5 olabiliyor.
-    reelYillik:   (typeof f.real_return_1y === "number") ? parseFloat((f.real_return_1y * 100).toFixed(2)) : null,
+    reelYillik:   donem(f.real_return_1y, 365),
 
     // ── KARŞILAŞTIRMA BAYRAKLARI ──────────────────────────────────────────
     // ⚠️ GÜVENİLMEZ — EKRANDA GÖSTERİLMİYOR (2026-08-06).
@@ -280,7 +307,7 @@ function mapFon(f, vakif, takasAraligi) {
     riskSkoru:  (typeof f.risk_score === "number") ? f.risk_score : null,
     sharpe90:   (typeof f.sharpe_90 === "number") ? parseFloat(f.sharpe_90.toFixed(2)) : null,
     volatilite90: (typeof f.volatility_90 === "number") ? parseFloat((f.volatility_90 * 100).toFixed(2)) : null,
-    maksDusus1y:  (typeof f.max_drawdown_1y === "number") ? parseFloat((f.max_drawdown_1y * 100).toFixed(2)) : null,
+    maksDusus1y:  donem(f.max_drawdown_1y, 365),
 
     // ── FON BÜYÜKLÜĞÜ DEĞİŞİMİ ────────────────────────────────────────────
     // ⚠️ BU DEĞERLER TL DEĞİL, ORAN (2026-08-06'da ölçülerek doğrulandı).
