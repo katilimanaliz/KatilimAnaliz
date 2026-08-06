@@ -136,11 +136,14 @@ async function fonDetayGetir(req, res) {
     const paket = { success: true, ...fon };
     try { await kv.set(cacheAnahtar, paket, { ex: FON_DETAY_CACHE_TTL_SANIYE }); } catch {}
 
-    // ⚠️ BOŞ YANIT CDN'DE ÖNBELLEKLENMEZ (2026-08-03). Bugün bu tuzağa iki kez
-    // düşüldü: /timeseries eşlemesi yanlışken boş "noktalar" hem Redis'te hem
-    // Vercel kenar önbelleğinde 5 dakika takılı kaldı; düzeltmenin etkisi
-    // görünmediği için hata kodda sanıldı. Veri yoksa taze sorulsun.
-    res.setHeader("Cache-Control", noktalar.length
+    // ⚠️ 2026-08-06 DÜZELTİLDİ: Burada "noktalar.length" kontrolü vardı ama bu
+    // fonksiyonda öyle bir değişken YOK — koruma yanlışlıkla fonGecmisGetir
+    // yerine buraya yazılmıştı. Sonuç: /api/tefas-proxy?detay=1 çağrısı
+    // 3 Ağustos'tan beri her seferinde 500 dönüyordu
+    // ("noktalar is not defined"). Derleme hatası vermiyor; yalnız çalışma
+    // anında patlıyor ve sadece bu dal tetiklendiğinde görünüyor.
+    // Bu uçta karşılığı: fon nesnesi gerçekten doldu mu?
+    res.setHeader("Cache-Control", fon?.kod
       ? "max-age=0, s-maxage=300, stale-while-revalidate=300"
       : "no-store");
     return res.status(200).json(paket);
@@ -220,9 +223,15 @@ async function fonGecmisGetir(req, res) {
       try { await kv.set(cacheAnahtar, paket, { ex: FON_GECMIS_CACHE_TTL_SANIYE }); } catch {}
     }
 
-    res.setHeader("Cache-Control", "max-age=0, s-maxage=300, stale-while-revalidate=300");
+    // ⚠️ BOŞ SERİ CDN'DE ÖNBELLEKLENMEZ. /timeseries eşlemesi yanlışken boş
+    // "noktalar" hem Redis'te hem Vercel kenar önbelleğinde takılı kalmış,
+    // düzeltmenin etkisi görünmediği için hata kodda sanılmıştı.
+    res.setHeader("Cache-Control", noktalar.length
+      ? "max-age=0, s-maxage=300, stale-while-revalidate=300"
+      : "no-store");
     return res.status(200).json(paket);
   } catch (e) {
+    res.setHeader("Cache-Control", "no-store");
     return res.status(500).json({ success: false, error: String(e.message || e) });
   }
 }

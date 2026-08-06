@@ -189,6 +189,7 @@ const ICON_MAP: Record<string, any> = {
   ekonomiSozluk: ScrollText,   // sözlük/terim listesi; BookOpen katılım sözlüğünde kullanılıyor
   kfkNedir: ShieldCheck,
   kiraSertifikasi: FileText,
+  taksitKarsilastirma: Scale,
   sozluk: BookOpen,
   katilimBlog: Newspaper,
   asistan: Bot,
@@ -795,6 +796,7 @@ const EKRAN_KATEGORI: Record<string,string> = {
   tahvilBono:"katilim", kasaOranAnalizi:"katilim", verimlilikAnalizi:"katilim", katkiPayi:"katilim",
   // Bireysel Finansman
   konutFinansman:"bireysel", tasitFinansman:"bireysel", yatirimFonuFinansman:"bireysel",
+  taksitKarsilastirma:"bireysel",
   toggFinansman:"bireysel", esnekOdemePlanlari:"bireysel", arsaIsyeri:"bireysel", taksitenKredi:"bireysel",
   // Tüzel Finansman
   spotFinansman:"tuzel", taksitliTicari:"tuzel", leasing:"tuzel", cekArkasiFinansman:"tuzel", posHesaplama:"tuzel",
@@ -10828,6 +10830,365 @@ function SiteAltBilgi({onEkran}:{onEkran:(sc:string)=>void}){
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// TAKSİT KARŞILAŞTIRMA (2026-08-05)
+// ═══════════════════════════════════════════════════════════════════════════
+// Ürün + tutar + vade seçilince bankaları AYLIK TAKSİTE göre sıralar.
+// Oranlar kar-payi.json'ın "finansman" bölümünden okunur — KarPayiOranlari
+// ekranıyla AYNI kaynak, ayrı istek atılmaz.
+//
+// ⚠️ VADE → ORAN EŞLEMESİ (kullanıcı kuralı, 2026-08-05):
+// Elimizde ürün başına yalnız İKİ oran var. Ara vadeler için oran UYDURULMAZ
+// (interpolasyon yok); vade eşiği aşarsa üst basamağın oranı kullanılır:
+//   Konut   ≤60 ay → konut60   | 61–120 ay → konut120
+//   Taşıt   ≤12 ay → tasit12   | 13–24 ay  → tasit24
+//   İhtiyaç ≤12 ay → ihtiyac12 | 13–24 ay  → ihtiyac24
+//
+// ⚠️ YASAL SINIRLAR — TasitFinansman ve YatirimFonuFinansman ekranlarındaki
+// tabloların AYNISI kullanılıyor (tek kaynak; oralarda değişirse burası da
+// güncellenmeli):
+//   TAŞIT (araç değerine göre):   ≤400b → LTV %70 / 48 ay · ≤800b → %50 / 36 ay
+//                                 ≤1,2mn → %30 / 24 ay · ≤2mn → %20 / 12 ay
+//                                 >2mn → finansman yok
+//   İHTİYAÇ (tutara göre):        ≤125b → 36 ay · ≤250b → 24 ay · >250b → 12 ay
+// ⚠️ Yasal tavan 48 aya kadar çıkabiliyor ama ORANIMIZ 24 aya kadar var;
+// bu yüzden taşıt/ihtiyaçta uygulanan tavan = min(yasal, 24).
+//
+// ⚠️ VERGİ: Konut finansmanında KKDF UYGULANMAZ; BSMV yalnız ikinci konutta.
+// Taşıt ve ihtiyaçta ikisi de uygulanır. Hesap, ekranların kendi kopyası değil
+// ORTAK hesaplaOdemePlani motoruyla yapılıyor.
+const TK_URUNLER = [
+  { anahtar:"konut",   ad:"Konut",   ikon:"🏠", maxVade:120, esik:60,
+    altOran:"konut60",   ustOran:"konut120",  tarihAlan:"konut" },
+  { anahtar:"tasit",   ad:"Taşıt",   ikon:"🚗", maxVade:24,  esik:12,
+    altOran:"tasit12",   ustOran:"tasit24",   tarihAlan:"tasit" },
+  { anahtar:"ihtiyac", ad:"İhtiyaç", ikon:"💳", maxVade:24,  esik:12,
+    altOran:"ihtiyac12", ustOran:"ihtiyac24", tarihAlan:"ihtiyac" },
+] as const;
+
+// Bireysel azami kullandırım komisyonu — KonutFinansman'daki AZAMI_KULL_BIR
+// ile aynı: %0,50 (binde 5). 12 aydan kısa vadede orantılı uygulanır.
+const TK_AZAMI_KOMISYON = 0.50;
+
+// Taşıt: araç değerine göre kredi/değer oranı ve yasal vade tavanı.
+// Kaynak: TasitFinansman > getTasitLimits.
+function tkTasitLimit(aracDegeri: number): {ltv:number; vadeMax:number} | null {
+  if (aracDegeri <= 400000)  return { ltv:70, vadeMax:48 };
+  if (aracDegeri <= 800000)  return { ltv:50, vadeMax:36 };
+  if (aracDegeri <= 1200000) return { ltv:30, vadeMax:24 };
+  if (aracDegeri <= 2000000) return { ltv:20, vadeMax:12 };
+  return null;   // 2 mn üstü taşıta finansman kullandırılamıyor
+}
+// İhtiyaç: tutara göre yasal vade tavanı. Kaynak: YatirimFonuFinansman.
+function tkIhtiyacVadeMax(tutar: number): number {
+  if (tutar <= 125000) return 36;
+  if (tutar <= 250000) return 24;
+  return 12;
+}
+
+// Tutar alanlarını yazarken binlik ayırıcıyla biçimler ("1000000" → "1.000.000").
+// Yalnız rakamlar korunur; sayiOku zaten noktaları temizlediği için hesap etkilenmez.
+function tkBindele(x: string): string {
+  const rakam = String(x).replace(/[^0-9]/g, "");
+  if (!rakam) return "";
+  return Number(rakam).toLocaleString("tr-TR");
+}
+
+function TaksitKarsilastirma({ s }: { s: any }) {
+  const [veri, setVeri] = useState<any>(null);
+  const [yukleniyor, setYukleniyor] = useState(true);
+  const [hata, setHata] = useState<string | null>(null);
+
+  const [urun, setUrun] = useState<string>("konut");
+  const [tutarStr, setTutarStr] = useState<string>("");
+  const [aracDegerStr, setAracDegerStr] = useState<string>("");
+  const [vadeStr, setVadeStr] = useState<string>("120");
+  const [ilkEv, setIlkEv] = useState<boolean>(true);
+  const [acikBanka, setAcikBanka] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/kar-payi.json`, { cache: "no-store" })
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+      .then(d => setVeri(d))
+      .catch(e => setHata(e.message))
+      .finally(() => setYukleniyor(false));
+  }, []);
+
+  const urunMeta = TK_URUNLER.find(u => u.anahtar === urun)!;
+  const sayiOku = (x: string) => parseFloat(String(x).replace(/\./g, "").replace(",", ".")) || 0;
+  const tutar = sayiOku(tutarStr);
+  const aracDeger = sayiOku(aracDegerStr);
+
+  // ── UYGULANAN VADE TAVANI ────────────────────────────────────────────────
+  // Yasal tavan ile oran tablomuzun tavanının küçüğü. Taşıtta araç değeri
+  // girilmemişse yasal tavan hesaplanamaz; oran tavanı kullanılır.
+  const tasitLimit = urun === "tasit" && aracDeger > 0 ? tkTasitLimit(aracDeger) : null;
+  const tasitYasak = urun === "tasit" && aracDeger > 2000000;
+  const yasalVadeMax =
+      urun === "tasit"   ? (tasitLimit ? tasitLimit.vadeMax : urunMeta.maxVade)
+    : urun === "ihtiyac" ? (tutar > 0 ? tkIhtiyacVadeMax(tutar) : urunMeta.maxVade)
+    : urunMeta.maxVade;
+  const vadeTavan = Math.min(yasalVadeMax, urunMeta.maxVade);
+
+  // Taşıtta kredi/değer sınırı
+  const maxFinansman = tasitLimit ? Math.round(aracDeger * (tasitLimit.ltv / 100)) : null;
+  const ltvAsim = maxFinansman != null && tutar > maxFinansman;
+
+  const vade = Math.max(0, Math.round(sayiOku(vadeStr)));
+  const vadeAsim = vade > vadeTavan;
+  const vadeGecerli = vade >= 1 && !vadeAsim;
+
+  // Ürün değişince vade tavanı değişiyor — aşan değer tavana çekiliyor.
+  useEffect(() => {
+    setAcikBanka(null);
+    const v = Math.round(sayiOku(vadeStr));
+    if (v > vadeTavan) setVadeStr(String(vadeTavan));
+  }, [urun, vadeTavan]);
+
+  const sonuclar = useMemo(() => {
+    if (!veri || tutar <= 0 || !vadeGecerli || ltvAsim || tasitYasak) return [];
+    const oranAlan = vade <= urunMeta.esik ? urunMeta.altOran : urunMeta.ustOran;
+    const bsmvR = urun === "konut" ? (ilkEv ? 0 : (s?.bireyselBSMV ?? 0)) : (s?.bireyselBSMV ?? 0);
+    const kkdfR = urun === "konut" ? 0 : (s?.bireyselKKDF ?? 0);
+    // Komisyon: 12 aydan kısa vadede orantılı (KonutFinansman'daki kural).
+    const komisyonOran = vade < 12 ? TK_AZAMI_KOMISYON * (vade / 12) : TK_AZAMI_KOMISYON;
+    const komisyon = Math.round(tutar * (komisyonOran / 100) * 100) / 100;
+
+    return (veri?.finansman?.bankalar || [])
+      .map((b: any) => {
+        const oran = b[oranAlan];
+        if (typeof oran !== "number" || !(oran > 0)) return null;
+        const ao = oran / 100;
+        const plan = hesaplaOdemePlani(tutar, vade, ao, bsmvR, kkdfR);
+        const aylik = plan._toplamSabitTaksit;
+        if (!isFinite(aylik) || aylik <= 0) return null;
+
+        const toplamOdeme = plan._toplamOdeme ?? aylik * vade;
+        // ── EFEKTİF YILLIK MALİYET ────────────────────────────────────────
+        // KonutFinansman/TasitFinansman ile AYNI yöntem: vergi dâhil taksitin,
+        // komisyon düşülmüş NET kullanım tutarına eşitlendiği aylık oran
+        // (bisection), sonra yıllık bileşiğe çevriliyor. Müşterinin gerçekte
+        // katlandığı maliyet budur — ilan edilen orandan yüksektir.
+        const netKullanim = tutar - komisyon;
+        let efAylik = 0;
+        if (netKullanim > 0 && vade > 0 && aylik > 0) {
+          let lo = 0.0001 / 12, hi = 3.0 / 12;
+          for (let i = 0; i < 200; i++) {
+            const mid = (lo + hi) / 2;
+            const pv = aylik * (1 - Math.pow(1 + mid, -vade)) / mid;
+            if (pv > netKullanim) lo = mid; else hi = mid;
+          }
+          efAylik = (lo + hi) / 2;
+        }
+        const efYillik = efAylik > 0 ? (Math.pow(1 + efAylik, 12) - 1) * 100 : null;
+
+        return {
+          ad: b.ad, oran, aylik, toplamOdeme,
+          toplamKarPayi: plan._toplamKarPayi ?? (toplamOdeme - tutar),
+          toplamVergi: plan._toplamVergi ?? 0,
+          komisyon, komisyonOran,
+          toplamMaliyet: Math.round((toplamOdeme + komisyon) * 100) / 100,
+          efYillik,
+        };
+      })
+      .filter(Boolean)
+      .sort((a: any, b: any) => a.aylik - b.aylik);
+  }, [veri, tutar, vade, urun, ilkEv, s, vadeGecerli, ltvAsim, tasitYasak]);
+
+  const enUcuz = sonuclar.length ? sonuclar[0].aylik : 0;
+  const tarih = veri?.finansman?.guncelleme?.[urunMeta.tarihAlan] || null;
+
+  const kart: any = { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12 };
+  const alanStil: any = {
+    width: "100%", padding: "12px 14px", fontSize: 17, fontWeight: 700, borderRadius: 10,
+    border: `1px solid ${C.border}`, background: C.card, color: C.label, outline: "none",
+    boxSizing: "border-box", fontFamily: "inherit",
+  };
+  const etiketStil: any = { fontSize: 11.5, fontWeight: 700, color: C.sub, display: "block", marginBottom: 5 };
+  const uyariKutu: any = { background: "rgba(248,113,113,0.12)", border: `1px solid ${C.red}`,
+                           borderRadius: 10, padding: "10px 12px", marginBottom: 12 };
+
+  return (
+    <div style={{ padding: "12px 14px 28px" }}>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        {TK_URUNLER.map(u => (
+          <button key={u.anahtar} onClick={() => setUrun(u.anahtar)} style={{
+            flex: 1, padding: "11px 4px", borderRadius: 10, cursor: "pointer",
+            border: `1px solid ${urun === u.anahtar ? C.blue : C.border}`,
+            background: urun === u.anahtar ? C.blue : C.card,
+            color: urun === u.anahtar ? "#fff" : C.sub,
+            fontSize: 13, fontWeight: 700, fontFamily: "inherit",
+          }}>{u.ikon} {u.ad}</button>
+        ))}
+      </div>
+
+      {/* Taşıtta önce araç değeri: kredi/değer ve vade tavanı buna bağlı */}
+      {urun === "tasit" && (
+        <div style={{ marginBottom: 12 }}>
+          <span style={etiketStil}>ARAÇ DEĞERİ (₺)</span>
+          <input value={aracDegerStr} onChange={e => { setAracDegerStr(tkBindele(e.target.value)); setAcikBanka(null); }}
+            inputMode="numeric" placeholder="Örn. 750.000" style={alanStil} />
+          {tasitLimit && (
+            <div style={{ fontSize: 11, color: C.sub, marginTop: 4 }}>
+              Bu değerde en çok %{tasitLimit.ltv} kredi ({fmtTL(maxFinansman!)}) ·
+              yasal vade {tasitLimit.vadeMax} ay
+            </div>
+          )}
+        </div>
+      )}
+
+      <div style={{ marginBottom: 12 }}>
+        <span style={etiketStil}>FİNANSMAN TUTARI (₺)</span>
+        <input value={tutarStr} onChange={e => { setTutarStr(tkBindele(e.target.value)); setAcikBanka(null); }}
+          inputMode="numeric" placeholder="Örn. 1.000.000" style={alanStil} />
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <span style={etiketStil}>VADE (AY) · en fazla {vadeTavan}</span>
+        <input value={vadeStr} onChange={e => { setVadeStr(e.target.value.replace(/[^0-9]/g, "")); setAcikBanka(null); }}
+          inputMode="numeric" placeholder={`1 – ${vadeTavan}`}
+          style={{ ...alanStil, borderColor: vadeAsim ? C.red : C.border }} />
+      </div>
+
+      {urun === "konut" && (
+        <label style={{ ...kart, display: "flex", alignItems: "center", gap: 10,
+                        padding: "11px 14px", marginBottom: 14, cursor: "pointer" }}>
+          <input type="checkbox" checked={ilkEv} onChange={e => setIlkEv(e.target.checked)}
+            style={{ width: 18, height: 18, accentColor: C.blue }} />
+          <div>
+            <div style={{ fontSize: 13, color: C.label, fontWeight: 600 }}>İlk konutum</div>
+            <div style={{ fontSize: 11, color: C.sub }}>İkinci konutta BSMV uygulanır</div>
+          </div>
+        </label>
+      )}
+
+      {/* ── SINIR UYARILARI ─────────────────────────────────────────────── */}
+      {tasitYasak && (
+        <div style={uyariKutu}>
+          <p style={{ margin: 0, fontSize: 12.5, color: C.red, fontWeight: 700 }}>
+            2.000.000 ₺ üzeri taşıta finansman kullandırılamıyor.
+          </p>
+        </div>
+      )}
+      {ltvAsim && !tasitYasak && (
+        <div style={uyariKutu}>
+          <p style={{ margin: 0, fontSize: 12.5, color: C.red, fontWeight: 700 }}>
+            Bu araç değeri için en çok {fmtTL(maxFinansman!)} kullandırılabilir (%{tasitLimit!.ltv}).
+          </p>
+        </div>
+      )}
+      {vadeAsim && (
+        <div style={uyariKutu}>
+          <p style={{ margin: 0, fontSize: 12.5, color: C.red, fontWeight: 700 }}>
+            Bu ürün için en fazla {vadeTavan} ay vade seçilebilir.
+          </p>
+          <p style={{ margin: "3px 0 0", fontSize: 11, color: C.sub }}>
+            {urun === "ihtiyac" && tutar > 0 && `${fmtTL(tutar)} tutarında yasal vade sınırı ${yasalVadeMax} ay. `}
+            {urun === "tasit" && tasitLimit && `Bu araç değerinde yasal sınır ${tasitLimit.vadeMax} ay. `}
+            {yasalVadeMax > urunMeta.maxVade && `Oran tablomuz ${urunMeta.maxVade} aya kadar. `}
+          </p>
+        </div>
+      )}
+
+      {yukleniyor && <div style={{ textAlign: "center", color: C.sub, fontSize: 13, padding: 20 }}>Oranlar yükleniyor…</div>}
+      {hata && <div style={{ textAlign: "center", color: C.red, fontSize: 13, padding: 20 }}>Oranlar alınamadı: {hata}</div>}
+
+      {!yukleniyor && !hata && sonuclar.length === 0 && !vadeAsim && !ltvAsim && !tasitYasak && (
+        <div style={{ ...kart, padding: "18px 16px", textAlign: "center", color: C.sub, fontSize: 13 }}>
+          {urun === "tasit" && aracDeger <= 0
+            ? "Araç değerini ve finansman tutarını girin."
+            : tutar <= 0 ? "Karşılaştırma için finansman tutarı girin."
+            : "Vade girin (1 – " + vadeTavan + " ay)."}
+        </div>
+      )}
+
+      {sonuclar.length > 0 && (
+        <>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline",
+                        marginBottom: 8, padding: "0 2px" }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: C.sub, textTransform: "uppercase", letterSpacing: 0.5 }}>
+              Aylık Taksite Göre Sıralı
+            </span>
+            <span style={{ fontSize: 11, color: C.sub }}>{sonuclar.length} banka</span>
+          </div>
+
+          <div style={{ ...kart, overflow: "hidden" }}>
+            {sonuclar.map((r: any, i: number) => {
+              const acik = acikBanka === r.ad;
+              const fark = r.aylik - enUcuz;
+              return (
+                <div key={r.ad} style={{ borderTop: i > 0 ? `1px solid ${C.border}` : "none" }}>
+                  <div onClick={() => setAcikBanka(acik ? null : r.ad)} style={{
+                    display: "flex", alignItems: "center", gap: 10,
+                    padding: "12px 14px", cursor: "pointer",
+                    background: i === 0 ? "rgba(74,222,128,0.07)" : "transparent",
+                  }}>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: i === 0 ? C.green : C.sub,
+                                   width: 18, flexShrink: 0 }}>{i + 1}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 700, color: C.label,
+                                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.ad}</div>
+                      <div style={{ fontSize: 11.5, color: C.sub, marginTop: 1 }}>
+                        %{r.oran.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} aylık
+                        {fark > 0 && <span style={{ color: C.red }}> · +{fmtTL(fark)}</span>}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: "right", flexShrink: 0 }}>
+                      <div style={{ fontSize: 15, fontWeight: 800, color: i === 0 ? C.green : C.label,
+                                    fontFamily: "monospace" }}>{fmtTL(r.aylik)}</div>
+                      <div style={{ fontSize: 10, color: C.sub }}>aylık</div>
+                    </div>
+                  </div>
+
+                  {acik && (
+                    <div style={{ padding: "0 14px 12px 42px", background: WA(0.03) }}>
+                      {([
+                        ["Aylık taksit", fmtTL(r.aylik)],
+                        ["Finansman tutarı", fmtTL(tutar)],
+                        ["Vade", `${vade} ay`],
+                        ["Toplam kâr payı", fmtTL(r.toplamKarPayi)],
+                        ...(r.toplamVergi > 0 ? [["Toplam vergi (BSMV+KKDF)", fmtTL(r.toplamVergi)]] : []),
+                        ["Toplam geri ödeme", fmtTL(r.toplamOdeme)],
+                        [`Kullandırım komisyonu (%${r.komisyonOran.toLocaleString("tr-TR",{maximumFractionDigits:4})})`, fmtTL(r.komisyon)],
+                        ["Toplam maliyet", fmtTL(r.toplamMaliyet)],
+                        ...(r.efYillik != null ? [["Efektif yıllık maliyet", "%" + r.efYillik.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2})]] : []),
+                        ...(fark > 0 ? [["En ucuza göre fark", "+" + fmtTL(fark) + " / ay"]] : []),
+                      ] as [string, string][]).map(([k, v], j) => {
+                        const vurgu = k === "Toplam maliyet" || k === "Efektif yıllık maliyet";
+                        return (
+                          <div key={k} style={{ display: "flex", justifyContent: "space-between",
+                                                padding: "6px 0", borderTop: j > 0 ? `1px solid ${WA(0.05)}` : "none" }}>
+                            <span style={{ fontSize: 12, color: vurgu ? C.text : C.sub, fontWeight: vurgu ? 700 : 400 }}>{k}</span>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: vurgu ? C.blue : C.text,
+                                           fontFamily: "monospace" }}>{v}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* ⚠️ Oran tarihi HER ZAMAN görünmeli — bkz. bayat veri dersleri. */}
+          <p style={{ margin: "12px 2px 0", fontSize: 11, color: C.sub, lineHeight: 1.65 }}>
+            {tarih && <>Oranlar {tarih} tarihli. </>}
+            Vade {urunMeta.esik} ayı aşarsa {urunMeta.maxVade} ay oranı kullanılır.
+            Kullandırım komisyonu bireysel azami %{TK_AZAMI_KOMISYON.toLocaleString("tr-TR",{minimumFractionDigits:2})} üzerinden
+            hesaplanmıştır; bankalar aşağı revize edebilir.
+            {urun === "konut" ? " Konut finansmanında KKDF uygulanmaz." : " Hesaba BSMV ve KKDF dâhildir."}
+            {" "}Efektif yıllık maliyet, komisyon düşülmüş net kullanım üzerinden hesaplanır.
+            Bu hesaplama bilgilendirme amaçlıdır; kesin teklif niteliği taşımaz. Ekspertiz ve
+            sigorta gibi diğer masraflar dâhil değildir.
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
 function KatilimSektoruOzet({onAc}:{onAc:()=>void}){
   const [veri,setVeri]=useState<any>(null);
   useEffect(()=>{ kbVeriGetir().then(setVeri); },[]);
@@ -13262,6 +13623,7 @@ const MENU = {
   katilimSektoru:{title:"Katılım Bankacılığı Sektörü",back:"araclarMenu"},
   ekonomiSozluk:{title:"Ekonomi Sözlüğü",back:"araclarMenu"},
   kiraSertifikasi:{title:"Kira Sertifikası İhraçları",back:"araclarMenu"},
+  taksitKarsilastirma:{title:"Taksit Karşılaştırma",back:"hesaplaMenu"},
   portfoyum:{title:"Portföyüm",back:"araclarMenu"},
   fonDetay:{title:"Fon Detay",back:"portfoyum"},
   hazineDoviz:{title:"Döviz Dönüştürücü",back:"hesaplaMenu"},
@@ -13498,6 +13860,7 @@ const HESAPLA_ARAC_LISTESI = [
   {key:"kasaOranAnalizi",    icon:"🔄", label:"Basitten Bileşiğe Oran Hesaplama",             kat:"katilim"},
   {key:"verimlilikAnalizi",  icon:"📊", label:"Verimlilik Analizi",                   kat:"katilim"},
   // Bireysel Finansman
+  {key:"taksitKarsilastirma", icon:"⚖️", label:"Taksit Karşılaştırma (Bankalar)", kat:"bireysel"},
   {key:"konutFinansman",     icon:"🏠", label:"Konut Finansmanı Hesaplama",           kat:"bireysel"},
   {key:"tasitFinansman",     icon:"🚗", label:"Taşıt Finansmanı Hesaplama",           kat:"bireysel"},
   {key:"yatirimFonuFinansman",icon:"📦", label:"İhtiyaç Finansmanı Hesaplama",   kat:"bireysel"},
@@ -21762,6 +22125,7 @@ function App(){
         {screen==="getiridenAnapara"&&<GetiridenAnapara s={settings}/>}
         {screen==="oranAnalizi"&&<OranAnalizi s={settings}/>}
         {screen==="tahvilBono"&&<TahvilBono s={settings} onGecmis={k=>gecmisKaydet(gecmis,setGecmis,k)}/>}
+        {screen==="taksitKarsilastirma"&&<TaksitKarsilastirma s={settings}/>}
         {screen==="konutFinansman"&&<KonutFinansman s={settings} onGecmis={k=>gecmisKaydet(gecmis,setGecmis,k)}/>}
         {screen==="tasitFinansman"&&<TasitFinansman s={settings} onGecmis={k=>gecmisKaydet(gecmis,setGecmis,k)}/>}
         {screen==="yatirimFonuFinansman"&&<YatirimFonuFinansman s={settings} onGecmis={k=>gecmisKaydet(gecmis,setGecmis,k)}/>}
