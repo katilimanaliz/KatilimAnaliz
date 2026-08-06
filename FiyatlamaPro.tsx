@@ -2616,31 +2616,16 @@ function FonDetay({ fon: fonProp, onGeri, settings }: { fon: any, onGeri: () => 
           Her blok, verisi yoksa HİÇ render edilmiyor — eski kayıtlarda ve
           alanı boş gelen fonlarda boş kutu görünmesin diye. */}
 
-      {/* ── KARŞILAŞTIRMA ROZETLERİ ─────────────────────────────────────────
-          beats_* alanları API'de hazır hesaplanıyor. "Bu fon enflasyonu
-          yendi mi?" katılım fonu bakan birinin ilk sorusu. */}
-      {fon.yendi && Object.values(fon.yendi).some((v:any)=>v!=null) && (
-        <div style={{padding:"0 14px",marginBottom:14}}>
-          <div style={{fontSize:11,fontWeight:700,color:C.sub,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>
-            Son 1 Yılda Geçtikleri
-          </div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-            {([["tufe","Enflasyon"],["mevduat","Mevduat"],["altin","Altın"],["bist100","BIST 100"],["kategori","Kategori"]] as [string,string][])
-              .filter(([k])=>fon.yendi[k]!=null)
-              .map(([k,ad])=>{
-                const gecti = fon.yendi[k]===true;
-                return (
-                  <span key={k} style={{
-                    fontSize:11.5, fontWeight:700, padding:"5px 10px", borderRadius:20,
-                    background: gecti ? "rgba(74,222,128,0.14)" : "rgba(248,113,113,0.12)",
-                    border:`1px solid ${gecti ? "rgba(74,222,128,0.35)" : "rgba(248,113,113,0.3)"}`,
-                    color: gecti ? C.green : C.red,
-                  }}>{gecti ? "✓" : "✕"} {ad}</span>
-                );
-              })}
-          </div>
-        </div>
-      )}
+      {/* ── KARŞILAŞTIRMA ROZETLERİ KALDIRILDI (2026-08-06) ────────────────
+          beats_* alanları GÜVENİLMEZ olduğu için gösterilmiyor:
+            • Detay ucunda (/v1/funds/{kod}) HEPSİ null geliyor.
+            • Liste ucunda false geliyor — ama KUT örneğinde fonun
+              reelYillik değeri +23,77 iken beats_tufe=false döndü.
+              Reel getiri pozitifse fon enflasyonu YENMİŞTİR; bu değer
+              matematiksel olarak yanlış.
+          Yanlış rozet, eksik rozetten kötüdür: kullanıcı "bu fon enflasyonu
+          yenememiş" diye yanlış karar verir. Veri backend'de duruyor
+          (fon.yendi); Fonoloji bu alanları düzeltirse blok geri gelir. */}
 
       {/* ── REEL GETİRİ ─────────────────────────────────────────────────────
           Türkiye'de nominal getiri tek başına yanıltıcı: %167 nominal,
@@ -2710,17 +2695,19 @@ function FonDetay({ fon: fonProp, onGeri, settings }: { fon: any, onGeri: () => 
           Fona net giriş/çıkış. Pozitif = para giriyor. Yatırımcı ilgisinin
           en doğrudan göstergesi; getiri rakamının anlatmadığı şeyi anlatır. */}
       {fon.akis && Object.values(fon.akis).some((v:any)=>typeof v==="number") && (()=>{
+        // ⚠️ AKIŞ DEĞERLERİ TL DEĞİL, ORAN (2026-08-06'da ölçüldü).
+        // KUT için gelen değerler: hafta -0,0175 · ay -0,0872 · ucAy -0,1656
+        // Bunlar fon büyüklüğündeki ORANSAL değişim; yüzdeye çevrilir.
+        // İlk sürümde TL sanılıp fmtTL ile biçimlendirilmişti, ekranda
+        // "−0 ₺ / +0 ₺ / +1 ₺" gibi anlamsız değerler çıkıyordu.
         const fmtAkis=(v:number)=>{
-          const m=Math.abs(v);
-          const s=m>=1e9 ? (m/1e9).toLocaleString("tr-TR",{maximumFractionDigits:2})+" Mr"
-                : m>=1e6 ? (m/1e6).toLocaleString("tr-TR",{maximumFractionDigits:1})+" Mn"
-                : m.toLocaleString("tr-TR",{maximumFractionDigits:0});
-          return (v<0?"−":"+")+s+" ₺";
+          const y=v*100;
+          return (y>0?"+":"")+y.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2})+"%";
         };
         return (
           <div style={{padding:"0 14px",marginBottom:14}}>
             <div style={{fontSize:11,fontWeight:700,color:C.sub,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>
-              Para Giriş / Çıkışı
+              Fon Büyüklüğü Değişimi
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
               {([["hafta","1 Hafta"],["ay","1 Ay"],["ucAy","3 Ay"]] as [string,string][])

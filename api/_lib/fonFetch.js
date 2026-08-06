@@ -260,8 +260,12 @@ function mapFon(f, vakif, takasAraligi) {
     reelYillik:   (typeof f.real_return_1y === "number") ? parseFloat((f.real_return_1y * 100).toFixed(2)) : null,
 
     // ── KARŞILAŞTIRMA BAYRAKLARI ──────────────────────────────────────────
-    // API bunları hazır hesaplayıp gönderiyor. "Bu fon altını/enflasyonu/
-    // mevduatı yendi mi?" — katılım fonu bakan birinin ilk sorusu.
+    // ⚠️ GÜVENİLMEZ — EKRANDA GÖSTERİLMİYOR (2026-08-06).
+    // Detay ucunda hepsi null; liste ucunda false geliyor ama KUT örneğinde
+    // reelYillik +23,77 iken beats_tufe=false döndü. Reel getiri pozitifse
+    // fon enflasyonu yenmiştir — yani değer matematiksel olarak yanlış.
+    // Alan haritalanmaya devam ediyor (ek maliyeti yok); Fonoloji düzeltirse
+    // FonDetay'daki rozet bloğu geri açılabilir.
     yendi: {
       altin:    f.beats_altin    ?? null,
       bist100:  f.beats_bist100  ?? null,
@@ -278,9 +282,12 @@ function mapFon(f, vakif, takasAraligi) {
     volatilite90: (typeof f.volatility_90 === "number") ? parseFloat((f.volatility_90 * 100).toFixed(2)) : null,
     maksDusus1y:  (typeof f.max_drawdown_1y === "number") ? parseFloat((f.max_drawdown_1y * 100).toFixed(2)) : null,
 
-    // ── PARA AKIŞI ────────────────────────────────────────────────────────
-    // Fona net giriş/çıkış. Pozitif = para giriyor. Fonoloji'nin ayrı
-    // /insights/flow ucuna gerek yok, veri burada.
+    // ── FON BÜYÜKLÜĞÜ DEĞİŞİMİ ────────────────────────────────────────────
+    // ⚠️ BU DEĞERLER TL DEĞİL, ORAN (2026-08-06'da ölçülerek doğrulandı).
+    // KUT için gelen: hafta -0,0175 · ay -0,0872 · ucAy -0,1656
+    // Yani -%1,75 / -%8,72 / -%16,56. İlk sürümde TL sanılıp para birimiyle
+    // biçimlendirilmişti ve ekranda "−0 ₺" gibi anlamsız değerler çıkıyordu.
+    // Ekranda ×100 ile yüzdeye çevriliyor. Pozitif = fona para giriyor.
     akis: {
       hafta: (typeof f.flow_1w === "number") ? f.flow_1w : null,
       ay:    (typeof f.flow_1m === "number") ? f.flow_1m : null,
