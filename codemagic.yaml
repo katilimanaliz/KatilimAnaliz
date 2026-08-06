@@ -11,6 +11,7 @@ workflows:
         XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
         BUNDLE_ID: "com.katilimplus.app"
+        MARKETING_VERSION: "1.7"
         BUILD_NUMBER: 35
       xcode: latest
       node: 22
@@ -50,10 +51,13 @@ workflows:
       - name: Xcode imzalama ayarlari
         script: xcode-project use-profiles
 
-      - name: Build numarasi
+      - name: Surum ve build numarasi
         script: |
           cd ios/App
+          agvtool new-marketing-version $MARKETING_VERSION
           agvtool new-version -all $BUILD_NUMBER
+          echo "=== Info.plist kontrol ==="
+          plutil -p App/Info.plist | grep -i -E "CFBundleShortVersionString|CFBundleVersion" || true
 
       - name: IPA uret
         script: |
@@ -65,15 +69,11 @@ workflows:
         script: |
           IPA=$(find build/ios/ipa -name "*.ipa" | head -1)
           echo "Yuklenecek dosya: $IPA"
-          echo "APPLE_ID uzunluk: ${#APPLE_ID} (beklenen 20)"
-          echo "PAROLA uzunluk: ${#APP_SPECIFIC_PASSWORD} (beklenen 19)"
 
-          echo "=== Saglayici listesi ==="
           xcrun altool --list-providers \
-            -u "$APPLE_ID" -p "$APP_SPECIFIC_PASSWORD" | tee /tmp/providers.txt
-
+            -u "$APPLE_ID" -p "$APP_SPECIFIC_PASSWORD" > /tmp/providers.txt
           PUBLIC_ID=$(grep -Eo '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' /tmp/providers.txt | head -1)
-          echo "Bulunan public id: $PUBLIC_ID"
+          echo "Public id: $PUBLIC_ID"
 
           xcrun altool --upload-app --type ios --file "$IPA" \
             -u "$APPLE_ID" -p "$APP_SPECIFIC_PASSWORD" \
