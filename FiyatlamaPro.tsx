@@ -1750,14 +1750,18 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
                   }}>
                     <div style={{width:38,flexShrink:0,display:"flex",flexDirection:"column",alignItems:"flex-start",gap:1}}>
                       <span style={{fontSize:12,fontWeight:800,color:vakif?FC.green:FC.blue}}>
-                        {fon.kod}{vakif&&<span style={{fontSize:8,color:FC.green,opacity:0.8}}>★</span>}
+                        {fon.kod}
+                        {vakif&&<span style={{fontSize:8,color:FC.green,opacity:0.8}}>★</span>}
+                        {/* TEFAS'ta işlem görmeyen fonlar listede de belli olsun.
+                            ⚠️ SADECE İKON — açıklama metni YAZILMAZ (2026-08-06):
+                            ilk sürümde "⚠ İŞLEM YOK" yazıyordu, 38 px'lik kod
+                            sütununa sığmayıp fon adının ve fiyatın üstüne taşıyordu.
+                            Ne olduğu detay ekranında tam metinle yazılı; burada
+                            yalnız dikkat çekmesi yeterli. */}
+                        {fon.islemDurumu && fon.islemDurumu !== "AKTİF" && (
+                          <span title={fon.islemDurumu} style={{fontSize:9,marginLeft:2}}>⚠️</span>
+                        )}
                       </span>
-                      {/* TEFAS'ta işlem görmeyen fonlar listede de belli olsun —
-                          kullanıcı detaya girmeden anlamalı (bkz. FonDetay'daki not). */}
-                      {fon.islemDurumu && fon.islemDurumu !== "AKTİF" && (
-                        <span title={fon.islemDurumu}
-                          style={{fontSize:8,fontWeight:800,color:FC.red,lineHeight:1}}>⚠ İŞLEM YOK</span>
-                      )}
 
                     </div>
                     <div onClick={(e)=>{ if(onFonGrafikAc){ e.stopPropagation(); onFonGrafikAc(fon); } }} style={{flex:1,minWidth:0,paddingRight:2,textAlign:"left",cursor:onFonGrafikAc?"pointer":"default"}}>
