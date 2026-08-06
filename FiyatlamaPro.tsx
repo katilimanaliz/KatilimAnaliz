@@ -188,6 +188,7 @@ const ICON_MAP: Record<string, any> = {
   katilimSektoru: Building2,
   ekonomiSozluk: ScrollText,   // sözlük/terim listesi; BookOpen katılım sözlüğünde kullanılıyor
   kfkNedir: ShieldCheck,
+  zekatHesabi: Gift,   // zekât = vermek; Gift zaten import edilmiş, yeni import riski alınmadı
   kiraSertifikasi: FileText,
   taksitKarsilastirma: Scale,
   sozluk: BookOpen,
@@ -11765,6 +11766,468 @@ function KatilimSektoru(){
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// ZEKÂT HESABI (2026-08-06)
+// ═══════════════════════════════════════════════════════════════════════════
+// Piyasadaki zekât hesaplayıcılarından (TDV, Ziraat Katılım) farkı: her alanı
+// elle doldurtmuyor — Portföyüm'deki altın, hisse ve fon kalemleri otomatik
+// geliyor. Portföyü boş olan kullanıcı da her şeyi elle girip kullanabilir;
+// ekran ikisini de destekler.
+//
+// ÖLÇÜT: Diyanet İşleri Başkanlığı. Nisap 24 ayardan 80,18 gram altın
+// değeri, oran kırkta bir (%2,5), süre bir kameri yıl (354 gün).
+//
+// BİLİNÇLİ SADELEŞTİRME — MEZHEP SORULMUYOR: İlk taslakta Hanefî/Şâfiî
+// seçimi vardı (ziynet altını dahil mi değil mi). Kullanıcıya fıkhî bir soru
+// sormak hem sürtünme hem de uygulamanın taşımaması gereken bir sorumluluk
+// yaratıyordu. Bunun yerine "Takı ve ziynet" AYRI bir satır: katmak isteyen
+// girer, istemeyen boş bırakır. Karar kullanıcının, uygulama fetva vermiyor.
+//
+// TAKVİM: Zekât günü MİLADİ gösteriliyor (kullanıcı böyle düşünüyor), ama
+// aralık kameri yıl olduğu için 354 gün ekleniyor ve bu ekranda açıkça
+// yazılıyor — yoksa "geçen sene 26 Temmuz'du, neden bu sene 15 Temmuz?"
+// sorusu doğar. Hicri takvim kütüphanesi gerekmiyor.
+const ZEKAT_LS_KEY = "kp_zekat";
+const ZEKAT_NISAP_GRAM = 80.18;   // 24 ayar altın — Diyanet ölçütü
+const ZEKAT_ORAN = 0.025;         // kırkta bir
+const ZEKAT_KAMERI_GUN = 354;
+
+type ZekatGecmisKaydi = { tarih: string; matrah: number; zekat: number; gramFiyat: number };
+type ZekatVeri = {
+  altinGram: string; takiGram: string; hisse: string; nakit: string; ticari: string; borc: string;
+  zekatTarihi: string | null;   // "YYYY-MM-DD" — kullanıcının seçtiği zekât günü
+  hatirlatmaKurulu: boolean;
+  gecmis: ZekatGecmisKaydi[];
+};
+
+const ZEKAT_BOS: ZekatVeri = {
+  altinGram: "", takiGram: "", hisse: "", nakit: "", ticari: "", borc: "",
+  zekatTarihi: null, hatirlatmaKurulu: false, gecmis: [],
+};
+
+function zekatOku(): ZekatVeri {
+  try {
+    const ham = localStorage.getItem(ZEKAT_LS_KEY);
+    if (!ham) return { ...ZEKAT_BOS };
+    const d = JSON.parse(ham);
+    return { ...ZEKAT_BOS, ...d, gecmis: Array.isArray(d?.gecmis) ? d.gecmis : [] };
+  } catch { return { ...ZEKAT_BOS }; }
+}
+function zekatYaz(v: ZekatVeri) {
+  try { localStorage.setItem(ZEKAT_LS_KEY, JSON.stringify(v)); } catch {}
+}
+
+// "1.234,56" / "1234.56" / "1234,56" → 1234.56
+function zekatSayi(s: string): number {
+  if (!s) return 0;
+  const temiz = String(s).replace(/\s/g, "").replace(/\.(?=\d{3}(\D|$))/g, "").replace(",", ".");
+  const n = parseFloat(temiz);
+  return isNaN(n) || n < 0 ? 0 : n;
+}
+
+function zekatGunEkle(gg: string, gun: number): string {
+  const t = Date.parse(gg + "T00:00:00Z");
+  if (isNaN(t)) return gg;
+  return new Date(t + gun * 86400000).toISOString().slice(0, 10);
+}
+function zekatKalanGun(gg: string): number {
+  const t = Date.parse(gg + "T00:00:00Z");
+  const bugun = Date.parse(new Date().toISOString().slice(0, 10) + "T00:00:00Z");
+  if (isNaN(t)) return 0;
+  return Math.round((t - bugun) / 86400000);
+}
+function zekatTarihYaz(gg: string): string {
+  const t = Date.parse(gg + "T00:00:00Z");
+  if (isNaN(t)) return gg;
+  return new Date(t).toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+}
+
+function ZekatHesabi() {
+  const [v, setV] = useState<ZekatVeri>(() => zekatOku());
+  const [gramFiyat, setGramFiyat] = useState<number | null>(null);
+  const [fiyatYukleniyor, setFiyatYukleniyor] = useState(true);
+  const [portfoyOzet, setPortfoyOzet] = useState<{ altinGram: number; menkul: number; kalem: number } | null>(null);
+  const [kayitNotu, setKayitNotu] = useState("");
+  const [hatirlatmaDurum, setHatirlatmaDurum] = useState<"bos" | "gonderiliyor" | "basarili">("bos");
+  const [hatirlatmaHata, setHatirlatmaHata] = useState("");
+
+  const guncelle = (yama: Partial<ZekatVeri>) => {
+    setV(onceki => { const yeni = { ...onceki, ...yama }; zekatYaz(yeni); return yeni; });
+  };
+
+  // ── Canlı gram altın (24 ayar / has) ──────────────────────────────────────
+  // AltinAPI'deki "ALTIN" sembolü = Gram Altın (Has · 24 Ayar) — nisabın
+  // tanımıyla birebir aynı ayar. ALIŞ fiyatı kullanılıyor: varlığın bugün
+  // nakde çevrildiğinde getireceği tutar bu, satış değil.
+  useEffect(() => {
+    let iptal = false;
+    fetch(`${API_BASE}/api/piyasa-fiyatlar?tip=altinapi`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (iptal) return;
+        const a = d?.ALTIN;
+        const f = (a && a.bid != null) ? Number(a.bid) : null;
+        setGramFiyat(f && f > 0 ? f : null);
+        setFiyatYukleniyor(false);
+      })
+      .catch(() => { if (!iptal) setFiyatYukleniyor(false); });
+    return () => { iptal = true; };
+  }, []);
+
+  // ── Portföyden otomatik dolum ─────────────────────────────────────────────
+  // Sadece GERÇEK portföy kalemleri sayılıyor (alis != null). Takip listesine
+  // eklenmiş ama sahip olunmayan kalemler zekâta girmemeli — "izliyorum"
+  // ile "sahibim" farklı şeyler.
+  useEffect(() => {
+    try {
+      const liste = portfoyOku().filter(k => k.alis != null && k.miktar != null && k.miktar > 0);
+      let altinGram = 0, menkul = 0, kalem = 0;
+      for (const k of liste) {
+        if (k.tur === "altin") {
+          // Altın kalemleri gram cinsinden toplanıyor; TL'ye canlı nisap
+          // fiyatıyla çevrilecek. Eski (altinCarpan dolu) kayıtlarda çarpan
+          // gram karşılığını verir.
+          const carpan = k.altinCarpan && k.altinCarpan > 0 ? k.altinCarpan : 1;
+          altinGram += (k.miktar || 0) * carpan;
+          kalem++;
+        } else if (k.tur === "hisse" || k.tur === "fon") {
+          if (k.fiyat != null) { menkul += (k.miktar || 0) * k.fiyat; kalem++; }
+        }
+      }
+      if (altinGram > 0 || menkul > 0) setPortfoyOzet({ altinGram, menkul, kalem });
+    } catch {}
+  }, []);
+
+  const portfoyuAktar = () => {
+    if (!portfoyOzet) return;
+    guncelle({
+      altinGram: portfoyOzet.altinGram > 0 ? String(Number(portfoyOzet.altinGram.toFixed(2))) : v.altinGram,
+      hisse: portfoyOzet.menkul > 0 ? String(Number(portfoyOzet.menkul.toFixed(2))) : v.hisse,
+    });
+  };
+
+  // ── Hesap ─────────────────────────────────────────────────────────────────
+  const nisapTL = gramFiyat != null ? ZEKAT_NISAP_GRAM * gramFiyat : null;
+  const altinTL = gramFiyat != null ? zekatSayi(v.altinGram) * gramFiyat : 0;
+  const takiTL = gramFiyat != null ? zekatSayi(v.takiGram) * gramFiyat : 0;
+  const varliklar = altinTL + takiTL + zekatSayi(v.hisse) + zekatSayi(v.nakit) + zekatSayi(v.ticari);
+  const borclar = zekatSayi(v.borc);
+  const matrah = Math.max(varliklar - borclar, 0);
+  const yukumlu = nisapTL != null && matrah >= nisapTL && matrah > 0;
+  const zekatTutari = yukumlu ? matrah * ZEKAT_ORAN : 0;
+  const doluluk = nisapTL ? Math.min(matrah / nisapTL * 100, 100) : 0;
+
+  const para = (n: number) => `${new Intl.NumberFormat("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)} ₺`;
+
+  const kartBg = TEMA === "acik" ? "#E9EEF4" : WA(0.05);
+  const kartCizgi = WA(0.08);
+  const baslikRenk = TEMA === "acik" ? "#1A2430" : "#A8C2DC";
+
+  const Baslik = ({ t }: { t: string }) => (
+    <p style={{ margin: "18px 0 8px", fontSize: 11, fontWeight: 800, color: baslikRenk, textTransform: "uppercase", letterSpacing: 0.5 }}>{TR(t)}</p>
+  );
+
+  const Satir = ({ etiket, alt, deger, alan, sonek, otomatik }: {
+    etiket: string; alt: string; deger: string; alan: keyof ZekatVeri; sonek: string; otomatik?: boolean;
+  }) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 13px", borderBottom: `1px solid ${WA(0.06)}` }}>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <p style={{ margin: 0, fontSize: 12.5, fontWeight: 700, color: TEMA === "acik" ? C.label : "#fff" }}>{etiket}</p>
+        <p style={{ margin: "2px 0 0", fontSize: 10.5, color: WA(0.5) }}>{alt}</p>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
+        <input
+          value={deger}
+          onChange={e => guncelle({ [alan]: e.target.value } as any)}
+          inputMode="decimal"
+          placeholder="0"
+          style={{
+            width: 104, textAlign: "right", padding: "8px 9px", borderRadius: 9,
+            border: `1px solid ${otomatik ? "rgba(91,155,216,0.45)" : WA(0.14)}`,
+            background: TEMA === "acik" ? "#fff" : WA(0.04),
+            color: TEMA === "acik" ? C.label : "#fff", fontSize: 13.5, fontWeight: 700,
+            fontFamily: "inherit", outline: "none",
+          }}
+        />
+        <span style={{ fontSize: 11.5, color: WA(0.5), width: 30 }}>{sonek}</span>
+      </div>
+    </div>
+  );
+
+  // ── Zekât günü / hatırlatma ───────────────────────────────────────────────
+  const sonrakiTarih = v.zekatTarihi ? zekatGunEkle(v.zekatTarihi, ZEKAT_KAMERI_GUN) : null;
+  const kalan = sonrakiTarih ? zekatKalanGun(sonrakiTarih) : null;
+
+  const hatirlatmaKur = () => {
+    if (!v.zekatTarihi) { setHatirlatmaHata("Önce zekât gününü seç."); return; }
+    const token = pushTokenAl();
+    if (!token) {
+      let neden = ""; try { neden = localStorage.getItem("kp_push_hata") || ""; } catch {}
+      setHatirlatmaHata(neden ? `Bildirim kaydı başarısız: ${neden}` : "Bildirim izni gerekiyor — cihaz Ayarlar'dan izin verip tekrar deneyin.");
+      return;
+    }
+    // Bir sonraki zekât günü geleceğe düşmeli; kullanıcı geçmiş bir gün
+    // seçtiyse (ki normal — nisaba geçen yıl ulaşmıştır) kameri yıl eklenerek
+    // ileri taşınır.
+    let hedef = v.zekatTarihi;
+    let guvenlik = 0;
+    while (zekatKalanGun(hedef) < 0 && guvenlik < 10) { hedef = zekatGunEkle(hedef, ZEKAT_KAMERI_GUN); guvenlik++; }
+
+    setHatirlatmaDurum("gonderiliyor"); setHatirlatmaHata("");
+    fetch(`${API_BASE}/api/bildirim?islem=alarm-ekle`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, tip: "zekat", ad: "Zekât Günü", zekatTarihi: hedef }),
+    }).then(r => r.json().then(d => ({ ok: r.ok, d })))
+      .then(({ ok, d }) => {
+        if (ok && d?.basarili) {
+          setHatirlatmaDurum("basarili");
+          guncelle({ hatirlatmaKurulu: true });
+          olayGonder("zekat_hatirlatma_kuruldu", {});
+        } else { setHatirlatmaDurum("bos"); setHatirlatmaHata(d?.hata || "Hatırlatma kurulamadı."); }
+      })
+      .catch(() => { setHatirlatmaDurum("bos"); setHatirlatmaHata("Bağlantı hatası, tekrar deneyin."); });
+  };
+
+  const hesabiKaydet = () => {
+    if (!yukumlu || gramFiyat == null) return;
+    const kayit: ZekatGecmisKaydi = {
+      tarih: new Date().toISOString().slice(0, 10),
+      matrah, zekat: zekatTutari, gramFiyat,
+    };
+    guncelle({ gecmis: [kayit, ...v.gecmis].slice(0, 20) });
+    setKayitNotu("Hesap kaydedildi.");
+    setTimeout(() => setKayitNotu(""), 2500);
+  };
+
+  return (
+    <div style={{ background: C.bg, padding: "12px 14px 92px", minHeight: "100%" }}>
+
+      {/* NİSAP */}
+      <div style={{
+        background: yukumlu ? "rgba(22,163,74,0.10)" : (TEMA === "acik" ? "#E9EEF4" : WA(0.05)),
+        border: `1px solid ${yukumlu ? "rgba(22,163,74,0.35)" : kartCizgi}`,
+        borderRadius: 16, padding: "16px 16px 14px", marginBottom: 4,
+      }}>
+        <p style={{ margin: 0, fontSize: 10.5, fontWeight: 800, color: WA(0.55), letterSpacing: 0.5 }}>{TR("Bugünkü Nisap")}</p>
+        <p style={{ margin: "6px 0 0", fontSize: 26, fontWeight: 800, color: TEMA === "acik" ? C.label : "#fff", letterSpacing: -0.5 }}>
+          {fiyatYukleniyor ? "…" : (nisapTL != null ? para(nisapTL) : "—")}
+        </p>
+        <p style={{ margin: "3px 0 0", fontSize: 11, color: WA(0.5) }}>
+          {gramFiyat != null
+            ? `80,18 gr altın × ${new Intl.NumberFormat("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(gramFiyat)} ₺ (has altın alış)`
+            : "Altın fiyatı alınamadı — birazdan tekrar deneyin"}
+        </p>
+
+        <div style={{ height: 7, background: WA(0.09), borderRadius: 99, overflow: "hidden", margin: "14px 0 10px" }}>
+          <div style={{ height: "100%", width: `${doluluk}%`, background: yukumlu ? "#16A34A" : "#5B9BD8", borderRadius: 99, transition: "width .35s ease" }} />
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 10 }}>
+          <div>
+            <p style={{ margin: 0, fontSize: 10.5, color: WA(0.5) }}>Zekât matrahın</p>
+            <p style={{ margin: "2px 0 0", fontSize: 14.5, fontWeight: 800, color: TEMA === "acik" ? C.label : "#fff" }}>{para(matrah)}</p>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <p style={{ margin: 0, fontSize: 10.5, color: WA(0.5) }}>{yukumlu ? "Nisabın üzerinde" : "Nisaba kalan"}</p>
+            <p style={{ margin: "2px 0 0", fontSize: 14.5, fontWeight: 800, color: yukumlu ? "#16A34A" : WA(0.6) }}>
+              {nisapTL != null ? para(Math.abs(matrah - nisapTL)) : "—"}
+            </p>
+          </div>
+        </div>
+
+        {yukumlu && (
+          <div style={{ marginTop: 12, display: "inline-flex", alignItems: "center", gap: 7, background: "rgba(22,163,74,0.16)", border: "1px solid rgba(22,163,74,0.4)", color: "#16A34A", fontSize: 12, fontWeight: 800, padding: "6px 11px", borderRadius: 99 }}>
+            <span style={{ width: 6, height: 6, borderRadius: 99, background: "#16A34A" }} />
+            Zekât vermekle yükümlüsün
+          </div>
+        )}
+        {!yukumlu && matrah === 0 && (
+          <p style={{ margin: "12px 0 0", fontSize: 11.5, color: WA(0.5), lineHeight: 1.5 }}>
+            Varlıklarını gir, nisabı aşıp aşmadığını görelim.
+          </p>
+        )}
+      </div>
+
+      {/* PORTFÖYDEN AKTAR */}
+      {portfoyOzet && (
+        <div style={{ background: "rgba(91,155,216,0.10)", border: "1px solid rgba(91,155,216,0.3)", borderRadius: 13, padding: "12px 13px", marginTop: 10, display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <p style={{ margin: 0, fontSize: 12, fontWeight: 800, color: "#5B9BD8" }}>Portföyünden aktarabilirsin</p>
+            <p style={{ margin: "3px 0 0", fontSize: 10.5, color: WA(0.55), lineHeight: 1.45 }}>
+              {portfoyOzet.kalem} kalem
+              {portfoyOzet.altinGram > 0 ? ` · ${new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 2 }).format(portfoyOzet.altinGram)} gr altın` : ""}
+              {portfoyOzet.menkul > 0 ? ` · ${para(portfoyOzet.menkul)} hisse/fon` : ""}
+            </p>
+          </div>
+          <button onClick={portfoyuAktar} style={{ flexShrink: 0, background: "#5B9BD8", border: "none", color: "#fff", fontSize: 11.5, fontWeight: 800, padding: "8px 13px", borderRadius: 9, cursor: "pointer", fontFamily: "inherit" }}>Aktar</button>
+        </div>
+      )}
+
+      {/* VARLIKLAR */}
+      <Baslik t="Varlıkların" />
+      <div style={{ background: kartBg, border: `1px solid ${kartCizgi}`, borderRadius: 14, overflow: "hidden" }}>
+        <Satir etiket="Altın" alt="Yatırım amaçlı, gram olarak" deger={v.altinGram} alan="altinGram" sonek="gr" />
+        <Satir etiket="Takı ve ziynet" alt="Zekâta katmak istersen gir" deger={v.takiGram} alan="takiGram" sonek="gr" />
+        <Satir etiket="Hisse ve fonlar" alt="Güncel piyasa değeri" deger={v.hisse} alan="hisse" sonek="₺" />
+        <Satir etiket="Nakit ve katılma hesabı" alt="TL ve döviz toplamı" deger={v.nakit} alan="nakit" sonek="₺" />
+        <Satir etiket="Ticari mal ve alacaklar" alt="İsteğe bağlı" deger={v.ticari} alan="ticari" sonek="₺" />
+        <div style={{ display: "flex", justifyContent: "space-between", padding: "11px 13px", background: WA(0.03) }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: WA(0.6) }}>Varlık toplamı</span>
+          <span style={{ fontSize: 13, fontWeight: 800, color: TEMA === "acik" ? C.label : "#fff" }}>{para(varliklar)}</span>
+        </div>
+      </div>
+      {(zekatSayi(v.altinGram) > 0 || zekatSayi(v.takiGram) > 0) && gramFiyat != null && (
+        <p style={{ margin: "7px 2px 0", fontSize: 10.5, color: WA(0.45) }}>
+          Altın ve takı, has altın alış fiyatından TL'ye çevrildi: {para(altinTL + takiTL)}
+        </p>
+      )}
+
+      {/* BORÇLAR */}
+      <Baslik t="Borçların" />
+      <div style={{ background: kartBg, border: `1px solid ${kartCizgi}`, borderRadius: 14, overflow: "hidden" }}>
+        <Satir etiket="Bir yıl içinde ödeyeceklerin" alt="Taksit, fatura, vergi" deger={v.borc} alan="borc" sonek="₺" />
+      </div>
+      <div style={{ background: "rgba(224,163,60,0.10)", border: "1px solid rgba(224,163,60,0.3)", borderRadius: 12, padding: "11px 12px", marginTop: 9 }}>
+        <p style={{ margin: 0, fontSize: 11.5, color: TEMA === "acik" ? "#8A6519" : "#E8C58A", lineHeight: 1.55 }}>
+          <b>Toplam borcunu değil, önümüzdeki 12 ayda ödeyeceğini yaz.</b> 10 yıl vadeli 180.000 ₺ konut finansmanında yıllık ödemen 18.000 ₺ ise buraya 18.000 ₺ girersin.
+        </p>
+      </div>
+
+      {/* SONUÇ */}
+      <div style={{
+        background: yukumlu ? "linear-gradient(160deg,#12693C 0%,#0E5531 100%)" : (TEMA === "acik" ? "#E9EEF4" : WA(0.05)),
+        border: yukumlu ? "none" : `1px solid ${kartCizgi}`,
+        borderRadius: 16, padding: "16px", marginTop: 18,
+      }}>
+        <p style={{ margin: 0, fontSize: 10.5, fontWeight: 800, letterSpacing: 0.5, color: yukumlu ? "#9FE0B9" : WA(0.55) }}>{TR("Vermen Gereken Zekât")}</p>
+        <p style={{ margin: "6px 0 2px", fontSize: 30, fontWeight: 800, letterSpacing: -1, color: yukumlu ? "#fff" : WA(0.4) }}>
+          {yukumlu ? para(zekatTutari) : "—"}
+        </p>
+        <p style={{ margin: 0, fontSize: 11.5, color: yukumlu ? "#B8E8CC" : WA(0.45) }}>
+          {yukumlu && gramFiyat != null
+            ? `${new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 2 }).format(zekatTutari / gramFiyat)} gram altın karşılığı`
+            : "Varlıkların nisabı aştığında hesaplanır"}
+        </p>
+
+        {yukumlu && (
+          <div style={{ borderTop: "1px solid rgba(255,255,255,0.18)", marginTop: 13, paddingTop: 11 }}>
+            {[["Varlıkların", para(varliklar)], ["Borçların", `− ${para(borclar)}`], ["Matrah", para(matrah)], ["Oran", "%2,5 (kırkta bir)"]].map(([a, b], i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", fontSize: 12, color: "#CFEEDC" }}>
+                <span>{a}</span><b style={{ color: "#fff" }}>{b}</b>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ZEKÂT GÜNÜ */}
+      <Baslik t="Zekât Günün" />
+      <div style={{ background: kartBg, border: `1px solid ${kartCizgi}`, borderRadius: 14, padding: "13px" }}>
+        <p style={{ margin: 0, fontSize: 11.5, color: WA(0.55), lineHeight: 1.55 }}>
+          Nisaba ilk ulaştığın günü seç. Bir kameri yıl (354 gün) sonrası için hatırlatma kuralım.
+        </p>
+        <input
+          type="date"
+          value={v.zekatTarihi || ""}
+          onChange={e => guncelle({ zekatTarihi: e.target.value || null, hatirlatmaKurulu: false })}
+          style={{
+            width: "100%", marginTop: 10, padding: "11px 12px", borderRadius: 10,
+            border: `1px solid ${WA(0.14)}`, background: TEMA === "acik" ? "#fff" : WA(0.04),
+            color: TEMA === "acik" ? C.label : "#fff", fontSize: 13.5, fontWeight: 700,
+            fontFamily: "inherit", outline: "none", boxSizing: "border-box",
+          }}
+        />
+        {sonrakiTarih && (
+          <div style={{ marginTop: 11, padding: "11px 12px", background: WA(0.04), borderRadius: 10 }}>
+            <p style={{ margin: 0, fontSize: 13, fontWeight: 800, color: TEMA === "acik" ? C.label : "#fff" }}>{zekatTarihYaz(sonrakiTarih)}</p>
+            <p style={{ margin: "3px 0 0", fontSize: 10.5, color: WA(0.5) }}>
+              Bir sonraki zekât günün · kameri yıl 354 gün{kalan != null && kalan >= 0 ? ` · ${kalan} gün kaldı` : ""}
+            </p>
+          </div>
+        )}
+        <button
+          onClick={hatirlatmaKur}
+          disabled={!v.zekatTarihi || hatirlatmaDurum === "gonderiliyor"}
+          style={{
+            width: "100%", marginTop: 10, padding: "12px", borderRadius: 11, border: "none",
+            background: v.zekatTarihi ? (v.hatirlatmaKurulu ? WA(0.08) : "#16A34A") : WA(0.06),
+            color: v.zekatTarihi ? (v.hatirlatmaKurulu ? WA(0.6) : "#fff") : WA(0.3),
+            fontSize: 13.5, fontWeight: 800, fontFamily: "inherit",
+            cursor: v.zekatTarihi ? "pointer" : "default",
+          }}
+        >
+          {hatirlatmaDurum === "gonderiliyor" ? "Kuruluyor…"
+            : v.hatirlatmaKurulu ? "Hatırlatma kurulu · güncellemek için dokun"
+            : "Zekât günümde hatırlat"}
+        </button>
+        {hatirlatmaDurum === "basarili" && !hatirlatmaHata && (
+          <p style={{ margin: "8px 0 0", fontSize: 11.5, color: "#16A34A", lineHeight: 1.5 }}>
+            Zekât gününde bildirim alacaksın. Tarih her yıl otomatik olarak bir kameri yıl ileri alınır.
+          </p>
+        )}
+        {hatirlatmaHata && (
+          <p style={{ margin: "8px 0 0", fontSize: 11.5, color: "#E06C6C", lineHeight: 1.5 }}>{hatirlatmaHata}</p>
+        )}
+      </div>
+
+      {/* KAYDET */}
+      <button
+        onClick={hesabiKaydet}
+        disabled={!yukumlu}
+        style={{
+          width: "100%", marginTop: 14, padding: "14px", borderRadius: 12, border: "none",
+          background: yukumlu ? "#16A34A" : WA(0.06), color: yukumlu ? "#fff" : WA(0.3),
+          fontSize: 14, fontWeight: 800, fontFamily: "inherit", cursor: yukumlu ? "pointer" : "default",
+        }}
+      >Bu hesabı kaydet</button>
+      {kayitNotu && <p style={{ margin: "8px 0 0", fontSize: 11.5, color: "#16A34A", textAlign: "center" }}>{kayitNotu}</p>}
+
+      {/* GEÇMİŞ */}
+      {v.gecmis.length > 0 && (
+        <>
+          <Baslik t="Geçmiş Hesapların" />
+          <div style={{ background: kartBg, border: `1px solid ${kartCizgi}`, borderRadius: 14, overflow: "hidden" }}>
+            {v.gecmis.map((g, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "11px 13px", borderBottom: i < v.gecmis.length - 1 ? `1px solid ${WA(0.06)}` : "none" }}>
+                <div style={{ minWidth: 0 }}>
+                  <p style={{ margin: 0, fontSize: 12.5, fontWeight: 700, color: TEMA === "acik" ? C.label : "#fff" }}>{zekatTarihYaz(g.tarih)}</p>
+                  <p style={{ margin: "2px 0 0", fontSize: 10.5, color: WA(0.5) }}>Matrah {para(g.matrah)}</p>
+                </div>
+                <span style={{ fontSize: 13, fontWeight: 800, color: "#16A34A", flexShrink: 0 }}>{para(g.zekat)}</span>
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={() => guncelle({ gecmis: [] })}
+            style={{ width: "100%", marginTop: 9, padding: "10px", borderRadius: 10, border: `1px solid ${WA(0.12)}`, background: "transparent", color: WA(0.5), fontSize: 12, fontWeight: 700, fontFamily: "inherit", cursor: "pointer" }}
+          >Geçmişi temizle</button>
+        </>
+      )}
+
+      {/* YÖNTEM + UYARI */}
+      <Baslik t="Hesaplama Yöntemi" />
+      <div style={{ background: kartBg, border: `1px solid ${kartCizgi}`, borderRadius: 14, padding: "13px 14px" }}>
+        {[
+          ["Nisap", "24 ayardan 80,18 gram altın değeri"],
+          ["Oran", "Kırkta bir (%2,5)"],
+          ["Süre", "Nisaba ulaştıktan sonra bir kameri yıl (354 gün)"],
+          ["Borç", "Yalnızca önümüzdeki 12 ayda ödenecek tutar düşülür"],
+          ["Aslî ihtiyaç", "Oturulan ev, kullanılan araç ve ev eşyası hesaba girmez"],
+        ].map(([a, b], i, dizi) => (
+          <div key={i} style={{ display: "flex", gap: 10, paddingBottom: i < dizi.length - 1 ? 9 : 0, marginBottom: i < dizi.length - 1 ? 9 : 0, borderBottom: i < dizi.length - 1 ? `1px solid ${WA(0.06)}` : "none" }}>
+            <span style={{ fontSize: 11.5, fontWeight: 800, color: TEMA === "acik" ? C.label : "#fff", width: 78, flexShrink: 0 }}>{a}</span>
+            <span style={{ fontSize: 11.5, color: WA(0.55), lineHeight: 1.5 }}>{b}</span>
+          </div>
+        ))}
+      </div>
+
+      <p style={{ margin: "14px 2px 0", fontSize: 10.5, color: WA(0.42), lineHeight: 1.6 }}>
+        Bu hesaplama bilgilendirme amaçlıdır ve fetva niteliği taşımaz. Diyanet İşleri Başkanlığı'nın yayımladığı nisap ve oran ölçütleri esas alınmıştır; ticaret malı, ortaklık payı ve gayrimenkul gibi kalemlerde farklı görüşler bulunabilir. Kişisel durumunuz için Din İşleri Yüksek Kurulu'na başvurabilirsiniz.
+      </p>
+    </div>
+  );
+}
+
 function KfkNedir(){
   const kimlerYararlanir=["Gerçek ve tüzel KOBİ'ler","Esnaf ve sanatkârlar","Tarım işletmeleri","Kadın ve genç girişimciler","KOBİ dışı firmalar"];
   const paketler=[
@@ -13636,6 +14099,7 @@ const MENU = {
   kfkNedir:{title:"KFK Nedir?",back:"araclarMenu"},
   katilimSektoru:{title:"Katılım Bankacılığı Sektörü",back:"araclarMenu"},
   ekonomiSozluk:{title:"Ekonomi Sözlüğü",back:"araclarMenu"},
+  zekatHesabi:{title:"Zekât Hesabı",back:"araclarMenu"},
   kiraSertifikasi:{title:"Kira Sertifikası İhraçları",back:"araclarMenu"},
   taksitKarsilastirma:{title:"Taksit Karşılaştırma",back:"hesaplaMenu"},
   portfoyum:{title:"Portföyüm",back:"araclarMenu"},
@@ -13667,7 +14131,7 @@ const TAB_OF_SCREEN:any = {
   hazineDoviz:"hesapla", hazineForward:"hesapla", hazineSwap:"hesapla",
   hazineBono:"hesapla", hazineSenaryo:"hesapla",
   piyasaHaberleri:"piyasa", finansalGostergeler:"piyasa",
-  araclarMenu:"araclar", sozluk:"araclar", vadeTakibi:"araclar", katilimBankalari:"araclar", kfkNedir:"araclar", kiraSertifikasi:"araclar", getiriKarsilastirma:"araclar", haftalikOzet:"araclar", portfoyum:"araclar", fonDetay:"araclar",
+  araclarMenu:"araclar", sozluk:"araclar", vadeTakibi:"araclar", katilimBankalari:"araclar", kfkNedir:"araclar", zekatHesabi:"araclar", kiraSertifikasi:"araclar", getiriKarsilastirma:"araclar", haftalikOzet:"araclar", portfoyum:"araclar", fonDetay:"araclar",
   asistan:"yapayzeka",
   profil:"profil",
 };
@@ -13741,6 +14205,7 @@ const SCREEN_TO_PATH: Record<string,string> = {
   vadeTakibi: "/vade-takip",
   katilimBankalari: "/katilim-bankalari",
   kfkNedir: "/kfk-nedir",
+  zekatHesabi: "/zekat-hesabi",
   kiraSertifikasi: "/kira-sertifikasi-ihraclari",
   portfoyum: "/portfoyum",
   hazineDoviz: "/doviz-donusturucu",
@@ -13841,6 +14306,7 @@ const MENU_ARAMA_LIST=[
   {key:"kfkNedir",           label:"KFK Nedir?",                                 icon:"🤝", grup:"Araçlar", alt:["kfk","kefalet","katılım finans kefalet","kgf","teminat","kobi"]},
   {key:"katilimSektoru",     label:"Katılım Bankacılığı Sektörü",               icon:"🏦", grup:"Araçlar", alt:["sektör","bddk","pay","aktif","toplanan fon","kullandırılan fon","katılma hesabı","özel cari","roe","kârlılık"]},
   {key:"ekonomiSozluk",      label:"Ekonomi Sözlüğü",                           icon:"📚", grup:"Araçlar", alt:["ekonomi","terim","sözlük","enflasyon","gsyh","faiz","tanım","kavram","makro"]},
+  {key:"zekatHesabi",        label:"Zekât Hesabı",                               icon:"🌙", grup:"Araçlar", alt:["zekat","zekât","nisap","nisab","kırkta bir","sadaka","altın nisabı","dini","ibadet","hesapla"]},
   {key:"kiraSertifikasi",    label:"Kira Sertifikası İhraçları",                 icon:"📜", grup:"Araçlar", alt:["kira sertifikası","sukuk","ihraç","vekâlet","murabaha","icare","varlık kiralama","spk"]},
   {key:"hazineDoviz",        label:"Döviz Dönüştürücü",                          icon:"💱", grup:"Hesaplama Araçları", alt:["kur","dolar","euro","dolar kaç tl"]},
   {key:"piyasaMenu",         label:"Piyasa & Veriler",                           icon:"📊", grup:"Piyasa & Veriler", alt:["tüfe","enflasyon","gösterge","politika faizi","sofr","euribor","tlref","tlrefk","aofm","rezerv","cds","borsa","bist","altın","gümüş","emtia","kripto"]},
@@ -20588,6 +21054,7 @@ function App(){
               {key:"kfkNedir",label:"KFK Nedir?"},
               {key:"katilimSektoru",label:"Katılım Bankacılığı Sektörü"},
               {key:"ekonomiSozluk",label:"Ekonomi Sözlüğü"},
+              {key:"zekatHesabi",label:"Zekât Hesabı"},
               {key:"piyasaHaberleri",label:"Piyasa Haberleri"},
               {key:"sozluk",label:"Finans Sözlüğü"},
             ].map(m=>(
@@ -21952,6 +22419,7 @@ function App(){
               {key:"katilimSektoru", icon:"🏦", label:"Katılım Bankacılığı Sektörü", desc:"Sektör payı, fon büyüklükleri ve kârlılık — BDDK resmî verisiyle", renk:"#5B9BD8", bg:"rgba(91,155,216,0.15)"},
               {key:"ekonomiSozluk", icon:"📚", label:"Ekonomi Sözlüğü", desc:"196 ekonomi ve finans terimi — enflasyondan rezervlere, sade tanımlarla", renk:"#A78BFA", bg:"rgba(167,139,250,0.15)"},
               {key:"kfkNedir", icon:"🤝", label:"KFK Nedir?", desc:"Teminat yetersizliğinde işletmenize kefalet desteği — Katılım Finans Kefalet A.Ş.", renk:"#2CCB9A", bg:"rgba(44,203,154,0.15)"},
+              {key:"zekatHesabi", icon:"🌙", label:"Zekât Hesabı", desc:"Nisap güncel altın fiyatıyla, varlıkların portföyünden — zekât gününde hatırlatma", renk:"#16A34A", bg:"rgba(22,163,74,0.15)"},
               {key:"kiraSertifikasi", icon:"📜", label:"Kira Sertifikası İhraçları", desc:"Türkiye'de sukuk ihraçları — SPK resmî verisiyle tür ve yıl bazında", renk:"#F5A623", bg:"rgba(245,166,35,0.15)"},
               {key:"sozluk",     icon:"📖", label:"Katılım Bankacılığı Sözlüğü",     desc:"Terim ve tanımları hızlıca ara", renk:"#60A5FA", bg:"rgba(96,165,250,0.15)"},
               {key:"katilimBlog", icon:"📝", label:"Katılım Blog", desc:"Kâr payı, murabaha, TLREF ve daha fazlası — anlaşılır rehberler", renk:"#2CCB9A", bg:"rgba(44,203,154,0.15)", harici:true},
@@ -22171,6 +22639,7 @@ function App(){
         {screen==="kfkNedir"&&<KfkNedir/>}
         {screen==="katilimSektoru"&&<KatilimSektoru/>}
         {screen==="ekonomiSozluk"&&<EkonomiSozluk/>}
+        {screen==="zekatHesabi"&&<ZekatHesabi/>}
         {screen==="kiraSertifikasi"&&<KiraSertifikasiIhraclari/>}
         {screen==="getiriKarsilastirma"&&<GetiriKarsilastirma/>}
         {screen==="haftalikOzet"&&<HaftalikPiyasaOzeti/>}

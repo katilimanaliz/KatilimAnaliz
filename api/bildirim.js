@@ -138,6 +138,37 @@ const FCM_TOKEN_REGEX = /^[A-Za-z0-9_:.\-]{100,4096}$/;
 // kötüye kullanımda tavan görevi görüyor.
 const MAKS_TOPLAM_ALARM = 5000;
 
+// ── ZEKÂT HATIRLATMASI (2026-08-06) ─────────────────────────────────────────
+// Fiyat alarmlarından ve KAP aboneliklerinden farklı olarak TARİH tabanlı:
+// kullanıcı zekât gününü seçer, o gün geldiğinde tek bir push gider ve tarih
+// otomatik olarak bir KAMERİ YIL (354 gün) ileri alınır — abonelik sürer.
+//
+// NEDEN AYRI BİR SİSTEM DEĞİL: Yerel bildirim (@capacitor/local-notifications)
+// yeni bir native paket ve yeni mağaza sürümü gerektirirdi. Mevcut alarm
+// dizisine yeni bir "tip" olarak eklenince token yönetimi, cron turu, FCM
+// gönderimi ve ölü token temizliği HAZIR altyapıdan geliyor; özellik Live
+// Update ile çıkabiliyor.
+//
+// Token başına TEK kayıt tutulur — ikinci kez kurulursa mevcut kayıt
+// güncellenir (kullanıcı zekât gününü değiştirmiş demektir).
+const ZEKAT_KAMERI_GUN = 354;
+const ZEKAT_SEMBOL = "ZEKAT";
+
+// "YYYY-MM-DD" → gün başlangıcı (UTC) zaman damgası. Saat dilimi kaymasının
+// bildirimi bir gün erken/geç göndermemesi için gün bazında karşılaştırıyoruz.
+function zekatTarihMs(gg) {
+  if (typeof gg !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(gg)) return null;
+  const t = Date.parse(gg + "T00:00:00Z");
+  return isNaN(t) ? null : t;
+}
+
+// Bir kameri yıl ileri al ve yine "YYYY-MM-DD" döndür.
+function zekatTarihIlerlet(gg, gun = ZEKAT_KAMERI_GUN) {
+  const t = zekatTarihMs(gg);
+  if (t == null) return null;
+  return new Date(t + gun * 86400000).toISOString().slice(0, 10);
+}
+
 async function tokenKaydet(req, res) {
   let { token, platform, eskiToken } = req.body || {};
 
@@ -745,8 +776,85 @@ async function alarmEkle(req, res) {
   }
   // KAP alarmında "yon" anlamsız — istemci göndermese de kabul ediyoruz.
   if (tip === "kap" && !yon) yon = "yeni";
+  // Zekât hatırlatmasında sembol/ad/yon sabit — istemcinin göndermesi gerekmez.
+  if (tip === "zekat") {
+    sembol = ZEKAT_SEMBOL;
+    ad = ad || "Zekât Günü";
+    yon = "tarih";
+  }
   if (!token || !sembol || !ad || !tip || !yon) {
     res.status(400).json({ hata: "token, sembol, ad, tip, yon alanları zorunlu" });
+    return;
+  }
+
+  // ── ZEKÂT HATIRLATMASI ──────────────────────────────────────────────────
+  // Fiyat çekilmez, tarih tutulur. Token başına TEK kayıt: aynı token tekrar
+  // kurarsa mevcut kayıt güncellenir (kullanıcı gününü değiştirmiş olur).
+  if (tip === "zekat") {
+    const gg = req.body?.zekatTarihi;
+    const ms = zekatTarihMs(gg);
+    if (ms == null) {
+      res.status(400).json({ hata: "Geçerli bir zekât tarihi gerekli (YYYY-AA-GG)." });
+      return;
+    }
+    // Bugünden en fazla bir kameri yıl ileri olabilir; daha uzağı kullanıcı
+    // hatasıdır (yanlış yıl seçimi) ve yıllarca sessiz kalan kayıt üretirdi.
+    const bugun = Date.parse(new Date().toISOString().slice(0, 10) + "T00:00:00Z");
+    if (ms < bugun) {
+      res.status(400).json({ hata: "Zekât tarihi geçmiş bir gün olamaz." });
+      return;
+    }
+    if (ms > bugun + (ZEKAT_KAMERI_GUN + 30) * 86400000) {
+      res.status(400).json({ hata: "Zekât tarihi en fazla bir yıl sonrası için kurulabilir." });
+      return;
+    }
+
+    try {
+      const { basarili, sonuc } = await kilitliCalistir(
+        redis, ALARM_KILIT_ANAHTAR, 15,
+        async () => {
+          const alarmlar = await alarmlariOku();
+          if (alarmlar.length >= MAKS_TOPLAM_ALARM) {
+            console.error("KURESEL ALARM TAVANI ASILDI (zekat):", alarmlar.length);
+            return { hataKodu: 503, hata: "Sistem şu anda yeni kayıt kabul edemiyor. Lütfen daha sonra tekrar deneyin." };
+          }
+          const mevcut = alarmlar.find((a) => a.token === token && a.tip === "zekat");
+          if (mevcut) {
+            const guncel = { ...mevcut, ad, zekatTarihi: gg, aktif: true, kapaliSebep: null };
+            await redis.set(ALARM_KV_ANAHTAR, alarmlar.map((a) => (a.id === mevcut.id ? guncel : a)));
+            return { alarm: guncel, guncellendi: true };
+          }
+          const yeniAlarm = {
+            id: randomUUID(),
+            token, sembol: ZEKAT_SEMBOL, ad,
+            tip: "zekat",
+            yon: "tarih",
+            zekatTarihi: gg,
+            hedefFiyat: null,
+            yuzde: null,
+            baslangicFiyat: null,
+            bildirimSayisi: 0,
+            olusturulmaTs: Date.now(),
+            aktif: true,
+            tetiklenmeTs: null,
+            tetiklenmeFiyat: null,
+          };
+          await redis.set(ALARM_KV_ANAHTAR, [...alarmlar, yeniAlarm]);
+          return { alarm: yeniAlarm, guncellendi: false };
+        },
+        { denemeSayisi: 10, bekleMs: 300 }
+      );
+      if (!basarili) { res.status(409).json({ hata: "Şu anda başka bir alarm işlemi sürüyor, lütfen tekrar deneyin." }); return; }
+      if (sonuc?.hataKodu) { res.status(sonuc.hataKodu).json({ hata: sonuc.hata }); return; }
+      res.status(200).json({
+        basarili: true,
+        alarm: sonuc.alarm,
+        guncellendi: sonuc.guncellendi,
+        not: "Zekât gününde hatırlatma alacaksınız; tarih her yıl bir kameri yıl (354 gün) ileri alınır.",
+      });
+    } catch (e) {
+      res.status(500).json({ hata: "Zekât hatırlatması kurulamadı", detay: e.message });
+    }
     return;
   }
 
@@ -1158,9 +1266,12 @@ async function alarmKontrol(req, res) {
           return { kontrolEdilenAlarm: 0, benzersizSembol: 0, tetiklenen: 0, gonderilenBildirim: 0 };
         }
 
-        // Fiyat alarmları ve KAP abonelikleri ayrı akışlar — KAP'ta fiyat yok.
+        // Fiyat alarmları, KAP abonelikleri ve zekât hatırlatmaları ayrı
+        // akışlar — son ikisinde çekilecek bir fiyat yok. Zekât kayıtları bu
+        // filtreye EKLENMEZSE alarmFiyatTablosu "ZEKAT" sembolü için boşuna
+        // fiyat aramaya çalışır ve her turda hata üretir.
         const kapAlarmlar = aktifAlarmlar.filter((a) => a.tip === "kap");
-        const fiyatAlarmlar = aktifAlarmlar.filter((a) => a.tip !== "kap");
+        const fiyatAlarmlar = aktifAlarmlar.filter((a) => a.tip !== "kap" && a.tip !== "zekat");
 
         // Aynı sembolü birden fazla alarm izliyorsa fiyatı TEK kere çekelim.
         const benzersizSemboller = [...new Set(fiyatAlarmlar.map((a) => a.sembol))];
@@ -1178,6 +1289,7 @@ async function alarmKontrol(req, res) {
         let tetiklenen = 0;
         let gonderilenBildirim = 0;
         let kapTetiklenen = 0;
+        let zekatTetiklenen = 0;
         let olenAbonelik = 0;   // token gecersiz oldugu icin kapanan abonelik sayisi
         let gecersizKurulumKapatilan = 0;   // kurulusunda kosulu zaten saglanan (eski) hedef alarmlari
         const gonderimHatalari = [];
@@ -1192,6 +1304,60 @@ async function alarmKontrol(req, res) {
           // ── KAP ABONELİĞİ ────────────────────────────────────────────────
           // Fiyat alarmlarından farklı olarak tetiklense de AKTİF KALIR;
           // yalnızca "son görülen" imleci ileri alınır.
+          // ── ZEKÂT HATIRLATMASI ───────────────────────────────────────────
+          // Tarih tabanlı. Gün geldiğinde (veya geçtiyse) tek bildirim gider,
+          // tarih bir kameri yıl ileri alınır ve kayıt AKTİF KALIR.
+          //
+          // Gecikme toleransı: cron bir gün hiç çalışmazsa tarih geçmiş olur;
+          // ">=" karşılaştırması sayesinde bildirim yine de gider (bir gün geç
+          // ama gider). Kaçırılan yıl birikmesin diye tarih, bugünün İLERİSİNE
+          // düşene kadar ilerletilir.
+          if (alarm.tip === "zekat") {
+            const hedefMs = zekatTarihMs(alarm.zekatTarihi);
+            if (hedefMs == null) {
+              // Bozuk kayıt — sessizce kapat, her turda tekrar denenmesin.
+              guncelListe.push({ ...alarm, aktif: false, kapaliSebep: "gecersiz-tarih" });
+              continue;
+            }
+            const bugunMs = Date.parse(new Date().toISOString().slice(0, 10) + "T00:00:00Z");
+            if (bugunMs < hedefMs) { guncelListe.push(alarm); continue; }
+
+            zekatTetiklenen++;
+            const gonderildi = await tekTokeneGonder(
+              alarm.token,
+              "🌙 Zekât günün geldi",
+              "Zekât hesabını güncellemek için Katılım Plus'ı aç. Nisap, güncel altın fiyatına göre yeniden hesaplanacak.",
+              { tip: "zekat-hatirlatma", alarmId: alarm.id, ekran: "zekatHesabi" }
+            );
+            if (gonderildi === true) gonderilenBildirim++;
+            else if (gonderildi && gonderildi.hata) {
+              gonderimHatalari.push({ alarm: alarm.ad, tokenIlk10: (alarm.token || "").slice(0, 10), hata: gonderildi.hata });
+            }
+
+            // Ölü token → aboneliği kapat (KAP aboneliğiyle aynı gerekçe).
+            const olduMu = !!(gonderildi && gonderildi.hata &&
+              String(gonderildi.hata).includes("registration-token-not-registered"));
+            if (olduMu) {
+              olenAbonelik++;
+              guncelListe.push({ ...alarm, aktif: false, kapaliSebep: "token-gecersiz", tetiklenmeTs: Date.now() });
+              continue;
+            }
+
+            let sonraki = zekatTarihIlerlet(alarm.zekatTarihi);
+            let guvenlik = 0;
+            while (sonraki && zekatTarihMs(sonraki) <= bugunMs && guvenlik < 10) {
+              sonraki = zekatTarihIlerlet(sonraki);
+              guvenlik++;
+            }
+            guncelListe.push({
+              ...alarm,
+              zekatTarihi: sonraki || alarm.zekatTarihi,
+              bildirimSayisi: (alarm.bildirimSayisi || 0) + 1,
+              tetiklenmeTs: Date.now(),
+            });
+            continue;
+          }
+
           if (alarm.tip === "kap") {
             if (!kapListe) { guncelListe.push(alarm); continue; }
             const kod = String(alarm.sembol || "").slice(BIST_ONEK.length).toUpperCase();
@@ -1314,6 +1480,7 @@ async function alarmKontrol(req, res) {
           benzersizSembol: benzersizSemboller.length,
           tetiklenen,
           kapTetiklenen,
+          zekatTetiklenen,
           olenAbonelik,
           gecersizKurulumKapatilan,
           gonderilenBildirim,
