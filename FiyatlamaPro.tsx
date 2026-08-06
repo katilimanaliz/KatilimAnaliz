@@ -11902,9 +11902,13 @@ function ZekatHesabi() {
   const [hatirlatmaDurum, setHatirlatmaDurum] = useState<"bos" | "gonderiliyor" | "basarili">("bos");
   const [hatirlatmaHata, setHatirlatmaHata] = useState("");
 
-  const guncelle = (yama: Partial<ZekatVeri>) => {
+  // useCallback ZORUNLU DEĞİL ama bilinçli: guncelle her render'da yeniden
+  // oluşsaydı ZekatSatir'ın prop'u değişir, gereksiz render tetiklenirdi.
+  // Referans sabit olunca satırlar yalnızca kendi değeri değiştiğinde
+  // güncelleniyor — mobilde yazarken gözle görülür fark yaratıyor.
+  const guncelle = useCallback((yama: Partial<ZekatVeri>) => {
     setV(onceki => { const yeni = { ...onceki, ...yama }; zekatYaz(yeni); return yeni; });
-  };
+  }, []);
 
   // ── Canlı gram altın (24 ayar / has) ──────────────────────────────────────
   // AltinAPI'deki "ALTIN" sembolü = Gram Altın (Has · 24 Ayar) — nisabın
@@ -11972,9 +11976,6 @@ function ZekatHesabi() {
 
   const kartBg = TEMA === "acik" ? "#E9EEF4" : WA(0.05);
   const kartCizgi = WA(0.08);
-
-  const Baslik = ZekatBaslik;
-  const Satir = (p: any) => <ZekatSatir {...p} guncelle={guncelle} />;
 
   // ── Zekât günü / hatırlatma ───────────────────────────────────────────────
   const sonrakiTarih = v.zekatTarihi ? zekatGunEkle(v.zekatTarihi, ZEKAT_KAMERI_GUN) : null;
@@ -12086,13 +12087,13 @@ function ZekatHesabi() {
       )}
 
       {/* VARLIKLAR */}
-      <Baslik t="Varlıkların" />
+      <ZekatBaslik t="Varlıkların" />
       <div style={{ background: kartBg, border: `1px solid ${kartCizgi}`, borderRadius: 14, overflow: "hidden" }}>
-        <Satir etiket="Altın" alt="Yatırım amaçlı, gram olarak" deger={v.altinGram} alan="altinGram" sonek="gr" />
-        <Satir etiket="Takı ve ziynet" alt="Zekâta katmak istersen gir" deger={v.takiGram} alan="takiGram" sonek="gr" />
-        <Satir etiket="Hisse ve fonlar" alt="Güncel piyasa değeri" deger={v.hisse} alan="hisse" sonek="₺" />
-        <Satir etiket="Nakit ve katılma hesabı" alt="TL ve döviz toplamı" deger={v.nakit} alan="nakit" sonek="₺" />
-        <Satir etiket="Ticari mal ve alacaklar" alt="İsteğe bağlı" deger={v.ticari} alan="ticari" sonek="₺" />
+        <ZekatSatir etiket="Altın" alt="Yatırım amaçlı, gram olarak" deger={v.altinGram} alan="altinGram" sonek="gr" guncelle={guncelle} />
+        <ZekatSatir etiket="Takı ve ziynet" alt="Zekâta katmak istersen gir" deger={v.takiGram} alan="takiGram" sonek="gr" guncelle={guncelle} />
+        <ZekatSatir etiket="Hisse ve fonlar" alt="Güncel piyasa değeri" deger={v.hisse} alan="hisse" sonek="₺" guncelle={guncelle} />
+        <ZekatSatir etiket="Nakit ve katılma hesabı" alt="TL ve döviz toplamı" deger={v.nakit} alan="nakit" sonek="₺" guncelle={guncelle} />
+        <ZekatSatir etiket="Ticari mal ve alacaklar" alt="İsteğe bağlı" deger={v.ticari} alan="ticari" sonek="₺" guncelle={guncelle} />
         <div style={{ display: "flex", justifyContent: "space-between", padding: "11px 13px", background: WA(0.03) }}>
           <span style={{ fontSize: 12, fontWeight: 700, color: WA(0.6) }}>Varlık toplamı</span>
           <span style={{ fontSize: 13, fontWeight: 800, color: TEMA === "acik" ? C.label : "#fff" }}>{para(varliklar)}</span>
@@ -12105,9 +12106,9 @@ function ZekatHesabi() {
       )}
 
       {/* BORÇLAR */}
-      <Baslik t="Borçların" />
+      <ZekatBaslik t="Borçların" />
       <div style={{ background: kartBg, border: `1px solid ${kartCizgi}`, borderRadius: 14, overflow: "hidden" }}>
-        <Satir etiket="Bir yıl içinde ödeyeceklerin" alt="Taksit, fatura, vergi" deger={v.borc} alan="borc" sonek="₺" />
+        <ZekatSatir etiket="Bir yıl içinde ödeyeceklerin" alt="Taksit, fatura, vergi" deger={v.borc} alan="borc" sonek="₺" guncelle={guncelle} />
       </div>
       <div style={{ background: "rgba(224,163,60,0.10)", border: "1px solid rgba(224,163,60,0.3)", borderRadius: 12, padding: "11px 12px", marginTop: 9 }}>
         <p style={{ margin: 0, fontSize: 11.5, color: TEMA === "acik" ? "#8A6519" : "#E8C58A", lineHeight: 1.55 }}>
@@ -12143,7 +12144,7 @@ function ZekatHesabi() {
       </div>
 
       {/* ZEKÂT GÜNÜ */}
-      <Baslik t="Zekât Günün" />
+      <ZekatBaslik t="Zekât Günün" />
       <div style={{ background: kartBg, border: `1px solid ${kartCizgi}`, borderRadius: 14, padding: "13px" }}>
         <p style={{ margin: 0, fontSize: 11.5, color: WA(0.55), lineHeight: 1.55 }}>
           Nisaba ilk ulaştığın günü seç. Bir kameri yıl (354 gün) sonrası için hatırlatma kuralım.
@@ -12207,7 +12208,7 @@ function ZekatHesabi() {
       {/* GEÇMİŞ */}
       {v.gecmis.length > 0 && (
         <>
-          <Baslik t="Geçmiş Hesapların" />
+          <ZekatBaslik t="Geçmiş Hesapların" />
           <div style={{ background: kartBg, border: `1px solid ${kartCizgi}`, borderRadius: 14, overflow: "hidden" }}>
             {v.gecmis.map((g, i) => (
               <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "11px 13px", borderBottom: i < v.gecmis.length - 1 ? `1px solid ${WA(0.06)}` : "none" }}>
@@ -12227,7 +12228,7 @@ function ZekatHesabi() {
       )}
 
       {/* YÖNTEM + UYARI */}
-      <Baslik t="Hesaplama Yöntemi" />
+      <ZekatBaslik t="Hesaplama Yöntemi" />
       <div style={{ background: kartBg, border: `1px solid ${kartCizgi}`, borderRadius: 14, padding: "13px 14px" }}>
         {[
           ["Nisap", "24 ayardan 80,18 gram altın değeri"],
