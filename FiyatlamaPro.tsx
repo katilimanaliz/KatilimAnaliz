@@ -1750,18 +1750,19 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
                   }}>
                     <div style={{width:38,flexShrink:0,display:"flex",flexDirection:"column",alignItems:"flex-start",gap:1}}>
                       <span style={{fontSize:12,fontWeight:800,color:vakif?FC.green:FC.blue}}>
-                        {fon.kod}
-                        {vakif&&<span style={{fontSize:8,color:FC.green,opacity:0.8}}>★</span>}
-                        {/* TEFAS'ta işlem görmeyen fonlar listede de belli olsun.
-                            ⚠️ SADECE İKON — açıklama metni YAZILMAZ (2026-08-06):
-                            ilk sürümde "⚠ İŞLEM YOK" yazıyordu, 38 px'lik kod
-                            sütununa sığmayıp fon adının ve fiyatın üstüne taşıyordu.
-                            Ne olduğu detay ekranında tam metinle yazılı; burada
-                            yalnız dikkat çekmesi yeterli. */}
-                        {fon.islemDurumu && fon.islemDurumu !== "AKTİF" && (
-                          <span title={fon.islemDurumu} style={{fontSize:9,marginLeft:2}}>⚠️</span>
-                        )}
+                        {fon.kod}{vakif&&<span style={{fontSize:8,color:FC.green,opacity:0.8}}>★</span>}
                       </span>
+                      {/* TEFAS'ta işlem görmeyen fonlar listede de belli olsun.
+                          ⚠️ KODUN ALTINDA, AYRI SATIRDA (2026-08-06):
+                          İlk sürümde "⚠ İŞLEM YOK" metniydi — 38 px'lik sütuna
+                          sığmayıp fon adının üstüne taşıyordu. İkincisinde kodun
+                          YANINA alındı, bu sefer alt satıra kayıp fiyatla
+                          çakıştı. Sütun zaten dikey (flexDirection:column) ve
+                          altında boş yer var; ikon oraya kendi satırına konuldu.
+                          Açıklama metni detay ekranında tam olarak yazılı. */}
+                      {fon.islemDurumu && fon.islemDurumu !== "AKTİF" && (
+                        <span title={fon.islemDurumu} style={{fontSize:10,lineHeight:1}}>⚠️</span>
+                      )}
 
                     </div>
                     <div onClick={(e)=>{ if(onFonGrafikAc){ e.stopPropagation(); onFonGrafikAc(fon); } }} style={{flex:1,minWidth:0,paddingRight:2,textAlign:"left",cursor:onFonGrafikAc?"pointer":"default"}}>
@@ -2721,40 +2722,18 @@ function FonDetay({ fon: fonProp, onGeri, settings }: { fon: any, onGeri: () => 
         );
       })()}
 
-      {/* ── PARA AKIŞI ──────────────────────────────────────────────────────
-          Fona net giriş/çıkış. Pozitif = para giriyor. Yatırımcı ilgisinin
-          en doğrudan göstergesi; getiri rakamının anlatmadığı şeyi anlatır. */}
-      {fon.akis && Object.values(fon.akis).some((v:any)=>typeof v==="number") && (()=>{
-        // ⚠️ AKIŞ DEĞERLERİ TL DEĞİL, ORAN (2026-08-06'da ölçüldü).
-        // KUT için gelen değerler: hafta -0,0175 · ay -0,0872 · ucAy -0,1656
-        // Bunlar fon büyüklüğündeki ORANSAL değişim; yüzdeye çevrilir.
-        // İlk sürümde TL sanılıp fmtTL ile biçimlendirilmişti, ekranda
-        // "−0 ₺ / +0 ₺ / +1 ₺" gibi anlamsız değerler çıkıyordu.
-        const fmtAkis=(v:number)=>{
-          const y=v*100;
-          return (y>0?"+":"")+y.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2})+"%";
-        };
-        return (
-          <div style={{padding:"0 14px",marginTop:18,marginBottom:0}}>
-            <div style={{fontSize:11,fontWeight:700,color:C.sub,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>
-              Fon Büyüklüğü Değişimi
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-              {([["hafta","1 Hafta"],["ay","1 Ay"],["ucAy","3 Ay"]] as [string,string][])
-                .filter(([k])=>typeof fon.akis[k]==="number")
-                .map(([k,ad])=>(
-                  <div key={k} style={{background:C.card,borderRadius:10,border:`1px solid ${C.border}`,padding:"10px 8px",textAlign:"center"}}>
-                    <div style={{fontSize:10,color:C.sub,marginBottom:4}}>{ad}</div>
-                    <div style={{fontSize:12.5,fontWeight:800,fontFamily:"monospace",
-                                 color:fon.akis[k]>0?C.green:fon.akis[k]<0?C.red:C.sub}}>
-                      {fmtAkis(fon.akis[k])}
-                    </div>
-                  </div>
-                ))}
-            </div>
-          </div>
-        );
-      })()}
+      {/* ── FON BÜYÜKLÜĞÜ DEĞİŞİMİ KALDIRILDI (2026-08-06) ─────────────────
+          flow_1w / flow_1m / flow_3m alanlarının BİRİMİ ÇÖZÜLEMEDİ.
+          Aynı listede, aynı gün ölçülen değerler:
+            KUT  hafta -0,0175   ay -0,0872   ucAy -0,1656
+            VPA  hafta  0,5744   ay  1,7585   ucAy null
+            EP1  hafta -0,0165   ay  2224,53  ucAy null
+          Üç farklı büyüklük mertebesi — oran da olamaz, TL de olamaz.
+          Fonoloji'nin kendi sitesi VPA için "1 hafta +1,7 mr ₺ · 1 ay
+          +411,5 mn ₺" gösteriyor; bu rakamlar da yukarıdakilerle tutmuyor.
+          Önce TL sanılıp "−0 ₺" gösterildi, sonra oran sanılıp yüzdeye
+          çevrildi; ikisi de yanlıştı. Birim netleşmeden gösterilmeyecek.
+          Alan mapFon'da duruyor (fon.akis); doğrulanırsa blok geri gelir. */}
 
       {/* ── RİSK GÖSTERGELERİ ───────────────────────────────────────────────
           riskSkoru TEFAS'ın resmî 1–7 ölçeği (1 = en düşük risk).

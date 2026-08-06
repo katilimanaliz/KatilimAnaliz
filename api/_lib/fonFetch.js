@@ -241,10 +241,26 @@ function mapFon(f, vakif, takasAraligi) {
   let yonetici = (f.management_company || "").trim();
   if (!yonetici || vakif) yonetici = "Vakıf Katılım Portföy Yönetimi A.Ş.";
   const yasGun = fonYasiGun(f);
+
+  // ── "TAM SIFIR" ŞÜPHESİ (2026-08-06) ────────────────────────────────────
+  // Fonoloji, verisi olmayan dönemler için bazen null bazen 0 döndürüyor.
+  // ilkGorulme null olan fonlarda yaş elemesi devreye girmediği için sıfırlar
+  // ekrana "%0,00" olarak düşüyordu. Ölçülen örnekler:
+  //   VPA: aylik 3.21 · uc_aylik 0 · ytd 8.82 · yillik 0   ← 0'lar sahte
+  //   EP1: aylik 3.18 · uc_aylik 0 · yillik 0              ← 0'lar sahte
+  // Bir fon 1 ayda %3,21 kazanıp 3 ayda TAM %0,00 yapamaz; bu "veri yok".
+  // Kural: uzun dönem tam 0 iken DAHA KISA bir dönem sıfırdan farklıysa,
+  // uzun dönem null sayılır. Kısa dönemlerin hepsi de 0 ise değer korunur —
+  // gerçekten hareketsiz bir fonun meşru sıfırını silmeyelim.
+  const _kisaDonemler = [f.return_1d, f.return_1w, f.return_1m];
+  const _hareketVar = _kisaDonemler.some(v => typeof v === "number" && v !== 0);
+  const sahteSifir = (ham) => _hareketVar && ham === 0;
   // Dönem yetmiyorsa null; yetiyorsa yüzdeye çevrilmiş değer.
   const donem = (ham, gerekliGun, basamak = 2) => {
     if (!donemGecerliMi(yasGun, gerekliGun)) return null;
     if (typeof ham !== "number") return null;
+    // 30 günden uzun dönemlerde tam sıfır şüpheli (bkz. yukarıdaki not).
+    if (gerekliGun > 30 && sahteSifir(ham)) return null;
     return parseFloat((ham * 100).toFixed(basamak));
   };
   return {
@@ -307,6 +323,7 @@ function mapFon(f, vakif, takasAraligi) {
     riskSkoru:  (typeof f.risk_score === "number") ? f.risk_score : null,
     sharpe90:   (typeof f.sharpe_90 === "number") ? parseFloat(f.sharpe_90.toFixed(2)) : null,
     volatilite90: (typeof f.volatility_90 === "number") ? parseFloat((f.volatility_90 * 100).toFixed(2)) : null,
+    // Yıllık getiri hesaplanamıyorsa yıllık en sert düşüş de hesaplanamaz.
     maksDusus1y:  donem(f.max_drawdown_1y, 365),
 
     // ── FON BÜYÜKLÜĞÜ DEĞİŞİMİ ────────────────────────────────────────────
