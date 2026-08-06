@@ -65,6 +65,8 @@ workflows:
         script: |
           IPA=$(find build/ios/ipa -name "*.ipa" | head -1)
           echo "Yuklenecek dosya: $IPA"
+          echo "APPLE_ID uzunluk: ${#APPLE_ID} (beklenen 20)"
+          echo "PAROLA uzunluk: ${#APP_SPECIFIC_PASSWORD} (beklenen 19)"
 
           echo "=== Saglayici listesi ==="
           xcrun altool --list-providers \
@@ -73,14 +75,9 @@ workflows:
           PUBLIC_ID=$(grep -Eo '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' /tmp/providers.txt | head -1)
           echo "Bulunan public id: $PUBLIC_ID"
 
-          if [ -n "$PUBLIC_ID" ]; then
-            xcrun altool --upload-app --type ios --file "$IPA" \
-              -u "$APPLE_ID" -p "$APP_SPECIFIC_PASSWORD" \
-              --provider-public-id "$PUBLIC_ID"
-          else
-            xcrun altool --upload-app --type ios --file "$IPA" \
-              -u "$APPLE_ID" -p "$APP_SPECIFIC_PASSWORD"
-          fi
+          xcrun altool --upload-app --type ios --file "$IPA" \
+            -u "$APPLE_ID" -p "$APP_SPECIFIC_PASSWORD" \
+            ${PUBLIC_ID:+--provider-public-id "$PUBLIC_ID"}
 
     artifacts:
       - build/ios/ipa/*.ipa
