@@ -10934,14 +10934,32 @@ function TaksitKarsilastirma({ s }: { s: any }) {
   const vadeAsim = vade > vadeTavan;
   const vadeGecerli = vade >= 1 && !vadeAsim;
 
-  // Ürün değişince vade tavanı değişiyor — aşan değer tavana çekiliyor.
+  // ── ÜRÜN DEĞİŞİNCE ALANLAR SIFIRLANIR (2026-08-06) ───────────────────────
+  // Önceki sürümde tutar korunuyordu: konutta 1.000.000 girip taşıta geçince
+  // aynı rakam duruyor ve HEMEN hesaplanıyordu. Taşıtta 1.000.000 ₺ finansman
+  // ancak 3,3 milyon ₺ değerinde bir araçla mümkün — yani gösterilen sonuç
+  // baştan geçersizdi. Ürünler arası tutarlar taşınmaz.
+  // ⚠️ vadeTavan bağımlılığa KONULMAZ: tavan tutar değiştikçe de değişiyor,
+  // aynı effect'e koyulursa kullanıcı yazarken alan sürekli temizlenirdi.
   useEffect(() => {
+    setTutarStr("");
+    setAracDegerStr("");
+    setVadeStr(String(urunMeta.maxVade));
     setAcikBanka(null);
+  }, [urun]);
+
+  // Tavan aşıldıysa (tutar/araç değeri değişince olabilir) vadeyi tavana çek.
+  useEffect(() => {
     const v = Math.round(sayiOku(vadeStr));
     if (v > vadeTavan) setVadeStr(String(vadeTavan));
-  }, [urun, vadeTavan]);
+  }, [vadeTavan]);
 
   const sonuclar = useMemo(() => {
+    // ⚠️ TAŞITTA ÖNCE ARAÇ DEĞERİ (2026-08-06): Araç değeri girilmeden
+    // kredi/değer sınırı ve yasal vade tavanı hesaplanamıyor. Önceki sürümde
+    // yalnız finansman tutarı yazılınca liste geliyordu — sınırlar devre dışı
+    // olduğu için kullanıcının alamayacağı taksitler gösteriliyordu.
+    if (urun === "tasit" && aracDeger <= 0) return [];
     if (!veri || tutar <= 0 || !vadeGecerli || ltvAsim || tasitYasak) return [];
     const oranAlan = vade <= urunMeta.esik ? urunMeta.altOran : urunMeta.ustOran;
     const bsmvR = urun === "konut" ? (ilkEv ? 0 : (s?.bireyselBSMV ?? 0)) : (s?.bireyselBSMV ?? 0);
@@ -10989,7 +11007,7 @@ function TaksitKarsilastirma({ s }: { s: any }) {
       })
       .filter(Boolean)
       .sort((a: any, b: any) => a.aylik - b.aylik);
-  }, [veri, tutar, vade, urun, ilkEv, s, vadeGecerli, ltvAsim, tasitYasak]);
+  }, [veri, tutar, aracDeger, vade, urun, ilkEv, s, vadeGecerli, ltvAsim, tasitYasak]);
 
   const enUcuz = sonuclar.length ? sonuclar[0].aylik : 0;
   const tarih = veri?.finansman?.guncelleme?.[urunMeta.tarihAlan] || null;
