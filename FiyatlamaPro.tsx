@@ -11767,7 +11767,7 @@ function KatilimSektoru(){
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ZEKÂT HESABI (2026-08-06)
+// ZEKÂT HESAPLAYICI (2026-08-06)
 // ═══════════════════════════════════════════════════════════════════════════
 // Piyasadaki zekât hesaplayıcılarından (TDV, Ziraat Katılım) farkı: her alanı
 // elle doldurtmuyor — Portföyüm'deki altın, hisse ve fon kalemleri otomatik
@@ -11840,6 +11840,57 @@ function zekatTarihYaz(gg: string): string {
   const t = Date.parse(gg + "T00:00:00Z");
   if (isNaN(t)) return gg;
   return new Date(t).toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+}
+
+// ── ODAK KAYBI HATASI VE ÇÖZÜMÜ (2026-08-06) ───────────────────────────────
+// İlk sürümde Baslik ve Satir, ZekatHesabi'nin İÇİNDE tanımlıydı. React her
+// render'da yeni bir fonksiyon referansı görüp bunu YENİ BİR BİLEŞEN TÜRÜ
+// sayıyor; input'u söküp yeniden takıyordu. Sonuç: kullanıcı bir rakam yazar
+// yazmaz state değişiyor, input yeniden monte ediliyor, odak gidiyor ve mobil
+// klavye kapanıyordu — alana hiçbir şey yazılamıyordu.
+//
+// ÇÖZÜM: İkisi de modül seviyesine taşındı. Artık referans sabit, React aynı
+// bileşen olduğunu anlıyor, input DOM'da kalıyor.
+//
+// GENEL KURAL: State içeren bir bileşenin gövdesinde ASLA alt bileşen
+// tanımlama — özellikle içinde input varsa.
+function ZekatBaslik({ t }: { t: string }) {
+  const renk = TEMA === "acik" ? "#1A2430" : "#A8C2DC";
+  return (
+    <p style={{ margin: "18px 0 8px", fontSize: 11, fontWeight: 800, color: renk, textTransform: "uppercase", letterSpacing: 0.5 }}>{TR(t)}</p>
+  );
+}
+
+function ZekatSatir({ etiket, alt, deger, alan, sonek, otomatik, guncelle }: {
+  etiket: string; alt: string; deger: string; alan: string; sonek: string;
+  otomatik?: boolean; guncelle: (yama: any) => void;
+}) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 13px", borderBottom: `1px solid ${WA(0.06)}` }}>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <p style={{ margin: 0, fontSize: 12.5, fontWeight: 700, color: TEMA === "acik" ? C.label : "#fff" }}>{etiket}</p>
+        <p style={{ margin: "2px 0 0", fontSize: 10.5, color: WA(0.5) }}>{alt}</p>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
+        <input
+          value={deger}
+          onChange={e => guncelle({ [alan]: e.target.value })}
+          type="text"
+          inputMode="decimal"
+          autoComplete="off"
+          placeholder="0"
+          style={{
+            width: 104, textAlign: "right", padding: "8px 9px", borderRadius: 9,
+            border: `1px solid ${otomatik ? "rgba(91,155,216,0.45)" : WA(0.14)}`,
+            background: TEMA === "acik" ? "#fff" : WA(0.04),
+            color: TEMA === "acik" ? C.label : "#fff", fontSize: 13.5, fontWeight: 700,
+            fontFamily: "inherit", outline: "none",
+          }}
+        />
+        <span style={{ fontSize: 11.5, color: WA(0.5), width: 30 }}>{sonek}</span>
+      </div>
+    </div>
+  );
 }
 
 function ZekatHesabi() {
@@ -11921,38 +11972,9 @@ function ZekatHesabi() {
 
   const kartBg = TEMA === "acik" ? "#E9EEF4" : WA(0.05);
   const kartCizgi = WA(0.08);
-  const baslikRenk = TEMA === "acik" ? "#1A2430" : "#A8C2DC";
 
-  const Baslik = ({ t }: { t: string }) => (
-    <p style={{ margin: "18px 0 8px", fontSize: 11, fontWeight: 800, color: baslikRenk, textTransform: "uppercase", letterSpacing: 0.5 }}>{TR(t)}</p>
-  );
-
-  const Satir = ({ etiket, alt, deger, alan, sonek, otomatik }: {
-    etiket: string; alt: string; deger: string; alan: keyof ZekatVeri; sonek: string; otomatik?: boolean;
-  }) => (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 13px", borderBottom: `1px solid ${WA(0.06)}` }}>
-      <div style={{ minWidth: 0, flex: 1 }}>
-        <p style={{ margin: 0, fontSize: 12.5, fontWeight: 700, color: TEMA === "acik" ? C.label : "#fff" }}>{etiket}</p>
-        <p style={{ margin: "2px 0 0", fontSize: 10.5, color: WA(0.5) }}>{alt}</p>
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
-        <input
-          value={deger}
-          onChange={e => guncelle({ [alan]: e.target.value } as any)}
-          inputMode="decimal"
-          placeholder="0"
-          style={{
-            width: 104, textAlign: "right", padding: "8px 9px", borderRadius: 9,
-            border: `1px solid ${otomatik ? "rgba(91,155,216,0.45)" : WA(0.14)}`,
-            background: TEMA === "acik" ? "#fff" : WA(0.04),
-            color: TEMA === "acik" ? C.label : "#fff", fontSize: 13.5, fontWeight: 700,
-            fontFamily: "inherit", outline: "none",
-          }}
-        />
-        <span style={{ fontSize: 11.5, color: WA(0.5), width: 30 }}>{sonek}</span>
-      </div>
-    </div>
-  );
+  const Baslik = ZekatBaslik;
+  const Satir = (p: any) => <ZekatSatir {...p} guncelle={guncelle} />;
 
   // ── Zekât günü / hatırlatma ───────────────────────────────────────────────
   const sonrakiTarih = v.zekatTarihi ? zekatGunEkle(v.zekatTarihi, ZEKAT_KAMERI_GUN) : null;
@@ -14099,7 +14121,7 @@ const MENU = {
   kfkNedir:{title:"KFK Nedir?",back:"araclarMenu"},
   katilimSektoru:{title:"Katılım Bankacılığı Sektörü",back:"araclarMenu"},
   ekonomiSozluk:{title:"Ekonomi Sözlüğü",back:"araclarMenu"},
-  zekatHesabi:{title:"Zekât Hesabı",back:"araclarMenu"},
+  zekatHesabi:{title:"Zekât Hesaplayıcı",back:"araclarMenu"},
   kiraSertifikasi:{title:"Kira Sertifikası İhraçları",back:"araclarMenu"},
   taksitKarsilastirma:{title:"Taksit Karşılaştırma",back:"hesaplaMenu"},
   portfoyum:{title:"Portföyüm",back:"araclarMenu"},
@@ -14205,7 +14227,7 @@ const SCREEN_TO_PATH: Record<string,string> = {
   vadeTakibi: "/vade-takip",
   katilimBankalari: "/katilim-bankalari",
   kfkNedir: "/kfk-nedir",
-  zekatHesabi: "/zekat-hesabi",
+  zekatHesabi: "/zekat-hesaplayici",
   kiraSertifikasi: "/kira-sertifikasi-ihraclari",
   portfoyum: "/portfoyum",
   hazineDoviz: "/doviz-donusturucu",
@@ -14306,7 +14328,7 @@ const MENU_ARAMA_LIST=[
   {key:"kfkNedir",           label:"KFK Nedir?",                                 icon:"🤝", grup:"Araçlar", alt:["kfk","kefalet","katılım finans kefalet","kgf","teminat","kobi"]},
   {key:"katilimSektoru",     label:"Katılım Bankacılığı Sektörü",               icon:"🏦", grup:"Araçlar", alt:["sektör","bddk","pay","aktif","toplanan fon","kullandırılan fon","katılma hesabı","özel cari","roe","kârlılık"]},
   {key:"ekonomiSozluk",      label:"Ekonomi Sözlüğü",                           icon:"📚", grup:"Araçlar", alt:["ekonomi","terim","sözlük","enflasyon","gsyh","faiz","tanım","kavram","makro"]},
-  {key:"zekatHesabi",        label:"Zekât Hesabı",                               icon:"🌙", grup:"Araçlar", alt:["zekat","zekât","nisap","nisab","kırkta bir","sadaka","altın nisabı","dini","ibadet","hesapla"]},
+  {key:"zekatHesabi",        label:"Zekât Hesaplayıcı",                               icon:"🌙", grup:"Araçlar", alt:["zekat","zekât","nisap","nisab","kırkta bir","sadaka","altın nisabı","dini","ibadet","hesapla"]},
   {key:"kiraSertifikasi",    label:"Kira Sertifikası İhraçları",                 icon:"📜", grup:"Araçlar", alt:["kira sertifikası","sukuk","ihraç","vekâlet","murabaha","icare","varlık kiralama","spk"]},
   {key:"hazineDoviz",        label:"Döviz Dönüştürücü",                          icon:"💱", grup:"Hesaplama Araçları", alt:["kur","dolar","euro","dolar kaç tl"]},
   {key:"piyasaMenu",         label:"Piyasa & Veriler",                           icon:"📊", grup:"Piyasa & Veriler", alt:["tüfe","enflasyon","gösterge","politika faizi","sofr","euribor","tlref","tlrefk","aofm","rezerv","cds","borsa","bist","altın","gümüş","emtia","kripto"]},
@@ -21054,7 +21076,7 @@ function App(){
               {key:"kfkNedir",label:"KFK Nedir?"},
               {key:"katilimSektoru",label:"Katılım Bankacılığı Sektörü"},
               {key:"ekonomiSozluk",label:"Ekonomi Sözlüğü"},
-              {key:"zekatHesabi",label:"Zekât Hesabı"},
+              {key:"zekatHesabi",label:"Zekât Hesaplayıcı"},
               {key:"piyasaHaberleri",label:"Piyasa Haberleri"},
               {key:"sozluk",label:"Finans Sözlüğü"},
             ].map(m=>(
@@ -22419,7 +22441,7 @@ function App(){
               {key:"katilimSektoru", icon:"🏦", label:"Katılım Bankacılığı Sektörü", desc:"Sektör payı, fon büyüklükleri ve kârlılık — BDDK resmî verisiyle", renk:"#5B9BD8", bg:"rgba(91,155,216,0.15)"},
               {key:"ekonomiSozluk", icon:"📚", label:"Ekonomi Sözlüğü", desc:"196 ekonomi ve finans terimi — enflasyondan rezervlere, sade tanımlarla", renk:"#A78BFA", bg:"rgba(167,139,250,0.15)"},
               {key:"kfkNedir", icon:"🤝", label:"KFK Nedir?", desc:"Teminat yetersizliğinde işletmenize kefalet desteği — Katılım Finans Kefalet A.Ş.", renk:"#2CCB9A", bg:"rgba(44,203,154,0.15)"},
-              {key:"zekatHesabi", icon:"🌙", label:"Zekât Hesabı", desc:"Nisap güncel altın fiyatıyla, varlıkların portföyünden — zekât gününde hatırlatma", renk:"#16A34A", bg:"rgba(22,163,74,0.15)"},
+              {key:"zekatHesabi", icon:"🌙", label:"Zekât Hesaplayıcı", desc:"Nisap güncel altın fiyatıyla, varlıkların portföyünden — zekât gününde hatırlatma", renk:"#16A34A", bg:"rgba(22,163,74,0.15)"},
               {key:"kiraSertifikasi", icon:"📜", label:"Kira Sertifikası İhraçları", desc:"Türkiye'de sukuk ihraçları — SPK resmî verisiyle tür ve yıl bazında", renk:"#F5A623", bg:"rgba(245,166,35,0.15)"},
               {key:"sozluk",     icon:"📖", label:"Katılım Bankacılığı Sözlüğü",     desc:"Terim ve tanımları hızlıca ara", renk:"#60A5FA", bg:"rgba(96,165,250,0.15)"},
               {key:"katilimBlog", icon:"📝", label:"Katılım Blog", desc:"Kâr payı, murabaha, TLREF ve daha fazlası — anlaşılır rehberler", renk:"#2CCB9A", bg:"rgba(44,203,154,0.15)", harici:true},
