@@ -6,14 +6,13 @@ workflows:
 
     environment:
       groups:
-        - katilim_ios          # Codemagic UI'da olusturulacak degisken grubu
+        - katilim_ios
       vars:
-        XCODE_WORKSPACE: "ios/App/App.xcworkspace"
+        XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
         BUNDLE_ID: "com.katilimplus.app"
-        BUILD_NUMBER_OFFSET: 300   # TestFlight'taki en yuksek build numarasindan buyuk olmali
+        BUILD_NUMBER_OFFSET: 300
       xcode: latest
-      cocoapods: default
       node: 22
 
     scripts:
@@ -21,7 +20,6 @@ workflows:
         script: |
           node -v
           npm -v
-          ls -la ios
           ls -la ios/App
 
       - name: Bagimliliklar
@@ -60,7 +58,7 @@ workflows:
       - name: IPA uret
         script: |
           xcode-project build-ipa \
-            --workspace "$XCODE_WORKSPACE" \
+            --project "$XCODE_PROJECT" \
             --scheme "$XCODE_SCHEME"
 
       - name: TestFlight'a yukle
