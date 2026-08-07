@@ -11811,12 +11811,25 @@ const ZEKAT_BOS: ZekatVeri = {
   zekatTarihi: null, hatirlatmaKurulu: false, gecmis: [],
 };
 
+// Zekât günü ve hatırlatma durumu SÜREGELEN bir tercih — kullanıcı bir kez
+// kurar, uygulamayı her açtığında kaybolmamalı. Geçmiş kayıtları da bilinçli
+// bir "Bu hesabı kaydet" eylemiyle oluşuyor, kalıcı olması beklenir.
+//
+// HESAP GİRDİLERİ (altın, takı, hisse, nakit, ticari, borç) ise KASITLI
+// OLARAK kalıcı DEĞİL: ekrana her girişte boş başlar. Önceki sürümde tüm
+// alanlar birlikte saklanıyordu; kullanıcı yeni bir senaryo denemek
+// istediğinde önce eski rakamları silmek zorunda kalıyordu.
 function zekatOku(): ZekatVeri {
   try {
     const ham = localStorage.getItem(ZEKAT_LS_KEY);
     if (!ham) return { ...ZEKAT_BOS };
     const d = JSON.parse(ham);
-    return { ...ZEKAT_BOS, ...d, gecmis: Array.isArray(d?.gecmis) ? d.gecmis : [] };
+    return {
+      ...ZEKAT_BOS,
+      zekatTarihi: d?.zekatTarihi ?? null,
+      hatirlatmaKurulu: !!d?.hatirlatmaKurulu,
+      gecmis: Array.isArray(d?.gecmis) ? d.gecmis : [],
+    };
   } catch { return { ...ZEKAT_BOS }; }
 }
 function zekatYaz(v: ZekatVeri) {
@@ -12378,21 +12391,58 @@ function VadeFarkiKarari() {
 // Bu ikisi farklı şeyler; aynıymış gibi tek sayıya indirilirse hata olur.
 function TlYpKarari({ s }: { s?: any }) {
   const [paraBirimi, setParaBirimi] = useState("USD");
-  const [tutarS, setTutarS] = useState("");
-  const [gunS, setGunS] = useState("");
+  const [tutarS, setTutarS] = useState("");           // seçili döviz cinsinden tutar (örn. 30.000 USD)
+  const [odemeYapisi, setOdemeYapisi] = useState("spot"); // "spot" | "taksitli"
+  const [gunS, setGunS] = useState("");                // spot: vade (gün)
+  const [taksitSayisiS, setTaksitSayisiS] = useState(""); // taksitli: taksit adedi
+  const [taksitAraligiS, setTaksitAraligiS] = useState("1"); // taksitli: taksitler arası ay
   const [tlOranS, setTlOranS] = useState("");
   const [ypOranS, setYpOranS] = useState("");
   const [ypBsmv, setYpBsmv] = useState("var");     // "var" | "muaf"
   const [kurBeklentiS, setKurBeklentiS] = useState("");
 
-  const T = sayiOku(tutarS);
-  const gun = Math.round(sayiOku(gunS));
+  // ── Canlı kur — tutar döviz cinsinden giriliyor, TL karşılığı burada ──────
+  // NEDEN: İlk sürümde kullanıcı TL tutar giriyordu ve YP tarafında "döviz
+  // karşılığı kullanılır" diye belirsiz bırakılıyordu. Ticari kullanıcı
+  // finansman ihtiyacını genelde döviz cinsinden bilir (örn. "30.000 USD'lik
+  // ithalat"); TL'ye çevirmek onun işi olmamalı. portfoyGecmisVeri, uygulamanın
+  // her yerde kullandığı AYNI canlı kur kaynağı (Yahoo "USDTRY=X"/"EURTRY=X").
+  const [kur, setKur] = useState<number | null>(null);
+  const [kurYukleniyor, setKurYukleniyor] = useState(true);
+  useEffect(() => {
+    let iptal = false;
+    setKurYukleniyor(true);
+    portfoyGecmisVeri(paraBirimi === "USD" ? "USDTRY=X" : "EURTRY=X")
+      .then(v => { if (!iptal) { setKur(v.guncelFiyat ?? null); setKurYukleniyor(false); } })
+      .catch(() => { if (!iptal) setKurYukleniyor(false); });
+    return () => { iptal = true; };
+  }, [paraBirimi]);
+
+  const dovizTutar = sayiOku(tutarS);
+  const T = kur != null ? dovizTutar * kur : 0;   // TL karşılığı — hesabın geri kalanı bunu kullanır
+
+  // ── Ödeme yapısı: spot ya da taksitli ──────────────────────────────────────
+  // Taksitli yapıda kâr payı azalan bakiyeye işler; tek bir "vade" yerine
+  // AĞIRLIKLI ORTALAMA VADE (AOV) kullanılır — Erken Kapama Kararı'ndaki aynı
+  // yaklaşım. Eşit taksit varsayımıyla AOV = (taksit sayısı + 1) / 2 × aralık.
+  // Bu YAKLAŞIKTIR: gerçek ödeme planı farklı taksit tutarları içeriyorsa AOV
+  // biraz kayar; ekranın altında bu belirtiliyor.
+  const taksitSayisi = Math.round(sayiOku(taksitSayisiS));
+  const taksitAraligiAy = Math.max(sayiOku(taksitAraligiS), 0.1);
+  const aovAy = taksitSayisi > 0 ? (taksitSayisi + 1) / 2 * taksitAraligiAy : 0;
+  const toplamVadeAy = taksitSayisi * taksitAraligiAy;
+
+  const gun = odemeYapisi === "spot"
+    ? Math.round(sayiOku(gunS))
+    : Math.round(aovAy * 30);   // AOV ay -> gün (360/12 = 30 gün/ay, finansman tarafıyla tutarlı)
+
   const rTL = sayiOku(tlOranS) / 100;
   const rYP = sayiOku(ypOranS) / 100;
   const kurBeklenti = sayiOku(kurBeklentiS) / 100;   // yıllık
   const bsmvOran = (s?.ticariBSMV ?? 5) / 100;
 
-  const hazir = T > 0 && gun > 0 && rTL > 0 && rYP > 0;
+  const hazir = T > 0 && gun > 0 && rTL > 0 && rYP > 0 &&
+    (odemeYapisi === "spot" ? sayiOku(gunS) > 0 : taksitSayisi > 0);
 
   // Dönem maliyet oranları (anapara üzerine binen yük)
   const yTL = rTL * (gun / 360) * (1 + bsmvOran);
@@ -12416,6 +12466,7 @@ function TlYpKarari({ s }: { s?: any }) {
     ? (Math.pow(1 + (1 + dBeklenenDonem) * (1 + yYP) - 1, 365 / gun) - 1) * 100 : 0;
 
   const pb = paraBirimi;
+  const kurYaz = kur != null ? new Intl.NumberFormat("tr-TR", { minimumFractionDigits: 4, maximumFractionDigits: 4 }).format(kur) : null;
 
   return (
     <div style={{ padding: "14px 14px 90px" }}>
@@ -12427,9 +12478,28 @@ function TlYpKarari({ s }: { s?: any }) {
       <Card>
         <SecTitle>Finansman</SecTitle>
         <Seg options={[{ v: "USD", l: "USD" }, { v: "EUR", l: "EUR" }]} value={paraBirimi} onChange={setParaBirimi} />
-        <Field label="Finansman Tutarı" value={tutarS} onChange={setTutarS} suffix="₺"
-          hint="YP'de bu tutarın döviz karşılığı kullanılır" />
-        <Field label="Vade" value={gunS} onChange={setGunS} suffix="Gün" hint="Vade sonunda tek ödeme (spot)" />
+        <Field label={`Finansman Tutarı (${pb})`} value={tutarS} onChange={setTutarS} suffix={pb}
+          hint="Döviz cinsinden ihtiyacını yaz" />
+        <RRow
+          label={kurYukleniyor ? "TL karşılığı hesaplanıyor…" : `TL Karşılığı (${pb}/TL ${kurYaz ?? "—"})`}
+          value={T > 0 ? kararTL(T) : "—"}
+          accent={C.blue} sub />
+
+        <p style={{ margin: "14px 0 8px", fontSize: 12, fontWeight: 600, color: C.sub }}>Ödeme Yapısı</p>
+        <Seg options={[{ v: "spot", l: "Tek Ödeme (Spot)" }, { v: "taksitli", l: "Taksitli" }]}
+          value={odemeYapisi} onChange={setOdemeYapisi} />
+
+        {odemeYapisi === "spot" ? (
+          <Field label="Vade" value={gunS} onChange={setGunS} suffix="Gün" hint="Vade sonunda tek ödeme" />
+        ) : (
+          <>
+            <Field label="Taksit Sayısı" value={taksitSayisiS} onChange={setTaksitSayisiS} suffix="Adet" />
+            <Field label="Taksitler Arası Süre" value={taksitAraligiS} onChange={setTaksitAraligiS} suffix="Ay" />
+            {taksitSayisi > 0 && (
+              <RRow label="Ağırlıklı Ortalama Vade" value={`${aovAy.toFixed(1)} ay (${gun} gün)`} accent={C.orange} sub />
+            )}
+          </>
+        )}
       </Card>
 
       <Card>
@@ -12446,7 +12516,7 @@ function TlYpKarari({ s }: { s?: any }) {
       {!hazir ? (
         <Card>
           <p style={{ margin: 0, fontSize: 13, color: C.sub, lineHeight: 1.6, textAlign: "center" }}>
-            Karşılaştırma için tutar, vade ve iki oranı gir.
+            Karşılaştırma için tutar, vade (ya da taksit bilgisi) ve iki oranı gir.
           </p>
         </Card>
       ) : (
@@ -12514,6 +12584,7 @@ function TlYpKarari({ s }: { s?: any }) {
                 <p style={{ margin: "11px 0 0", fontSize: 11.5, color: C.sub, lineHeight: 1.55 }}>
                   {pb} yolunda kur farkı yalnızca anaparaya değil, kâr payına da biner — bu yüzden
                   toplam etki beklenen kur artışından biraz yüksek çıkar.
+                  {odemeYapisi === "taksitli" && " Taksitli yapıda hesap, eşit taksit varsayımıyla bulunan ağırlıklı ortalama vadeye göre yapıldı; gerçek ödeme planın farklıysa sonuç bir miktar değişir."}
                 </p>
               </Card>
             </>
@@ -12529,7 +12600,8 @@ function TlYpKarari({ s }: { s?: any }) {
             <SecTitle>Kimler YP Borçlanabilir?</SecTitle>
             <p style={{ margin: "0 0 12px", fontSize: 12, color: C.sub, lineHeight: 1.6 }}>
               Döviz kredisi kullanımı 32 Sayılı Karar ve TCMB Sermaye Hareketleri Genelgesi ile
-              sınırlandırılmıştır. Hesaplamaya girmeden önce uygunluğunu kontrol et.
+              sınırlandırılmıştır. Aşağıdakiler başlıca hallerdir, liste tüketici değildir —
+              hesaplamaya girmeden önce uygunluğunu kontrol et.
             </p>
             {[
               ["Döviz geliri olan firmalar",
@@ -12542,6 +12614,8 @@ function TlYpKarari({ s }: { s?: any }) {
                "Teşvik belgesi kapsamında kredi kullanması öngörülen firmalar bu şarttan muaftır."],
               ["Muhtemel döviz gelirini belgeleyenler",
                "Son üç mali yılda döviz geliri olmayanlar, bağlantılarını ve muhtemel döviz gelirlerini tevsik etmek kaydıyla, bu tutarı aşmayacak şekilde kredi kullanabilir."],
+              ["Bazı sektörel ve idari istisnalar",
+               "EYDEP sertifikalı savunma sanayii firmaları ve TMSF tasfiye ihalelerine ilişkin pay devri gibi mevzuatta ayrıca sayılan özel haller de şarttan muaf tutulabilir; bunlar sık güncellenen dar kapsamlı istisnalardır."],
             ].map(([baslik, metin], i) => (
               <div key={i} style={{ display: "flex", gap: 10, marginBottom: 11 }}>
                 <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: 99, background: C.blueLight,
@@ -12565,7 +12639,8 @@ function TlYpKarari({ s }: { s?: any }) {
             <p style={{ margin: "12px 0 0", fontSize: 11, color: C.sub, lineHeight: 1.55, opacity: 0.85 }}>
               Döviz gelirleri, SMMM veya YMM tarafından onaylanan Döviz Gelirleri Beyan Formu ve tespit
               raporu ile bankaya belgelenir; kontrol krediye aracılık eden bankanın yükümlülüğündedir.
-              Mevzuat değişebilir — eşikler ve istisnalar için bankana ve mali müşavirine danış.
+              Mevzuat sık değişir ve buradaki liste tüketici değildir — eşikler, istisnalar ve son
+              durum için bankana ve mali müşavirine danış.
             </p>
           </Card>
         </>
@@ -12573,13 +12648,15 @@ function TlYpKarari({ s }: { s?: any }) {
 
       <p style={{ margin: "6px 4px 0", fontSize: 11, color: C.sub, lineHeight: 1.6, opacity: 0.85 }}>
         Kâr payı 360 gün esasına göre basit yöntemle, kur artışının yıllıklandırılması 365 gün
-        üzerinden hesaplanır. Vade sonunda tek ödemeli (spot) yapı varsayılmıştır; taksitli
-        yapılarda sonuç değişir. Bu ekran bilgilendirme amaçlıdır; yatırım, finansman veya
-        danışmanlık hizmeti sunmaz ve tavsiye niteliği taşımaz. Sonuçlar girdiğin varsayımlara dayanır; karar ve sorumluluk sana aittir.
+        üzerinden hesaplanır. Taksitli yapılarda vade, ağırlıklı ortalama vade ile yaklaşık olarak
+        hesaplanır. Bu ekran bilgilendirme amaçlıdır; yatırım, finansman veya danışmanlık hizmeti
+        sunmaz ve tavsiye niteliği taşımaz. Sonuçlar girdiğin varsayımlara dayanır; karar ve
+        sorumluluk sana aittir.
       </p>
     </div>
   );
 }
+
 
 // ── ODAK KAYBI HATASI VE ÇÖZÜMÜ (2026-08-06) ───────────────────────────────
 // İlk sürümde Baslik ve Satir, ZekatHesabi'nin İÇİNDE tanımlıydı. React her
@@ -12600,10 +12677,26 @@ function ZekatBaslik({ t }: { t: string }) {
   );
 }
 
+// Yalnızca RAKAM içeren tam sayı gösterimi — binlik ayraç. TL alanlarına
+// (borç, nakit, hisse, ticari) uygulanıyor. Gram alanları (altın, takı)
+// KASITLI OLARAK biçimlendirilmiyor: portfoyuAktar() bu alanlara JS'in
+// ondalık NOKTA gösterimini yazıyor ("45.32"); virgül bekleyen bir
+// biçimlendirici bu noktayı binlik ayraç sanıp değeri 100 kat büyütürdü
+// (45.32 gr → "4.532"). Gram alanları ondalık taşıdığı için ham bırakılıyor.
+function zekatTLGoster(ham: string): string {
+  const rakam = String(ham ?? "").replace(/\D/g, "");
+  if (!rakam) return "";
+  return rakam.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
 function ZekatSatir({ etiket, alt, deger, alan, sonek, otomatik, guncelle }: {
   etiket: string; alt: string; deger: string; alan: string; sonek: string;
   otomatik?: boolean; guncelle: (yama: any) => void;
 }) {
+  const tlAlani = sonek === "₺";
+  const degisti = (e: any) => {
+    guncelle({ [alan]: tlAlani ? e.target.value.replace(/\D/g, "") : e.target.value });
+  };
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 13px", borderBottom: `1px solid ${WA(0.06)}` }}>
       <div style={{ minWidth: 0, flex: 1 }}>
@@ -12612,8 +12705,8 @@ function ZekatSatir({ etiket, alt, deger, alan, sonek, otomatik, guncelle }: {
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
         <input
-          value={deger}
-          onChange={e => guncelle({ [alan]: e.target.value })}
+          value={tlAlani ? zekatTLGoster(deger) : deger}
+          onChange={degisti}
           type="text"
           inputMode="decimal"
           autoComplete="off"
@@ -12623,7 +12716,7 @@ function ZekatSatir({ etiket, alt, deger, alan, sonek, otomatik, guncelle }: {
             border: `1px solid ${otomatik ? "rgba(91,155,216,0.45)" : WA(0.14)}`,
             background: TEMA === "acik" ? "#fff" : WA(0.04),
             color: TEMA === "acik" ? C.label : "#fff", fontSize: 13.5, fontWeight: 700,
-            fontFamily: "inherit", outline: "none",
+            fontFamily: "monospace", outline: "none",
           }}
         />
         <span style={{ fontSize: 11.5, color: WA(0.5), width: 30 }}>{sonek}</span>
@@ -12888,17 +12981,26 @@ function ZekatHesabi() {
         <p style={{ margin: 0, fontSize: 11.5, color: WA(0.55), lineHeight: 1.55 }}>
           Nisaba ilk ulaştığın günü seç. Bir kameri yıl (354 gün) sonrası için hatırlatma kuralım.
         </p>
-        <input
-          type="date"
-          value={v.zekatTarihi || ""}
-          onChange={e => guncelle({ zekatTarihi: e.target.value || null, hatirlatmaKurulu: false })}
-          style={{
-            width: "100%", marginTop: 10, padding: "11px 12px", borderRadius: 10,
-            border: `1px solid ${WA(0.14)}`, background: TEMA === "acik" ? "#fff" : WA(0.04),
-            color: TEMA === "acik" ? C.label : "#fff", fontSize: 13.5, fontWeight: 700,
-            fontFamily: "inherit", outline: "none", boxSizing: "border-box",
-          }}
-        />
+        {/* iOS'ta <input type="date"> kendi native denetimini (yuvarlak beyaz
+            kapsül) getiriyor ve bizim border-radius/arka plan ayarlarımızı
+            görmezden gelip kartın dışına taşıyordu. Sarmalayıcıdaki
+            overflow:hidden taşmayı kart sınırına kilitliyor;
+            WebkitAppearance:"none" native kapsülü kaldırıp bizim stilimizin
+            görünmesini sağlıyor. */}
+        <div style={{ marginTop: 10, borderRadius: 10, overflow: "hidden", border: `1px solid ${WA(0.14)}` }}>
+          <input
+            type="date"
+            value={v.zekatTarihi || ""}
+            onChange={e => guncelle({ zekatTarihi: e.target.value || null, hatirlatmaKurulu: false })}
+            style={{
+              width: "100%", display: "block", padding: "11px 12px",
+              border: "none", background: TEMA === "acik" ? "#fff" : WA(0.04),
+              color: TEMA === "acik" ? C.label : "#fff", fontSize: 13.5, fontWeight: 700,
+              fontFamily: "inherit", outline: "none", boxSizing: "border-box",
+              WebkitAppearance: "none", appearance: "none", colorScheme: TEMA === "acik" ? "light" : "dark",
+            }}
+          />
+        </div>
         {sonrakiTarih && (
           <div style={{ marginTop: 11, padding: "11px 12px", background: WA(0.04), borderRadius: 10 }}>
             <p style={{ margin: 0, fontSize: 13, fontWeight: 800, color: TEMA === "acik" ? C.label : "#fff" }}>{zekatTarihYaz(sonrakiTarih)}</p>
