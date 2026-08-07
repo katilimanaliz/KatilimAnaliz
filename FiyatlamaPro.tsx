@@ -12007,6 +12007,7 @@ function ErkenKapamaKarari({ s }: { s?: any }) {
   const [taksitS, setTaksitS] = useState("");
   const [vadeS, setVadeS] = useState("");
   const [nakitS, setNakitS] = useState("");
+  const [bilesikS, setBilesikS] = useState("");   // ticari: elle girilen yıllık bileşik oran
   const [yatirimVadeS, setYatirimVadeS] = useState("32");
   const [getiriS, setGetiriS] = useState("");
 
@@ -12020,8 +12021,18 @@ function ErkenKapamaKarari({ s }: { s?: any }) {
   const netYillik = brutGetiri * (1 - sOran / 100);
   const aylikGetiri = netYillik > 0 ? Math.pow(1 + netYillik / 100, 1 / 12) - 1 : 0;
 
+  // Finansmanın örtük yıllık maliyeti taksit + vade + anaparadan TÜRETİLİR.
+  // Ancak taksit×vade ≤ anapara ise böyle bir plan matematiksel olarak
+  // çözülemez (ödemeler anaparayı bile karşılamıyor) ve fonksiyon 0 döner.
+  // TİCARİ TL'de erken kapama ücreti formülü bu orana DAYANDIĞI için, 0
+  // dönmesi ücreti sessizce eksik hesaplatıyordu. Bu yüzden ticaride oran
+  // elle de girilebiliyor; girilmişse o kullanılır.
   const aylikOran = kararAylikOranBul(anapara, taksit, n);
-  const yillikBilesik = aylikOran > 0 ? (Math.pow(1 + aylikOran, 12) - 1) * 100 : 0;
+  const turetilenBilesik = aylikOran > 0 ? (Math.pow(1 + aylikOran, 12) - 1) * 100 : 0;
+  const elleBilesik = sayiOku(bilesikS);
+  const yillikBilesik = elleBilesik > 0 ? elleBilesik : turetilenBilesik;
+  // Girilen taksit ve vade, kalan anaparayı karşılamıyorsa veri tutarsızdır.
+  const planTutarsiz = anapara > 0 && taksit > 0 && n > 0 && taksit * n <= anapara;
 
   const aov = n > 0 ? (n + 1) / 2 : 0;   // eşit taksitte ağırlıklı ortalama kalan vade
   let ucret = 0, bsmv = 0, ucretAciklama = "";
@@ -12065,6 +12076,10 @@ function ErkenKapamaKarari({ s }: { s?: any }) {
     return (alt + ust) / 2;
   })();
 
+  // Tür değişince ticariTL'ye özgü alan anlamsızlaşır; ekranda görünmediği
+  // hâlde hesaba karışmasın diye temizleniyor.
+  useEffect(() => { if (tur !== "ticariTL" && bilesikS) setBilesikS(""); }, [tur]);
+
   const turAciklama: Record<string, string> = {
     konut: "Erken kapama tazminatı var — kalan vade 36 aydan kısaysa azami %1, uzunsa %2.",
     tuketici: "Bu türde erken kapama ücreti alınmaz. Arsa/işyeri ve Togg de aynı rejimde.",
@@ -12089,10 +12104,30 @@ function ErkenKapamaKarari({ s }: { s?: any }) {
         <Field label="Kalan Anapara" value={anaparaS} onChange={setAnaparaS} suffix="₺" hint="Son ekstrende yazan bakiye" />
         <Field label="Ödenen Aylık Taksit Tutarı" value={taksitS} onChange={setTaksitS} suffix="₺" hint="Her ay ödediğin tutar" />
         <Field label="Kalan Vade" value={vadeS} onChange={setVadeS} suffix="Ay" hint="Kaç taksit kaldı" />
-        {aylikOran > 0 && (
-          <RRow label="Finansmanın Yıllık Maliyeti" value={kararYuzde(yillikBilesik)} accent={C.orange} />
+        {tur === "ticariTL" && (
+          <Field label="Yıllık Bileşik Kâr Payı Oranı" value={bilesikS} onChange={setBilesikS} suffix="%"
+            hint={turetilenBilesik > 0
+              ? `Boş bırakırsan taksit ve vadeden hesaplanan ${kararYuzde(turetilenBilesik)} kullanılır`
+              : "Erken kapama ücreti bu orana bağlı — sözleşmendeki oranı gir"} />
+        )}
+        {yillikBilesik > 0 && (
+          <RRow label={elleBilesik > 0 ? "Finansmanın Yıllık Maliyeti (girilen)" : "Finansmanın Yıllık Maliyeti"}
+            value={kararYuzde(yillikBilesik)} accent={C.orange} />
+        )}
+        {anapara > 0 && n > 0 && (
+          <RRow label="Erken Kapama Ücreti" value={ucret + bsmv > 0 ? kararTL(ucret + bsmv) : "Yok"}
+            accent={ucret + bsmv > 0 ? C.orange : C.green} />
         )}
       </Card>
+
+      {planTutarsiz && (
+        <KararNot tur="uyari">
+          Girdiğin taksit ve vade, kalan anaparayı karşılamıyor
+          ({kararTL(taksit)} × {n} ay = {kararTL(taksit * n)}, kalan anapara {kararTL(anapara)}).
+          Rakamları kontrol et — finansmanın maliyeti bu verilerden hesaplanamıyor.
+          {tur === "ticariTL" && " Ticari üründe erken kapama ücreti için yıllık bileşik oranı elle girebilirsin."}
+        </KararNot>
+      )}
 
       <Card>
         <SecTitle>Elindeki Para</SecTitle>
