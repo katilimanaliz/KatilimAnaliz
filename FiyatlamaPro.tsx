@@ -11849,51 +11849,38 @@ function zekatTarihYaz(gg: string): string {
 // ═══════════════════════════════════════════════════════════════════════════
 // KARAR ARAÇLARI (2026-08-06) — Erken Kapama Kararı · Vade Farkı Kararı
 // ═══════════════════════════════════════════════════════════════════════════
-// Uygulamadaki diğer ekranlar TEK bir hesap yapıyor ("taksitim ne olur").
-// Bunlar iki seçeneği yan yana koyup CEVABI söylüyor ("hangisini yapmalıyım").
-// Kullanıcı bir hesabı bir kez yapar, bir kararı her ay yeniden sorar.
+// Diğer ekranlar TEK bir hesap yapar ("taksitim ne olur"). Bunlar iki seçeneği
+// yan yana koyup CEVABI söyler ("hangisini yapmalıyım").
+//
+// TASARIM: Uygulamanın STANDART bileşenleri kullanılıyor — Card, SecTitle,
+// Field/TutarField, Seg, RRow. İlk sürümde bu ekranlara özel kartlar, emoji
+// ikon rozetleri ve kendi girdi bileşenleri yazılmıştı; uygulamanın geri
+// kalanına hiç benzemiyordu ve her modülün ayrı bir dili olmasına yol
+// açıyordu. Yeni ekran eklerken kural: ÖNCE mevcut bileşenlere bak.
+//
+// TutarField binlik ayracını kendisi yapıyor — ayrı bir biçimlendirme yazmaya
+// gerek yok, üstelik uygulama genelinde tutarlı davranıyor.
+//
+// KAYITLI DEĞER YOK: İlk sürüm girilenleri localStorage'a yazıyordu; ekran
+// her açılışta eski rakamlarla geliyor ve kullanıcı yeni bir senaryo denemek
+// isterken önce temizlemek zorunda kalıyordu. Hesaplama ekranlarının hiçbiri
+// böyle davranmıyor — bu ekranlar da her açılışta BOŞ başlar.
 //
 // ÇİFTE SAYIM TUZAĞI: İskonto/ceza gibi kalemler YA tutarın içinde olur YA da
-// ayrı satır olarak eklenir — ikisi birden asla. İlk taslakta iskonto hem
-// "iskontolu tutar"ın içinde hem ayrı kalem olarak sayılmış ve sonuç TERS
-// çıkmıştı. Aşağıdaki dökümlerde her kalem TEK kez geçiyor.
+// ayrı satır olarak eklenir — ikisi birden asla. İlk taslakta iskonto iki kez
+// sayılmış ve sonuç TERS çıkmıştı.
 //
 // BİRİM TUZAĞI: "Ödeyeceğin toplam" ile "elinde kalan" yan yana konulamaz.
-// Karşılaştırma daima VADE SONUNDAKİ NET VARLIK üzerinden yapılıyor.
-//
-// NEDEN YALNIZCA KATILMA HESABI: İlk sürümde Altın ve Fon seçenekleri de
-// vardı. İkisinde de "beklenen getiri" kullanıcının tahminine kalıyordu ve
-// altında bunun ne anlama geldiği (fiyat artışı mı, gram sayısı mı) belirsiz
-// kalıyordu — döviz, gayrimenkul gibi sonsuz alternatif de eklenebilirdi.
-// Katılma hesabı, oranı bankaca ilan edilen ve stopajı kurallı olan tek
-// araç; karşılaştırmanın çapası olarak o bırakıldı.
+// Karşılaştırma daima VADE SONUNDAKİ NET VARLIK üzerinden yapılır.
 
-// ── Sayı okuma / yazma ─────────────────────────────────────────────────────
-function kararSayi(s: any): number {
-  if (s == null) return 0;
-  // Yalnızca binlik ayracı görünümündeki noktalar silinir. Düz .replace(/\./g,"")
-  // kullanılırsa yüzde alanına "3.25" yazan kullanıcının değeri 325 olur.
-  const t = String(s).replace(/\s/g, "").replace(/\.(?=\d{3}(\D|$))/g, "").replace(",", ".");
-  const n = parseFloat(t);
-  return isNaN(n) || n < 0 ? 0 : n;
-}
-// Kullanıcı yazarken canlı binlik ayracı. Uygulamanın geri kalanında tutarlar
-// hep "1.250.000" biçiminde gösteriliyor; girdi alanlarında ham rakam kalması
-// tutarsız duruyordu ve büyük tutarlarda okunamıyordu.
-function kararTLBicim(ham: any): string {
-  const yalniz = String(ham ?? "").replace(/\D/g, "");
-  if (!yalniz) return "";
-  return yalniz.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-}
 const kararTL = (n: number) =>
   `${new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 0 }).format(Math.round(n))} ₺`;
 const kararYuzde = (n: number) =>
   `%${new Intl.NumberFormat("tr-TR", { minimumFractionDigits: 1, maximumFractionDigits: 2 }).format(n)}`;
 
-// Eşit taksitli bir planın örtük AYLIK oranı. Kalan anapara, taksit ve vade
-// biliniyorsa oran analitik çözülemez; ikiye bölme ile bulunuyor.
-// Neden gerekli: kullanıcı oranı bilmiyor, elinde sadece ekstre var. Ayrıca
-// ticari erken ödeme ücreti formülü yıllık BİLEŞİK orana dayanıyor.
+// Eşit taksitli bir planın örtük AYLIK oranı. Kullanıcı oranı bilmiyor,
+// elinde sadece ekstre var; oran analitik çözülemediği için ikiye bölme.
+// Ticari erken ödeme ücreti formülü de yıllık BİLEŞİK orana dayanıyor.
 function kararAylikOranBul(anapara: number, taksit: number, ay: number): number {
   if (anapara <= 0 || taksit <= 0 || ay <= 0) return 0;
   if (taksit * ay <= anapara) return 0;
@@ -11911,166 +11898,53 @@ function kararTaksitGelecek(taksit: number, i: number, n: number): number {
   return taksit * (Math.pow(1 + i, n) - 1) / i;
 }
 
-// ── Görsel parçalar ────────────────────────────────────────────────────────
-// MODÜL SEVİYESİNDE olmaları zorunlu: bileşen gövdesinde tanımlanan bir alt
-// bileşen her render'da yeni bir tür sayılır, input DOM'dan sökülür ve mobil
-// klavye kapanır. Zekât ekranında bu hata iki kez yaşandı.
-function KararBaslik({ t, renk }: { t: string; renk?: string }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "22px 0 9px" }}>
-      <span style={{ width: 3, height: 13, borderRadius: 2, background: renk || "#16A34A" }} />
-      <p style={{ margin: 0, fontSize: 11, fontWeight: 800, letterSpacing: 0.6,
-        color: TEMA === "acik" ? "#1A2430" : "#A8C2DC", textTransform: "uppercase" }}>{TR(t)}</p>
-    </div>
-  );
-}
-
-const KARAR_KART = () => ({
-  background: TEMA === "acik" ? "#FFFFFF" : WA(0.05),
-  border: `1px solid ${TEMA === "acik" ? "#DEE6EE" : WA(0.08)}`,
-  borderRadius: 16, overflow: "hidden" as const,
-  boxShadow: TEMA === "acik" ? "0 1px 3px rgba(20,40,60,0.06)" : "none",
-});
-
-function KararSatir({ ikon, etiket, alt, deger, alan, sonek, guncelle, salt, bicim, vurgu }: {
-  ikon?: string; etiket: string; alt?: string; deger: any; alan: string; sonek: string;
-  guncelle?: (y: any) => void; salt?: boolean; bicim?: "tl" | "ham"; vurgu?: string;
-}) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "15px 14px",
-      borderBottom: `1px solid ${WA(0.06)}`, background: salt ? WA(0.03) : "transparent" }}>
-      {ikon ? (
-        <span style={{ width: 40, height: 40, flexShrink: 0, borderRadius: 13, fontSize: 18,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          background: TEMA === "acik" ? "#EDF3F9" : WA(0.06),
-          border: `1px solid ${WA(0.07)}` }}>{ikon}</span>
-      ) : null}
-      <div style={{ minWidth: 0, flex: 1 }}>
-        <p style={{ margin: 0, fontSize: 14, fontWeight: salt ? 600 : 700, lineHeight: 1.25,
-          color: salt ? WA(0.62) : (TEMA === "acik" ? C.label : "#fff") }}>{etiket}</p>
-        {alt ? <p style={{ margin: "3px 0 0", fontSize: 11, color: WA(0.45), lineHeight: 1.4 }}>{alt}</p> : null}
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
-        {salt ? (
-          <span style={{ minWidth: 104, textAlign: "right", padding: "10px 11px", borderRadius: 11,
-            border: `1px dashed ${WA(0.18)}`, color: vurgu || "#1FBF5A", fontSize: 15, fontWeight: 800 }}>{deger}</span>
-        ) : (
-          <input value={deger}
-            onChange={e => guncelle && guncelle({ [alan]: bicim === "tl" ? kararTLBicim(e.target.value) : e.target.value })}
-            type="text" inputMode="decimal" autoComplete="off" placeholder="0"
-            style={{ width: 128, textAlign: "right", padding: "12px 11px", borderRadius: 12,
-              border: `1.5px solid ${WA(0.14)}`, background: TEMA === "acik" ? "#F4F8FC" : WA(0.04),
-              color: TEMA === "acik" ? C.label : "#fff", fontSize: 16.5, fontWeight: 800,
-              fontFamily: "inherit", outline: "none", letterSpacing: -0.2 }} />
-        )}
-        <span style={{ fontSize: 12.5, color: WA(0.5), width: 30, fontWeight: 600 }}>{sonek}</span>
-      </div>
-    </div>
-  );
-}
-
-// Girdi kartlarının İÇİNDEKİ başlık. Önceki sürümde bölüm adları kartın
-// dışında küçük gri büyük harflerdi ve girdi alanları ekranda kayboluyordu;
-// başlığı kartın içine alıp renkli bir şerit vermek bölümü görünür kılıyor.
-function KararKartBaslik({ ikon, baslik, alt, renk }: {
-  ikon: string; baslik: string; alt: string; renk: string;
-}) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "15px 14px",
-      borderBottom: `1px solid ${WA(0.07)}`,
-      background: TEMA === "acik" ? `${renk}12` : `${renk}1A` }}>
-      <span style={{ width: 40, height: 40, flexShrink: 0, borderRadius: 13, fontSize: 19,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        background: `${renk}24`, border: `1px solid ${renk}45` }}>{ikon}</span>
-      <div style={{ minWidth: 0 }}>
-        <p style={{ margin: 0, fontSize: 15.5, fontWeight: 800, letterSpacing: -0.2,
-          color: TEMA === "acik" ? C.label : "#fff" }}>{baslik}</p>
-        <p style={{ margin: "3px 0 0", fontSize: 11, color: WA(0.5), lineHeight: 1.4 }}>{alt}</p>
-      </div>
-    </div>
-  );
-}
-
-// İki oranı yan yana çubukla gösterir — kararın SEZGİSEL özeti budur.
-function KararCubuk({ solEtiket, solDeger, sagEtiket, sagDeger, solKazandi }: {
-  solEtiket: string; solDeger: number; sagEtiket: string; sagDeger: number; solKazandi: boolean;
-}) {
-  const enb = Math.max(solDeger, sagDeger, 0.001);
-  const cizgi = (etiket: string, deger: number, kazandi: boolean) => (
-    <div style={{ marginBottom: 10 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
-        <span style={{ fontSize: 11, color: WA(0.55), fontWeight: 600 }}>{etiket}</span>
-        <span style={{ fontSize: 12.5, fontWeight: 800, color: kazandi ? "#1FBF5A" : (TEMA === "acik" ? C.label : "#fff") }}>
-          {kararYuzde(deger)}
-        </span>
-      </div>
-      <div style={{ height: 8, background: WA(0.08), borderRadius: 99, overflow: "hidden" }}>
-        <div style={{ height: "100%", borderRadius: 99, transition: "width .3s ease",
-          width: `${Math.max(3, deger / enb * 100)}%`,
-          background: kazandi ? "linear-gradient(90deg,#16A34A,#1FBF5A)" : WA(0.28) }} />
-      </div>
-    </div>
-  );
-  return (
-    <div style={{ ...KARAR_KART(), padding: 14 }}>
-      {cizgi(solEtiket, solDeger, solKazandi)}
-      {cizgi(sagEtiket, sagDeger, !solKazandi)}
-    </div>
-  );
-}
-
-function KararSonuc({ basarili, baslik, aciklama, solEtiket, solDeger, sagEtiket, sagDeger }: {
+// Sonuç başlığı — uygulamadaki RRow/Card diliyle uyumlu, sade.
+// MODÜL SEVİYESİNDE: bileşen gövdesinde tanımlanan alt bileşen her render'da
+// yeni tür sayılır, input odağı kaybolur ve mobil klavye kapanır.
+function KararSonucKart({ basarili, baslik, aciklama, solEtiket, solDeger, sagEtiket, sagDeger }: {
   basarili: boolean; baslik: string; aciklama: string;
   solEtiket: string; solDeger: string; sagEtiket: string; sagDeger: string;
 }) {
+  const renk = basarili ? C.green : C.blue;
   return (
-    <div style={{ position: "relative", overflow: "hidden", borderRadius: 20, padding: 18, marginTop: 18,
-      background: basarili ? "linear-gradient(150deg,#16A34A 0%,#0E5531 100%)"
-                           : "linear-gradient(150deg,#2A6E90 0%,#16394A 100%)",
-      boxShadow: "0 8px 24px rgba(0,0,0,0.18)" }}>
-      <span style={{ position: "absolute", right: -18, top: -24, fontSize: 120, opacity: 0.09, lineHeight: 1 }}>
-        {basarili ? "✓" : "≡"}
-      </span>
-      <p style={{ margin: 0, fontSize: 10.5, fontWeight: 800, letterSpacing: 0.8, color: "rgba(255,255,255,0.75)" }}>SONUÇ</p>
-      <p style={{ margin: "8px 0 5px", fontSize: 22, fontWeight: 800, color: "#fff", letterSpacing: -0.5, lineHeight: 1.2 }}>{baslik}</p>
-      <p style={{ margin: 0, fontSize: 12, color: "rgba(255,255,255,0.88)", lineHeight: 1.55, position: "relative" }}>{aciklama}</p>
-      <div style={{ marginTop: 14, paddingTop: 13, borderTop: "1px solid rgba(255,255,255,0.22)",
-        display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 10 }}>
-        <div><span style={{ display: "block", fontSize: 10.5, color: "rgba(255,255,255,0.75)" }}>{solEtiket}</span>
-          <b style={{ fontSize: 20, color: "#fff" }}>{solDeger}</b></div>
-        <div style={{ textAlign: "right" }}><span style={{ display: "block", fontSize: 10.5, color: "rgba(255,255,255,0.75)" }}>{sagEtiket}</span>
-          <b style={{ fontSize: 20, color: "#fff" }}>{sagDeger}</b></div>
+    <Card style={{ borderColor: renk, borderWidth: 1.5, background: basarili ? C.greenLight : C.blueLight }}>
+      <p style={{ margin: 0, fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", color: C.sub, textTransform: "uppercase" }}>Sonuç</p>
+      <p style={{ margin: "7px 0 5px", fontSize: 20, fontWeight: 800, color: renk, letterSpacing: -0.3, lineHeight: 1.25 }}>{baslik}</p>
+      <p style={{ margin: 0, fontSize: 12.5, color: C.sub, lineHeight: 1.55 }}>{aciklama}</p>
+      <div style={{ marginTop: 13, paddingTop: 12, borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", gap: 10 }}>
+        <div>
+          <span style={{ display: "block", fontSize: 11, color: C.sub }}>{solEtiket}</span>
+          <b style={{ fontSize: 18, fontFamily: "monospace", color: renk }}>{solDeger}</b>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <span style={{ display: "block", fontSize: 11, color: C.sub }}>{sagEtiket}</span>
+          <b style={{ fontSize: 18, fontFamily: "monospace", color: C.label }}>{sagDeger}</b>
+        </div>
       </div>
-    </div>
+    </Card>
   );
 }
 
-// Kartların SIRASI SABİT, yalnızca renk ve rozet değişir — senaryo denerken
-// kartların yer değiştirmesi kafa karıştırıyordu.
-function KararYol({ baslik, ikon, tutar, not, kazanan, satirlar }: {
-  baslik: string; ikon: string; tutar: string; not: string; kazanan: boolean; satirlar: [string, string][];
+// İki yolun dökümü. Kartların SIRASI SABİT, yalnızca vurgu değişir —
+// senaryo denerken kartların yer değiştirmesi kafa karıştırıyordu.
+function KararYolKart({ baslik, tutar, not, kazanan, satirlar }: {
+  baslik: string; tutar: string; not: string; kazanan: boolean; satirlar: [string, string][];
 }) {
   return (
-    <div style={{ flex: 1, minWidth: 0, borderRadius: 16, padding: 13, position: "relative",
-      background: kazanan ? "rgba(22,163,74,0.10)" : (TEMA === "acik" ? "#FFFFFF" : WA(0.05)),
-      border: `1.5px solid ${kazanan ? "rgba(22,163,74,0.55)" : (TEMA === "acik" ? "#DEE6EE" : WA(0.08))}`,
-      boxShadow: kazanan ? "0 4px 14px rgba(22,163,74,0.14)" : "none" }}>
-      {kazanan && (
-        <span style={{ position: "absolute", top: -9, left: 12, background: "#16A34A", color: "#fff",
-          fontSize: 9, fontWeight: 800, letterSpacing: 0.5, padding: "3px 8px", borderRadius: 99 }}>DAHA İYİ</span>
-      )}
-      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        <span style={{ fontSize: 13 }}>{ikon}</span>
-        <p style={{ margin: 0, fontSize: 12, fontWeight: 800, color: TEMA === "acik" ? C.label : "#fff" }}>{baslik}</p>
+    <div style={{ flex: 1, minWidth: 0, background: kazanan ? C.greenLight : C.card,
+      border: `1.5px solid ${kazanan ? C.green : C.border}`, borderRadius: 14, padding: "12px 13px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
+        <span style={{ fontSize: 12.5, fontWeight: 700, color: C.label }}>{baslik}</span>
+        {kazanan && <span style={{ fontSize: 9, fontWeight: 800, color: C.green, letterSpacing: "0.05em" }}>DAHA İYİ</span>}
       </div>
-      <p style={{ margin: "9px 0 3px", fontSize: 17, fontWeight: 800, letterSpacing: -0.3,
-        color: kazanan ? "#16A34A" : (TEMA === "acik" ? C.label : "#fff") }}>{tutar}</p>
-      <p style={{ margin: 0, fontSize: 10, color: WA(0.45), lineHeight: 1.45 }}>{not}</p>
-      <div style={{ marginTop: 11, paddingTop: 10, borderTop: `1px solid ${WA(0.08)}` }}>
+      <p style={{ margin: "8px 0 3px", fontSize: 17, fontWeight: 800, fontFamily: "monospace",
+        color: kazanan ? C.green : C.label }}>{tutar}</p>
+      <p style={{ margin: 0, fontSize: 10.5, color: C.sub, lineHeight: 1.4 }}>{not}</p>
+      <div style={{ marginTop: 10, paddingTop: 9, borderTop: `1px solid ${C.border}` }}>
         {satirlar.map(([a, b], i) => (
-          <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 6, fontSize: 10.5, color: WA(0.5), padding: "3.5px 0" }}>
-            <span style={{ minWidth: 0 }}>{a}</span>
-            <b style={{ color: TEMA === "acik" ? C.label : "#fff", flexShrink: 0 }}>{b}</b>
+          <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 6, padding: "3px 0" }}>
+            <span style={{ fontSize: 11, color: C.sub }}>{a}</span>
+            <span style={{ fontSize: 11.5, fontWeight: 700, fontFamily: "monospace", color: C.label, flexShrink: 0 }}>{b}</span>
           </div>
         ))}
       </div>
@@ -12078,31 +11952,39 @@ function KararYol({ baslik, ikon, tutar, not, kazanan, satirlar }: {
   );
 }
 
-function KararUyari({ children }: { children: any }) {
-  return (
-    <div style={{ display: "flex", gap: 9, background: "rgba(224,163,60,0.10)",
-      border: "1px solid rgba(224,163,60,0.32)", borderRadius: 14, padding: "12px 13px", marginTop: 12 }}>
-      <span style={{ fontSize: 13, flexShrink: 0, lineHeight: 1.3 }}>⚠️</span>
-      <p style={{ margin: 0, fontSize: 11.5, color: TEMA === "acik" ? "#8A6519" : "#E8C58A", lineHeight: 1.55 }}>{children}</p>
+// İki oranı yan yana çubukla gösterir — kararın SEZGİSEL özeti budur.
+function KararOranCubuk({ solEtiket, solDeger, sagEtiket, sagDeger, solKazandi }: {
+  solEtiket: string; solDeger: number; sagEtiket: string; sagDeger: number; solKazandi: boolean;
+}) {
+  const enb = Math.max(solDeger, sagDeger, 0.001);
+  const cizgi = (etiket: string, deger: number, kazandi: boolean, ilk: boolean) => (
+    <div style={{ marginBottom: ilk ? 12 : 0 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+        <span style={{ fontSize: 12, color: C.sub }}>{etiket}</span>
+        <span style={{ fontSize: 13, fontWeight: 800, fontFamily: "monospace", color: kazandi ? C.green : C.label }}>{kararYuzde(deger)}</span>
+      </div>
+      <div style={{ height: 7, background: WA(0.08), borderRadius: 99, overflow: "hidden" }}>
+        <div style={{ height: "100%", borderRadius: 99, width: `${Math.max(3, deger / enb * 100)}%`,
+          background: kazandi ? C.green : WA(0.25), transition: "width .3s ease" }} />
+      </div>
     </div>
+  );
+  return (
+    <Card>
+      <SecTitle>Oran Karşılaştırması</SecTitle>
+      {cizgi(solEtiket, solDeger, solKazandi, true)}
+      {cizgi(sagEtiket, sagDeger, !solKazandi, false)}
+    </Card>
   );
 }
 
-function KararBilgi({ children }: { children: any }) {
+function KararNot({ tur, children }: { tur: "bilgi" | "uyari"; children: any }) {
+  const uyari = tur === "uyari";
   return (
-    <div style={{ display: "flex", gap: 9, background: "rgba(91,155,216,0.10)",
-      border: "1px solid rgba(91,155,216,0.3)", borderRadius: 14, padding: "12px 13px" }}>
-      <span style={{ fontSize: 13, flexShrink: 0, lineHeight: 1.3 }}>💡</span>
-      <p style={{ margin: 0, fontSize: 11.5, color: TEMA === "acik" ? "#2E6DA8" : "#A8CDEA", lineHeight: 1.55 }}>{children}</p>
-    </div>
-  );
-}
-
-function KararBos({ metin }: { metin: string }) {
-  return (
-    <div style={{ ...KARAR_KART(), padding: 24, marginTop: 18, textAlign: "center" }}>
-      <p style={{ margin: 0, fontSize: 26, opacity: 0.35 }}>⚖️</p>
-      <p style={{ margin: "8px 0 0", fontSize: 12.5, color: WA(0.5), lineHeight: 1.6 }}>{metin}</p>
+    <div style={{ background: uyari ? C.orangeLight : C.blueLight,
+      border: `1px solid ${uyari ? C.orange : C.blue}`, borderRadius: 12,
+      padding: "11px 13px", marginBottom: 10 }}>
+      <p style={{ margin: 0, fontSize: 12, color: uyari ? C.orange : C.blue, lineHeight: 1.55 }}>{children}</p>
     </div>
   );
 }
@@ -12114,32 +11996,24 @@ function KararBos({ metin }: { metin: string }) {
 //   B) Devam  : nakit n ay büyür, her ay taksit çıkar.
 //   Karar     : B − A
 //
-// ERKEN KAPAMA ÜCRETİ ÜÇ REJİM (uygulamadaki KalanAnaparaModal ile aynı):
-//   konut      → kalan vade ≤36 ay %1, uzunsa %2
-//   tuketici   → yok (taşıt, ihtiyaç, arsa/işyeri, Togg)
-//   ticariTL   → yıllık bileşik × %5 + AOV × %0,20, üzerine %5 BSMV
-//   ticariYP   → %3 + AOV × %0,10, üzerine %5 BSMV
-const EK_TURLER: { key: string; ad: string; ikon: string; alt: string }[] = [
-  { key: "konut",    ad: "Konut",         ikon: "🏠", alt: "Erken kapama tazminatı var — kalan vade 36 aydan kısaysa azami %1, uzunsa %2" },
-  { key: "tuketici", ad: "Taşıt/İhtiyaç", ikon: "🚗", alt: "Bu türde erken kapama ücreti alınmaz; arsa/işyeri ve Togg de aynı rejimde" },
-  { key: "ticariTL", ad: "Ticari TL",     ikon: "🏢", alt: "TCMB formülü: yıllık bileşik × %5 + ağırlıklı ortalama vade × %0,20, üzerine %5 BSMV" },
-  { key: "ticariYP", ad: "Ticari YP",     ikon: "💱", alt: "TCMB formülü: %3 + ağırlıklı ortalama vade × %0,10, üzerine %5 BSMV" },
-];
-const EK_LS = "kp_erken_kapama_karari";
-
+// ERKEN KAPAMA ÜCRETİ ÜÇ REJİM (KalanAnaparaModal ile aynı):
+//   konut     → kalan vade ≤36 ay %1, uzunsa %2
+//   tuketici  → yok (taşıt, ihtiyaç, arsa/işyeri, Togg)
+//   ticariTL  → yıllık bileşik × %5 + AOV × %0,20, üzerine %5 BSMV
+//   ticariYP  → %3 + AOV × %0,10, üzerine %5 BSMV
 function ErkenKapamaKarari({ s }: { s?: any }) {
-  const [v, setV] = useState<any>(() => {
-    try { const h = localStorage.getItem(EK_LS); if (h) return JSON.parse(h); } catch {}
-    return { tur: "konut", anapara: "", taksit: "", vade: "", nakit: "", yatirimVade: "32", getiri: "" };
-  });
-  const guncelle = useCallback((y: any) => {
-    setV((o: any) => { const n = { ...o, ...y }; try { localStorage.setItem(EK_LS, JSON.stringify(n)); } catch {} return n; });
-  }, []);
+  const [tur, setTur] = useState("konut");
+  const [anaparaS, setAnaparaS] = useState("");
+  const [taksitS, setTaksitS] = useState("");
+  const [vadeS, setVadeS] = useState("");
+  const [nakitS, setNakitS] = useState("");
+  const [yatirimVadeS, setYatirimVadeS] = useState("32");
+  const [getiriS, setGetiriS] = useState("");
 
-  const anapara = kararSayi(v.anapara), taksit = kararSayi(v.taksit);
-  const n = Math.round(kararSayi(v.vade)), nakit = kararSayi(v.nakit);
-  const yatirimVade = Math.round(kararSayi(v.yatirimVade)) || 32;
-  const brutGetiri = kararSayi(v.getiri);
+  const anapara = sayiOku(anaparaS), taksit = sayiOku(taksitS);
+  const n = Math.round(sayiOku(vadeS)), nakit = sayiOku(nakitS);
+  const yatirimVade = Math.round(sayiOku(yatirimVadeS)) || 32;
+  const brutGetiri = sayiOku(getiriS);
 
   // Stopaj uygulamanın kendi tablosundan — Ayarlar'dan değiştirilebilir
   const sOran = stopajOranSec(yatirimVade, s);
@@ -12149,15 +12023,15 @@ function ErkenKapamaKarari({ s }: { s?: any }) {
   const aylikOran = kararAylikOranBul(anapara, taksit, n);
   const yillikBilesik = aylikOran > 0 ? (Math.pow(1 + aylikOran, 12) - 1) * 100 : 0;
 
-  const aov = n > 0 ? (n + 1) / 2 : 0;
+  const aov = n > 0 ? (n + 1) / 2 : 0;   // eşit taksitte ağırlıklı ortalama kalan vade
   let ucret = 0, bsmv = 0, ucretAciklama = "";
-  if (v.tur === "konut") {
+  if (tur === "konut") {
     const o = n <= 36 ? 1 : 2;
     ucret = anapara * o / 100;
     ucretAciklama = `Kalan vade ${n} ay olduğu için azami %${o} uygulandı`;
-  } else if (v.tur === "tuketici") {
+  } else if (tur === "tuketici") {
     ucretAciklama = "Bu finansman türünde erken kapama ücreti alınmaz";
-  } else if (v.tur === "ticariTL") {
+  } else if (tur === "ticariTL") {
     const o = yillikBilesik * 0.05 + aov * 0.20;
     ucret = anapara * o / 100; bsmv = ucret * 0.05;
     ucretAciklama = `Bileşik ${kararYuzde(yillikBilesik)} × %5 + ortalama vade ${aov.toFixed(1)} ay × %0,20`;
@@ -12168,100 +12042,85 @@ function ErkenKapamaKarari({ s }: { s?: any }) {
   }
   const kapamaTutari = anapara + ucret + bsmv;
 
-  const eksikVeri = !(anapara > 0 && taksit > 0 && n > 0 && nakit > 0 && brutGetiri > 0);
-  const yetersizNakit = !eksikVeri && nakit < kapamaTutari;
+  const hazir = anapara > 0 && taksit > 0 && n > 0 && nakit > 0 && brutGetiri > 0;
+  const yetersizNakit = hazir && nakit < kapamaTutari;
 
   const yolA = kararGelecek(Math.max(nakit - kapamaTutari, 0), aylikGetiri, n);
   const yolB = kararGelecek(nakit, aylikGetiri, n) - kararTaksitGelecek(taksit, aylikGetiri, n);
   const fark = yolB - yolA;
   const devamAvantajli = fark > 0;
 
-  // Başabaş: hangi BRÜT yıllık getiride iki yol eşitlenir?
+  // Başabaş: hangi BRÜT yıllık kâr payında iki yol eşitlenir?
   const basabas = (() => {
-    if (eksikVeri || yetersizNakit) return null;
+    if (!hazir || yetersizNakit) return null;
     const degerle = (g: number) => {
       const net = g * (1 - sOran / 100);
       const i = Math.pow(1 + net / 100, 1 / 12) - 1;
       return (kararGelecek(nakit, i, n) - kararTaksitGelecek(taksit, i, n))
            - kararGelecek(Math.max(nakit - kapamaTutari, 0), i, n);
     };
+    if (degerle(0) > 0 || degerle(400) < 0) return null;
     let alt = 0, ust = 400;
-    if (degerle(alt) > 0 || degerle(ust) < 0) return null;
     for (let k = 0; k < 60; k++) { const m = (alt + ust) / 2; if (degerle(m) < 0) alt = m; else ust = m; }
     return (alt + ust) / 2;
   })();
 
-  const secili = EK_TURLER.find(t => t.key === v.tur) || EK_TURLER[0];
+  const turAciklama: Record<string, string> = {
+    konut: "Erken kapama tazminatı var — kalan vade 36 aydan kısaysa azami %1, uzunsa %2.",
+    tuketici: "Bu türde erken kapama ücreti alınmaz. Arsa/işyeri ve Togg de aynı rejimde.",
+    ticariTL: "TCMB formülü: yıllık bileşik oran × %5 + ağırlıklı ortalama vade × %0,20, üzerine %5 BSMV.",
+    ticariYP: "TCMB formülü: %3 + ağırlıklı ortalama vade × %0,10, üzerine %5 BSMV.",
+  };
 
   return (
-    <div style={{ background: C.bg, padding: "12px 14px 92px", minHeight: "100%" }}>
-      <KararBilgi>
+    <div style={{ padding: "14px 14px 90px" }}>
+      <KararNot tur="bilgi">
         Elindeki parayla finansmanı erken kapatmak mı, katılma hesabında tutup taksite devam
-        etmek mi daha kârlı? İki yolun <b>vade sonundaki net varlığını</b> yan yana hesaplıyoruz.
-      </KararBilgi>
+        etmek mi daha kârlı? İki yolun vade sonundaki net varlığını karşılaştırıyoruz.
+      </KararNot>
 
-      <div style={{ ...KARAR_KART(), marginTop: 16 }}>
-        <KararKartBaslik ikon="📄" baslik="Mevcut Finansmanın"
-          alt="Ekstrendeki kalan bakiye, taksit ve vade" renk="#16A34A" />
-        <div style={{ padding: "14px 14px 13px", borderBottom: `1px solid ${WA(0.06)}` }}>
-          <p style={{ margin: "0 0 10px", fontSize: 14, fontWeight: 700, color: TEMA === "acik" ? C.label : "#fff" }}>Finansman türü</p>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7 }}>
-            {EK_TURLER.map(t => {
-              const aktif = v.tur === t.key;
-              return (
-                <button key={t.key} onClick={() => guncelle({ tur: t.key })} style={{
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-                  padding: "13px 6px", borderRadius: 12, cursor: "pointer", fontFamily: "inherit",
-                  border: `1.5px solid ${aktif ? "#16A34A" : WA(0.12)}`,
-                  background: aktif ? "rgba(22,163,74,0.13)" : "transparent",
-                  color: aktif ? "#16A34A" : WA(0.6), fontSize: 13.5, fontWeight: 700,
-                }}><span style={{ fontSize: 15 }}>{t.ikon}</span>{t.ad}</button>
-              );
-            })}
-          </div>
-          <p style={{ margin: "10px 0 0", fontSize: 10.5, color: WA(0.45), lineHeight: 1.5 }}>{secili.alt}</p>
-        </div>
-        <KararSatir ikon="💰" etiket="Kalan anapara" alt="Son ekstrende yazan bakiye"
-          deger={v.anapara} alan="anapara" sonek="₺" guncelle={guncelle} bicim="tl" />
-        <KararSatir ikon="📅" etiket="Aylık taksit" alt="Her ay ödediğin tutar"
-          deger={v.taksit} alan="taksit" sonek="₺" guncelle={guncelle} bicim="tl" />
-        <KararSatir ikon="⏱" etiket="Kalan vade" alt="Kaç taksit kaldı"
-          deger={v.vade} alan="vade" sonek="ay" guncelle={guncelle} />
+      <Card>
+        <SecTitle>Mevcut Finansmanın</SecTitle>
+        <Seg
+          options={[{ v: "konut", l: "Konut" }, { v: "tuketici", l: "Taşıt/İhtiyaç" },
+                    { v: "ticariTL", l: "Ticari TL" }, { v: "ticariYP", l: "Ticari YP" }]}
+          value={tur} onChange={setTur} />
+        <p style={{ margin: "-6px 0 12px", fontSize: 11.5, color: C.sub, lineHeight: 1.5 }}>{turAciklama[tur]}</p>
+        <Field label="Kalan Anapara" value={anaparaS} onChange={setAnaparaS} suffix="₺" hint="Son ekstrende yazan bakiye" />
+        <Field label="Aylık Taksit" value={taksitS} onChange={setTaksitS} suffix="₺" />
+        <Field label="Kalan Vade" value={vadeS} onChange={setVadeS} suffix="Ay" hint="Kaç taksit kaldı" />
         {aylikOran > 0 && (
-          <KararSatir etiket="Finansmanın yıllık maliyeti" alt="Taksit ve vadeden hesaplandı"
-            deger={kararYuzde(yillikBilesik)} alan="" sonek="" salt vurgu="#E0A33C" />
+          <RRow label="Finansmanın Yıllık Maliyeti" value={kararYuzde(yillikBilesik)} accent={C.orange} />
         )}
-      </div>
+      </Card>
 
-      <div style={{ ...KARAR_KART(), marginTop: 14 }}>
-        <KararKartBaslik ikon="🏦" baslik="Elindeki Para"
-          alt="Kapatmak yerine katılma hesabında değerlendirilirse" renk="#5B9BD8" />
-        <KararSatir ikon="💰" etiket="Kapatmaya ayırdığın tutar" alt="Bugün elindeki nakit"
-          deger={v.nakit} alan="nakit" sonek="₺" guncelle={guncelle} bicim="tl" />
-        <KararSatir ikon="⏳" etiket="Katılma hesabı vadesi" alt="Stopaj oranı buna göre belirlenir"
-          deger={v.yatirimVade} alan="yatirimVade" sonek="gün" guncelle={guncelle} />
-        <KararSatir ikon="📈" etiket="Beklenen yıllık kâr payı" alt="Brüt oran"
-          deger={v.getiri} alan="getiri" sonek="%" guncelle={guncelle} />
-        <KararSatir etiket="Stopaj" alt={`${yatirimVade} gün vadeye göre · Ayarlar'dan değiştirilebilir`}
-          deger={kararYuzde(sOran)} alan="" sonek="" salt vurgu="#E0A33C" />
-        {brutGetiri > 0 && (
-          <KararSatir etiket="Net yıllık getiri" alt="Stopaj düşülmüş" deger={kararYuzde(netYillik)} alan="" sonek="" salt />
-        )}
-      </div>
+      <Card>
+        <SecTitle>Elindeki Para</SecTitle>
+        <Field label="Kapatmaya Ayırdığın Tutar" value={nakitS} onChange={setNakitS} suffix="₺" />
+        <Field label="Katılma Hesabı Vadesi" value={yatirimVadeS} onChange={setYatirimVadeS} suffix="Gün"
+          hint="Stopaj oranı bu vadeye göre belirlenir" />
+        <Field label="Beklenen Yıllık Kâr Payı" value={getiriS} onChange={setGetiriS} suffix="%" hint="Brüt oran" />
+        <RRow label={`Stopaj (${yatirimVade} gün)`} value={kararYuzde(sOran)} accent={C.orange} sub />
+        {brutGetiri > 0 && <RRow label="Net Yıllık Getiri" value={kararYuzde(netYillik)} accent={C.green} />}
+      </Card>
 
-      {eksikVeri ? (
-        <KararBos metin="Karşılaştırma için kalan anapara, taksit, vade, elindeki tutar ve beklenen kâr payını gir." />
+      {!hazir ? (
+        <Card>
+          <p style={{ margin: 0, fontSize: 13, color: C.sub, lineHeight: 1.6, textAlign: "center" }}>
+            Karşılaştırma için kalan anapara, taksit, vade, elindeki tutar ve beklenen kâr payını gir.
+          </p>
+        </Card>
       ) : yetersizNakit ? (
         <>
-          <KararSonuc basarili={false} baslik="Kapatmaya yetmiyor"
+          <KararSonucKart basarili={false} baslik="Kapatmaya yetmiyor"
             aciklama={`Erken kapama için ${kararTL(kapamaTutari)} gerekiyor; elindeki tutar bunun altında. Kısmi kapama (ara ödeme) seçeneğini bankana sorabilirsin.`}
             solEtiket="Gereken tutar" solDeger={kararTL(kapamaTutari)}
             sagEtiket="Eksik" sagDeger={kararTL(kapamaTutari - nakit)} />
-          <KararUyari>Kısmi ödemede taksit tutarı ya da vade kısalır; bu ekran tam kapamayı hesaplar.</KararUyari>
+          <KararNot tur="uyari">Kısmi ödemede taksit tutarı ya da vade kısalır; bu ekran tam kapamayı hesaplar.</KararNot>
         </>
       ) : (
         <>
-          <KararSonuc basarili={devamAvantajli}
+          <KararSonucKart basarili={devamAvantajli}
             baslik={devamAvantajli ? "Yatırımda tut, kapatma" : "Erken kapat"}
             aciklama={devamAvantajli
               ? `Katılma hesabının net getirisi, finansmanın maliyetinden yüksek. ${n} ay sonunda parayı yatırımda tutmak daha avantajlı.`
@@ -12269,61 +12128,60 @@ function ErkenKapamaKarari({ s }: { s?: any }) {
             solEtiket="Aradaki fark" solDeger={kararTL(Math.abs(fark))}
             sagEtiket="Aylık ortalama" sagDeger={kararTL(Math.abs(fark) / Math.max(n, 1))} />
 
-          <KararBaslik t="Oran Karşılaştırması" />
-          <KararCubuk solEtiket="Katılma hesabı net getirisi" solDeger={netYillik}
+          <KararOranCubuk solEtiket="Katılma hesabı net getirisi" solDeger={netYillik}
             sagEtiket="Finansmanın yıllık maliyeti" sagDeger={yillikBilesik} solKazandi={devamAvantajli} />
 
-          <KararBaslik t="İki Yol" />
-          <div style={{ display: "flex", gap: 9 }}>
-            <KararYol baslik="Şimdi kapat" ikon="🔓" tutar={kararTL(yolA)} not={`${n} ay sonunda elinde kalan`}
-              kazanan={!devamAvantajli}
-              satirlar={[
-                ["Kalan anapara", kararTL(anapara)],
-                ["Erken kapama ücreti", ucret > 0 ? kararTL(ucret) : "—"],
-                ...(bsmv > 0 ? [["BSMV (%5)", kararTL(bsmv)] as [string, string]] : []),
-                ["Kalan nakdin", kararTL(Math.max(nakit - kapamaTutari, 0))],
-              ] as [string, string][]} />
-            <KararYol baslik="Yatırımda tut" ikon="📊" tutar={kararTL(yolB)} not={`${n} ay sonunda elinde kalan`}
-              kazanan={devamAvantajli}
-              satirlar={[
-                ["Yatırımın büyümesi", kararTL(kararGelecek(nakit, aylikGetiri, n))],
-                ["Ödenecek taksitler", `−${kararTL(kararTaksitGelecek(taksit, aylikGetiri, n))}`],
-                ["Toplam taksit", kararTL(taksit * n)],
-              ] as [string, string][]} />
-          </div>
+          <Card>
+            <SecTitle>İki Yol</SecTitle>
+            <div style={{ display: "flex", gap: 9 }}>
+              <KararYolKart baslik="Şimdi kapat" tutar={kararTL(yolA)} not={`${n} ay sonunda elinde kalan`}
+                kazanan={!devamAvantajli}
+                satirlar={[
+                  ["Kalan anapara", kararTL(anapara)],
+                  ["Erken kapama ücreti", ucret > 0 ? kararTL(ucret) : "—"],
+                  ...(bsmv > 0 ? [["BSMV (%5)", kararTL(bsmv)] as [string, string]] : []),
+                  ["Kalan nakdin", kararTL(Math.max(nakit - kapamaTutari, 0))],
+                ] as [string, string][]} />
+              <KararYolKart baslik="Yatırımda tut" tutar={kararTL(yolB)} not={`${n} ay sonunda elinde kalan`}
+                kazanan={devamAvantajli}
+                satirlar={[
+                  ["Yatırımın büyümesi", kararTL(kararGelecek(nakit, aylikGetiri, n))],
+                  ["Ödenecek taksitler", `−${kararTL(kararTaksitGelecek(taksit, aylikGetiri, n))}`],
+                  ["Toplam taksit", kararTL(taksit * n)],
+                ] as [string, string][]} />
+            </div>
+          </Card>
 
-          <KararUyari>
+          <KararNot tur="uyari">
             <b>Erken kapama ücreti: {ucret + bsmv > 0 ? kararTL(ucret + bsmv) : "yok"}.</b> {ucretAciklama}.
-            Bunlar mevzuattaki <b>azami</b> oranlardır; bankan daha düşük uygulayabilir, kesin tutarı sözleşmenden teyit et.
-            {(v.tur === "ticariTL" || v.tur === "ticariYP") && " Ağırlıklı ortalama vade eşit taksit varsayımıyla hesaplandı; ödeme planın farklıysa ücret bir miktar değişir."}
-          </KararUyari>
+            Bunlar mevzuattaki azami oranlardır; bankan daha düşük uygulayabilir, kesin tutarı sözleşmenden teyit et.
+            {(tur === "ticariTL" || tur === "ticariYP") && " Ağırlıklı ortalama vade eşit taksit varsayımıyla hesaplandı; ödeme planın farklıysa ücret bir miktar değişir."}
+          </KararNot>
 
           {basabas != null && (
-            <>
-              <KararBaslik t="Başabaş Noktası" renk="#E0A33C" />
-              <div style={{ ...KARAR_KART(), padding: 14 }}>
-                <p style={{ margin: 0, fontSize: 12, color: WA(0.6), lineHeight: 1.6 }}>
-                  Kâr payı oranı <b style={{ color: TEMA === "acik" ? C.label : "#fff", fontSize: 15 }}>{kararYuzde(basabas)}</b>'in
-                  {devamAvantajli ? " altına düşerse kapatmak" : " üstüne çıkarsa yatırımda tutmak"} daha kârlı hale gelir.
-                </p>
-                <div style={{ height: 8, background: WA(0.08), borderRadius: 99, overflow: "hidden", margin: "11px 0 6px" }}>
-                  <div style={{ height: "100%", borderRadius: 99, background: devamAvantajli ? "linear-gradient(90deg,#16A34A,#1FBF5A)" : "#5B9BD8",
-                    width: `${Math.max(4, Math.min(100, brutGetiri / Math.max(basabas, brutGetiri) * 100))}%` }} />
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: WA(0.45) }}>
-                  <span>Başabaş {kararYuzde(basabas)}</span>
-                  <span>Senin varsayımın {kararYuzde(brutGetiri)}</span>
-                </div>
+            <Card>
+              <SecTitle>Başabaş Noktası</SecTitle>
+              <p style={{ margin: "0 0 10px", fontSize: 12.5, color: C.sub, lineHeight: 1.6 }}>
+                Kâr payı oranı <b style={{ color: C.label }}>{kararYuzde(basabas)}</b>'in
+                {devamAvantajli ? " altına düşerse kapatmak" : " üstüne çıkarsa yatırımda tutmak"} daha kârlı hale gelir.
+              </p>
+              <div style={{ height: 7, background: WA(0.08), borderRadius: 99, overflow: "hidden" }}>
+                <div style={{ height: "100%", borderRadius: 99, background: devamAvantajli ? C.green : C.blue,
+                  width: `${Math.max(4, Math.min(100, brutGetiri / Math.max(basabas, brutGetiri) * 100))}%` }} />
               </div>
-            </>
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
+                <span style={{ fontSize: 11, color: C.sub }}>Başabaş {kararYuzde(basabas)}</span>
+                <span style={{ fontSize: 11, color: C.sub }}>Senin varsayımın {kararYuzde(brutGetiri)}</span>
+              </div>
+            </Card>
           )}
         </>
       )}
 
-      <p style={{ margin: "18px 2px 0", fontSize: 10.5, color: WA(0.42), lineHeight: 1.6 }}>
-        Bu karşılaştırma bilgilendirme amaçlıdır, yatırım tavsiyesi değildir. Kâr payı oranı
-        garanti edilmez; gerçekleşen getiri girdiğin varsayımdan farklı olabilir. Erken kapama
-        tutarını bankandan teyit et.
+      <p style={{ margin: "6px 4px 0", fontSize: 11, color: C.sub, lineHeight: 1.6, opacity: 0.85 }}>
+        Bu karşılaştırma bilgilendirme amaçlıdır, yatırım tavsiyesi değildir. Kâr payı oranı garanti
+        edilmez; gerçekleşen getiri girdiğin varsayımdan farklı olabilir. Erken kapama tutarını
+        bankandan teyit et.
       </p>
     </div>
   );
@@ -12333,31 +12191,27 @@ function ErkenKapamaKarari({ s }: { s?: any }) {
 // 2) VADE FARKI KARARI
 // ═══════════════════════════════════════════════════════════════════════════
 // "Tedarikçim peşin ödemede iskonto veriyor, vadem de var. Spot finansman
-// alıp peşin ödesem kârlı mı?" KOBİ'nin haftalık kararı.
+// alıp peşin ödesem kârlı mı?"
 //
 // İnsanların sezgiyle çözemediği yer: %3 iskonto küçük görünür ama 60 günde
 // alınıyorsa YILLIK ~%19'a denktir. Ekranın asıl işi bu çeviriyi yapmak.
 //
 // KARŞILAŞTIRMA NOKTASI: Her iki yolda da nakit çıkışı VADE SONUNDA ölçülüyor
-// (finansman da o gün geri ödeniyor), bu yüzden tutarlar doğrudan kıyaslanabilir.
-const VF_LS = "kp_vade_farki_karari";
-
+// (finansman da o gün geri ödeniyor), tutarlar doğrudan kıyaslanabilir.
 function VadeFarkiKarari() {
-  const [v, setV] = useState<any>(() => {
-    try { const h = localStorage.getItem(VF_LS); if (h) return JSON.parse(h); } catch {}
-    return { fatura: "", iskonto: "", gun: "60", aylikOran: "", komisyon: "" };
-  });
-  const guncelle = useCallback((y: any) => {
-    setV((o: any) => { const n = { ...o, ...y }; try { localStorage.setItem(VF_LS, JSON.stringify(n)); } catch {} return n; });
-  }, []);
+  const [faturaS, setFaturaS] = useState("");
+  const [iskontoS, setIskontoS] = useState("");
+  const [gunS, setGunS] = useState("");
+  const [aylikOranS, setAylikOranS] = useState("");
+  const [komisyonS, setKomisyonS] = useState("");
 
-  const F = kararSayi(v.fatura);
-  const d = kararSayi(v.iskonto) / 100;
-  const gun = Math.round(kararSayi(v.gun));
-  const aylik = kararSayi(v.aylikOran) / 100;
-  const komisyon = kararSayi(v.komisyon);
+  const F = sayiOku(faturaS);
+  const d = sayiOku(iskontoS) / 100;
+  const gun = Math.round(sayiOku(gunS));
+  const aylik = sayiOku(aylikOranS) / 100;
+  const komisyon = sayiOku(komisyonS);
 
-  const eksikVeri = !(F > 0 && gun > 0 && aylik > 0);
+  const hazir = F > 0 && gun > 0 && aylik > 0;
 
   const iskontolu = F * (1 - d);
   const karPayi = iskontolu * aylik * (gun / 30);
@@ -12377,37 +12231,34 @@ function VadeFarkiKarari() {
   })();
 
   return (
-    <div style={{ background: C.bg, padding: "12px 14px 92px", minHeight: "100%" }}>
-      <KararBilgi>
-        Tedarikçin peşin ödemede iskonto veriyor. Spot finansman alıp peşin ödemek mi,
-        vadeyi kullanmak mı daha ucuz? İkisinin de <b>vade sonundaki toplam çıkışını</b> karşılaştırıyoruz.
-      </KararBilgi>
+    <div style={{ padding: "14px 14px 90px" }}>
+      <KararNot tur="bilgi">
+        Tedarikçin peşin ödemede iskonto veriyor. Spot finansman alıp peşin ödemek mi, vadeyi
+        kullanmak mı daha ucuz? İkisinin de vade sonundaki toplam çıkışını karşılaştırıyoruz.
+      </KararNot>
 
-      <div style={{ ...KARAR_KART(), marginTop: 16 }}>
-        <KararKartBaslik ikon="🧾" baslik="Tedarikçi Teklifi"
-          alt="Faturanın vadeli fiyatı ve peşin ödeme indirimi" renk="#16A34A" />
-        <KararSatir ikon="💵" etiket="Fatura tutarı" alt="Vadeli fiyat"
-          deger={v.fatura} alan="fatura" sonek="₺" guncelle={guncelle} bicim="tl" />
-        <KararSatir ikon="🏷" etiket="Peşin iskontosu" alt="Peşin ödersen yapılan indirim"
-          deger={v.iskonto} alan="iskonto" sonek="%" guncelle={guncelle} />
-        <KararSatir ikon="⏱" etiket="Vade" alt="Peşin ödemezsen kaç gün sonra ödeyeceksin"
-          deger={v.gun} alan="gun" sonek="gün" guncelle={guncelle} />
-      </div>
+      <Card>
+        <SecTitle>Tedarikçi Teklifi</SecTitle>
+        <Field label="Fatura Tutarı" value={faturaS} onChange={setFaturaS} suffix="₺" hint="Vadeli fiyat" />
+        <Field label="Peşin İskontosu" value={iskontoS} onChange={setIskontoS} suffix="%" hint="Peşin ödersen yapılan indirim" />
+        <Field label="Vade" value={gunS} onChange={setGunS} suffix="Gün" hint="Peşin ödemezsen kaç gün sonra ödeyeceksin" />
+      </Card>
 
-      <div style={{ ...KARAR_KART(), marginTop: 14 }}>
-        <KararKartBaslik ikon="🏦" baslik="Spot Finansman"
-          alt="Peşin ödemek için kullanacağın finansmanın koşulları" renk="#5B9BD8" />
-        <KararSatir ikon="📈" etiket="Aylık kâr payı oranı" alt="Bankanın spot finansman oranı"
-          deger={v.aylikOran} alan="aylikOran" sonek="%" guncelle={guncelle} />
-        <KararSatir ikon="💸" etiket="Komisyon ve masraf" alt="Dosya, BSMV dahil toplam"
-          deger={v.komisyon} alan="komisyon" sonek="₺" guncelle={guncelle} bicim="tl" />
-      </div>
+      <Card>
+        <SecTitle>Spot Finansman</SecTitle>
+        <Field label="Aylık Kâr Payı Oranı" value={aylikOranS} onChange={setAylikOranS} suffix="%" />
+        <Field label="Komisyon ve Masraf" value={komisyonS} onChange={setKomisyonS} suffix="₺" hint="Dosya, BSMV dahil toplam" />
+      </Card>
 
-      {eksikVeri ? (
-        <KararBos metin="Karşılaştırma için fatura tutarı, vade ve aylık kâr payı oranını gir." />
+      {!hazir ? (
+        <Card>
+          <p style={{ margin: 0, fontSize: 13, color: C.sub, lineHeight: 1.6, textAlign: "center" }}>
+            Karşılaştırma için fatura tutarı, vade ve aylık kâr payı oranını gir.
+          </p>
+        </Card>
       ) : (
         <>
-          <KararSonuc basarili={pesinAvantajli}
+          <KararSonucKart basarili={pesinAvantajli}
             baslik={pesinAvantajli ? "Finansman al, peşin öde" : "Vadeyi kullan"}
             aciklama={pesinAvantajli
               ? "İskontonun yıllık karşılığı, finansman maliyetinden yüksek. Peşin ödemek net kazanç sağlıyor."
@@ -12416,46 +12267,41 @@ function VadeFarkiKarari() {
             solDeger={kararTL(Math.abs(fark))}
             sagEtiket="Fatura üzerinden" sagDeger={kararYuzde(Math.abs(fark) / F * 100)} />
 
-          <KararBaslik t="Oran Karşılaştırması" />
-          <KararCubuk solEtiket={`İskontonun yıllık karşılığı (${gun} günde ${kararYuzde(d * 100)})`}
-            solDeger={iskontoYillik}
-            sagEtiket="Finansmanın yıllık maliyeti" sagDeger={finansmanYillik}
+          <KararOranCubuk solEtiket={`İskontonun yıllık karşılığı (${gun} günde ${kararYuzde(d * 100)})`}
+            solDeger={iskontoYillik} sagEtiket="Finansmanın yıllık maliyeti" sagDeger={finansmanYillik}
             solKazandi={pesinAvantajli} />
-          <p style={{ margin: "9px 4px 0", fontSize: 10.5, color: WA(0.45), lineHeight: 1.55 }}>
-            İskonto küçük görünse de kısa vadede alındığı için yıllık karşılığı yüksek olabilir.
-            Kararı değiştirebilecek tek şey, elindeki nakdi bu {gun} günde daha yüksek getirili
-            bir işte kullanıp kullanamayacağın.
-          </p>
 
-          <KararBaslik t="İki Yol" />
-          <div style={{ display: "flex", gap: 9 }}>
-            <KararYol baslik="Peşin öde" ikon="⚡" tutar={kararTL(pesinToplam)} not={`${gun}. günde toplam çıkışın`}
-              kazanan={pesinAvantajli}
-              satirlar={[
-                ["İskontolu tutar", kararTL(iskontolu)],
-                [`Kâr payı (${gun} gün)`, `+${kararTL(karPayi)}`],
-                ["Komisyon", komisyon > 0 ? `+${kararTL(komisyon)}` : "—"],
-              ] as [string, string][]} />
-            <KararYol baslik="Vadeyi kullan" ikon="📆" tutar={kararTL(F)} not={`${gun}. günde toplam çıkışın`}
-              kazanan={!pesinAvantajli}
-              satirlar={[
-                ["Fatura", kararTL(F)],
-                ["Finansman", "yok"],
-                ["İskonto", "kullanılmadı"],
-              ] as [string, string][]} />
-          </div>
+          <Card>
+            <SecTitle>İki Yol</SecTitle>
+            <div style={{ display: "flex", gap: 9 }}>
+              <KararYolKart baslik="Peşin öde" tutar={kararTL(pesinToplam)} not={`${gun}. günde toplam çıkışın`}
+                kazanan={pesinAvantajli}
+                satirlar={[
+                  ["İskontolu tutar", kararTL(iskontolu)],
+                  [`Kâr payı (${gun} gün)`, `+${kararTL(karPayi)}`],
+                  ["Komisyon", komisyon > 0 ? `+${kararTL(komisyon)}` : "—"],
+                ] as [string, string][]} />
+              <KararYolKart baslik="Vadeyi kullan" tutar={kararTL(F)} not={`${gun}. günde toplam çıkışın`}
+                kazanan={!pesinAvantajli}
+                satirlar={[
+                  ["Fatura", kararTL(F)],
+                  ["Finansman", "yok"],
+                  ["İskonto", "kullanılmadı"],
+                ] as [string, string][]} />
+            </div>
+          </Card>
 
           {basabasIskonto != null && (
-            <KararUyari>
+            <KararNot tur="uyari">
               <b>Başabaş iskonto oranı {kararYuzde(basabasIskonto)}.</b> Tedarikçin bunun altında iskonto
               veriyorsa vadeyi kullan; üstünde veriyorsa finansman alıp peşin öde.
               {d > 0 && ` Buradaki teklif ${kararYuzde(d * 100)} — eşiğin ${d * 100 >= basabasIskonto ? "üstünde" : "altında"}.`}
-            </KararUyari>
+            </KararNot>
           )}
         </>
       )}
 
-      <p style={{ margin: "18px 2px 0", fontSize: 10.5, color: WA(0.42), lineHeight: 1.6 }}>
+      <p style={{ margin: "6px 4px 0", fontSize: 11, color: C.sub, lineHeight: 1.6, opacity: 0.85 }}>
         Bu karşılaştırma bilgilendirme amaçlıdır. Oranlar ve komisyonlar bankaya göre değişir;
         KDV ve BSMV etkileri işletmenin vergi durumuna bağlıdır. Kesin karar için mali müşavirine danış.
       </p>
