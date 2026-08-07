@@ -12175,16 +12175,22 @@ function ErkenKapamaKarari({ s }: { s?: any }) {
                   ["Kalan anapara", kararTL(anapara)],
                   ["Erken kapama ücreti", ucret > 0 ? kararTL(ucret) : "—"],
                   ...(bsmv > 0 ? [["BSMV (%5)", kararTL(bsmv)] as [string, string]] : []),
-                  ["Kalan nakdin", kararTL(Math.max(nakit - kapamaTutari, 0))],
+                  ["Kapatmadan kalan nakit", kararTL(Math.max(nakit - kapamaTutari, 0))],
+                  [`Nakdin ${n} ayda büyümesi`, kararTL(yolA)],
                 ] as [string, string][]} />
               <KararYolKart baslik="Yatırımda tut" tutar={kararTL(yolB)} not={`${n} ay sonunda elinde kalan`}
                 kazanan={devamAvantajli}
                 satirlar={[
                   ["Yatırımın büyümesi", kararTL(kararGelecek(nakit, aylikGetiri, n))],
-                  ["Ödenecek taksitler", `−${kararTL(kararTaksitGelecek(taksit, aylikGetiri, n))}`],
-                  ["Toplam taksit", kararTL(taksit * n)],
+                  ["Taksitlerin vade sonu değeri", `−${kararTL(kararTaksitGelecek(taksit, aylikGetiri, n))}`],
+                  ["Nominal taksit toplamı", kararTL(taksit * n)],
                 ] as [string, string][]} />
             </div>
+            <p style={{ margin: "11px 0 0", fontSize: 11.5, color: C.sub, lineHeight: 1.55 }}>
+              Taksitlerin vade sonu değeri, ödenen tutarların yatırımda kalsaydı ulaşacağı
+              büyüklüktür; bu yüzden nominal toplamdan yüksektir. İki yol da {n}. ayda elinde
+              kalan net varlık üzerinden karşılaştırılır.
+            </p>
           </Card>
 
           <KararNot tur="uyari">
