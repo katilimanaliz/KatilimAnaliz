@@ -12087,7 +12087,7 @@ function ErkenKapamaKarari({ s }: { s?: any }) {
           value={tur} onChange={setTur} />
         <p style={{ margin: "-6px 0 12px", fontSize: 11.5, color: C.sub, lineHeight: 1.5 }}>{turAciklama[tur]}</p>
         <Field label="Kalan Anapara" value={anaparaS} onChange={setAnaparaS} suffix="₺" hint="Son ekstrende yazan bakiye" />
-        <Field label="Aylık Taksit" value={taksitS} onChange={setTaksitS} suffix="₺" />
+        <Field label="Ödenen Aylık Taksit Tutarı" value={taksitS} onChange={setTaksitS} suffix="₺" hint="Her ay ödediğin tutar" />
         <Field label="Kalan Vade" value={vadeS} onChange={setVadeS} suffix="Ay" hint="Kaç taksit kaldı" />
         {aylikOran > 0 && (
           <RRow label="Finansmanın Yıllık Maliyeti" value={kararYuzde(yillikBilesik)} accent={C.orange} />
