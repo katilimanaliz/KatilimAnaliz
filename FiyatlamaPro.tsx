@@ -188,9 +188,9 @@ const ICON_MAP: Record<string, any> = {
   katilimSektoru: Building2,
   ekonomiSozluk: ScrollText,   // sözlük/terim listesi; BookOpen katılım sözlüğünde kullanılıyor
   kfkNedir: ShieldCheck,
-  zekatHesabi: Gift,
+  zekatHesabi: Gift,             // zekât = vermek; Gift zaten import edilmiş, yeni import riski alınmadı
   erkenKapamaKarari: Zap,        // zaten import; erken kapama modalında da ⚡ kullanılıyor
-  vadeFarkiKarari: CalendarClock, // zaten import   // zekât = vermek; Gift zaten import edilmiş, yeni import riski alınmadı
+  vadeFarkiKarari: CalendarClock, // zaten import
   kiraSertifikasi: FileText,
   taksitKarsilastirma: Scale,
   sozluk: BookOpen,
@@ -799,10 +799,12 @@ const EKRAN_KATEGORI: Record<string,string> = {
   tahvilBono:"katilim", kasaOranAnalizi:"katilim", verimlilikAnalizi:"katilim", katkiPayi:"katilim",
   // Bireysel Finansman
   konutFinansman:"bireysel", tasitFinansman:"bireysel", yatirimFonuFinansman:"bireysel",
+  erkenKapamaKarari:"bireysel",
   taksitKarsilastirma:"bireysel",
   toggFinansman:"bireysel", esnekOdemePlanlari:"bireysel", arsaIsyeri:"bireysel", taksitenKredi:"bireysel",
   // Tüzel Finansman
   spotFinansman:"tuzel", taksitliTicari:"tuzel", leasing:"tuzel", cekArkasiFinansman:"tuzel", posHesaplama:"tuzel",
+  vadeFarkiKarari:"tuzel",
   tmKomisyon:"tuzel", akreditifKomisyon:"tuzel", soikReeskont:"tuzel",
   // Piyasa & Veriler
   bistHisseTarayici:"piyasa", fonGetiriIzleme:"piyasa", karPayiOranlari:"piyasa", finansalGostergeler:"piyasa", piyasaHaberleri:"piyasa", fiyatAlarmlarim:"piyasa",
@@ -14666,8 +14668,8 @@ const MENU = {
   katilimSektoru:{title:"Katılım Bankacılığı Sektörü",back:"araclarMenu"},
   ekonomiSozluk:{title:"Ekonomi Sözlüğü",back:"araclarMenu"},
   zekatHesabi:{title:"Zekât Hesaplayıcı",back:"araclarMenu"},
-  erkenKapamaKarari:{title:"Erken Kapama Kararı",back:"hesaplama"},
-  vadeFarkiKarari:{title:"Vade Farkı Kararı",back:"hesaplama"},
+  erkenKapamaKarari:{title:"Erken Kapama Kararı",back:"hesaplaMenu"},
+  vadeFarkiKarari:{title:"Vade Farkı Kararı",back:"hesaplaMenu"},
   kiraSertifikasi:{title:"Kira Sertifikası İhraçları",back:"araclarMenu"},
   taksitKarsilastirma:{title:"Taksit Karşılaştırma",back:"hesaplaMenu"},
   portfoyum:{title:"Portföyüm",back:"araclarMenu"},
@@ -14699,7 +14701,7 @@ const TAB_OF_SCREEN:any = {
   hazineDoviz:"hesapla", hazineForward:"hesapla", hazineSwap:"hesapla",
   hazineBono:"hesapla", hazineSenaryo:"hesapla",
   piyasaHaberleri:"piyasa", finansalGostergeler:"piyasa",
-  araclarMenu:"araclar", sozluk:"araclar", vadeTakibi:"araclar", katilimBankalari:"araclar", kfkNedir:"araclar", zekatHesabi:"araclar", erkenKapamaKarari:"hesaplama", vadeFarkiKarari:"hesaplama", kiraSertifikasi:"araclar", getiriKarsilastirma:"araclar", haftalikOzet:"araclar", portfoyum:"araclar", fonDetay:"araclar",
+  araclarMenu:"araclar", sozluk:"araclar", vadeTakibi:"araclar", katilimBankalari:"araclar", kfkNedir:"araclar", zekatHesabi:"araclar", erkenKapamaKarari:"hesapla", vadeFarkiKarari:"hesapla", kiraSertifikasi:"araclar", getiriKarsilastirma:"araclar", haftalikOzet:"araclar", portfoyum:"araclar", fonDetay:"araclar",
   asistan:"yapayzeka",
   profil:"profil",
 };
