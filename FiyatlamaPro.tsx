@@ -12255,33 +12255,45 @@ function ErkenKapamaKarari({ s }: { s?: any }) {
 //
 // KARŞILAŞTIRMA NOKTASI: Her iki yolda da nakit çıkışı VADE SONUNDA ölçülüyor
 // (finansman da o gün geri ödeniyor), tutarlar doğrudan kıyaslanabilir.
-function VadeFarkiKarari() {
+function VadeFarkiKarari({ s }: { s?: any }) {
   const [faturaS, setFaturaS] = useState("");
   const [iskontoS, setIskontoS] = useState("");
   const [gunS, setGunS] = useState("");
   const [aylikOranS, setAylikOranS] = useState("");
   const [komisyonS, setKomisyonS] = useState("");
+  const [bsmvVar, setBsmvVar] = useState("var");   // "var" | "muaf"
 
   const F = sayiOku(faturaS);
   const d = sayiOku(iskontoS) / 100;
   const gun = Math.round(sayiOku(gunS));
   const aylik = sayiOku(aylikOranS) / 100;
   const komisyon = sayiOku(komisyonS);
+  // Uygulamanın ticari BSMV ayarı — Ayarlar'dan değiştirilebilir, TL/YP
+  // Kararı ekranıyla AYNI kaynak. Önceki sürümde bu ekranda BSMV hiç
+  // hesaplanmıyordu; "Komisyon" alanının ipucu kullanıcıdan BSMV'yi ELLE
+  // komisyona eklemesini bekliyordu — kolayca atlanan, sessiz bir eksiklik.
+  const bsmvOran = (s?.ticariBSMV ?? 5) / 100;
+  const bsmvCarpan = bsmvVar === "var" ? (1 + bsmvOran) : 1;
 
   const hazir = F > 0 && gun > 0 && aylik > 0;
 
   const iskontolu = F * (1 - d);
-  const karPayi = iskontolu * aylik * (gun / 30);
+  const karPayiHam = iskontolu * aylik * (gun / 30);
+  const bsmvTutari = karPayiHam * (bsmvCarpan - 1);
+  const karPayi = karPayiHam + bsmvTutari;             // BSMV dahil kâr payı
   const pesinToplam = iskontolu + karPayi + komisyon;   // her kalem TEK kez
   const fark = F - pesinToplam;
   const pesinAvantajli = fark > 0;
 
   const iskontoYillik = d > 0 && d < 1 && gun > 0 ? (d / (1 - d)) * (365 / gun) * 100 : 0;
-  const finansmanYillik = aylik * 12 * 100;
+  // Finansmanın yıllık maliyeti BSMV DAHİL gösteriliyor — kararı asıl
+  // etkileyen bu rakam; BSMV'siz gösterirsek başlıktaki oran ile ekranın
+  // altındaki gerçek maliyet birbirini tutmaz.
+  const finansmanYillik = aylik * bsmvCarpan * 12 * 100;
 
-  // Başabaş iskonto: F(1−d)(1 + aylık×gün/30) + komisyon = F
+  // Başabaş iskonto: F(1−d)(1 + aylık×gün/30×bsmvCarpan) + komisyon = F
   const basabasIskonto = (() => {
-    const carpan = 1 + aylik * (gun / 30);
+    const carpan = 1 + aylik * (gun / 30) * bsmvCarpan;
     if (F <= 0 || carpan <= 0) return null;
     const oran = 1 - (F - komisyon) / (F * carpan);
     return oran > 0 && oran < 1 ? oran * 100 : null;
@@ -12304,7 +12316,10 @@ function VadeFarkiKarari() {
       <Card>
         <SecTitle>Spot Finansman</SecTitle>
         <Field label="Aylık Kâr Payı Oranı" value={aylikOranS} onChange={setAylikOranS} suffix="%" />
-        <Field label="Komisyon ve Masraf" value={komisyonS} onChange={setKomisyonS} suffix="₺" hint="Dosya, BSMV dahil toplam" />
+        <p style={{ margin: "2px 0 6px", fontSize: 12, fontWeight: 600, color: C.sub }}>Kâr Payında BSMV</p>
+        <Seg options={[{ v: "var", l: `BSMV %${(bsmvOran * 100).toFixed(0)}` }, { v: "muaf", l: "Muaf" }]}
+          value={bsmvVar} onChange={setBsmvVar} />
+        <Field label="Diğer Masraflar" value={komisyonS} onChange={setKomisyonS} suffix="₺" hint="Dosya masrafı vb. — BSMV hariç" />
       </Card>
 
       {!hazir ? (
@@ -12335,8 +12350,9 @@ function VadeFarkiKarari() {
                 kazanan={pesinAvantajli}
                 satirlar={[
                   ["İskontolu tutar", kararTL(iskontolu)],
-                  [`Kâr payı (${gun} gün)`, `+${kararTL(karPayi)}`],
-                  ["Komisyon", komisyon > 0 ? `+${kararTL(komisyon)}` : "—"],
+                  [`Kâr payı (${gun} gün)`, `+${kararTL(karPayiHam)}`],
+                  [`BSMV${bsmvVar === "muaf" ? " (muaf)" : ` (%${(bsmvOran * 100).toFixed(0)})`}`, bsmvTutari > 0 ? `+${kararTL(bsmvTutari)}` : "—"],
+                  ["Diğer masraflar", komisyon > 0 ? `+${kararTL(komisyon)}` : "—"],
                 ] as [string, string][]} />
               <KararYolKart baslik="Vade kullanımı" tutar={kararTL(F)} not={`${gun}. günde toplam çıkışın`}
                 kazanan={!pesinAvantajli}
@@ -23561,7 +23577,7 @@ function App(){
         {screen==="ekonomiSozluk"&&<EkonomiSozluk/>}
         {screen==="zekatHesabi"&&<ZekatHesabi/>}
         {screen==="erkenKapamaKarari"&&<ErkenKapamaKarari s={settings}/>}
-        {screen==="vadeFarkiKarari"&&<VadeFarkiKarari/>}
+        {screen==="vadeFarkiKarari"&&<VadeFarkiKarari s={settings}/>}
         {screen==="tlYpKarari"&&<TlYpKarari s={settings}/>}
         {screen==="kiraSertifikasi"&&<KiraSertifikasiIhraclari/>}
         {screen==="getiriKarsilastirma"&&<GetiriKarsilastirma/>}
