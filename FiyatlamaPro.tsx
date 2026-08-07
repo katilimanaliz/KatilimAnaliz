@@ -12428,7 +12428,11 @@ function TlYpKarari({ s }: { s?: any }) {
   // Bu YAKLAŞIKTIR: gerçek ödeme planı farklı taksit tutarları içeriyorsa AOV
   // biraz kayar; ekranın altında bu belirtiliyor.
   const taksitSayisi = Math.round(sayiOku(taksitSayisiS));
-  const taksitAraligiAy = Math.max(sayiOku(taksitAraligiS), 0.1);
+  // Taksitler arası süre KASITLI OLARAK sabit: ticari finansmanda taksitler
+  // neredeyse her zaman aylık olduğu için ayrı bir alan gereksiz sürtünme
+  // yaratıyordu. taksitAraligiS state'i geriye dönük uyumluluk için duruyor
+  // ama artık ekranda gösterilmiyor.
+  const taksitAraligiAy = 1;
   const aovAy = taksitSayisi > 0 ? (taksitSayisi + 1) / 2 * taksitAraligiAy : 0;
   const toplamVadeAy = taksitSayisi * taksitAraligiAy;
 
@@ -12471,17 +12475,33 @@ function TlYpKarari({ s }: { s?: any }) {
   return (
     <div style={{ padding: "14px 14px 90px" }}>
       <KararNot tur="bilgi">
-        YP oranı düşük görünse de kur artışı maliyeti değiştirir. Asıl soru şu:
-        kur ne kadar artarsa TL borçlanmak daha ucuz hale gelir?
+        Kur ne kadar artarsa TL, YP'den ucuz hale gelir?
       </KararNot>
 
       <Card>
         <SecTitle>Finansman</SecTitle>
         <Seg options={[{ v: "USD", l: "USD" }, { v: "EUR", l: "EUR" }]} value={paraBirimi} onChange={setParaBirimi} />
-        <Field label={`Finansman Tutarı (${pb})`} value={tutarS} onChange={setTutarS} suffix={pb}
-          hint="Döviz cinsinden ihtiyacını yaz" />
+
+        <div style={{ marginBottom: 13 }}>
+          <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: C.sub, marginBottom: 4 }}>
+            {`Finansman Tutarı (${pb})`}
+          </label>
+          <div style={{ position: "relative" }}>
+            <input
+              type="text" inputMode="decimal" autoComplete="off" placeholder="0"
+              value={zekatTLGoster(tutarS)}
+              onChange={e => setTutarS(e.target.value.replace(/\D/g, ""))}
+              style={{ width: "100%", boxSizing: "border-box", padding: "11px 52px 11px 13px",
+                fontSize: 15, fontWeight: 600, fontFamily: "monospace", background: WA(0.06),
+                border: `1.5px solid ${C.border}`, borderRadius: 10, color: C.label, outline: "none" }}
+            />
+            <span style={{ position: "absolute", right: 11, top: "50%", transform: "translateY(-50%)",
+              color: C.blue, fontWeight: 700, fontSize: 13 }}>{pb}</span>
+          </div>
+        </div>
+
         <RRow
-          label={kurYukleniyor ? "TL karşılığı hesaplanıyor…" : `TL Karşılığı (${pb}/TL ${kurYaz ?? "—"})`}
+          label={kurYukleniyor ? "TL karşılığı" : `TL Karşılığı (1 ${pb} = ${kurYaz ?? "—"} ₺)`}
           value={T > 0 ? kararTL(T) : "—"}
           accent={C.blue} sub />
 
@@ -12490,13 +12510,12 @@ function TlYpKarari({ s }: { s?: any }) {
           value={odemeYapisi} onChange={setOdemeYapisi} />
 
         {odemeYapisi === "spot" ? (
-          <Field label="Vade" value={gunS} onChange={setGunS} suffix="Gün" hint="Vade sonunda tek ödeme" />
+          <Field label="Vade" value={gunS} onChange={setGunS} suffix="Gün" />
         ) : (
           <>
             <Field label="Taksit Sayısı" value={taksitSayisiS} onChange={setTaksitSayisiS} suffix="Adet" />
-            <Field label="Taksitler Arası Süre" value={taksitAraligiS} onChange={setTaksitAraligiS} suffix="Ay" />
             {taksitSayisi > 0 && (
-              <RRow label="Ağırlıklı Ortalama Vade" value={`${aovAy.toFixed(1)} ay (${gun} gün)`} accent={C.orange} sub />
+              <RRow label="Ortalama Vade" value={`${gun} gün`} accent={C.orange} sub />
             )}
           </>
         )}
@@ -12506,11 +12525,10 @@ function TlYpKarari({ s }: { s?: any }) {
         <SecTitle>Oranlar</SecTitle>
         <Field label="TL Yıllık Kâr Payı Oranı" value={tlOranS} onChange={setTlOranS} suffix="%" />
         <Field label={`${pb} Yıllık Kâr Payı Oranı`} value={ypOranS} onChange={setYpOranS} suffix="%" />
-        <p style={{ margin: "2px 0 6px", fontSize: 12, fontWeight: 600, color: C.sub }}>YP işlemde BSMV</p>
+        <p style={{ margin: "2px 0 6px", fontSize: 12, fontWeight: 600, color: C.sub }}>YP İşlemde BSMV</p>
         <Seg options={[{ v: "var", l: `BSMV %${(bsmvOran * 100).toFixed(0)}` }, { v: "muaf", l: "Muaf" }]}
           value={ypBsmv} onChange={setYpBsmv} />
-        <Field label="Beklenen Yıllık Kur Artışı" value={kurBeklentiS} onChange={setKurBeklentiS} suffix="%"
-          hint="Boş bırakırsan yalnızca başabaş oranı gösterilir" />
+        <Field label="Beklenen Yıllık Kur Artışı" value={kurBeklentiS} onChange={setKurBeklentiS} suffix="%" />
       </Card>
 
       {!hazir ? (
@@ -12540,8 +12558,7 @@ function TlYpKarari({ s }: { s?: any }) {
           <Card>
             <SecTitle>Başabaş Kur Artışı</SecTitle>
             <p style={{ margin: "0 0 10px", fontSize: 12.5, color: C.sub, lineHeight: 1.6 }}>
-              {pb} kuru yıllık <b style={{ color: C.label }}>{kararYuzde(basabasYillik)}</b> artarsa iki yolun
-              maliyeti eşitlenir. Bunun üstünde artarsa TL, altında kalırsa {pb} daha ucuz olur.
+              {pb} yıllık <b style={{ color: C.label }}>{kararYuzde(basabasYillik)}</b>'ten fazla artarsa TL, altında kalırsa {pb} daha ucuz.
             </p>
             {beklentiVar && (
               <>
@@ -12581,11 +12598,6 @@ function TlYpKarari({ s }: { s?: any }) {
                       ["Dönem kur artışı", kararYuzde(dBeklenenDonem * 100)],
                     ] as [string, string][]} />
                 </div>
-                <p style={{ margin: "11px 0 0", fontSize: 11.5, color: C.sub, lineHeight: 1.55 }}>
-                  {pb} yolunda kur farkı yalnızca anaparaya değil, kâr payına da biner — bu yüzden
-                  toplam etki beklenen kur artışından biraz yüksek çıkar.
-                  {odemeYapisi === "taksitli" && " Taksitli yapıda hesap, eşit taksit varsayımıyla bulunan ağırlıklı ortalama vadeye göre yapıldı; gerçek ödeme planın farklıysa sonuç bir miktar değişir."}
-                </p>
               </Card>
             </>
           )}
@@ -12598,60 +12610,38 @@ function TlYpKarari({ s }: { s?: any }) {
 
           <Card>
             <SecTitle>Kimler YP Borçlanabilir?</SecTitle>
-            <p style={{ margin: "0 0 12px", fontSize: 12, color: C.sub, lineHeight: 1.6 }}>
-              Döviz kredisi kullanımı 32 Sayılı Karar ve TCMB Sermaye Hareketleri Genelgesi ile
-              sınırlandırılmıştır. Aşağıdakiler başlıca hallerdir, liste tüketici değildir —
-              hesaplamaya girmeden önce uygunluğunu kontrol et.
+            <p style={{ margin: "0 0 11px", fontSize: 11.5, color: C.sub, lineHeight: 1.5 }}>
+              32 Sayılı Karar'a göre başlıca haller (liste tüketici değildir):
             </p>
             {[
-              ["Döviz geliri olan firmalar",
-               "İhracat, transit ticaret, ihracat sayılan satış ve teslimler ile döviz kazandırıcı hizmet ve faaliyetlerden geliri olanlar. Kullanılmak istenen tutar ile mevcut kredi bakiyesi toplamı, son üç mali yılın döviz gelirleri toplamını aşamaz."],
-              ["Kredi bakiyesi 15 milyon USD ve üzerinde olanlar",
-               "Bu eşiği aşan firmalarda döviz geliri şartı aranmaz."],
-              ["Kamu kurumları ve finansal kuruluşlar",
-               "Kamu kurum ve kuruluşları, bankalar, finansal kiralama şirketleri, faktoring şirketleri ve finansman şirketleri döviz geliri şartından muaftır."],
-              ["Yatırım teşvik belgesi sahipleri",
-               "Teşvik belgesi kapsamında kredi kullanması öngörülen firmalar bu şarttan muaftır."],
-              ["Muhtemel döviz gelirini belgeleyenler",
-               "Son üç mali yılda döviz geliri olmayanlar, bağlantılarını ve muhtemel döviz gelirlerini tevsik etmek kaydıyla, bu tutarı aşmayacak şekilde kredi kullanabilir."],
-              ["Bazı sektörel ve idari istisnalar",
-               "EYDEP sertifikalı savunma sanayii firmaları ve TMSF tasfiye ihalelerine ilişkin pay devri gibi mevzuatta ayrıca sayılan özel haller de şarttan muaf tutulabilir; bunlar sık güncellenen dar kapsamlı istisnalardır."],
+              ["Döviz geliri olan firmalar", "tutar + mevcut bakiye, son 3 yılın döviz gelirini aşamaz."],
+              ["Kredi bakiyesi 15 milyon USD ve üzeri", "döviz geliri şartı aranmaz."],
+              ["Kamu, banka, leasing/faktoring/finansman şirketleri", "muaf."],
+              ["Yatırım teşvik belgesi sahipleri", "muaf."],
+              ["Muhtemel döviz gelirini belgeleyenler", "tevsik ettikleri tutar kadar."],
             ].map(([baslik, metin], i) => (
-              <div key={i} style={{ display: "flex", gap: 10, marginBottom: 11 }}>
-                <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: 99, background: C.blueLight,
-                  color: C.blue, fontSize: 11.5, fontWeight: 800, display: "flex",
-                  alignItems: "center", justifyContent: "center" }}>{i + 1}</span>
-                <div style={{ minWidth: 0 }}>
-                  <p style={{ margin: 0, fontSize: 12.5, fontWeight: 700, color: C.label, lineHeight: 1.35 }}>{baslik}</p>
-                  <p style={{ margin: "4px 0 0", fontSize: 11.5, color: C.sub, lineHeight: 1.55 }}>{metin}</p>
-                </div>
+              <div key={i} style={{ display: "flex", gap: 9, marginBottom: 8 }}>
+                <span style={{ flexShrink: 0, width: 19, height: 19, borderRadius: 99, background: C.blueLight,
+                  color: C.blue, fontSize: 10.5, fontWeight: 800, display: "flex",
+                  alignItems: "center", justifyContent: "center", marginTop: 1 }}>{i + 1}</span>
+                <p style={{ margin: 0, fontSize: 11.5, color: C.sub, lineHeight: 1.5 }}>
+                  <b style={{ color: C.label }}>{baslik}</b> — {metin}
+                </p>
               </div>
             ))}
-
-            <div style={{ marginTop: 4, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
-              <p style={{ margin: 0, fontSize: 12.5, fontWeight: 700, color: C.red }}>Kullanamayanlar</p>
-              <p style={{ margin: "5px 0 0", fontSize: 11.5, color: C.sub, lineHeight: 1.55 }}>
-                Türkiye'de yerleşik <b>gerçek kişiler</b> yurt içinden de yurt dışından da döviz kredisi
-                kullanamaz. Döviz geliri olmayan ve yukarıdaki istisnalara girmeyen firmalar da kullanamaz.
-              </p>
-            </div>
-
-            <p style={{ margin: "12px 0 0", fontSize: 11, color: C.sub, lineHeight: 1.55, opacity: 0.85 }}>
-              Döviz gelirleri, SMMM veya YMM tarafından onaylanan Döviz Gelirleri Beyan Formu ve tespit
-              raporu ile bankaya belgelenir; kontrol krediye aracılık eden bankanın yükümlülüğündedir.
-              Mevzuat sık değişir ve buradaki liste tüketici değildir — eşikler, istisnalar ve son
-              durum için bankana ve mali müşavirine danış.
+            <p style={{ margin: "10px 0 0", fontSize: 11.5, color: C.red, lineHeight: 1.5 }}>
+              <b>Gerçek kişiler</b> döviz kredisi kullanamaz.
+            </p>
+            <p style={{ margin: "10px 0 0", fontSize: 10.5, color: C.sub, lineHeight: 1.5, opacity: 0.8 }}>
+              Mevzuat sık değişir — son durumu bankandan ve mali müşavirinden teyit et.
             </p>
           </Card>
         </>
       )}
 
-      <p style={{ margin: "6px 4px 0", fontSize: 11, color: C.sub, lineHeight: 1.6, opacity: 0.85 }}>
-        Kâr payı 360 gün esasına göre basit yöntemle, kur artışının yıllıklandırılması 365 gün
-        üzerinden hesaplanır. Taksitli yapılarda vade, ağırlıklı ortalama vade ile yaklaşık olarak
-        hesaplanır. Bu ekran bilgilendirme amaçlıdır; yatırım, finansman veya danışmanlık hizmeti
-        sunmaz ve tavsiye niteliği taşımaz. Sonuçlar girdiğin varsayımlara dayanır; karar ve
-        sorumluluk sana aittir.
+      <p style={{ margin: "6px 4px 0", fontSize: 10.5, color: C.sub, lineHeight: 1.55, opacity: 0.8 }}>
+        Bilgilendirme amaçlıdır, tavsiye niteliği taşımaz. Sonuçlar girdiğin varsayımlara dayanır;
+        karar ve sorumluluk sana aittir.
       </p>
     </div>
   );
