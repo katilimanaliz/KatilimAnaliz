@@ -191,6 +191,7 @@ const ICON_MAP: Record<string, any> = {
   zekatHesabi: Gift,             // zekât = vermek; Gift zaten import edilmiş, yeni import riski alınmadı
   erkenKapamaKarari: Zap,        // zaten import; erken kapama modalında da ⚡ kullanılıyor
   vadeFarkiKarari: CalendarClock, // zaten import
+  tlYpKarari: ArrowLeftRight,     // zaten import
   kiraSertifikasi: FileText,
   taksitKarsilastirma: Scale,
   sozluk: BookOpen,
@@ -805,6 +806,7 @@ const EKRAN_KATEGORI: Record<string,string> = {
   // Tüzel Finansman
   spotFinansman:"tuzel", taksitliTicari:"tuzel", leasing:"tuzel", cekArkasiFinansman:"tuzel", posHesaplama:"tuzel",
   vadeFarkiKarari:"tuzel",
+  tlYpKarari:"tuzel",
   tmKomisyon:"tuzel", akreditifKomisyon:"tuzel", soikReeskont:"tuzel",
   // Piyasa & Veriler
   bistHisseTarayici:"piyasa", fonGetiriIzleme:"piyasa", karPayiOranlari:"piyasa", finansalGostergeler:"piyasa", piyasaHaberleri:"piyasa", fiyatAlarmlarim:"piyasa",
@@ -11935,7 +11937,7 @@ function KararYolKart({ baslik, tutar, not, kazanan, satirlar }: {
       border: `1.5px solid ${kazanan ? C.green : C.border}`, borderRadius: 14, padding: "12px 13px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
         <span style={{ fontSize: 12.5, fontWeight: 700, color: C.label }}>{baslik}</span>
-        {kazanan && <span style={{ fontSize: 9, fontWeight: 800, color: C.green, letterSpacing: "0.05em" }}>DAHA İYİ</span>}
+        {kazanan && <span style={{ fontSize: 9, fontWeight: 800, color: C.green, letterSpacing: "0.05em" }}>DAHA DÜŞÜK</span>}
       </div>
       <p style={{ margin: "8px 0 3px", fontSize: 17, fontWeight: 800, fontFamily: "monospace",
         color: kazanan ? C.green : C.label }}>{tutar}</p>
@@ -12156,10 +12158,10 @@ function ErkenKapamaKarari({ s }: { s?: any }) {
       ) : (
         <>
           <KararSonucKart basarili={devamAvantajli}
-            baslik={devamAvantajli ? "Yatırımda tut, kapatma" : "Erken kapat"}
+            baslik={devamAvantajli ? "Bu senaryoda yatırımda tutmak daha avantajlı" : "Bu senaryoda erken kapatmak daha avantajlı"}
             aciklama={devamAvantajli
-              ? `Katılma hesabının net getirisi, finansmanın maliyetinden yüksek. ${n} ay sonunda parayı yatırımda tutmak daha avantajlı.`
-              : `Finansmanın maliyeti, katılma hesabının net getirisinden yüksek. ${n} ay sonunda kapatmak daha avantajlı.`}
+              ? `Girdiğin verilerle katılma hesabının net getirisi, finansmanın maliyetinden yüksek çıkıyor. ${n} ay sonunda elinde kalan tutar bu yolda daha büyük oluyor.`
+              : `Girdiğin verilerle finansmanın maliyeti, katılma hesabının net getirisinden yüksek çıkıyor. ${n} ay sonunda elinde kalan tutar kapatma yolunda daha büyük oluyor.`}
             solEtiket="Aradaki fark" solDeger={kararTL(Math.abs(fark))}
             sagEtiket="Aylık ortalama" sagDeger={kararTL(Math.abs(fark) / Math.max(n, 1))} />
 
@@ -12169,7 +12171,7 @@ function ErkenKapamaKarari({ s }: { s?: any }) {
           <Card>
             <SecTitle>İki Yol</SecTitle>
             <div style={{ display: "flex", gap: 9 }}>
-              <KararYolKart baslik="Şimdi kapat" tutar={kararTL(yolA)} not={`${n} ay sonunda elinde kalan`}
+              <KararYolKart baslik="Erken kapama" tutar={kararTL(yolA)} not={`${n} ay sonunda elinde kalan`}
                 kazanan={!devamAvantajli}
                 satirlar={[
                   ["Kalan anapara", kararTL(anapara)],
@@ -12178,7 +12180,7 @@ function ErkenKapamaKarari({ s }: { s?: any }) {
                   ["Kapatmadan kalan nakit", kararTL(Math.max(nakit - kapamaTutari, 0))],
                   [`Nakdin ${n} ayda büyümesi`, kararTL(yolA)],
                 ] as [string, string][]} />
-              <KararYolKart baslik="Yatırımda tut" tutar={kararTL(yolB)} not={`${n} ay sonunda elinde kalan`}
+              <KararYolKart baslik="Devam + yatırım" tutar={kararTL(yolB)} not={`${n} ay sonunda elinde kalan`}
                 kazanan={devamAvantajli}
                 satirlar={[
                   ["Yatırımın büyümesi", kararTL(kararGelecek(nakit, aylikGetiri, n))],
@@ -12220,9 +12222,10 @@ function ErkenKapamaKarari({ s }: { s?: any }) {
       )}
 
       <p style={{ margin: "6px 4px 0", fontSize: 11, color: C.sub, lineHeight: 1.6, opacity: 0.85 }}>
-        Bu karşılaştırma bilgilendirme amaçlıdır, yatırım tavsiyesi değildir. Kâr payı oranı garanti
-        edilmez; gerçekleşen getiri girdiğin varsayımdan farklı olabilir. Erken kapama tutarını
-        bankandan teyit et.
+        Bu ekran bilgilendirme amaçlıdır; yatırım, finansman veya danışmanlık hizmeti sunmaz ve
+        tavsiye niteliği taşımaz. Kâr payı oranı garanti edilmez; gerçekleşen getiri girdiğin
+        varsayımdan farklı olabilir. Erken kapama tutarını bankandan teyit et.
+        Sonuçlar girdiğin varsayımlara dayanır; karar ve sorumluluk sana aittir.
       </p>
     </div>
   );
@@ -12300,10 +12303,10 @@ function VadeFarkiKarari() {
       ) : (
         <>
           <KararSonucKart basarili={pesinAvantajli}
-            baslik={pesinAvantajli ? "Finansman al, peşin öde" : "Vadeyi kullan"}
+            baslik={pesinAvantajli ? "Bu senaryoda peşin ödemek daha ucuz" : "Bu senaryoda vadeyi kullanmak daha ucuz"}
             aciklama={pesinAvantajli
-              ? "İskontonun yıllık karşılığı, finansman maliyetinden yüksek. Peşin ödemek net kazanç sağlıyor."
-              : "İskontonun yıllık karşılığı, finansman maliyetini karşılamıyor. Finansman alıp peşin ödemek daha pahalıya geliyor."}
+              ? "İskontonun yıllık karşılığı, finansman maliyetinden yüksek çıkıyor. Vade sonundaki toplam çıkışın peşin ödeme yolunda daha düşük oluyor."
+              : "İskontonun yıllık karşılığı, finansman maliyetini karşılamıyor. Vade sonundaki toplam çıkışın vadeyi kullanma yolunda daha düşük oluyor."}
             solEtiket={pesinAvantajli ? "Net kazanç" : "Vadeyi kullanmanın kazancı"}
             solDeger={kararTL(Math.abs(fark))}
             sagEtiket="Fatura üzerinden" sagDeger={kararYuzde(Math.abs(fark) / F * 100)} />
@@ -12315,14 +12318,14 @@ function VadeFarkiKarari() {
           <Card>
             <SecTitle>İki Yol</SecTitle>
             <div style={{ display: "flex", gap: 9 }}>
-              <KararYolKart baslik="Peşin öde" tutar={kararTL(pesinToplam)} not={`${gun}. günde toplam çıkışın`}
+              <KararYolKart baslik="Peşin ödeme" tutar={kararTL(pesinToplam)} not={`${gun}. günde toplam çıkışın`}
                 kazanan={pesinAvantajli}
                 satirlar={[
                   ["İskontolu tutar", kararTL(iskontolu)],
                   [`Kâr payı (${gun} gün)`, `+${kararTL(karPayi)}`],
                   ["Komisyon", komisyon > 0 ? `+${kararTL(komisyon)}` : "—"],
                 ] as [string, string][]} />
-              <KararYolKart baslik="Vadeyi kullan" tutar={kararTL(F)} not={`${gun}. günde toplam çıkışın`}
+              <KararYolKart baslik="Vade kullanımı" tutar={kararTL(F)} not={`${gun}. günde toplam çıkışın`}
                 kazanan={!pesinAvantajli}
                 satirlar={[
                   ["Fatura", kararTL(F)],
@@ -12335,7 +12338,7 @@ function VadeFarkiKarari() {
           {basabasIskonto != null && (
             <KararNot tur="uyari">
               <b>Başabaş iskonto oranı {kararYuzde(basabasIskonto)}.</b> Tedarikçin bunun altında iskonto
-              veriyorsa vadeyi kullan; üstünde veriyorsa finansman alıp peşin öde.
+              veriyorsa vadeyi kullanmak, üstünde veriyorsa finansman alıp peşin ödemek daha ucuz olur.
               {d > 0 && ` Buradaki teklif ${kararYuzde(d * 100)} — eşiğin ${d * 100 >= basabasIskonto ? "üstünde" : "altında"}.`}
             </KararNot>
           )}
@@ -12343,8 +12346,236 @@ function VadeFarkiKarari() {
       )}
 
       <p style={{ margin: "6px 4px 0", fontSize: 11, color: C.sub, lineHeight: 1.6, opacity: 0.85 }}>
-        Bu karşılaştırma bilgilendirme amaçlıdır. Oranlar ve komisyonlar bankaya göre değişir;
-        KDV ve BSMV etkileri işletmenin vergi durumuna bağlıdır. Kesin karar için mali müşavirine danış.
+        Bu ekran bilgilendirme amaçlıdır; yatırım, finansman veya danışmanlık hizmeti sunmaz ve
+        tavsiye niteliği taşımaz. Oranlar ve komisyonlar bankaya göre değişir; KDV ve BSMV etkileri
+        işletmenin vergi durumuna bağlıdır. Kesin karar için mali müşavirine danış.
+        Sonuçlar girdiğin varsayımlara dayanır; karar ve sorumluluk sana aittir.
+      </p>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 3) TL / YP BORÇLANMA KARARI
+// ═══════════════════════════════════════════════════════════════════════════
+// "YP oranı düşük görünüyor, döviz mi borçlansam?" Ticari müşterinin en sık
+// yanıldığı yer. İki oranı çıplak karşılaştırmak yanıltıcıdır; asıl soru
+// KURUN NE KADAR ARTACAĞIDIR.
+//
+// Ekranın asıl çıktısı BAŞABAŞ KUR ARTIŞI: hangi kur artışında iki yolun
+// maliyeti eşitlenir. Kullanıcı kendi kur beklentisini bu eşikle kıyaslar —
+// tek bir tahmine dayanan cevaptan çok daha sağlam bir karar zemini.
+//
+// MODEL — spot (vade sonunda tek ödeme) mantığı, uygulamanın Spot Finansman
+// ekranıyla aynı: kâr payı 360 gün esasına göre basit, üzerine BSMV.
+//   TL maliyeti  = T × rTL × g/360 × (1+bsmv)
+//   YP maliyeti  = T × (1+d) × (1 + rYP × g/360 × (1+bsmvYP)) − T
+// Başabaş d*: (1+d*)(1+yYP) = 1+yTL  →  d* = (1+yTL)/(1+yYP) − 1
+// Yıllığa çevrim: (1+d*)^(365/g) − 1
+//
+// NEDEN 360 / 365 KARIŞIK: Finansman tarafı 360 gün esası (uygulama genelinde
+// böyle), kur artışının yıllıklandırılması ise takvim yılı olduğu için 365.
+// Bu ikisi farklı şeyler; aynıymış gibi tek sayıya indirilirse hata olur.
+function TlYpKarari({ s }: { s?: any }) {
+  const [paraBirimi, setParaBirimi] = useState("USD");
+  const [tutarS, setTutarS] = useState("");
+  const [gunS, setGunS] = useState("");
+  const [tlOranS, setTlOranS] = useState("");
+  const [ypOranS, setYpOranS] = useState("");
+  const [ypBsmv, setYpBsmv] = useState("var");     // "var" | "muaf"
+  const [kurBeklentiS, setKurBeklentiS] = useState("");
+
+  const T = sayiOku(tutarS);
+  const gun = Math.round(sayiOku(gunS));
+  const rTL = sayiOku(tlOranS) / 100;
+  const rYP = sayiOku(ypOranS) / 100;
+  const kurBeklenti = sayiOku(kurBeklentiS) / 100;   // yıllık
+  const bsmvOran = (s?.ticariBSMV ?? 5) / 100;
+
+  const hazir = T > 0 && gun > 0 && rTL > 0 && rYP > 0;
+
+  // Dönem maliyet oranları (anapara üzerine binen yük)
+  const yTL = rTL * (gun / 360) * (1 + bsmvOran);
+  const yYP = rYP * (gun / 360) * (1 + (ypBsmv === "muaf" ? 0 : bsmvOran));
+
+  // Başabaş kur artışı — önce dönemlik, sonra yıllığa çevrilir
+  const dDonem = yYP > -1 ? (1 + yTL) / (1 + yYP) - 1 : 0;
+  const basabasYillik = gun > 0 && dDonem > -1 ? (Math.pow(1 + dDonem, 365 / gun) - 1) * 100 : 0;
+
+  // Kullanıcının beklentisi girilmişse iki yolun TL maliyeti
+  const beklentiVar = kurBeklentiS !== "" && sayiOku(kurBeklentiS) > 0;
+  const dBeklenenDonem = beklentiVar ? Math.pow(1 + kurBeklenti, gun / 365) - 1 : 0;
+  const tlMaliyet = T * yTL;
+  const ypMaliyet = T * ((1 + dBeklenenDonem) * (1 + yYP) - 1);
+  const tlUcuz = tlMaliyet <= ypMaliyet;
+  const fark = Math.abs(tlMaliyet - ypMaliyet);
+
+  // Kur etkisi dahil efektif yıllık oranlar — çubuk için
+  const tlEfektif = gun > 0 ? (Math.pow(1 + yTL, 365 / gun) - 1) * 100 : 0;
+  const ypEfektif = gun > 0 && beklentiVar
+    ? (Math.pow(1 + (1 + dBeklenenDonem) * (1 + yYP) - 1, 365 / gun) - 1) * 100 : 0;
+
+  const pb = paraBirimi;
+
+  return (
+    <div style={{ padding: "14px 14px 90px" }}>
+      <KararNot tur="bilgi">
+        YP oranı düşük görünse de kur artışı maliyeti değiştirir. Asıl soru şu:
+        kur ne kadar artarsa TL borçlanmak daha ucuz hale gelir?
+      </KararNot>
+
+      <Card>
+        <SecTitle>Finansman</SecTitle>
+        <Seg options={[{ v: "USD", l: "USD" }, { v: "EUR", l: "EUR" }]} value={paraBirimi} onChange={setParaBirimi} />
+        <Field label="Finansman Tutarı" value={tutarS} onChange={setTutarS} suffix="₺"
+          hint="YP'de bu tutarın döviz karşılığı kullanılır" />
+        <Field label="Vade" value={gunS} onChange={setGunS} suffix="Gün" hint="Vade sonunda tek ödeme (spot)" />
+      </Card>
+
+      <Card>
+        <SecTitle>Oranlar</SecTitle>
+        <Field label="TL Yıllık Kâr Payı Oranı" value={tlOranS} onChange={setTlOranS} suffix="%" />
+        <Field label={`${pb} Yıllık Kâr Payı Oranı`} value={ypOranS} onChange={setYpOranS} suffix="%" />
+        <p style={{ margin: "2px 0 6px", fontSize: 12, fontWeight: 600, color: C.sub }}>YP işlemde BSMV</p>
+        <Seg options={[{ v: "var", l: `BSMV %${(bsmvOran * 100).toFixed(0)}` }, { v: "muaf", l: "Muaf" }]}
+          value={ypBsmv} onChange={setYpBsmv} />
+        <Field label="Beklenen Yıllık Kur Artışı" value={kurBeklentiS} onChange={setKurBeklentiS} suffix="%"
+          hint="Boş bırakırsan yalnızca başabaş oranı gösterilir" />
+      </Card>
+
+      {!hazir ? (
+        <Card>
+          <p style={{ margin: 0, fontSize: 13, color: C.sub, lineHeight: 1.6, textAlign: "center" }}>
+            Karşılaştırma için tutar, vade ve iki oranı gir.
+          </p>
+        </Card>
+      ) : (
+        <>
+          {beklentiVar ? (
+            <KararSonucKart basarili={!tlUcuz}
+              baslik={tlUcuz ? "Bu senaryoda TL daha ucuz" : `Bu senaryoda ${pb} daha ucuz`}
+              aciklama={tlUcuz
+                ? `Girdiğin kur beklentisinde ${pb} finansman TL'den pahalıya geliyor; beklentin başabaş oranın üstünde kalıyor.`
+                : `Girdiğin kur beklentisinde ${pb} finansman daha ucuz görünüyor. Kur riski tamamen sende — beklentin tutmazsa sonuç tersine döner.`}
+              solEtiket="Maliyet farkı" solDeger={kararTL(fark)}
+              sagEtiket="Anapara üzerinden" sagDeger={kararYuzde(fark / T * 100)} />
+          ) : (
+            <KararSonucKart basarili={false}
+              baslik={`Başabaş: yıllık ${kararYuzde(basabasYillik)}`}
+              aciklama={`${pb} yıllık ${kararYuzde(basabasYillik)}'ten fazla değer kazanırsa TL yolu daha ucuz kalır. Kendi kur beklentini girersen iki yolun maliyetini de hesaplarım.`}
+              solEtiket="TL dönem maliyeti" solDeger={kararYuzde(yTL * 100)}
+              sagEtiket={`${pb} dönem maliyeti`} sagDeger={kararYuzde(yYP * 100)} />
+          )}
+
+          <Card>
+            <SecTitle>Başabaş Kur Artışı</SecTitle>
+            <p style={{ margin: "0 0 10px", fontSize: 12.5, color: C.sub, lineHeight: 1.6 }}>
+              {pb} kuru yıllık <b style={{ color: C.label }}>{kararYuzde(basabasYillik)}</b> artarsa iki yolun
+              maliyeti eşitlenir. Bunun üstünde artarsa TL, altında kalırsa {pb} daha ucuz olur.
+            </p>
+            {beklentiVar && (
+              <>
+                <div style={{ height: 7, background: WA(0.08), borderRadius: 99, overflow: "hidden" }}>
+                  <div style={{ height: "100%", borderRadius: 99, background: tlUcuz ? C.orange : C.green,
+                    width: `${Math.max(4, Math.min(100, kurBeklenti * 100 / Math.max(basabasYillik, kurBeklenti * 100) * 100))}%` }} />
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
+                  <span style={{ fontSize: 11, color: C.sub }}>Başabaş {kararYuzde(basabasYillik)}</span>
+                  <span style={{ fontSize: 11, color: C.sub }}>Senin beklentin {kararYuzde(kurBeklenti * 100)}</span>
+                </div>
+              </>
+            )}
+          </Card>
+
+          {beklentiVar && (
+            <>
+              <KararOranCubuk solEtiket="TL efektif yıllık maliyet" solDeger={tlEfektif}
+                sagEtiket={`${pb} efektif yıllık maliyet (kur dahil)`} sagDeger={ypEfektif}
+                solKazandi={tlUcuz} />
+
+              <Card>
+                <SecTitle>İki Yol</SecTitle>
+                <div style={{ display: "flex", gap: 9 }}>
+                  <KararYolKart baslik="TL finansman" tutar={kararTL(tlMaliyet)} not={`${gun} günlük toplam maliyet`}
+                    kazanan={tlUcuz}
+                    satirlar={[
+                      ["Kâr payı", kararTL(T * rTL * (gun / 360))],
+                      [`BSMV (%${(bsmvOran * 100).toFixed(0)})`, kararTL(T * rTL * (gun / 360) * bsmvOran)],
+                      ["Kur riski", "yok"],
+                    ] as [string, string][]} />
+                  <KararYolKart baslik={`${pb} finansman`} tutar={kararTL(ypMaliyet)} not={`${gun} günlük toplam maliyet`}
+                    kazanan={!tlUcuz}
+                    satirlar={[
+                      ["Kâr payı ve vergi", kararTL(T * yYP)],
+                      ["Kur farkı", kararTL(T * dBeklenenDonem * (1 + yYP))],
+                      ["Dönem kur artışı", kararYuzde(dBeklenenDonem * 100)],
+                    ] as [string, string][]} />
+                </div>
+                <p style={{ margin: "11px 0 0", fontSize: 11.5, color: C.sub, lineHeight: 1.55 }}>
+                  {pb} yolunda kur farkı yalnızca anaparaya değil, kâr payına da biner — bu yüzden
+                  toplam etki beklenen kur artışından biraz yüksek çıkar.
+                </p>
+              </Card>
+            </>
+          )}
+
+          <KararNot tur="uyari">
+            <b>Kur riski sende.</b> TL geliri olan bir firmada döviz borçlanmak, geliri ile borcu
+            farklı para biriminde tutmak demektir. Beklentin tutmazsa maliyet buradaki hesabın
+            çok üstüne çıkabilir; bu ekran yalnızca maliyet karşılaştırması yapar, risk ölçmez.
+          </KararNot>
+
+          <Card>
+            <SecTitle>Kimler YP Borçlanabilir?</SecTitle>
+            <p style={{ margin: "0 0 12px", fontSize: 12, color: C.sub, lineHeight: 1.6 }}>
+              Döviz kredisi kullanımı 32 Sayılı Karar ve TCMB Sermaye Hareketleri Genelgesi ile
+              sınırlandırılmıştır. Hesaplamaya girmeden önce uygunluğunu kontrol et.
+            </p>
+            {[
+              ["Döviz geliri olan firmalar",
+               "İhracat, transit ticaret, ihracat sayılan satış ve teslimler ile döviz kazandırıcı hizmet ve faaliyetlerden geliri olanlar. Kullanılmak istenen tutar ile mevcut kredi bakiyesi toplamı, son üç mali yılın döviz gelirleri toplamını aşamaz."],
+              ["Kredi bakiyesi 15 milyon USD ve üzerinde olanlar",
+               "Bu eşiği aşan firmalarda döviz geliri şartı aranmaz."],
+              ["Kamu kurumları ve finansal kuruluşlar",
+               "Kamu kurum ve kuruluşları, bankalar, finansal kiralama şirketleri, faktoring şirketleri ve finansman şirketleri döviz geliri şartından muaftır."],
+              ["Yatırım teşvik belgesi sahipleri",
+               "Teşvik belgesi kapsamında kredi kullanması öngörülen firmalar bu şarttan muaftır."],
+              ["Muhtemel döviz gelirini belgeleyenler",
+               "Son üç mali yılda döviz geliri olmayanlar, bağlantılarını ve muhtemel döviz gelirlerini tevsik etmek kaydıyla, bu tutarı aşmayacak şekilde kredi kullanabilir."],
+            ].map(([baslik, metin], i) => (
+              <div key={i} style={{ display: "flex", gap: 10, marginBottom: 11 }}>
+                <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: 99, background: C.blueLight,
+                  color: C.blue, fontSize: 11.5, fontWeight: 800, display: "flex",
+                  alignItems: "center", justifyContent: "center" }}>{i + 1}</span>
+                <div style={{ minWidth: 0 }}>
+                  <p style={{ margin: 0, fontSize: 12.5, fontWeight: 700, color: C.label, lineHeight: 1.35 }}>{baslik}</p>
+                  <p style={{ margin: "4px 0 0", fontSize: 11.5, color: C.sub, lineHeight: 1.55 }}>{metin}</p>
+                </div>
+              </div>
+            ))}
+
+            <div style={{ marginTop: 4, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
+              <p style={{ margin: 0, fontSize: 12.5, fontWeight: 700, color: C.red }}>Kullanamayanlar</p>
+              <p style={{ margin: "5px 0 0", fontSize: 11.5, color: C.sub, lineHeight: 1.55 }}>
+                Türkiye'de yerleşik <b>gerçek kişiler</b> yurt içinden de yurt dışından da döviz kredisi
+                kullanamaz. Döviz geliri olmayan ve yukarıdaki istisnalara girmeyen firmalar da kullanamaz.
+              </p>
+            </div>
+
+            <p style={{ margin: "12px 0 0", fontSize: 11, color: C.sub, lineHeight: 1.55, opacity: 0.85 }}>
+              Döviz gelirleri, SMMM veya YMM tarafından onaylanan Döviz Gelirleri Beyan Formu ve tespit
+              raporu ile bankaya belgelenir; kontrol krediye aracılık eden bankanın yükümlülüğündedir.
+              Mevzuat değişebilir — eşikler ve istisnalar için bankana ve mali müşavirine danış.
+            </p>
+          </Card>
+        </>
+      )}
+
+      <p style={{ margin: "6px 4px 0", fontSize: 11, color: C.sub, lineHeight: 1.6, opacity: 0.85 }}>
+        Kâr payı 360 gün esasına göre basit yöntemle, kur artışının yıllıklandırılması 365 gün
+        üzerinden hesaplanır. Vade sonunda tek ödemeli (spot) yapı varsayılmıştır; taksitli
+        yapılarda sonuç değişir. Bu ekran bilgilendirme amaçlıdır; yatırım, finansman veya
+        danışmanlık hizmeti sunmaz ve tavsiye niteliği taşımaz. Sonuçlar girdiğin varsayımlara dayanır; karar ve sorumluluk sana aittir.
       </p>
     </div>
   );
@@ -14633,6 +14864,7 @@ const MENU = {
   zekatHesabi:{title:"Zekât Hesaplayıcı",back:"araclarMenu"},
   erkenKapamaKarari:{title:"Erken Kapama Kararı",back:"hesaplaMenu"},
   vadeFarkiKarari:{title:"Vade Farkı Kararı",back:"hesaplaMenu"},
+  tlYpKarari:{title:"TL/YP Borçlanma Kararı",back:"hesaplaMenu"},
   kiraSertifikasi:{title:"Kira Sertifikası İhraçları",back:"araclarMenu"},
   taksitKarsilastirma:{title:"Taksit Karşılaştırma",back:"hesaplaMenu"},
   portfoyum:{title:"Portföyüm",back:"araclarMenu"},
@@ -14664,7 +14896,7 @@ const TAB_OF_SCREEN:any = {
   hazineDoviz:"hesapla", hazineForward:"hesapla", hazineSwap:"hesapla",
   hazineBono:"hesapla", hazineSenaryo:"hesapla",
   piyasaHaberleri:"piyasa", finansalGostergeler:"piyasa",
-  araclarMenu:"araclar", sozluk:"araclar", vadeTakibi:"araclar", katilimBankalari:"araclar", kfkNedir:"araclar", zekatHesabi:"araclar", erkenKapamaKarari:"hesapla", vadeFarkiKarari:"hesapla", kiraSertifikasi:"araclar", getiriKarsilastirma:"araclar", haftalikOzet:"araclar", portfoyum:"araclar", fonDetay:"araclar",
+  araclarMenu:"araclar", sozluk:"araclar", vadeTakibi:"araclar", katilimBankalari:"araclar", kfkNedir:"araclar", zekatHesabi:"araclar", erkenKapamaKarari:"hesapla", vadeFarkiKarari:"hesapla", tlYpKarari:"hesapla", kiraSertifikasi:"araclar", getiriKarsilastirma:"araclar", haftalikOzet:"araclar", portfoyum:"araclar", fonDetay:"araclar",
   asistan:"yapayzeka",
   profil:"profil",
 };
@@ -14741,6 +14973,7 @@ const SCREEN_TO_PATH: Record<string,string> = {
   zekatHesabi: "/zekat-hesaplayici",
   erkenKapamaKarari: "/erken-kapama-karari",
   vadeFarkiKarari: "/vade-farki-karari",
+  tlYpKarari: "/tl-yp-karari",
   kiraSertifikasi: "/kira-sertifikasi-ihraclari",
   portfoyum: "/portfoyum",
   hazineDoviz: "/doviz-donusturucu",
@@ -14824,6 +15057,7 @@ const MENU_ARAMA_LIST=[
   {key:"esnekOdemePlanlari", label:"Esnek Ödeme Planları Hesaplama",       icon:"📋", grup:"Bireysel Finansman"},
   {key:"spotFinansman",      label:"Spot Finansman Hesaplama",             icon:"⚡", grup:"Tüzel Finansman"},
   {key:"vadeFarkiKarari",    label:"Vade Farkı Kararı",                    icon:"⏳", grup:"Tüzel Finansman", alt:["vade farki","pesin iskonto","pesin mi vadeli mi","tedarikci","iskonto","pesin odeme","karar"]},
+  {key:"tlYpKarari",         label:"TL/YP Borçlanma Kararı",               icon:"💱", grup:"Tüzel Finansman", alt:["tl mi yp mi","doviz kredisi","yp finansman","kur riski","basabas kur","doviz borclanma","karar"]},
   {key:"taksitliTicari",     label:"Taksitli Ticari Finansman Hesaplama",  icon:"🏗️", grup:"Tüzel Finansman"},
   {key:"leasing",            label:"Finansal Kiralama Hesaplama",          icon:"🔑", grup:"Tüzel Finansman"},
   {key:"cekArkasiFinansman", label:"Çek Teminatlı Finansman Hesaplama",   icon:"🧾", grup:"Tüzel Finansman", alt:["çek","iskonto","kırdırma","çek arkası","teminat","bugünkü değer"]},
@@ -14888,6 +15122,7 @@ const HESAPLA_ARAC_LISTESI = [
   // Tüzel Finansman
   {key:"spotFinansman",      icon:"⚡", label:"Spot Finansman Hesaplama",             kat:"ticari"},
   {key:"vadeFarkiKarari",    icon:"⏳", label:"Vade Farkı Kararı",                    kat:"ticari"},
+  {key:"tlYpKarari",         icon:"💱", label:"TL/YP Borçlanma Kararı",               kat:"ticari"},
   {key:"taksitliTicari",     icon:"🏗️", label:"Taksitli Ticari Finansman Hesaplama",  kat:"ticari"},
   {key:"esnekOdemePlanlari", icon:"📋", label:"Esnek Ödeme Planları Hesaplama",       kat:"ticari"},
   {key:"cekArkasiFinansman", icon:"🧾", label:"Çek Teminatlı Finansman Hesaplama",   kat:"ticari"},
@@ -23235,6 +23470,7 @@ function App(){
         {screen==="zekatHesabi"&&<ZekatHesabi/>}
         {screen==="erkenKapamaKarari"&&<ErkenKapamaKarari s={settings}/>}
         {screen==="vadeFarkiKarari"&&<VadeFarkiKarari/>}
+        {screen==="tlYpKarari"&&<TlYpKarari s={settings}/>}
         {screen==="kiraSertifikasi"&&<KiraSertifikasiIhraclari/>}
         {screen==="getiriKarsilastirma"&&<GetiriKarsilastirma/>}
         {screen==="haftalikOzet"&&<HaftalikPiyasaOzeti/>}
