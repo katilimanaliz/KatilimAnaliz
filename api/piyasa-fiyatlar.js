@@ -1,24 +1,30 @@
 // api/piyasa-fiyatlar.js
-// Birleştirilmiş fiyat proxy'si: altin.js + kripto.js + petrol.js + kur.js
-// (2026-07) Vercel Hobby planındaki "deployment başına en fazla 12 serverless
-// function" sınırı asistan-ai.js eklenince aşıldı; bu 4 küçük route tek dosyada
-// birleştirildi. Her tipin davranışı/response şekli BİREBİR korundu — frontend
-// hangi alanı bekliyorsa (XAU_TRY_gram, btc_usd, brent_usd, USD_TRY vb.) aynen
-// dönüyor. Kullanım: /api/piyasa-fiyatlar?tip=altin | kripto | petrol | kur
+// Birleştirilmiş fiyat proxy'si: altin + kripto + petrol + kur + altinapi
+// Kullanım: /api/piyasa-fiyatlar?tip=altin | kripto | petrol | kur | altinapi
 //
-// GÜNCELLEME (2026-07): altin.js önceden gold-api.com kullanıyordu; ücretsiz
-// plan istek limitine ulaşıldığı için kaynak Yahoo Finance'e (GC=F altın,
-// SI=F gümüş futures) çevrildi — kur.js zaten aynı kaynağı kullanıyordu,
-// tutarlılık sağlandı. Döndürülen alanlar (XAU_USD, XAG_USD, USD_TRY,
-// XAU_TRY_gram, XAG_TRY_gram) değişmedi.
+// ═══════════════════════════════════════════════════════════════════════════
+// KAYNAK DEĞİŞİKLİĞİ (2026-08-08) — Yahoo/Frankfurter → AltinAPI
+// ═══════════════════════════════════════════════════════════════════════════
+// SORUN: Kurlar Frankfurter'dan (Avrupa Merkez Bankası GÜNLÜK REFERANS kuru,
+// günde tek yayın) geliyordu. Bu kur ne serbest piyasa kuruydu ne de gün
+// içinde güncelleniyordu; kullanıcının döviz bürosunda gördüğü rakamla
+// uyuşmuyordu. Altın/gümüş ise Yahoo futures'tan (GC=F, SI=F) alınıp USD/TRY
+// ile ÇARPILARAK gram fiyatına çevriliyordu — bu da Kapalı Çarşı fiyatı değil,
+// türetilmiş bir yaklaşıklıktı.
 //
-// TEK DAVRANIŞ DEĞİŞİKLİĞİ: kur.js önceden Redis dağıtık kilidi (kilitliGetir)
-// KULLANMIYORDU, sadece CDN Cache-Control'e güveniyordu — bu, önbellek süresi
-// dolduğunda 5 dış API'ye (Frankfurter, open.er-api, Yahoo Finance x2, CoinGecko)
-// aynı anda binlerce istek gidebileceği anlamına geliyordu (tam da kripto.js'nin
-// kendi yorumunda uyardığı "thundering herd" riski). Diğer üç route zaten bu
-// korumaya sahip olduğu için, tutarlılık ve güvenlik adına kur tipine de aynı
-// kilitliGetir koruması eklendi. Döndürülen veri/alanlar değişmedi.
+// ÇÖZÜM: Tümü AltinAPI'ye (Harem Altın verisi, serbest piyasa) taşındı.
+// Böylece uygulama genelinde TEK kaynak kullanılıyor; altın Harem'den, kur
+// ECB'den gelince ortaya çıkan iç tutarsızlık ortadan kalktı.
+//
+// ALTINAPI'DE OLMAYANLAR — bilinçli olarak eski kaynaklarında bırakıldı:
+//   • Petrol (BZ=F)  → AlphaVantage, yedeği Yahoo
+//   • Bitcoin        → CoinGecko
+//
+// BID/ASK: AltinAPI her sembol için alış (bid) ve satış (ask) veriyor.
+// Ana alan adları (USD_TRY vb.) SATIŞ fiyatını taşıyor — kullanıcı döviz
+// ALIRKEN ödeyeceği fiyat budur ve ana ekranda gösterilen odur. Alış/satış
+// ayrı ayrı da döndürülüyor ("detay" altında) ki Piyasa ekranı ikisini
+// birden gösterebilsin.
 import { Redis } from "@upstash/redis";
 import { kilitliGetir } from "./_lib/kilitliOnbellek.js";
 
@@ -27,39 +33,89 @@ const redis = new Redis({
   token: process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN,
 });
 
-// ─── ALTIN (Kaynak: Yahoo Finance GC=F / SI=F) ─────────────────────────────
-async function altinTaze() {
-  const GRAM_ONS = 31.1035;
-
-  const usdRes = await fetch("https://api.frankfurter.app/latest?from=USD&to=TRY");
-  if (!usdRes.ok) throw new Error(`USD/TRY kuru alınamadı (HTTP ${usdRes.status})`);
-  const usdData = await usdRes.json();
-  const USD_TRY = Number(usdData?.rates?.TRY);
-  if (!isFinite(USD_TRY) || USD_TRY <= 0) throw new Error("USD/TRY kuru geçersiz döndü");
-
-  const [altinRes, gumusRes] = await Promise.all([
-    fetch("https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1d&range=1d", { headers: { "User-Agent": "Mozilla/5.0" } }),
-    fetch("https://query1.finance.yahoo.com/v8/finance/chart/SI=F?interval=1d&range=1d", { headers: { "User-Agent": "Mozilla/5.0" } }),
-  ]);
-  if (!altinRes.ok) throw new Error(`Altın fiyatı alınamadı (HTTP ${altinRes.status})`);
-  if (!gumusRes.ok) throw new Error(`Gümüş fiyatı alınamadı (HTTP ${gumusRes.status})`);
-
-  const altin = await altinRes.json();
-  const gumus = await gumusRes.json();
-
-  const XAU_USD = Number(altin?.chart?.result?.[0]?.meta?.regularMarketPrice);
-  const XAG_USD = Number(gumus?.chart?.result?.[0]?.meta?.regularMarketPrice);
-  if (!isFinite(XAU_USD) || XAU_USD <= 0) throw new Error("Altın fiyatı geçersiz veri döndürdü: " + JSON.stringify(altin));
-  if (!isFinite(XAG_USD) || XAG_USD <= 0) throw new Error("Gümüş fiyatı geçersiz veri döndürdü: " + JSON.stringify(gumus));
-  if (XAG_USD >= XAU_USD) throw new Error(`Gümüş/Altın oranı anormal (XAG=${XAG_USD}, XAU=${XAU_USD}) — kaynak veri şüpheli`);
-
-  const XAU_TRY_gram = (XAU_USD * USD_TRY) / GRAM_ONS;
-  const XAG_TRY_gram = (XAG_USD * USD_TRY) / GRAM_ONS;
-
-  return { XAU_USD, XAG_USD, USD_TRY, XAU_TRY_gram, XAG_TRY_gram };
+// ─── ORTAK: AltinAPI ham veri ──────────────────────────────────────────────
+// Tek istekte 260+ sembol dönüyor; altin/kur/altinapi tiplerinin hepsi bunu
+// kullanıyor. Her tip kendi Redis anahtarında önbelleklendiği için AltinAPI'ye
+// giden istek sayısı artmıyor.
+async function altinApiCek() {
+  const apiKey = process.env.ALTINAPI_KEY;
+  if (!apiKey) throw new Error("ALTINAPI_KEY tanimli degil");
+  const r = await fetch("https://altinapi.com/api/v1/prices", {
+    headers: { "X-API-Key": apiKey },
+  });
+  if (!r.ok) throw new Error("AltinAPI HTTP " + r.status);
+  const json = await r.json();
+  const items = (json && json.data) || [];
+  const harita = {};
+  for (const item of items) {
+    if (!item || !item.symbol) continue;
+    harita[item.symbol] = item;
+  }
+  return harita;
 }
 
-// ─── KRİPTO (Kaynak: CoinGecko) ────────────────────────────────────────────
+// Sembolden sayı çıkarır. AltinAPI bazı sembolleri 0 ya da null döndürüyor
+// (örn. USDRUB bid=ask=0); bunlar geçersiz sayılıp null dönüyor ki hesaplara
+// sızmasın.
+function fiyat(harita, sembol, alan) {
+  const it = harita[sembol];
+  if (!it) return null;
+  const v = Number(it[alan]);
+  return isFinite(v) && v > 0 ? v : null;
+}
+// Satış (kullanıcı alırken ödediği) — ana gösterim
+const satis = (h, s) => fiyat(h, s, "ask");
+// Alış (kullanıcı bozdururken aldığı)
+const alis = (h, s) => fiyat(h, s, "bid");
+// Önceki kapanış — günlük % değişim için
+const kapanis = (h, s) => fiyat(h, s, "close");
+
+// Bir sembol için alış/satış/kapanış/değişim paketini üretir
+function cift(h, sembol) {
+  const a = alis(h, sembol), s = satis(h, sembol), k = kapanis(h, sembol);
+  return {
+    alis: a,
+    satis: s,
+    kapanis: k,
+    degisim: s != null && k != null && k > 0 ? Math.round((s - k) / k * 10000) / 100 : null,
+  };
+}
+
+// ─── ALTIN (Kaynak: AltinAPI) ──────────────────────────────────────────────
+// Alan adları BİREBİR korundu (XAU_USD, XAG_USD, USD_TRY, XAU_TRY_gram,
+// XAG_TRY_gram) — frontend'in beklediği şekil değişmedi. Tek fark: gram
+// fiyatları artık ons × kur ile HESAPLANMIYOR, doğrudan Kapalı Çarşı
+// verisinden (ALTIN / GUMUSTRY) geliyor.
+async function altinTaze() {
+  const h = await altinApiCek();
+
+  const XAU_USD = satis(h, "XAUUSD");
+  const XAG_USD = satis(h, "XAGUSD");
+  const USD_TRY = satis(h, "USDTRY");
+  const XAU_TRY_gram = satis(h, "ALTIN");
+  const XAG_TRY_gram = satis(h, "GUMUSTRY");
+
+  if (XAU_USD == null) throw new Error("XAUUSD (ons altın) alınamadı");
+  if (XAU_TRY_gram == null) throw new Error("ALTIN (gram altın) alınamadı");
+  if (USD_TRY == null) throw new Error("USDTRY alınamadı");
+  // Gümüş/altın oranı anormalse kaynak şüphelidir (eski koddaki koruma korundu)
+  if (XAG_USD != null && XAG_USD >= XAU_USD) {
+    throw new Error(`Gümüş/Altın oranı anormal (XAG=${XAG_USD}, XAU=${XAU_USD}) — kaynak veri şüpheli`);
+  }
+
+  return {
+    XAU_USD, XAG_USD, USD_TRY, XAU_TRY_gram, XAG_TRY_gram,
+    detay: {
+      ons_altin: cift(h, "XAUUSD"),
+      ons_gumus: cift(h, "XAGUSD"),
+      gram_altin: cift(h, "ALTIN"),
+      gram_gumus: cift(h, "GUMUSTRY"),
+    },
+    ts: new Date().toISOString(),
+  };
+}
+
+// ─── KRİPTO (Kaynak: CoinGecko — AltinAPI'de kripto yok) ───────────────────
 async function kriptoTaze() {
   const r = await fetch(
     "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd,try"
@@ -75,7 +131,7 @@ async function kriptoTaze() {
   };
 }
 
-// ─── PETROL (Kaynak: Yahoo Finance BZ=F) ───────────────────────────────────
+// ─── PETROL (Kaynak: AlphaVantage, yedek Yahoo — AltinAPI'de petrol yok) ───
 async function petrolTaze() {
   const apiKey = process.env.ALPHA_VANTAGE_KEY;
   if (apiKey) {
@@ -99,7 +155,7 @@ async function petrolTaze() {
         }
       }
     } catch (e) {
-      // Alpha Vantage basarisiz olursa asagidaki eski Yahoo yoluna dusulur
+      // Alpha Vantage basarisiz olursa asagidaki Yahoo yoluna dusulur
     }
   }
 
@@ -119,120 +175,107 @@ async function petrolTaze() {
   };
 }
 
-// ─── ALTINAPI (Kaynak: altinapi.com, Harem Altın ile ayni veri) ────────────
-//
-// DEĞİŞİKLİK (2026-08-08): Önceden yalnızca 18 kıymetli maden sembolü sabit bir
-// "istenenler" listesiyle süzülüyordu. Bu, AltinAPI'nin gönderdiği DÖVİZ
-// sembollerinin (varsa) sessizce atılmasına yol açıyordu — kur verisi
-// Frankfurter'dan (ECB günlük referans kuru, günde 1 kez) geldiği için
-// uygulamadaki kurlar serbest piyasadan farklı görünüyordu.
-//
-// Artık kaynak ne gönderiyorsa TAMAMI döndürülüyor. Böylece:
-//   • AltinAPI döviz veriyorsa hemen görünür ve kullanılabilir hale gelir,
-//   • ileride yeni sembol eklenirse kod değişikliği gerekmez,
-//   • mevcut 18 sembol GARANTİ altında (gelmezse null) — frontend bozulmaz.
-//
-// Veri boyutu küçük olduğu için tamamını döndürmenin maliyeti yok.
+// ─── ALTINAPI (ham, tüm semboller) ─────────────────────────────────────────
 const ALTINAPI_GARANTI = [
   "ALTIN","ONS","AYAR22","AYAR14","CEYREK_YENI","CEYREK_ESKI","YARIM_YENI",
   "YARIM_ESKI","TEK_YENI","TEK_ESKI","ATA_YENI","ATA_ESKI","XAGUSD",
-  "GUMUSTRY","XPTUSD","PLATIN","XPDUSD","PALADYUM",
+  "GUMUSTRY","XPTUSD","PLATIN","XPDUSD","PALADYUM","USDTRY","EURTRY",
 ];
 
 async function altinApiTaze() {
-  const apiKey = process.env.ALTINAPI_KEY;
-  if (!apiKey) throw new Error("ALTINAPI_KEY tanimli degil");
-  const r = await fetch("https://altinapi.com/api/v1/prices", {
-    headers: { "X-API-Key": apiKey },
-  });
-  if (!r.ok) throw new Error("AltinAPI HTTP " + r.status);
-  const json = await r.json();
-  const items = (json && json.data) || [];
-
+  const harita = await altinApiCek();
   const sonuc = {};
-  // 1) Kaynağın gönderdiği HER sembolü al
-  for (const item of items) {
-    if (!item || !item.symbol) continue;
-    sonuc[item.symbol] = { bid: item.bid, ask: item.ask, close: item.close };
+  for (const sembol of Object.keys(harita)) {
+    const i = harita[sembol];
+    sonuc[sembol] = { bid: i.bid, ask: i.ask, close: i.close };
   }
-  // 2) Beklenen 18 sembol gelmediyse null olarak yer tut (frontend kırılmasın)
   for (const sembol of ALTINAPI_GARANTI) {
     if (!(sembol in sonuc)) sonuc[sembol] = null;
   }
-  // 3) Teşhis: kaynağın gönderdiği sembol adlarının listesi
-  sonuc._semboller = items.map(function (i) { return i && i.symbol; }).filter(Boolean);
-
   return sonuc;
 }
 
-// ─── KUR (Döviz + Altın + Bitcoin, çoklu kaynak) ───────────────────────────
+// ─── KUR (Kaynak: AltinAPI; Bitcoin için CoinGecko) ────────────────────────
+// Alan adları BİREBİR korundu. Ana alanlar (USD_TRY, EUR_TRY …) SATIŞ
+// fiyatını taşıyor; alış/satış ayrımı "detay" altında.
+//
+// RUB/CNY/AED: AltinAPI'de ana sembol boş dönüyor (USDRUB bid=ask=0), bu
+// yüzden DS_ önekli karşılıkları yedek olarak kullanılıyor. DS_ serisi farklı
+// bir sağlayıcıdan geliyor; ana sembol dolu geldiğinde o tercih ediliyor.
 async function kurTaze() {
-  const [dovizRes, erApiRes, gcRes, siRes, btcRes] = await Promise.allSettled([
-    fetch("https://api.frankfurter.app/latest?from=USD&to=TRY,EUR,GBP,CHF,JPY,CNY"),
-    fetch("https://open.er-api.com/v6/latest/USD"), // SAR, RUB, AED dahil geniş kapsam - key gerektirmez
-    fetch("https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1d&range=1d", {headers:{"User-Agent":"Mozilla/5.0"}}),
-    fetch("https://query1.finance.yahoo.com/v8/finance/chart/SI=F?interval=1d&range=1d", {headers:{"User-Agent":"Mozilla/5.0"}}),
+  const [haritaRes, btcRes] = await Promise.allSettled([
+    altinApiCek(),
     fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"),
   ]);
 
-  const doviz = dovizRes.status==="fulfilled" && dovizRes.value.ok ? await dovizRes.value.json() : null;
-  const erApi = erApiRes.status==="fulfilled" && erApiRes.value.ok ? await erApiRes.value.json() : null;
-  const gcData = gcRes.status==="fulfilled" && gcRes.value.ok ? await gcRes.value.json() : null;
-  const siData = siRes.status==="fulfilled" && siRes.value.ok ? await siRes.value.json() : null;
-  const btcData = btcRes.status==="fulfilled" && btcRes.value.ok ? await btcRes.value.json() : null;
+  if (haritaRes.status !== "fulfilled") {
+    throw new Error("AltinAPI alınamadı: " + (haritaRes.reason?.message || "bilinmeyen hata"));
+  }
+  const h = haritaRes.value;
 
-  const rates = doviz?.rates ?? {};
-  const erRates = erApi?.rates ?? {}; // base: USD
-
-  // USD_TRY öncelik: Frankfurter, yoksa open.er-api
-  const USD_TRY = rates.TRY ?? erRates.TRY ?? null;
-
-  const gcFiyat = gcData?.chart?.result?.[0]?.meta?.regularMarketPrice ?? null;
-  const siFiyat = siData?.chart?.result?.[0]?.meta?.regularMarketPrice ?? null;
-  const XAU_TRY_gram = gcFiyat && USD_TRY ? Math.round(gcFiyat * USD_TRY / 31.1035 * 100) / 100 : null;
-  const XAG_TRY_gram = siFiyat && USD_TRY ? Math.round(siFiyat * USD_TRY / 32.1507 * 100) / 100 : null;
+  const btcData = btcRes.status === "fulfilled" && btcRes.value.ok ? await btcRes.value.json() : null;
   const BTC_USD = btcData?.bitcoin?.usd ?? null;
 
-  // SAR, RUB, CNY için open.er-api kullan (Frankfurter desteklemiyor / yedek)
-  const SAR_TRY = USD_TRY && erRates.SAR ? Math.round(USD_TRY / erRates.SAR * 10000) / 10000 : null;
-  const RUB_TRY = USD_TRY && erRates.RUB ? Math.round(USD_TRY / erRates.RUB * 10000) / 10000 : null;
-  const AED_TRY = USD_TRY && (rates.AED ?? erRates.AED) ? Math.round(USD_TRY / (rates.AED ?? erRates.AED) * 10000) / 10000 : null;
-  const CNY_TRY = USD_TRY && (rates.CNY ?? erRates.CNY) ? Math.round(USD_TRY / (rates.CNY ?? erRates.CNY) * 10000) / 10000 : null;
+  // Ana sembol boşsa DS_ karşılığına düş
+  const kurSatis = (ana, yedek) => satis(h, ana) ?? (yedek ? satis(h, yedek) : null);
+  const kurCift  = (ana, yedek) => (satis(h, ana) != null ? cift(h, ana) : (yedek ? cift(h, yedek) : cift(h, ana)));
+
+  const USD_TRY = kurSatis("USDTRY");
+  if (USD_TRY == null) throw new Error("USDTRY alınamadı");
+
+  const JPY = kurSatis("JPYTRY");
 
   return {
     USD_TRY,
-    EUR_TRY: USD_TRY && rates.EUR ? Math.round(USD_TRY / rates.EUR * 10000) / 10000 : null,
-    GBP_TRY: USD_TRY && rates.GBP ? Math.round(USD_TRY / rates.GBP * 10000) / 10000 : null,
-    CHF_TRY: USD_TRY && rates.CHF ? Math.round(USD_TRY / rates.CHF * 10000) / 10000 : null,
-    SAR_TRY,
-    RUB_TRY,
-    AED_TRY,
-    CNY_TRY,
-    JPY_TRY: USD_TRY && rates.JPY ? Math.round(USD_TRY / rates.JPY * 10000) / 10000 : null,
-    JPY100_TRY: USD_TRY && rates.JPY ? Math.round(USD_TRY / rates.JPY * 100 * 10000) / 10000 : null,
-    EUR_USD: rates.EUR ? Math.round(1 / rates.EUR * 10000) / 10000 : null,
-    XAU_USD: gcFiyat,
-    XAU_TRY_gram,
-    XAG_TRY_gram,
+    EUR_TRY: kurSatis("EURTRY"),
+    GBP_TRY: kurSatis("GBPTRY"),
+    CHF_TRY: kurSatis("CHFTRY"),
+    SAR_TRY: kurSatis("SARTRY"),
+    RUB_TRY: kurSatis("RUBTRY", "DS_RUBTRY"),
+    AED_TRY: kurSatis("AEDTRY", "DS_AEDTRY"),
+    CNY_TRY: kurSatis("CNYTRY", "DS_CNYTRY"),
+    JPY_TRY: JPY,
+    JPY100_TRY: JPY != null ? Math.round(JPY * 100 * 10000) / 10000 : null,
+    CAD_TRY: kurSatis("CADTRY"),
+    AUD_TRY: kurSatis("AUDTRY"),
+    EUR_USD: kurSatis("EURUSD"),
+    XAU_USD: satis(h, "XAUUSD"),
+    XAU_TRY_gram: satis(h, "ALTIN"),
+    XAG_TRY_gram: satis(h, "GUMUSTRY"),
     BTC_USD,
+    // Piyasa ekranı için alış + satış + günlük değişim
+    detay: {
+      USD_TRY: kurCift("USDTRY"),
+      EUR_TRY: kurCift("EURTRY"),
+      GBP_TRY: kurCift("GBPTRY"),
+      CHF_TRY: kurCift("CHFTRY"),
+      SAR_TRY: kurCift("SARTRY"),
+      RUB_TRY: kurCift("RUBTRY", "DS_RUBTRY"),
+      AED_TRY: kurCift("AEDTRY", "DS_AEDTRY"),
+      CNY_TRY: kurCift("CNYTRY", "DS_CNYTRY"),
+      JPY_TRY: kurCift("JPYTRY"),
+      CAD_TRY: kurCift("CADTRY"),
+      AUD_TRY: kurCift("AUDTRY"),
+      EUR_USD: kurCift("EURUSD"),
+      XAU_USD: cift(h, "XAUUSD"),
+      XAG_USD: cift(h, "XAGUSD"),
+      XAU_TRY_gram: cift(h, "ALTIN"),
+      XAG_TRY_gram: cift(h, "GUMUSTRY"),
+    },
+    ts: new Date().toISOString(),
   };
 }
 
-// ─── Tip → { Redis anahtarı, TTL, taze() fonksiyonu, Cache-Control } eşlemesi ──
-// (TTL/anahtar/Cache-Control değerleri orijinal 4 dosyadan BİREBİR alındı)
-//
-// altinapi anahtarı v3 → v4: içerik şekli değişti (artık tüm semboller
-// dönüyor). Anahtar yükseltilmezse eski, süzülmüş önbellek dönmeye devam eder
-// ve değişiklik hiç görünmez.
-//
-// altinapi TTL 3600 → 300: veri artık kur için de kullanılabilir hale geldi;
-// bir saatlik önbellek kurda kabul edilemez derecede eskidir.
+// ─── Tip → { Redis anahtarı, TTL, taze() fonksiyonu, Cache-Control } ───────
+// TTL'ler AltinAPI'ye geçişle güncellendi: altın artık 8 saatlik değil, kur
+// ile aynı tazelikte (300 sn). Anahtarlar yükseltildi — aksi halde eski
+// şekildeki önbellek dönmeye devam eder ve değişiklik hiç görünmez.
 const YAPILANDIRMA = {
-  altin:  { anahtar: "altin:v1",  ttl: 28800, fn: altinTaze,  cacheControl: "public, s-maxage=28800, stale-while-revalidate=3600" },
-  kripto: { anahtar: "kripto:v1", ttl: 300,   fn: kriptoTaze, cacheControl: "s-maxage=300" },
-  petrol: { anahtar: "petrol:v1", ttl: 1800,  fn: petrolTaze, cacheControl: "s-maxage=1800" },
-  kur:    { anahtar: "kur:v1",    ttl: 300,   fn: kurTaze,    cacheControl: "s-maxage=300" },
-  altinapi: { anahtar: "altinapi:v4", ttl: 300, fn: altinApiTaze, cacheControl: "s-maxage=300" },
+  altin:    { anahtar: "altin:v2",    ttl: 300,  fn: altinTaze,    cacheControl: "s-maxage=300" },
+  kripto:   { anahtar: "kripto:v1",   ttl: 300,  fn: kriptoTaze,   cacheControl: "s-maxage=300" },
+  petrol:   { anahtar: "petrol:v1",   ttl: 1800, fn: petrolTaze,   cacheControl: "s-maxage=1800" },
+  kur:      { anahtar: "kur:v2",      ttl: 300,  fn: kurTaze,      cacheControl: "s-maxage=300" },
+  altinapi: { anahtar: "altinapi:v5", ttl: 300,  fn: altinApiTaze, cacheControl: "s-maxage=300" },
 };
 
 export default async function handler(req, res) {
@@ -242,7 +285,7 @@ export default async function handler(req, res) {
   const conf = YAPILANDIRMA[tip];
   if (!conf) {
     return res.status(400).json({
-      error: `Geçersiz veya eksik 'tip' parametresi (gelen: ${tip ?? "yok"}). Kullanım: /api/piyasa-fiyatlar?tip=altin|kripto|petrol|kur`,
+      error: `Geçersiz veya eksik 'tip' parametresi (gelen: ${tip ?? "yok"}). Kullanım: /api/piyasa-fiyatlar?tip=altin|kripto|petrol|kur|altinapi`,
     });
   }
 
