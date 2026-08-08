@@ -20344,7 +20344,35 @@ function PortfoyDuzenleModal({kalem, onKapat, onKaydet}:{
   );
 }
 
+// iOS'ta klavye açılınca "vh" birimi küçülmüyor — alttan açılan bir sheet
+// maxHeight:"85vh" ile sabitlenmişse klavye ekranın alt yarısını kapladığında
+// sheet'in alt kısmı (ör. arama sonuçları) klavyenin ARKASINDA kalıyor ve
+// scroll ile de erişilemiyor: PortfoyEkleModal'da "Hisse ara" adımında
+// yaşanan hata tam olarak buydu.
+//
+// window.visualViewport, klavye açıkken GERÇEKTEN görünen alanı verir.
+// Sheet'in maxHeight'ını bu değere göre küçültünce (flex-end hizalamayla
+// birlikte) sheet'in tamamı her zaman klavyenin ÜSTÜNDE, görünür alanda kalır.
+// API yoksa (eski WebView) eski "85vh" davranışına sessizce düşülür.
+function useGorunurYukseklik(): number | null {
+  const [yukseklik, setYukseklik] = useState<number | null>(null);
+  useEffect(() => {
+    const vv = (window as any).visualViewport;
+    if (!vv) return;
+    const guncelle = () => setYukseklik(vv.height);
+    guncelle();
+    vv.addEventListener("resize", guncelle);
+    vv.addEventListener("scroll", guncelle);
+    return () => {
+      vv.removeEventListener("resize", guncelle);
+      vv.removeEventListener("scroll", guncelle);
+    };
+  }, []);
+  return yukseklik;
+}
+
 function PortfoyEkleModal({onKapat, onEklendi}:{onKapat:()=>void; onEklendi:(k:PortfoyKalemi)=>void}){
+  const gorunurYukseklik = useGorunurYukseklik();
   const [asama, setAsama] = useState<"tur"|"altinAlt"|"ara"|"miktar"|"alis">("tur");
   const [tur, setTur] = useState<PortfoyKalemi["tur"]|null>(null);
   const [altinTuru, setAltinTuru] = useState<{ad:string;sembol:string;birim:string;paraOnek:string}|null>(null);
@@ -20520,7 +20548,7 @@ function PortfoyEkleModal({onKapat, onEklendi}:{onKapat:()=>void; onEklendi:(k:P
 
   return (
     <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.6)",zIndex:500,display:"flex",alignItems:"flex-end",...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}} onClick={onKapat}>
-      <div onClick={(e)=>e.stopPropagation()} style={{background:C.card,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",maxHeight:"85vh",overflowY:"auto",padding:"14px 18px 28px"}}>
+      <div onClick={(e)=>e.stopPropagation()} style={{background:C.card,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",maxHeight:gorunurYukseklik?Math.round(gorunurYukseklik*0.85):"85vh",overflowY:"auto",padding:"14px 18px 28px"}}>
         <div style={{width:36,height:4,background:WA(0.2),borderRadius:2,margin:"0 auto 14px"}}/>
 
         {asama==="tur" && (
