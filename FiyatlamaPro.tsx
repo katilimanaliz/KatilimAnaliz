@@ -18146,7 +18146,9 @@ function PiyasaOzetiDuzenleModal({secili,onToggle,onClose}:{secili:string[],onTo
 
 // ─── PİYASALAR TABLOSU: kategori verisi ────────────────────────────────────
 const PIYASA_TABLO_KATEGORILER = [
-  {id:"tumu",        label:"Tümü"},
+  // "Tümü" kaldırıldı (2026-08-08): karışık liste olduğu için alış/satış
+  // sütunları orada anlamsız kalıyordu ve kullanıcı zaten kategoriden
+  // giriyor. Varsayılan sekme artık "Göstergeler".
   {id:"gostergeler", label:"Göstergeler"},
   {id:"disticaret",  label:"Dış Ticaret"},
   {id:"altin",       label:"Fiziki Altın"},
@@ -18371,7 +18373,7 @@ function PiyasaSatiri({ad,sembol,paraOnek,dec,onTikla,sira,alisGoster}:{ad:strin
             ? <span className="skeleton" style={{display:"inline-block",width:52,height:12,borderRadius:6,verticalAlign:"middle"}}/>
             : "—"}
       </span>
-      <span style={{width:alisGoster?56:60,textAlign:"right",fontSize:11,fontWeight:700,color:degisim!=null?renk:WA(0.3),flexShrink:0}}>
+      <span style={{width:alisGoster?60:64,textAlign:"right",fontSize:11,fontWeight:700,color:degisim!=null?renk:WA(0.3),flexShrink:0}}>
         {degisim!=null
           ? <span className="spark-in">{`${pozitif?"+":""}${degisim.toFixed(2).replace(".",",")}%`}</span>
           : (yukleniyor&&guncel==null)
@@ -18379,8 +18381,8 @@ function PiyasaSatiri({ad,sembol,paraOnek,dec,onTikla,sira,alisGoster}:{ad:strin
             : "—"}
       </span>
       {(guncel==null&&yukleniyor)
-        ? <div className="skeleton" style={{width:56,height:22,borderRadius:6,flexShrink:0}}/>
-        : <svg width={56} height={22} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{flexShrink:0}}>
+        ? <div className="skeleton" style={{width:52,height:22,borderRadius:6,flexShrink:0}}/>
+        : <svg width={52} height={22} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{flexShrink:0}}>
             {pathD&&<path className="spark-in" d={pathD} fill="none" stroke={renk} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"/>}
           </svg>}
     </div>
@@ -21796,7 +21798,7 @@ function App(){
     setKullaniciAdi(ad);
     try{ localStorage.setItem("katilimAnaliz_kullaniciAdi_v1", ad); }catch{}
   };
-  const [piyasaTabloFiltre,setPiyasaTabloFiltre]=useState("tumu");
+  const [piyasaTabloFiltre,setPiyasaTabloFiltre]=useState("gostergeler");
   // "Göstergeler" sekmesi içi alt-kategori (2026-07-23 kategorileştirme):
   // aktivite / enflasyon / para / karpayi / risk. Bankanın kendi makro veri
   // panelindeki 6 kategoriyle aynı isimlendirme (Küresel Piyasalar hariç —
@@ -23048,9 +23050,9 @@ function App(){
         {/* ── PİYASA (alt bar sekmesi) ── */}
         {screen==="piyasaMenu"&&(()=>{
           const aramaQ=piyasaTabloAramaQ.trim().toUpperCase();
-          const kaynakVeri = piyasaTabloFiltre==="tumu"
-            ? [...(PIYASA_TABLO_VERISI["doviz"]||[]),...(PIYASA_TABLO_VERISI["emtia"]||[]),...(PIYASA_TABLO_VERISI["borsa"]||[]),...(PIYASA_TABLO_VERISI["gostergeler"]||[]),...(PIYASA_TABLO_VERISI["kripto"]||[])]
-            : (PIYASA_TABLO_VERISI[piyasaTabloFiltre]||[]);
+          // "Tümü" sekmesi kaldırıldığı için birleştirme dalı da kaldırıldı;
+          // artık her zaman seçili kategorinin verisi kullanılıyor.
+          const kaynakVeri = PIYASA_TABLO_VERISI[piyasaTabloFiltre]||[];
           const satirlar=kaynakVeri.filter((r:any)=>
             aramaQ===""||r.ad.toUpperCase().includes(aramaQ)
           );
@@ -23536,11 +23538,14 @@ function App(){
               return (
               <>
                 <div style={{display:"flex",alignItems:"center",gap:8,padding:"0 4px 6px",borderBottom:`1px solid ${WA(0.1)}`}}>
-                  <span style={{flex:1,fontSize:10,fontWeight:700,color:WA(0.35),textTransform:"uppercase"}}>{TR("Sembol")}</span>
-                  {alisSutunuVar&&<span style={{width:70,textAlign:"right",fontSize:10,fontWeight:700,color:WA(0.35),textTransform:"uppercase"}}>{TR("Alış")}</span>}
-                  <span style={{width:alisSutunuVar?74:78,textAlign:"right",fontSize:10,fontWeight:700,color:WA(0.35),textTransform:"uppercase"}}>{alisSutunuVar?TR("Satış"):TR("Son")}</span>
-                  <span style={{width:alisSutunuVar?56:60,textAlign:"right",fontSize:10,fontWeight:700,color:WA(0.35),textTransform:"uppercase"}}>{TR("Günlük %")}</span>
-                  <span style={{width:56,textAlign:"right",fontSize:10,fontWeight:700,color:WA(0.35),textTransform:"uppercase"}}>{TR("Grafik")}</span>
+                  {/* Başlıklar WA(0.35) ile neredeyse görünmezdi; okunur
+                      opaklığa çekildi. "Günlük %" iki satıra sarıyordu —
+                      whiteSpace:nowrap ile tek satıra sabitlendi. */}
+                  <span style={{flex:1,fontSize:10,fontWeight:700,color:WA(0.62),textTransform:"uppercase",letterSpacing:0.3}}>{TR("Sembol")}</span>
+                  {alisSutunuVar&&<span style={{width:70,textAlign:"right",fontSize:10,fontWeight:700,color:WA(0.62),textTransform:"uppercase",letterSpacing:0.3,whiteSpace:"nowrap"}}>{TR("Alış")}</span>}
+                  <span style={{width:alisSutunuVar?74:78,textAlign:"right",fontSize:10,fontWeight:700,color:WA(0.62),textTransform:"uppercase",letterSpacing:0.3,whiteSpace:"nowrap"}}>{alisSutunuVar?TR("Satış"):TR("Son")}</span>
+                  <span style={{width:alisSutunuVar?60:64,textAlign:"right",fontSize:9.5,fontWeight:700,color:WA(0.62),textTransform:"uppercase",letterSpacing:0.2,whiteSpace:"nowrap"}}>{TR("Günlük %")}</span>
+                  <span style={{width:52,textAlign:"right",fontSize:10,fontWeight:700,color:WA(0.62),textTransform:"uppercase",letterSpacing:0.3,whiteSpace:"nowrap"}}>{TR("Grafik")}</span>
                 </div>
                 {satirlar.map((r:any,sira:number)=>(
                   <PiyasaSatiri key={r.sembol} sira={sira} ad={r.ad} sembol={r.sembol} dec={r.dec} paraOnek={r.paraOnek}
