@@ -11862,6 +11862,179 @@ function zekatTarihYaz(gg: string): string {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// ANA SAYFA HERO ŞERİDİ (2026-08-08)
+// ═══════════════════════════════════════════════════════════════════════════
+// Tek kutu, çerçevesi hep aynı; içindeki SAYFA 2,5 saniyede bir otomatik
+// değişir. Ayrıca parmakla yatay kaydırılabilir ve dokununca ilgili ekrana
+// gider. Beş sayfa, uygulamadaki GERÇEK ekranlara karşılık gelir — dekoratif
+// bir tanıtım banner'ı değil, doğrudan işlevsel bir kısayol şeridi.
+//
+// "altin" ve "gostergeler" ayrı birer ekran DEĞİL — piyasaMenu ekranının
+// içinde bir filtre (setPiyasaTabloFiltre + nav("piyasaMenu")). Bu yüzden
+// hedef alanı serbest metin tutuluyor, tıklama işleyicisi switch ile
+// yönlendiriyor (aşağıda anaSayfaHeroGit).
+const ANASAYFA_HERO_SAYFALAR: { renk: string; eyebrow: string; baslik: string; sub: string; cta: string; hedef: string }[] = [
+  { renk: "#5B9BD8", eyebrow: "",
+    baslik: "Hoş geldin",
+    sub: "Katılım finansına dair her hesap, tek uygulamada. Bugün ne yapmak istersin?",
+    cta: "", hedef: "" },
+  { renk: "#D4A03C", eyebrow: "Fiziki Altın",
+    baslik: "Kapalı Çarşı fiyatları",
+    sub: "Gram, çeyrek, yarım ve tam altında canlı alış-satış",
+    cta: "Fiyatları gör", hedef: "altin" },
+  { renk: "#2FA36B", eyebrow: "Zekât Hesaplayıcı",
+    baslik: "Nisabın üzerinde misin?",
+    sub: "Güncel altın fiyatıyla, Diyanet ölçütünde hesapla",
+    cta: "Hesapla", hedef: "zekat" },
+  { renk: "#4A8BC7", eyebrow: "Taksit Karşılaştırma",
+    baslik: "Hangi banka daha uygun?",
+    sub: "7 katılım bankasının taksitini yan yana karşılaştır",
+    cta: "Karşılaştır", hedef: "taksitKarsilastirma" },
+  { renk: "#9B6BC4", eyebrow: "Göstergeler",
+    baslik: "Piyasayı yönlendiren veriler",
+    sub: "TCMB rezervi, PPK takvimi ve enflasyon tek ekranda",
+    cta: "İncele", hedef: "gostergeler" },
+  { renk: "#C97B4A", eyebrow: "Katılım Bankacılığı Sözlüğü",
+    baslik: "Murabaha, icâre, sukuk",
+    sub: "61 terim, sade Türkçe tanımlarla açıklanmış",
+    cta: "Sözlüğe git", hedef: "sozluk" },
+];
+
+// Tek kutu, sabit çerçeve — içindeki sayfa key={idx} ile yeniden monte olup
+// uygulamanın kendi screenIn eğrisiyle (260ms, cubic-bezier(0.22,0.61,0.36,1))
+// beliriyor. Aynı görsel dil, yeni bir animasyon icat edilmedi.
+// Tek kutu, sabit çerçeve. İçindeki sayfa key={idx} ile yeniden monte olup
+// sağdan sola kayarak beliriyor (heroSlideIn).
+//
+// TİPOGRAFİ KURALI: Başlık ve alt metinde CV() kullanılıyor, TR() DEĞİL.
+// TR() metni büyük harfe çeviriyor; ilk sürümde tüm kutu "ERKEN KAPATSAM MI,
+// YATIRIMDA MI TUTSAM?" gibi tamamen kapitalize görünüyordu — okunması zor ve
+// Apple'ın tipografi diline aykırı. Büyük harf yalnızca üstteki küçük
+// ETİKET için kullanılıyor; başlık ve gövde normal cümle düzeninde.
+function AnaSayfaHeroSerit({ git, selamlama, bugunMetni, kullaniciAdi }: { git: (hedef: string) => void; selamlama: string; bugunMetni: string; kullaniciAdi?: string }) {
+  const [idx, setIdx] = useState(0);
+  const dokunuldu = useRef<number | null>(null);
+  const surukleniyor = useRef(false);
+
+  useEffect(() => {
+    const zamanlayici = setInterval(() => {
+      setIdx(i => (i + 1) % ANASAYFA_HERO_SAYFALAR.length);
+    }, 5000);
+    return () => clearInterval(zamanlayici);
+  }, []);
+
+  const dokunmaBasla = (e: any) => {
+    dokunuldu.current = e.touches[0].clientX;
+    surukleniyor.current = false;
+  };
+  const dokunmaHareket = (e: any) => {
+    if (dokunuldu.current == null) return;
+    if (Math.abs(e.touches[0].clientX - dokunuldu.current) > 8) surukleniyor.current = true;
+  };
+  const dokunmaBitti = (e: any) => {
+    if (dokunuldu.current == null) return;
+    const fark = e.changedTouches[0].clientX - dokunuldu.current;
+    if (Math.abs(fark) > 40) {
+      setIdx(i => {
+        const n = ANASAYFA_HERO_SAYFALAR.length;
+        return fark < 0 ? (i + 1) % n : (i - 1 + n) % n;
+      });
+    }
+    dokunuldu.current = null;
+  };
+
+  const s = ANASAYFA_HERO_SAYFALAR[idx];
+  const karsilama = !s.eyebrow;
+  const acikTema = TEMA === "acik";
+
+  // Yüzey rengi kartlarla AYNI aileden — önceki sürümdeki mavi gradyan
+  // uygulamanın geri kalanına yabancı duruyordu ("yapay" geri bildirimi).
+  // Artık kart yüzeyi + sayfanın kendi renginden çok hafif bir ışıma.
+  const yuzey = acikTema
+    ? `linear-gradient(150deg, #FFFFFF 0%, #F4F8FC 100%)`
+    : `linear-gradient(150deg, ${WA(0.055)} 0%, ${WA(0.025)} 100%)`;
+
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div
+        onTouchStart={dokunmaBasla} onTouchMove={dokunmaHareket} onTouchEnd={dokunmaBitti}
+        onClick={() => { if (!surukleniyor.current && s.hedef) git(s.hedef); }}
+        style={{
+          position: "relative", borderRadius: 20, overflow: "hidden", height: 132,
+          cursor: s.hedef ? "pointer" : "default",
+          background: yuzey,
+          border: `1px solid ${acikTema ? "#E2E9F0" : WA(0.09)}`,
+          boxShadow: acikTema ? "0 1px 3px rgba(20,40,60,0.05)" : "none",
+        }}
+      >
+        {/* Sayfanın kendi renginden gelen çok hafif köşe ışıması — kutuyu
+            tamamen düz bırakmadan, gradyanı öne çıkarmadan derinlik verir. */}
+        <div style={{
+          position: "absolute", top: -40, right: -30, width: 180, height: 180,
+          borderRadius: "50%", background: s.renk, opacity: acikTema ? 0.07 : 0.10,
+          filter: "blur(44px)", pointerEvents: "none",
+        }} />
+
+        <div key={idx} className="hero-page-anim" style={{
+          position: "absolute", inset: 0, padding: "17px 18px 15px",
+          display: "flex", flexDirection: "column",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 9, flexShrink: 0 }}>
+            <span style={{ width: 3, height: 11, borderRadius: 2, background: s.renk, flexShrink: 0 }} />
+            <span style={{
+              fontSize: 10, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase",
+              color: karsilama ? (acikTema ? "#5A7488" : "#8FA8BC") : s.renk,
+            }}>{karsilama ? `${selamlama} · ${bugunMetni}` : TR(s.eyebrow)}</span>
+          </div>
+
+          <div style={{
+            fontSize: karsilama ? (kullaniciAdi && kullaniciAdi.length > 9 ? 22 : 27) : 17,
+            fontWeight: 700, letterSpacing: "-0.021em", lineHeight: 1.18,
+            marginBottom: 5, flexShrink: 0,
+            color: acikTema ? "#16222E" : "#F2F7FC",
+            overflow: "hidden", textOverflow: "ellipsis",
+            display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
+          } as any}>
+            {karsilama
+              ? (kullaniciAdi ? `${CV(s.baslik)} ${kullaniciAdi}` : CV(s.baslik))
+              : CV(s.baslik)}
+          </div>
+
+          {s.sub && (
+            <div style={{
+              fontSize: 12.5, lineHeight: 1.35, flexShrink: 0,
+              color: acikTema ? "#5A7488" : WA(0.55),
+              overflow: "hidden", textOverflow: "ellipsis",
+              display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
+            } as any}>{CV(s.sub)}</div>
+          )}
+
+          {/* CTA marginTop:auto ile en altta — içerik uzunluğu ne olursa olsun
+              üst üste binme yapısal olarak imkansız. */}
+          {s.cta && (
+            <div style={{
+              marginTop: "auto", display: "inline-flex", alignItems: "center", gap: 5,
+              alignSelf: "flex-start", fontSize: 12, fontWeight: 600, flexShrink: 0,
+              color: s.renk, letterSpacing: "-0.01em",
+            }}>{CV(s.cta)}</div>
+          )}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "center", gap: 5, marginTop: 11 }}>
+        {ANASAYFA_HERO_SAYFALAR.map((_, i) => (
+          <span key={i} style={{
+            width: i === idx ? 16 : 5, height: 5, borderRadius: 99,
+            transition: "all 0.32s cubic-bezier(0.22,0.61,0.36,1)",
+            background: i === idx ? (acikTema ? "#2E6DA8" : C.blue) : WA(acikTema ? 0.16 : 0.18),
+          }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // KARAR ARAÇLARI (2026-08-06) — Erken Kapama Kararı · Vade Farkı Kararı
 // ═══════════════════════════════════════════════════════════════════════════
 // Diğer ekranlar TEK bir hesap yapar ("taksitim ne olur"). Bunlar iki seçeneği
@@ -21943,6 +22116,8 @@ function App(){
         .press-tile:active { transform: scale(1.03); box-shadow: 0 10px 28px rgba(91,155,216,0.28), 0 3px 10px rgba(0,0,0,0.35); }
         @keyframes screenIn { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform: translateY(0); } }
         .screen-anim { animation: screenIn 260ms cubic-bezier(0.22,0.61,0.36,1); }
+        @keyframes heroSlideIn { from { opacity:0; transform:translateX(28px); } to { opacity:1; transform:translateX(0); } }
+        .hero-page-anim { animation: heroSlideIn 340ms cubic-bezier(0.22,0.61,0.36,1); }
         @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
         .skeleton { background: linear-gradient(90deg, ${WA(0.04)} 25%, ${WA(0.09)} 50%, ${WA(0.04)} 75%); background-size: 200% 100%; animation: shimmer 1.4s ease-in-out infinite; border-radius: 10px; }
         @keyframes fadeInUp { from { opacity:0; transform: translateY(10px); } to { opacity:1; transform: translateY(0); } }
@@ -22147,69 +22322,6 @@ function App(){
                 )}
               </button>
             </div>
-            {/* Tarih/saat — küçük, tek satır, "Hoş geldin"in hemen üstünde */}
-            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
-              <span style={{width:3,height:12,borderRadius:2,background:C.blue,flexShrink:0}}/>
-              <span style={{fontSize:10,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.8}}>{TR(selamlama)} · {kisaTarihStr}</span>
-            </div>
-            {(()=>{
-              const selamMetni = kullaniciAdi?`${CV("Hoş geldin")} ${kullaniciAdi}`:CV("Hoş geldin");
-              // Uzun isim/soyisim girilirse başlık 2 satıra taşıp bölünmesin diye
-              // metin uzunluğuna göre yazı boyutu otomatik küçültülüyor (30px tabanlı,
-              // 18px'e kadar), tek satırda kalması garanti ediliyor.
-              const uzunluk = selamMetni.length;
-              const dinamikBoyut = uzunluk<=16 ? 30 : Math.max(18, Math.round(30 - (uzunluk-16)*0.8));
-              return (
-                <div style={{
-                  fontSize:dinamikBoyut,fontWeight:800,letterSpacing:"-0.015em",marginBottom:6,
-                  background:TEMA==="acik"?"linear-gradient(100deg,#16222E 0%,#1C3A5E 55%,#2E6DA8 100%)":"linear-gradient(100deg,#EAF1FA 0%,#9FC1EA 55%,#5B9BD8 100%)",
-                  WebkitBackgroundClip:"text",backgroundClip:"text",color:"transparent",
-                  textShadow:TEMA==="acik"?"none":"0 0 22px rgba(91,155,216,0.25)",
-                  whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",
-                } as any}>{selamMetni}</div>
-              );
-            })()}
-            <div style={{fontSize:13.5,color:(TEMA==="acik"?"#2E4256":"rgba(255,255,255,0.65)"),marginBottom:16}}>{CV("Bugün ne hesaplamak istersin?")}</div>
-
-            {/* ── APP STORE BANNER — yalnızca MOBİL tarayıcıda; native'de gizli.
-                Masaüstünde de gizli (2026-07-13): sağ alttaki QR kartı aynı işi
-                gördüğünden üstte ikinci bir çağrı gereksiz tekrardı. ── */}
-            {(()=>{
-              const nativeMi=(window as any).Capacitor?.isNativePlatform?.()??false;
-              if(nativeMi||appBannerKapali||genisEkran)return null;
-              return (
-                <div style={{
-                  display:"flex",alignItems:"center",gap:10,padding:"10px 12px",marginBottom:14,borderRadius:12,
-                  background:TEMA==="acik"?"linear-gradient(100deg,#E9F1FA,#DCE9F6)":"linear-gradient(100deg,rgba(91,155,216,0.16),rgba(91,155,216,0.05))",
-                  border:`1px solid ${TEMA==="acik"?"rgba(46,109,168,0.28)":"rgba(91,155,216,0.32)"}`,
-                }}>
-                  {/* 2026-08-01: Banner yalnızca App Store'a yönlendiriyordu;
-                      Android kullanıcısı yanlış mağazaya gidiyordu. Artık
-                      cihazın işletim sistemine göre doğru mağaza seçiliyor. */}
-                  <span style={{fontSize:22,flexShrink:0}}>📲</span>
-                  <div style={{flex:1,minWidth:0}}>
-                    <p style={{margin:0,fontSize:12.5,fontWeight:800,color:C.label,lineHeight:1.3}}>{CV("Katılım Plus uygulaması yayında")}</p>
-                    <p style={{margin:"2px 0 0",fontSize:11,color:C.sub,lineHeight:1.35}}>{CV("App Store ve Google Play'de. Bildirimlerle takipte kalın.")}</p>
-                  </div>
-                  {(()=>{
-                    const ua = String(navigator.userAgent||"");
-                    const androidMi = /Android/i.test(ua);
-                    const hedef = androidMi ? KP_PLAY_URL : "https://apps.apple.com/app/id6788268835";
-                    return (
-                      <a href={hedef} target="_blank" rel="noopener noreferrer" style={{
-                        flexShrink:0,padding:"8px 14px",borderRadius:9,background:C.blue,color:"#fff",
-                        fontSize:11.5,fontWeight:800,textDecoration:"none",lineHeight:1,
-                      }}>{CV("İndir")}</a>
-                    );
-                  })()}
-                  <button onClick={()=>{setAppBannerKapali(true);try{localStorage.setItem("kp_appstore_banner","kapali");}catch{}}} style={{
-                    flexShrink:0,width:26,height:26,borderRadius:13,border:"none",background:WA(0.08),
-                    color:C.sub,cursor:"pointer",fontSize:12,fontWeight:700,lineHeight:1,padding:0,
-                  }}>✕</button>
-                </div>
-              );
-            })()}
-
             {/* ── ANA MENÜ ARAMA ── */}
             {(()=>{
               const menuSonuclar=menuAramaQ.trim().length>1
@@ -22278,6 +22390,54 @@ function App(){
                 </div>
               );
             })()}
+
+            <AnaSayfaHeroSerit selamlama={TR(selamlama)} bugunMetni={kisaTarihStr} kullaniciAdi={kullaniciAdi} git={(hedef) => {
+              if (hedef === "altin") { setPiyasaTabloFiltre("altin"); nav("piyasaMenu"); }
+              else if (hedef === "gostergeler") { setPiyasaTabloFiltre("gostergeler"); nav("piyasaMenu"); }
+              else if (hedef === "zekat") { nav("zekatHesabi"); }
+              else if (hedef === "taksitKarsilastirma") { nav("taksitKarsilastirma"); }
+              else if (hedef === "sozluk") { nav("sozluk"); }
+            }} />
+
+            {/* ── APP STORE BANNER — yalnızca MOBİL tarayıcıda; native'de gizli.
+                Masaüstünde de gizli (2026-07-13): sağ alttaki QR kartı aynı işi
+                gördüğünden üstte ikinci bir çağrı gereksiz tekrardı. ── */}
+            {(()=>{
+              const nativeMi=(window as any).Capacitor?.isNativePlatform?.()??false;
+              if(nativeMi||appBannerKapali||genisEkran)return null;
+              return (
+                <div style={{
+                  display:"flex",alignItems:"center",gap:10,padding:"10px 12px",marginBottom:14,borderRadius:12,
+                  background:TEMA==="acik"?"linear-gradient(100deg,#E9F1FA,#DCE9F6)":"linear-gradient(100deg,rgba(91,155,216,0.16),rgba(91,155,216,0.05))",
+                  border:`1px solid ${TEMA==="acik"?"rgba(46,109,168,0.28)":"rgba(91,155,216,0.32)"}`,
+                }}>
+                  {/* 2026-08-01: Banner yalnızca App Store'a yönlendiriyordu;
+                      Android kullanıcısı yanlış mağazaya gidiyordu. Artık
+                      cihazın işletim sistemine göre doğru mağaza seçiliyor. */}
+                  <span style={{fontSize:22,flexShrink:0}}>📲</span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <p style={{margin:0,fontSize:12.5,fontWeight:800,color:C.label,lineHeight:1.3}}>{CV("Katılım Plus uygulaması yayında")}</p>
+                    <p style={{margin:"2px 0 0",fontSize:11,color:C.sub,lineHeight:1.35}}>{CV("App Store ve Google Play'de. Bildirimlerle takipte kalın.")}</p>
+                  </div>
+                  {(()=>{
+                    const ua = String(navigator.userAgent||"");
+                    const androidMi = /Android/i.test(ua);
+                    const hedef = androidMi ? KP_PLAY_URL : "https://apps.apple.com/app/id6788268835";
+                    return (
+                      <a href={hedef} target="_blank" rel="noopener noreferrer" style={{
+                        flexShrink:0,padding:"8px 14px",borderRadius:9,background:C.blue,color:"#fff",
+                        fontSize:11.5,fontWeight:800,textDecoration:"none",lineHeight:1,
+                      }}>{CV("İndir")}</a>
+                    );
+                  })()}
+                  <button onClick={()=>{setAppBannerKapali(true);try{localStorage.setItem("kp_appstore_banner","kapali");}catch{}}} style={{
+                    flexShrink:0,width:26,height:26,borderRadius:13,border:"none",background:WA(0.08),
+                    color:C.sub,cursor:"pointer",fontSize:12,fontWeight:700,lineHeight:1,padding:0,
+                  }}>✕</button>
+                </div>
+              );
+            })()}
+
 
             {/* Finansal Takvim - Bugün uyarısı kayan yazı */}
             {(()=>{
