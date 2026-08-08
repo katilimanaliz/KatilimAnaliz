@@ -1,19 +1,30 @@
 // api/gecmis.js
-// Yahoo Finance üzerinden 30 günlük geçmiş fiyat verisi (Kur Grafik Modalı için)
-// REDIS/KV + KİLİT KORUMASI (2026-07) — bkz. kripto.js'deki aynı not. Her sembol
-// kendi kilidini/önbelleğini kullanır (aynı sembole binlerce kişi aynı anda
-// bakabilir, farklı semboller birbirini beklemez).
+// 30 günlük geçmiş fiyat serisi + güncel fiyat (Kur Grafik Modalı ve Piyasa tablosu)
 //
-// ÇAPRAZ KUR FALLBACK (2026-07): Yahoo Finance bazı TRY paritelerini doğrudan
-// desteklemiyor (örn. "CNYTRY=X", "RUBTRY=X", "SARTRY=X", "SEKTRY=X",
-// "NOKTRY=X", "DKKTRY=X", "ZARTRY=X", "AZNTRY=X", "KWDTRY=X" — Yahoo'da arama
-// yapıldığında "No results" dönüyor), bu yüzden bu semboller kalıcı olarak
-// "—" görünüyordu. Doğrudan istek boş dönerse, GRAM_ALTIN'daki ile aynı
-// mantıkla USD üzerinden çapraz kur türetiyoruz:
-//   XXX/TRY = (USD/TRY) / (USD/XXX)
-// Yahoo'da "XXX=X" formatı USD/XXX veriyor (örn. "CNY=X" → USD/CNY, arama
-// sonuçlarıyla doğrulandı) — GRAM_ALTIN/GRAM_GUMUS zaten bunu ons için
-// kullanıyordu, aynı yaklaşım burada döviz için de uygulanıyor.
+// ═══════════════════════════════════════════════════════════════════════════
+// GÜNCEL FİYAT ARTIK ALTINAPI'DEN (2026-08-08)
+// ═══════════════════════════════════════════════════════════════════════════
+// SORUN: Bu uç her şeyi Yahoo Finance'ten alıyordu. Yahoo'nun "USDTRY=X"
+// sembolü BANKALARARASI (interbank) kuru verir — kullanıcının döviz
+// bürosunda gördüğü SERBEST PİYASA kuru değildir. Ayrıca alış/satış ayrımı
+// yoktur, tek fiyat döner. Gram altın da ons × kur ile HESAPLANIYORDU,
+// yani Kapalı Çarşı fiyatı değil türetilmiş bir yaklaşıklıktı.
+//
+// ÇÖZÜM — GÖREV BÖLÜMÜ:
+//   • GEÇMİŞ SERİ (30 günlük grafik) → Yahoo'da KALDI. AltinAPI yalnızca
+//     anlık fiyat veriyor, geçmiş veri sunmuyor. Grafiğin şekli zaten
+//     doğru; sorun hiçbir zaman geçmişte değildi.
+//   • GÜNCEL FİYAT + ALIŞ/SATIŞ → AltinAPI (Harem Altın, serbest piyasa).
+//     Investing.com ile karşılaştırıldı, birebir tutuyor.
+//
+// ORTAK ÖNBELLEK: AltinAPI verisi piyasa-fiyatlar.js'in yazdığı
+// "altinapi:v5" Redis anahtarından okunuyor. Bu uç her sembol için ayrı
+// çağrıldığından (tabloda 10+ satır = 10+ istek), her seferinde AltinAPI'ye
+// gitmek kotayı hızla tüketirdi. Anahtar boşsa (henüz yazılmamışsa) bir kez
+// doldurulup paylaşılıyor.
+//
+// AltinAPI karşılığı OLMAYAN semboller (BIST hisseleri, fonlar, kripto,
+// petrol, endeksler) eskisi gibi tamamen Yahoo/AlphaVantage'ten geliyor.
 import { Redis } from "@upstash/redis";
 import { kilitliGetir } from "./_lib/kilitliOnbellek.js";
 
@@ -27,6 +38,89 @@ const KV_TTL_SANIYE = 900; // 15 dakika
 // tatil üst üste gelirse Cuma kapanışı Salı sabahı 4 günlük görünebilir,
 // bu yüzden eşik cömert tutuldu; asıl yakalanmak istenen 8+ günlük sapma.
 const BAYATLIK_ESIGI_GUN = 5;
+
+// ─── ALTINAPI EŞLEMESİ ─────────────────────────────────────────────────────
+// Yahoo sembolü → AltinAPI sembolü. Burada olmayan semboller Yahoo'da kalır.
+// DS_ önekliler: AltinAPI'nin ana sembolü boş döndürdüğü pariteler
+// (örn. USDRUB bid=ask=0), farklı sağlayıcıdan gelen yedek seri.
+const ALTINAPI_ESLEME = {
+  "USDTRY=X": "USDTRY",
+  "EURTRY=X": "EURTRY",
+  "GBPTRY=X": "GBPTRY",
+  "CHFTRY=X": "CHFTRY",
+  "SARTRY=X": "SARTRY",
+  "JPYTRY=X": "JPYTRY",
+  "CADTRY=X": "CADTRY",
+  "AUDTRY=X": "AUDTRY",
+  "CNYTRY=X": "DS_CNYTRY",
+  "RUBTRY=X": "DS_RUBTRY",
+  "AEDTRY=X": "DS_AEDTRY",
+  "GRAM_ALTIN": "ALTIN",
+  "GRAM_GUMUS": "GUMUSTRY",
+  "GC=F": "XAUUSD",
+  "SI=F": "XAGUSD",
+};
+
+const KV_ALTINAPI = "altinapi:v5"; // piyasa-fiyatlar.js ile AYNI anahtar
+
+async function altinApiHaritaGetir() {
+  try {
+    const onbellek = await redis.get(KV_ALTINAPI);
+    if (onbellek && typeof onbellek === "object") return onbellek;
+  } catch { /* Redis erişilemezse aşağıda taze çekilir */ }
+
+  const apiKey = process.env.ALTINAPI_KEY;
+  if (!apiKey) return null;
+  try {
+    const r = await fetch("https://altinapi.com/api/v1/prices", {
+      headers: { "X-API-Key": apiKey },
+    });
+    if (!r.ok) return null;
+    const json = await r.json();
+    const items = (json && json.data) || [];
+    const harita = {};
+    for (const it of items) {
+      if (it && it.symbol) harita[it.symbol] = { bid: it.bid, ask: it.ask, close: it.close };
+    }
+    try { await redis.set(KV_ALTINAPI, harita, { ex: 300 }); } catch {}
+    return harita;
+  } catch { return null; }
+}
+
+function gecerliSayi(v) {
+  const n = Number(v);
+  return isFinite(n) && n > 0 ? n : null;
+}
+
+// Yahoo sonucunun üstüne AltinAPI güncel fiyatını/alış-satışını bindirir.
+// Geçmiş seri (noktalar) DEĞİŞMEZ — yalnızca "şu anki" değerler tazelenir.
+async function altinApiIleZenginlestir(sembol, sonuc) {
+  const apiSembol = ALTINAPI_ESLEME[sembol];
+  if (!apiSembol) return sonuc;
+
+  const harita = await altinApiHaritaGetir();
+  if (!harita) return sonuc;
+
+  const kayit = harita[apiSembol];
+  if (!kayit) return sonuc;
+
+  const alis = gecerliSayi(kayit.bid);
+  const satis = gecerliSayi(kayit.ask);
+  if (satis == null) return sonuc; // veri yoksa Yahoo değeri korunur
+
+  return {
+    ...sonuc,
+    // Ana fiyat SATIŞ: kullanıcı döviz/altın ALIRKEN ödediği fiyat budur.
+    guncelFiyat: satis,
+    alis,
+    satis,
+    fiyatKaynagi: "altinapi",
+    // oncekiKapanis Yahoo serisinin sondan ikinci noktası olarak KALIYOR:
+    // AltinAPI'nin "close" alanı ölçüldü ve güvenilir değil (USD/TRY için
+    // 47,297 veriyor, gerçek önceki kapanış 47,6087; gram altında yön bile
+    // ters çıkıyordu). Yahoo'nun günlük kapanış serisi bu iş için doğru.
+  };
+}
 
 function originIzinliMi(origin) {
   if (!origin) return false;
@@ -283,6 +377,13 @@ async function veriHesapla(sembol) {
   return dogrudan; // ikisi de başarısızsa eskisi gibi boş sonuç
 }
 
+// Yahoo hesabının üstüne AltinAPI bindirmesi. veriHesapla'yı sarmalıyor ki
+// önbellek de zenginleştirilmiş hâli tutsun.
+async function veriHesaplaVeZenginlestir(sembol) {
+  const temel = await veriHesapla(sembol);
+  return await altinApiIleZenginlestir(sembol, temel);
+}
+
 export default async function handler(req, res) {
   corsAyarla(req, res);
   res.setHeader("Cache-Control", "s-maxage=900, stale-while-revalidate=300");
@@ -292,13 +393,14 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "sembol parametresi gerekli" });
   }
 
-  // v1 → v2 (2026-08-04): Brent kaynak sırası değişti; eski önbellekteki
-  // Alpha Vantage kaydının TTL'i dolana kadar beklenmesin.
-  const kvAnahtar = `gecmis:v2:${sembol}`;
+  // v1 → v2 (2026-08-04): Brent kaynak sırası değişti.
+  // v2 → v3 (2026-08-08): Güncel fiyat + alış/satış AltinAPI'den geliyor;
+  // eski önbellekteki Yahoo fiyatının TTL'i dolana kadar beklenmesin.
+  const kvAnahtar = `gecmis:v3:${sembol}`;
   const debugMi = debug === "1";
 
   try {
-    const { veri, cached } = await kilitliGetir(redis, kvAnahtar, KV_TTL_SANIYE, () => veriHesapla(sembol), { debug: debugMi });
+    const { veri, cached } = await kilitliGetir(redis, kvAnahtar, KV_TTL_SANIYE, () => veriHesaplaVeZenginlestir(sembol), { debug: debugMi });
     res.status(200).json({ ...veri, cached });
   } catch (e) {
     try {
