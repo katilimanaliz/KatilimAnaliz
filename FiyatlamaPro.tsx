@@ -11955,7 +11955,7 @@ function AnaSayfaHeroSerit({ git, selamlama, bugunMetni, kullaniciAdi, genisEkra
     : `linear-gradient(150deg, ${WA(0.055)} 0%, ${WA(0.025)} 100%)`;
 
   return (
-    <div style={{ marginBottom: 14 }}>
+    <div style={{ marginBottom: 6 }}>
       <div
         onTouchStart={dokunmaBasla} onTouchMove={dokunmaHareket} onTouchEnd={dokunmaBitti}
         onClick={() => { if (!surukleniyor.current && s.hedef) git(s.hedef); }}
@@ -12021,7 +12021,7 @@ function AnaSayfaHeroSerit({ git, selamlama, bugunMetni, kullaniciAdi, genisEkra
         </div>
       </div>
 
-      <div style={{ display: "flex", justifyContent: "center", gap: 2, marginTop: 5 }}>
+      <div style={{ display: "flex", justifyContent: "center", gap: 2, marginTop: 2 }}>
         {/* Noktalar MASAÜSTÜNDE de çalışsın diye tıklanabilir: orada parmakla
             kaydırma yok, kullanıcının sayfalar arasında gezinebilmesi için tek
             yol bu. Dokunma alanı görsel noktadan büyük tutuldu. */}
@@ -12029,7 +12029,7 @@ function AnaSayfaHeroSerit({ git, selamlama, bugunMetni, kullaniciAdi, genisEkra
           <button key={i} type="button" aria-label={`${i + 1}. sayfa`}
             onClick={(e) => { e.stopPropagation(); setIdx(i); }}
             style={{
-              border: "none", background: "transparent", padding: "6px 3px",
+              border: "none", background: "transparent", padding: "4px 3px",
               cursor: "pointer", display: "flex", alignItems: "center", lineHeight: 0,
             }}>
             <span style={{
@@ -22305,7 +22305,7 @@ function App(){
       ...(icerikOlcek!==1?{zoom:icerikOlcek}:{})} as any}>
       <div key={screen} className="screen-anim">
       {/* header */}
-      <div style={{background:C.bg,padding:screen==="home"?"calc(18px + env(safe-area-inset-top,0px)) 20px 20px":"calc(44px + env(safe-area-inset-top,0px)) 20px 20px"}}>
+      <div style={{background:C.bg,padding:screen==="home"?"calc(18px + env(safe-area-inset-top,0px)) 20px 6px":"calc(44px + env(safe-area-inset-top,0px)) 20px 20px"}}>
         {screen==="home"?(
           <div>
             {/* Logo + marka — dikeyde tam ortalanmış, net hiyerarşi (marka adı
