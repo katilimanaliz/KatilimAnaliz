@@ -120,6 +120,25 @@ async function petrolTaze() {
 }
 
 // ─── ALTINAPI (Kaynak: altinapi.com, Harem Altın ile ayni veri) ────────────
+//
+// DEĞİŞİKLİK (2026-08-08): Önceden yalnızca 18 kıymetli maden sembolü sabit bir
+// "istenenler" listesiyle süzülüyordu. Bu, AltinAPI'nin gönderdiği DÖVİZ
+// sembollerinin (varsa) sessizce atılmasına yol açıyordu — kur verisi
+// Frankfurter'dan (ECB günlük referans kuru, günde 1 kez) geldiği için
+// uygulamadaki kurlar serbest piyasadan farklı görünüyordu.
+//
+// Artık kaynak ne gönderiyorsa TAMAMI döndürülüyor. Böylece:
+//   • AltinAPI döviz veriyorsa hemen görünür ve kullanılabilir hale gelir,
+//   • ileride yeni sembol eklenirse kod değişikliği gerekmez,
+//   • mevcut 18 sembol GARANTİ altında (gelmezse null) — frontend bozulmaz.
+//
+// Veri boyutu küçük olduğu için tamamını döndürmenin maliyeti yok.
+const ALTINAPI_GARANTI = [
+  "ALTIN","ONS","AYAR22","AYAR14","CEYREK_YENI","CEYREK_ESKI","YARIM_YENI",
+  "YARIM_ESKI","TEK_YENI","TEK_ESKI","ATA_YENI","ATA_ESKI","XAGUSD",
+  "GUMUSTRY","XPTUSD","PLATIN","XPDUSD","PALADYUM",
+];
+
 async function altinApiTaze() {
   const apiKey = process.env.ALTINAPI_KEY;
   if (!apiKey) throw new Error("ALTINAPI_KEY tanimli degil");
@@ -129,12 +148,20 @@ async function altinApiTaze() {
   if (!r.ok) throw new Error("AltinAPI HTTP " + r.status);
   const json = await r.json();
   const items = (json && json.data) || [];
-  const istenenler = ["ALTIN","ONS","AYAR22","AYAR14","CEYREK_YENI","CEYREK_ESKI","YARIM_YENI","YARIM_ESKI","TEK_YENI","TEK_ESKI","ATA_YENI","ATA_ESKI","XAGUSD","GUMUSTRY","XPTUSD","PLATIN","XPDUSD","PALADYUM"];
+
   const sonuc = {};
-  for (const sembol of istenenler) {
-    const item = items.find(function(i) { return i.symbol === sembol; });
-    sonuc[sembol] = item ? { bid: item.bid, ask: item.ask, close: item.close } : null;
+  // 1) Kaynağın gönderdiği HER sembolü al
+  for (const item of items) {
+    if (!item || !item.symbol) continue;
+    sonuc[item.symbol] = { bid: item.bid, ask: item.ask, close: item.close };
   }
+  // 2) Beklenen 18 sembol gelmediyse null olarak yer tut (frontend kırılmasın)
+  for (const sembol of ALTINAPI_GARANTI) {
+    if (!(sembol in sonuc)) sonuc[sembol] = null;
+  }
+  // 3) Teşhis: kaynağın gönderdiği sembol adlarının listesi
+  sonuc._semboller = items.map(function (i) { return i && i.symbol; }).filter(Boolean);
+
   return sonuc;
 }
 
@@ -193,12 +220,19 @@ async function kurTaze() {
 
 // ─── Tip → { Redis anahtarı, TTL, taze() fonksiyonu, Cache-Control } eşlemesi ──
 // (TTL/anahtar/Cache-Control değerleri orijinal 4 dosyadan BİREBİR alındı)
+//
+// altinapi anahtarı v3 → v4: içerik şekli değişti (artık tüm semboller
+// dönüyor). Anahtar yükseltilmezse eski, süzülmüş önbellek dönmeye devam eder
+// ve değişiklik hiç görünmez.
+//
+// altinapi TTL 3600 → 300: veri artık kur için de kullanılabilir hale geldi;
+// bir saatlik önbellek kurda kabul edilemez derecede eskidir.
 const YAPILANDIRMA = {
   altin:  { anahtar: "altin:v1",  ttl: 28800, fn: altinTaze,  cacheControl: "public, s-maxage=28800, stale-while-revalidate=3600" },
   kripto: { anahtar: "kripto:v1", ttl: 300,   fn: kriptoTaze, cacheControl: "s-maxage=300" },
   petrol: { anahtar: "petrol:v1", ttl: 1800,  fn: petrolTaze, cacheControl: "s-maxage=1800" },
   kur:    { anahtar: "kur:v1",    ttl: 300,   fn: kurTaze,    cacheControl: "s-maxage=300" },
-  altinapi: { anahtar: "altinapi:v3", ttl: 3600, fn: altinApiTaze, cacheControl: "s-maxage=3600" },
+  altinapi: { anahtar: "altinapi:v4", ttl: 300, fn: altinApiTaze, cacheControl: "s-maxage=300" },
 };
 
 export default async function handler(req, res) {
