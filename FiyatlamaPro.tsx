@@ -476,6 +476,8 @@ const EN_SOZLUK: Record<string, string> = {
   "Vade": "Maturity",
   "Son": "Last",
   "Günlük %": "Daily %",
+  "Alış": "Bid",
+  "Satış": "Ask",
   "Açıklama": "Description",
   "Başlık *": "Title *",
   "Brüt Getiri": "Gross Return",
@@ -17124,12 +17126,16 @@ function KurGrafikModal({kur, onClose}:{kur:any, onClose:()=>void}){
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}>
                 <div style={{background:WA(0.03),borderRadius:10,padding:"8px 10px"}}>
                   <p style={{margin:0,fontSize:9,color:WA(0.55),fontWeight:600}}>30G EN DÜŞÜK</p>
-                  <p style={{margin:"3px 0 0",fontSize:13,fontWeight:800,color:C.thead,fontFamily:"monospace"}}>{fmtBirim(minF)}</p>
+                  {/* C.thead TABLO BAŞLIĞI rengidir; koyu temada koyu tonda
+                      olduğu için koyu kart zemininde okunmuyordu. Üstteki
+                      "Güncel Fiyat"/"Önceki Kapanış" kartlarıyla aynı renk
+                      (C.label) kullanılıyor. */}
+                  <p style={{margin:"3px 0 0",fontSize:13,fontWeight:800,color:C.label,fontFamily:"monospace"}}>{fmtBirim(minF)}</p>
                   <p style={{margin:"1px 0 0",fontSize:9,color:(TEMA==="acik"?"#5A6B7C":"#9CA3AF")}}>{noktalar.find((n:any)=>n.fiyat===minF)?.tarih||"—"}</p>
                 </div>
                 <div style={{background:WA(0.03),borderRadius:10,padding:"8px 10px"}}>
                   <p style={{margin:0,fontSize:9,color:WA(0.55),fontWeight:600}}>30G EN YÜKSEK</p>
-                  <p style={{margin:"3px 0 0",fontSize:13,fontWeight:800,color:C.thead,fontFamily:"monospace"}}>{fmtBirim(maxF)}</p>
+                  <p style={{margin:"3px 0 0",fontSize:13,fontWeight:800,color:C.label,fontFamily:"monospace"}}>{fmtBirim(maxF)}</p>
                   <p style={{margin:"1px 0 0",fontSize:9,color:(TEMA==="acik"?"#5A6B7C":"#9CA3AF")}}>{noktalar.find((n:any)=>n.fiyat===maxF)?.tarih||"—"}</p>
                 </div>
                 <div style={{background:WA(0.03),borderRadius:10,padding:"8px 10px"}}>
@@ -17625,14 +17631,14 @@ function HakkindaModal({onClose}){
               <div style={{width:38,height:38,borderRadius:10,background:"rgba(91,155,216,0.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>📧</div>
               <div>
                 <p style={{margin:0,fontSize:11,color:WA(0.55),fontWeight:600}}>E-Posta</p>
-                <p style={{margin:0,fontSize:13,color:C.thead,fontWeight:700}}>katilimplus2026@gmail.com</p>
+                <p style={{margin:0,fontSize:13,color:C.label,fontWeight:700}}>katilimplus2026@gmail.com</p>
               </div>
             </a>
             <a href="https://www.linkedin.com/in/u%C4%9Fur-yilmaz-62194b168" target="_blank" rel="noreferrer" style={{display:"flex",alignItems:"center",gap:10,textDecoration:"none"}}>
               <div style={{width:38,height:38,borderRadius:10,background:"rgba(91,155,216,0.12)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>💼</div>
               <div>
                 <p style={{margin:0,fontSize:11,color:WA(0.55),fontWeight:600}}>LinkedIn</p>
-                <p style={{margin:0,fontSize:13,color:C.thead,fontWeight:700}}>Uğur YILMAZ</p>
+                <p style={{margin:0,fontSize:13,color:C.label,fontWeight:700}}>Uğur YILMAZ</p>
               </div>
             </a>
           </div>
@@ -17648,7 +17654,7 @@ function HakkindaModal({onClose}){
           ].map((s,i)=>(
             <div key={i} style={{background:WA(0.03),borderRadius:10,padding:"10px 14px",marginBottom:8}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                <span style={{fontSize:13,fontWeight:800,color:C.thead}}>{s.v}</span>
+                <span style={{fontSize:13,fontWeight:800,color:C.label}}>{s.v}</span>
                 <span style={{fontSize:10,color:(TEMA==="acik"?"#5A6B7C":"#9CA3AF")}}>{s.t}</span>
               </div>
               {s.notlar.map((n,j)=>(
@@ -18245,7 +18251,7 @@ for(const kat of ["doviz","emtia","borsa","gostergeler","kripto"]){
 const PIYASA_OZETI_VARSAYILAN=["USDTRY=X","EURTRY=X","GBPTRY=X","GRAM_ALTIN","XU100.IS","BTC-USD","ETH-USD","GRAM_GUMUS","BZ=F","^GSPC"];
 
 // Tablo satırı: sembol solda, son fiyat + günlük % ortada, sparkline sağda
-function PiyasaSatiri({ad,sembol,paraOnek,dec,onTikla,sira}:{ad:string,sembol:string,paraOnek?:string,dec:number,onTikla:()=>void,sira?:number}){
+function PiyasaSatiri({ad,sembol,paraOnek,dec,onTikla,sira,alisGoster}:{ad:string,sembol:string,paraOnek?:string,dec:number,onTikla:()=>void,sira?:number,alisGoster?:boolean}){
   const CACHE_KEY = `poz_${sembol}`;
   const [veri,setVeri]=useState<any>(()=>{
     try{
@@ -18292,6 +18298,10 @@ function PiyasaSatiri({ad,sembol,paraOnek,dec,onTikla,sira}:{ad:string,sembol:st
   const noktalar=veri?.noktalar||[];
   const fiyatlar=noktalar.map((n:any)=>n.fiyat).filter((f:any)=>typeof f==="number");
   const guncel=veri?.guncelFiyat??fiyatlar[fiyatlar.length-1];
+  // AltinAPI'den gelen ALIŞ fiyatı (gecmis.js ekliyor). Yalnızca döviz ve
+  // kıymetli madende var; hisse/fon/kripto/endekste null gelir ve sütun "—"
+  // gösterir. "guncel" alanı artık SATIŞ fiyatını taşıyor.
+  const alisF=veri?.alis??null;
   // Fallback dünkü kapanış olmalı, ayın ilk günü değil — aksi halde "günlük %" ~1 aylık değişim gösterir.
   const oncekiKapanis=veri?.oncekiKapanis??fiyatlar[fiyatlar.length-2];
   const degisim=(guncel!=null&&oncekiKapanis)?((guncel-oncekiKapanis)/oncekiKapanis*100):null;
@@ -18342,14 +18352,26 @@ function PiyasaSatiri({ad,sembol,paraOnek,dec,onTikla,sira}:{ad:string,sembol:st
       ...flashStil,
     }}>
       <span style={{flex:1,fontSize:13,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),minWidth:0}}>{ad}</span>
-      <span style={{width:78,textAlign:"right",fontSize:13,fontWeight:700,color:C.soft,fontFamily:"monospace",flexShrink:0}}>
+      {/* ALIŞ sütunu yalnızca DÖVİZ ve FİZİKİ ALTIN sekmelerinde gösteriliyor.
+          Emtia, Borsa, Kripto, Fonlar ve Göstergelerde alış-satış makası
+          kavramı yok; oralarda tablo eski haliyle (tek fiyat) kalıyor. */}
+      {alisGoster&&(
+        <span style={{width:70,textAlign:"right",fontSize:12.5,fontWeight:600,color:WA(0.5),fontFamily:"monospace",flexShrink:0}}>
+          {alisF!=null
+            ? <span className="spark-in">{`${paraOnek||""}${fmtDeger(alisF)}`}</span>
+            : yukleniyor
+              ? <span className="skeleton" style={{display:"inline-block",width:48,height:11,borderRadius:6,verticalAlign:"middle"}}/>
+              : "—"}
+        </span>
+      )}
+      <span style={{width:alisGoster?74:78,textAlign:"right",fontSize:13,fontWeight:700,color:C.soft,fontFamily:"monospace",flexShrink:0}}>
         {guncel!=null
           ? <span className="spark-in">{`${paraOnek||""}${fmtDeger(guncel)}`}</span>
           : yukleniyor
-            ? <span className="skeleton" style={{display:"inline-block",width:56,height:12,borderRadius:6,verticalAlign:"middle"}}/>
+            ? <span className="skeleton" style={{display:"inline-block",width:52,height:12,borderRadius:6,verticalAlign:"middle"}}/>
             : "—"}
       </span>
-      <span style={{width:60,textAlign:"right",fontSize:11,fontWeight:700,color:degisim!=null?renk:WA(0.3),flexShrink:0}}>
+      <span style={{width:alisGoster?56:60,textAlign:"right",fontSize:11,fontWeight:700,color:degisim!=null?renk:WA(0.3),flexShrink:0}}>
         {degisim!=null
           ? <span className="spark-in">{`${pozitif?"+":""}${degisim.toFixed(2).replace(".",",")}%`}</span>
           : (yukleniyor&&guncel==null)
@@ -23506,17 +23528,23 @@ function App(){
                   </>)}
                 </div>
               );
-            })():(
+            })():(()=>{
+              // Alış/satış makası YALNIZCA döviz ve fiziki altında anlamlı.
+              // Emtia, Borsa, Kripto, Fonlar, Göstergeler ve karışık liste olan
+              // "Tümü" sekmesinde tablo eski haliyle (tek fiyat) kalıyor.
+              const alisSutunuVar = piyasaTabloFiltre==="doviz" || piyasaTabloFiltre==="altin";
+              return (
               <>
-                {/* Tablo başlığı */}
                 <div style={{display:"flex",alignItems:"center",gap:8,padding:"0 4px 6px",borderBottom:`1px solid ${WA(0.1)}`}}>
                   <span style={{flex:1,fontSize:10,fontWeight:700,color:WA(0.35),textTransform:"uppercase"}}>{TR("Sembol")}</span>
-                  <span style={{width:78,textAlign:"right",fontSize:10,fontWeight:700,color:WA(0.35),textTransform:"uppercase"}}>{TR("Son")}</span>
-                  <span style={{width:60,textAlign:"right",fontSize:10,fontWeight:700,color:WA(0.35),textTransform:"uppercase"}}>{TR("Günlük %")}</span>
+                  {alisSutunuVar&&<span style={{width:70,textAlign:"right",fontSize:10,fontWeight:700,color:WA(0.35),textTransform:"uppercase"}}>{TR("Alış")}</span>}
+                  <span style={{width:alisSutunuVar?74:78,textAlign:"right",fontSize:10,fontWeight:700,color:WA(0.35),textTransform:"uppercase"}}>{alisSutunuVar?TR("Satış"):TR("Son")}</span>
+                  <span style={{width:alisSutunuVar?56:60,textAlign:"right",fontSize:10,fontWeight:700,color:WA(0.35),textTransform:"uppercase"}}>{TR("Günlük %")}</span>
                   <span style={{width:56,textAlign:"right",fontSize:10,fontWeight:700,color:WA(0.35),textTransform:"uppercase"}}>{TR("Grafik")}</span>
                 </div>
                 {satirlar.map((r:any,sira:number)=>(
                   <PiyasaSatiri key={r.sembol} sira={sira} ad={r.ad} sembol={r.sembol} dec={r.dec} paraOnek={r.paraOnek}
+                    alisGoster={alisSutunuVar}
                     onTikla={()=>setSeciliKur({kod:r.ad,ad:r.ad,sembol:r.sembol,birim:r.paraOnek||"₺"})}/>
                 ))}
                 {satirlar.length===0&&(
@@ -23536,7 +23564,8 @@ function App(){
                   </div>
                 )}
               </>
-            )}
+              );
+            })()}
           </div>
           );
         })()}
