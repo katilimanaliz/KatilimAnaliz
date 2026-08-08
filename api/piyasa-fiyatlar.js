@@ -6,25 +6,35 @@
 // KAYNAK DEĞİŞİKLİĞİ (2026-08-08) — Yahoo/Frankfurter → AltinAPI
 // ═══════════════════════════════════════════════════════════════════════════
 // SORUN: Kurlar Frankfurter'dan (Avrupa Merkez Bankası GÜNLÜK REFERANS kuru,
-// günde tek yayın) geliyordu. Bu kur ne serbest piyasa kuruydu ne de gün
-// içinde güncelleniyordu; kullanıcının döviz bürosunda gördüğü rakamla
-// uyuşmuyordu. Altın/gümüş ise Yahoo futures'tan (GC=F, SI=F) alınıp USD/TRY
-// ile ÇARPILARAK gram fiyatına çevriliyordu — bu da Kapalı Çarşı fiyatı değil,
+// günde tek yayın) geliyordu. Ne serbest piyasa kuruydu ne de gün içinde
+// güncelleniyordu; kullanıcının döviz bürosunda gördüğü rakamla uyuşmuyordu.
+// Altın/gümüş ise Yahoo futures'tan (GC=F, SI=F) alınıp USD/TRY ile
+// ÇARPILARAK gram fiyatına çevriliyordu — Kapalı Çarşı fiyatı değil,
 // türetilmiş bir yaklaşıklıktı.
 //
-// ÇÖZÜM: Tümü AltinAPI'ye (Harem Altın verisi, serbest piyasa) taşındı.
-// Böylece uygulama genelinde TEK kaynak kullanılıyor; altın Harem'den, kur
-// ECB'den gelince ortaya çıkan iç tutarsızlık ortadan kalktı.
+// ÇÖZÜM: Döviz + altın + gümüş tamamen AltinAPI'ye (Harem Altın verisi,
+// serbest piyasa) taşındı. Investing.com ile karşılaştırıldı, fiyatlar birebir
+// tutuyor. Uygulama genelinde tek kaynak kullanılıyor.
 //
 // ALTINAPI'DE OLMAYANLAR — bilinçli olarak eski kaynaklarında bırakıldı:
 //   • Petrol (BZ=F)  → AlphaVantage, yedeği Yahoo
 //   • Bitcoin        → CoinGecko
 //
-// BID/ASK: AltinAPI her sembol için alış (bid) ve satış (ask) veriyor.
-// Ana alan adları (USD_TRY vb.) SATIŞ fiyatını taşıyor — kullanıcı döviz
-// ALIRKEN ödeyeceği fiyat budur ve ana ekranda gösterilen odur. Alış/satış
-// ayrı ayrı da döndürülüyor ("detay" altında) ki Piyasa ekranı ikisini
-// birden gösterebilsin.
+// ═══════════════════════════════════════════════════════════════════════════
+// GÜNLÜK DEĞİŞİM: KENDİ KAPANIŞIMIZ (2026-08-08)
+// ═══════════════════════════════════════════════════════════════════════════
+// AltinAPI'nin "close" alanı GÜVENİLİR DEĞİL. Ölçüldü: USD/TRY için 47,297
+// veriyor ama gerçek önceki kapanış 47,6087; gram altında 6.693 diyor,
+// gerçek ~6.493. Bu alandan hesaplanan yüzde değişim yanlış çıkıyor, altında
+// YÖN bile ters dönüyordu (biz −%0,35 derken piyasa +%2,53).
+//
+// ÇÖZÜM: Değişimi kendi tuttuğumuz kapanıştan hesaplıyoruz. Her gün ilk
+// istekte, bir önceki günün SON gördüğümüz değeri "önceki kapanış" olarak
+// sabitleniyor. Böylece gösterdiğimiz fiyat ile hesapladığımız değişim AYNI
+// veriden geliyor — dış bir servise daha bağımlı olmuyoruz.
+//
+// İlk gün referans yoktur; değişim null döner ve arayüzde gösterilmez.
+// Uydurma bir değer üretmektense hiç göstermemek doğrudur.
 import { Redis } from "@upstash/redis";
 import { kilitliGetir } from "./_lib/kilitliOnbellek.js";
 
@@ -54,25 +64,60 @@ async function altinApiCek() {
   return harita;
 }
 
-// Sembolden sayı çıkarır. AltinAPI bazı sembolleri 0 ya da null döndürüyor
-// (örn. USDRUB bid=ask=0); bunlar geçersiz sayılıp null dönüyor ki hesaplara
-// sızmasın.
+// Sembolden sayı çıkarır. AltinAPI bazı sembolleri 0/null döndürüyor
+// (örn. USDRUB bid=ask=0); bunlar geçersiz sayılıp null dönüyor.
 function fiyat(harita, sembol, alan) {
   const it = harita[sembol];
   if (!it) return null;
   const v = Number(it[alan]);
   return isFinite(v) && v > 0 ? v : null;
 }
-// Satış (kullanıcı alırken ödediği) — ana gösterim
-const satis = (h, s) => fiyat(h, s, "ask");
-// Alış (kullanıcı bozdururken aldığı)
-const alis = (h, s) => fiyat(h, s, "bid");
-// Önceki kapanış — günlük % değişim için
-const kapanis = (h, s) => fiyat(h, s, "close");
+const satis = (h, s) => fiyat(h, s, "ask");   // kullanıcı alırken ödediği
+const alis  = (h, s) => fiyat(h, s, "bid");   // kullanıcı bozdururken aldığı
 
-// Bir sembol için alış/satış/kapanış/değişim paketini üretir
-function cift(h, sembol) {
-  const a = alis(h, sembol), s = satis(h, sembol), k = kapanis(h, sembol);
+// ─── GÜNLÜK KAPANIŞ TAKİBİ ─────────────────────────────────────────────────
+// Redis'te tek kayıt: { tarih, oncekiKapanis:{sembol:fiyat}, son:{sembol:fiyat} }
+// Gün değişince "son" → "oncekiKapanis" olur. Türkiye saatine göre.
+const KV_GUNLUK = "piyasa:gunluk:v1";
+// Değişimi hesaplanacak semboller (satış fiyatı üzerinden takip edilir)
+const TAKIP_SEMBOLLER = [
+  "USDTRY","EURTRY","GBPTRY","CHFTRY","SARTRY","JPYTRY","CADTRY","AUDTRY",
+  "EURUSD","XAUUSD","XAGUSD","ALTIN","GUMUSTRY","AYAR22","AYAR14",
+  "CEYREK_YENI","YARIM_YENI","TEK_YENI","ATA_YENI","ONS",
+];
+
+function bugunTR() {
+  return new Date().toLocaleDateString("tr-TR", { timeZone: "Europe/Istanbul" });
+}
+
+// Güncel değerleri kaydeder, önceki günün kapanışını döndürür.
+// Redis erişilemezse null döner — değişim gösterilmez ama fiyatlar akmaya
+// devam eder. Fiyat akışı hiçbir koşulda bu yüzden durmamalı.
+async function gunlukReferansAlVeYaz(h) {
+  const bugun = bugunTR();
+  const simdiki = {};
+  for (const s of TAKIP_SEMBOLLER) {
+    const v = satis(h, s);
+    if (v != null) simdiki[s] = v;
+  }
+
+  let kayit = null;
+  try { kayit = await redis.get(KV_GUNLUK); } catch {}
+
+  if (!kayit || kayit.tarih !== bugun) {
+    const oncekiKapanis = (kayit && kayit.son) || null;   // dünkü SON değer
+    try { await redis.set(KV_GUNLUK, { tarih: bugun, oncekiKapanis, son: simdiki }); } catch {}
+    return oncekiKapanis;
+  }
+
+  try { await redis.set(KV_GUNLUK, { ...kayit, son: simdiki }); } catch {}
+  return kayit.oncekiKapanis || null;
+}
+
+// Bir sembol için alış/satış/kapanış/değişim paketi
+function cift(h, sembol, ref) {
+  const a = alis(h, sembol), s = satis(h, sembol);
+  const k = ref && ref[sembol] != null ? ref[sembol] : null;
   return {
     alis: a,
     satis: s,
@@ -83,11 +128,11 @@ function cift(h, sembol) {
 
 // ─── ALTIN (Kaynak: AltinAPI) ──────────────────────────────────────────────
 // Alan adları BİREBİR korundu (XAU_USD, XAG_USD, USD_TRY, XAU_TRY_gram,
-// XAG_TRY_gram) — frontend'in beklediği şekil değişmedi. Tek fark: gram
-// fiyatları artık ons × kur ile HESAPLANMIYOR, doğrudan Kapalı Çarşı
-// verisinden (ALTIN / GUMUSTRY) geliyor.
+// XAG_TRY_gram). Tek fark: gram fiyatları artık ons × kur ile HESAPLANMIYOR,
+// doğrudan Kapalı Çarşı verisinden (ALTIN / GUMUSTRY) geliyor.
 async function altinTaze() {
   const h = await altinApiCek();
+  const ref = await gunlukReferansAlVeYaz(h);
 
   const XAU_USD = satis(h, "XAUUSD");
   const XAG_USD = satis(h, "XAGUSD");
@@ -98,7 +143,6 @@ async function altinTaze() {
   if (XAU_USD == null) throw new Error("XAUUSD (ons altın) alınamadı");
   if (XAU_TRY_gram == null) throw new Error("ALTIN (gram altın) alınamadı");
   if (USD_TRY == null) throw new Error("USDTRY alınamadı");
-  // Gümüş/altın oranı anormalse kaynak şüphelidir (eski koddaki koruma korundu)
   if (XAG_USD != null && XAG_USD >= XAU_USD) {
     throw new Error(`Gümüş/Altın oranı anormal (XAG=${XAG_USD}, XAU=${XAU_USD}) — kaynak veri şüpheli`);
   }
@@ -106,11 +150,16 @@ async function altinTaze() {
   return {
     XAU_USD, XAG_USD, USD_TRY, XAU_TRY_gram, XAG_TRY_gram,
     detay: {
-      ons_altin: cift(h, "XAUUSD"),
-      ons_gumus: cift(h, "XAGUSD"),
-      gram_altin: cift(h, "ALTIN"),
-      gram_gumus: cift(h, "GUMUSTRY"),
+      ons_altin:  cift(h, "XAUUSD", ref),
+      ons_gumus:  cift(h, "XAGUSD", ref),
+      gram_altin: cift(h, "ALTIN", ref),
+      gram_gumus: cift(h, "GUMUSTRY", ref),
+      ayar22:     cift(h, "AYAR22", ref),
+      ceyrek:     cift(h, "CEYREK_YENI", ref),
+      yarim:      cift(h, "YARIM_YENI", ref),
+      tam:        cift(h, "TEK_YENI", ref),
     },
+    referansVar: ref != null,
     ts: new Date().toISOString(),
   };
 }
@@ -196,12 +245,11 @@ async function altinApiTaze() {
 }
 
 // ─── KUR (Kaynak: AltinAPI; Bitcoin için CoinGecko) ────────────────────────
-// Alan adları BİREBİR korundu. Ana alanlar (USD_TRY, EUR_TRY …) SATIŞ
-// fiyatını taşıyor; alış/satış ayrımı "detay" altında.
+// Ana alanlar (USD_TRY, EUR_TRY …) SATIŞ fiyatını taşıyor — ana ekranda
+// gösterilen budur. Alış/satış ayrımı ve günlük değişim "detay" altında.
 //
 // RUB/CNY/AED: AltinAPI'de ana sembol boş dönüyor (USDRUB bid=ask=0), bu
-// yüzden DS_ önekli karşılıkları yedek olarak kullanılıyor. DS_ serisi farklı
-// bir sağlayıcıdan geliyor; ana sembol dolu geldiğinde o tercih ediliyor.
+// yüzden DS_ önekli karşılıkları yedek olarak kullanılıyor.
 async function kurTaze() {
   const [haritaRes, btcRes] = await Promise.allSettled([
     altinApiCek(),
@@ -212,13 +260,13 @@ async function kurTaze() {
     throw new Error("AltinAPI alınamadı: " + (haritaRes.reason?.message || "bilinmeyen hata"));
   }
   const h = haritaRes.value;
+  const ref = await gunlukReferansAlVeYaz(h);
 
   const btcData = btcRes.status === "fulfilled" && btcRes.value.ok ? await btcRes.value.json() : null;
   const BTC_USD = btcData?.bitcoin?.usd ?? null;
 
-  // Ana sembol boşsa DS_ karşılığına düş
   const kurSatis = (ana, yedek) => satis(h, ana) ?? (yedek ? satis(h, yedek) : null);
-  const kurCift  = (ana, yedek) => (satis(h, ana) != null ? cift(h, ana) : (yedek ? cift(h, yedek) : cift(h, ana)));
+  const kurCift  = (ana, yedek) => (satis(h, ana) != null ? cift(h, ana, ref) : (yedek ? cift(h, yedek, ref) : cift(h, ana, ref)));
 
   const USD_TRY = kurSatis("USDTRY");
   if (USD_TRY == null) throw new Error("USDTRY alınamadı");
@@ -243,7 +291,6 @@ async function kurTaze() {
     XAU_TRY_gram: satis(h, "ALTIN"),
     XAG_TRY_gram: satis(h, "GUMUSTRY"),
     BTC_USD,
-    // Piyasa ekranı için alış + satış + günlük değişim
     detay: {
       USD_TRY: kurCift("USDTRY"),
       EUR_TRY: kurCift("EURTRY"),
@@ -257,24 +304,25 @@ async function kurTaze() {
       CAD_TRY: kurCift("CADTRY"),
       AUD_TRY: kurCift("AUDTRY"),
       EUR_USD: kurCift("EURUSD"),
-      XAU_USD: cift(h, "XAUUSD"),
-      XAG_USD: cift(h, "XAGUSD"),
-      XAU_TRY_gram: cift(h, "ALTIN"),
-      XAG_TRY_gram: cift(h, "GUMUSTRY"),
+      XAU_USD: cift(h, "XAUUSD", ref),
+      XAG_USD: cift(h, "XAGUSD", ref),
+      XAU_TRY_gram: cift(h, "ALTIN", ref),
+      XAG_TRY_gram: cift(h, "GUMUSTRY", ref),
     },
+    // Arayüz, referans yokken (ilk gün) değişim alanlarını gizlemek için bakar
+    referansVar: ref != null,
     ts: new Date().toISOString(),
   };
 }
 
 // ─── Tip → { Redis anahtarı, TTL, taze() fonksiyonu, Cache-Control } ───────
-// TTL'ler AltinAPI'ye geçişle güncellendi: altın artık 8 saatlik değil, kur
-// ile aynı tazelikte (300 sn). Anahtarlar yükseltildi — aksi halde eski
-// şekildeki önbellek dönmeye devam eder ve değişiklik hiç görünmez.
+// Anahtarlar v3'e yükseltildi (günlük değişim eklendi) — aksi halde eski
+// şekildeki önbellek dönmeye devam eder ve değişiklik görünmez.
 const YAPILANDIRMA = {
-  altin:    { anahtar: "altin:v2",    ttl: 300,  fn: altinTaze,    cacheControl: "s-maxage=300" },
+  altin:    { anahtar: "altin:v3",    ttl: 300,  fn: altinTaze,    cacheControl: "s-maxage=300" },
   kripto:   { anahtar: "kripto:v1",   ttl: 300,  fn: kriptoTaze,   cacheControl: "s-maxage=300" },
   petrol:   { anahtar: "petrol:v1",   ttl: 1800, fn: petrolTaze,   cacheControl: "s-maxage=1800" },
-  kur:      { anahtar: "kur:v2",      ttl: 300,  fn: kurTaze,      cacheControl: "s-maxage=300" },
+  kur:      { anahtar: "kur:v3",      ttl: 300,  fn: kurTaze,      cacheControl: "s-maxage=300" },
   altinapi: { anahtar: "altinapi:v5", ttl: 300,  fn: altinApiTaze, cacheControl: "s-maxage=300" },
 };
 
