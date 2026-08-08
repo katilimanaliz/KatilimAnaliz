@@ -11911,7 +11911,7 @@ const ANASAYFA_HERO_SAYFALAR: { renk: string; eyebrow: string; baslik: string; s
 // YATIRIMDA MI TUTSAM?" gibi tamamen kapitalize görünüyordu — okunması zor ve
 // Apple'ın tipografi diline aykırı. Büyük harf yalnızca üstteki küçük
 // ETİKET için kullanılıyor; başlık ve gövde normal cümle düzeninde.
-function AnaSayfaHeroSerit({ git, selamlama, bugunMetni, kullaniciAdi }: { git: (hedef: string) => void; selamlama: string; bugunMetni: string; kullaniciAdi?: string }) {
+function AnaSayfaHeroSerit({ git, selamlama, bugunMetni, kullaniciAdi, genisEkran }: { git: (hedef: string) => void; selamlama: string; bugunMetni: string; kullaniciAdi?: string; genisEkran?: boolean }) {
   const [idx, setIdx] = useState(0);
   const dokunuldu = useRef<number | null>(null);
   const surukleniyor = useRef(false);
@@ -11960,7 +11960,7 @@ function AnaSayfaHeroSerit({ git, selamlama, bugunMetni, kullaniciAdi }: { git: 
         onTouchStart={dokunmaBasla} onTouchMove={dokunmaHareket} onTouchEnd={dokunmaBitti}
         onClick={() => { if (!surukleniyor.current && s.hedef) git(s.hedef); }}
         style={{
-          position: "relative", borderRadius: 20, overflow: "hidden", height: 132,
+          position: "relative", borderRadius: genisEkran ? 22 : 20, overflow: "hidden", height: genisEkran ? 118 : 132,
           cursor: s.hedef ? "pointer" : "default",
           background: yuzey,
           border: `1px solid ${acikTema ? "#E2E9F0" : WA(0.09)}`,
@@ -11976,19 +11976,19 @@ function AnaSayfaHeroSerit({ git, selamlama, bugunMetni, kullaniciAdi }: { git: 
         }} />
 
         <div key={idx} className="hero-page-anim" style={{
-          position: "absolute", inset: 0, padding: "17px 18px 15px",
+          position: "absolute", inset: 0, padding: genisEkran ? "19px 24px 17px" : "17px 18px 15px",
           display: "flex", flexDirection: "column",
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 9, flexShrink: 0 }}>
             <span style={{ width: 3, height: 11, borderRadius: 2, background: s.renk, flexShrink: 0 }} />
             <span style={{
-              fontSize: 10, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase",
+              fontSize: genisEkran ? 10.5 : 10, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase",
               color: karsilama ? (acikTema ? "#5A7488" : "#8FA8BC") : s.renk,
             }}>{karsilama ? `${selamlama} · ${bugunMetni}` : TR(s.eyebrow)}</span>
           </div>
 
           <div style={{
-            fontSize: karsilama ? (kullaniciAdi && kullaniciAdi.length > 9 ? 22 : 27) : 17,
+            fontSize: karsilama ? (kullaniciAdi && kullaniciAdi.length > 9 ? (genisEkran ? 25 : 22) : (genisEkran ? 30 : 27)) : (genisEkran ? 19 : 17),
             fontWeight: 700, letterSpacing: "-0.021em", lineHeight: 1.18,
             marginBottom: 5, flexShrink: 0,
             color: acikTema ? "#16222E" : "#F2F7FC",
@@ -12002,7 +12002,7 @@ function AnaSayfaHeroSerit({ git, selamlama, bugunMetni, kullaniciAdi }: { git: 
 
           {s.sub && (
             <div style={{
-              fontSize: 12.5, lineHeight: 1.35, flexShrink: 0,
+              fontSize: genisEkran ? 13.5 : 12.5, lineHeight: 1.35, flexShrink: 0,
               color: acikTema ? "#5A7488" : WA(0.55),
               overflow: "hidden", textOverflow: "ellipsis",
               display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
@@ -12014,20 +12014,30 @@ function AnaSayfaHeroSerit({ git, selamlama, bugunMetni, kullaniciAdi }: { git: 
           {s.cta && (
             <div style={{
               marginTop: "auto", display: "inline-flex", alignItems: "center", gap: 5,
-              alignSelf: "flex-start", fontSize: 12, fontWeight: 600, flexShrink: 0,
+              alignSelf: "flex-start", fontSize: genisEkran ? 13 : 12, fontWeight: 600, flexShrink: 0,
               color: s.renk, letterSpacing: "-0.01em",
             }}>{CV(s.cta)}</div>
           )}
         </div>
       </div>
 
-      <div style={{ display: "flex", justifyContent: "center", gap: 5, marginTop: 11 }}>
+      <div style={{ display: "flex", justifyContent: "center", gap: 2, marginTop: 5 }}>
+        {/* Noktalar MASAÜSTÜNDE de çalışsın diye tıklanabilir: orada parmakla
+            kaydırma yok, kullanıcının sayfalar arasında gezinebilmesi için tek
+            yol bu. Dokunma alanı görsel noktadan büyük tutuldu. */}
         {ANASAYFA_HERO_SAYFALAR.map((_, i) => (
-          <span key={i} style={{
-            width: i === idx ? 16 : 5, height: 5, borderRadius: 99,
-            transition: "all 0.32s cubic-bezier(0.22,0.61,0.36,1)",
-            background: i === idx ? (acikTema ? "#2E6DA8" : C.blue) : WA(acikTema ? 0.16 : 0.18),
-          }} />
+          <button key={i} type="button" aria-label={`${i + 1}. sayfa`}
+            onClick={(e) => { e.stopPropagation(); setIdx(i); }}
+            style={{
+              border: "none", background: "transparent", padding: "6px 3px",
+              cursor: "pointer", display: "flex", alignItems: "center", lineHeight: 0,
+            }}>
+            <span style={{
+              width: i === idx ? 16 : 5, height: 5, borderRadius: 99, display: "block",
+              transition: "all 0.32s cubic-bezier(0.22,0.61,0.36,1)",
+              background: i === idx ? (acikTema ? "#2E6DA8" : C.blue) : WA(acikTema ? 0.16 : 0.18),
+            }} />
+          </button>
         ))}
       </div>
     </div>
@@ -22391,7 +22401,7 @@ function App(){
               );
             })()}
 
-            <AnaSayfaHeroSerit selamlama={TR(selamlama)} bugunMetni={kisaTarihStr} kullaniciAdi={kullaniciAdi} git={(hedef) => {
+            <AnaSayfaHeroSerit selamlama={TR(selamlama)} bugunMetni={kisaTarihStr} kullaniciAdi={kullaniciAdi} genisEkran={genisEkran} git={(hedef) => {
               if (hedef === "altin") { setPiyasaTabloFiltre("altin"); nav("piyasaMenu"); }
               else if (hedef === "gostergeler") { setPiyasaTabloFiltre("gostergeler"); nav("piyasaMenu"); }
               else if (hedef === "zekat") { nav("zekatHesabi"); }
