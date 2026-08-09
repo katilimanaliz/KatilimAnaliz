@@ -59,7 +59,42 @@ const ALTINAPI_ESLEME = {
   "GRAM_GUMUS": "GUMUSTRY",
   "GC=F": "XAUUSD",
   "SI=F": "XAGUSD",
+  // Pariteler (TRY içermeyen)
+  "EURUSD=X": "EURUSD",
+  "GBPUSD=X": "GBPUSD",
+  "AUDUSD=X": "AUDUSD",
+  "JPY=X": "USDJPY",
+  "CHF=X": "USDCHF",
+  "SAR=X": "USDSAR",
+  "CNY=X": "DS_USDCNY",
+  "RUB=X": "USDRUB",
+  // Makası aşağıdaki kontrolden geçemeyenler burada dursa da elenecek;
+  // AltinAPI verisi düzelirse kod değişikliği olmadan devreye girsinler.
+  "ZARTRY=X": "DS_ZARTRY",
+  "SEKTRY=X": "SEKTRY",
+  "NOKTRY=X": "NOKTRY",
+  "DKKTRY=X": "DKKTRY",
+  "KWDTRY=X": "KWDTRY",
 };
+
+// ─── MAKAS AKIL KONTROLÜ ───────────────────────────────────────────────────
+// AltinAPI bazı sembollerde bozuk alış/satış döndürüyor. Ölçüldü (2026-08-08):
+//   DKKTRY  alış 1,4754  satış 7,2206  → makas %389
+//   SEKTRY  alış 3,5365  satış 5,0236  → makas %42
+//   NOKTRY  alış 3,5293  satış 5,0065  → makas %42
+//   DS_USDCNY alış 6,137 satış 7,304   → makas %19
+// Normal bir döviz makası %0,2–3 aralığındadır (USD/TRY %0,2).
+// Makas eşiği aşarsa YALNIZCA alış değil, SATIŞ da şüphelidir — bu yüzden
+// zenginleştirme tamamen atlanır ve Yahoo değeri korunur. Bozuk fiyat
+// göstermektense doğru ama serbest piyasa olmayan fiyatı göstermek yeğdir.
+//
+// İKİ AYRI EŞİK: Kıymetli madende makas doğal olarak geniştir — Kapalı
+// Çarşı'da gram gümüş alış 94,31 / satış 102,27 (%8,4) gerçek bir fiyattır,
+// düşük likiditeden gelir. Dövizdeki %5 eşiği burada uygulanırsa gümüş
+// yanlışlıkla elenir. Bu yüzden kıymetli maden için eşik %12.
+const MAKAS_ESIGI_DOVIZ = 5;
+const MAKAS_ESIGI_KIYMETLI = 12;
+const KIYMETLI_SEMBOLLER = new Set(["ALTIN","GUMUSTRY","XAUUSD","XAGUSD"]);
 
 const KV_ALTINAPI = "altinapi:v5"; // piyasa-fiyatlar.js ile AYNI anahtar
 
@@ -107,6 +142,13 @@ async function altinApiIleZenginlestir(sembol, sonuc) {
   const alis = gecerliSayi(kayit.bid);
   const satis = gecerliSayi(kayit.ask);
   if (satis == null) return sonuc; // veri yoksa Yahoo değeri korunur
+
+  // Makas akıl kontrolü — bozuk veriyi tamamen reddet, Yahoo'ya bırak.
+  if (alis != null) {
+    const makas = ((satis - alis) / alis) * 100;
+    const esik = KIYMETLI_SEMBOLLER.has(apiSembol) ? MAKAS_ESIGI_KIYMETLI : MAKAS_ESIGI_DOVIZ;
+    if (!isFinite(makas) || makas < 0 || makas > esik) return sonuc;
+  }
 
   return {
     ...sonuc,
