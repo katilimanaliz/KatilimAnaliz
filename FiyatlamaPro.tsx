@@ -18358,7 +18358,7 @@ function PiyasaSatiri({ad,sembol,paraOnek,dec,onTikla,sira,alisGoster}:{ad:strin
           Emtia, Borsa, Kripto, Fonlar ve Göstergelerde alış-satış makası
           kavramı yok; oralarda tablo eski haliyle (tek fiyat) kalıyor. */}
       {alisGoster&&(
-        <span style={{width:70,textAlign:"right",fontSize:12.5,fontWeight:600,color:WA(0.5),fontFamily:"monospace",flexShrink:0}}>
+        <span style={{width:70,textAlign:"right",fontSize:13,fontWeight:700,color:C.soft,fontFamily:"monospace",flexShrink:0}}>
           {alisF!=null
             ? <span className="spark-in">{`${paraOnek||""}${fmtDeger(alisF)}`}</span>
             : yukleniyor
