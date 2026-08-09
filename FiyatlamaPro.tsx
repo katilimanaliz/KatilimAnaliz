@@ -11913,6 +11913,20 @@ const ANASAYFA_HERO_SAYFALAR: { renk: string; eyebrow: string; baslik: string; s
 // YATIRIMDA MI TUTSAM?" gibi tamamen kapitalize görünüyordu — okunması zor ve
 // Apple'ın tipografi diline aykırı. Büyük harf yalnızca üstteki küçük
 // ETİKET için kullanılıyor; başlık ve gövde normal cümle düzeninde.
+// Dolgulu CTA butonunun ÜZERİNDEKİ metin rengi. Accent renklerin çoğu koyu
+// olduğu için beyaz uygun; ama altın (#D4A03C) yeterince açık ve üzerinde
+// beyaz metin okunmuyor — orada koyu metne düşülüyor. Parlaklık eşiği 0.6.
+function heroCtaMetinRengi(hex: string): string {
+  const h = String(hex || "").replace("#", "");
+  if (h.length !== 6) return "#FFFFFF";
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  if ([r, g, b].some(v => isNaN(v))) return "#FFFFFF";
+  const parlaklik = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return parlaklik > 0.6 ? "#0B1620" : "#FFFFFF";
+}
+
 function AnaSayfaHeroSerit({ git, selamlama, bugunMetni, kullaniciAdi, genisEkran }: { git: (hedef: string) => void; selamlama: string; bugunMetni: string; kullaniciAdi?: string; genisEkran?: boolean }) {
   const [idx, setIdx] = useState(0);
   const dokunuldu = useRef<number | null>(null);
@@ -11962,7 +11976,7 @@ function AnaSayfaHeroSerit({ git, selamlama, bugunMetni, kullaniciAdi, genisEkra
         onTouchStart={dokunmaBasla} onTouchMove={dokunmaHareket} onTouchEnd={dokunmaBitti}
         onClick={() => { if (!surukleniyor.current && s.hedef) git(s.hedef); }}
         style={{
-          position: "relative", borderRadius: genisEkran ? 22 : 20, overflow: "hidden", height: genisEkran ? 118 : 132,
+          position: "relative", borderRadius: genisEkran ? 22 : 20, overflow: "hidden", height: genisEkran ? 148 : 142,
           cursor: s.hedef ? "pointer" : "default",
           background: yuzey,
           border: `1px solid ${acikTema ? "#E2E9F0" : WA(0.09)}`,
@@ -11992,7 +12006,7 @@ function AnaSayfaHeroSerit({ git, selamlama, bugunMetni, kullaniciAdi, genisEkra
           <div style={{
             fontSize: karsilama ? (kullaniciAdi && kullaniciAdi.length > 9 ? (genisEkran ? 25 : 22) : (genisEkran ? 30 : 27)) : (genisEkran ? 19 : 17),
             fontWeight: 700, letterSpacing: "-0.021em", lineHeight: 1.18,
-            marginBottom: 5, flexShrink: 0,
+            marginBottom: 6, flexShrink: 0,
             color: acikTema ? "#16222E" : "#F2F7FC",
             overflow: "hidden", textOverflow: "ellipsis",
             display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
@@ -12004,22 +12018,39 @@ function AnaSayfaHeroSerit({ git, selamlama, bugunMetni, kullaniciAdi, genisEkra
 
           {s.sub && (
             <div style={{
-              fontSize: genisEkran ? 13.5 : 12.5, lineHeight: 1.35, flexShrink: 0,
+              fontSize: genisEkran ? 12.5 : 11.5, lineHeight: 1.35, flexShrink: 0,
+              marginBottom: 10,
               color: acikTema ? "#5A7488" : WA(0.55),
               overflow: "hidden", textOverflow: "ellipsis",
               display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
             } as any}>{CV(s.sub)}</div>
           )}
 
-          {/* CTA marginTop:auto ile en altta — içerik uzunluğu ne olursa olsun
-              üst üste binme yapısal olarak imkansız. */}
-          {s.cta && (
-            <div style={{
-              marginTop: "auto", display: "inline-flex", alignItems: "center", gap: 5,
-              alignSelf: "flex-start", fontSize: genisEkran ? 13 : 12, fontWeight: 600, flexShrink: 0,
-              color: s.renk, letterSpacing: "-0.01em",
-            }}>{CV(s.cta)}</div>
-          )}
+          {/* CTA — DOLGULU BUTON (2026-08-09)
+              marginTop:auto ile en altta; içerik uzunluğu ne olursa olsun üst
+              üste binme yapısal olarak imkansız. Zemin sayfanın accent rengi,
+              metin ve ok butonun içinde. Metin rengi sabit beyaz değil,
+              kontrasta göre seçiliyor (bkz. heroCtaMetinRengi). */}
+          {s.cta && (() => {
+            const metinRengi = heroCtaMetinRengi(s.renk);
+            return (
+              <div style={{
+                marginTop: "auto", display: "inline-flex", alignItems: "center",
+                gap: genisEkran ? 8 : 7, alignSelf: "flex-start", flexShrink: 0,
+                background: s.renk, borderRadius: 8,
+                padding: genisEkran ? "7px 13px" : "6px 11px",
+                fontSize: genisEkran ? 11.5 : 11, fontWeight: 700,
+                color: metinRengi, letterSpacing: "-0.01em", whiteSpace: "nowrap",
+              }}>
+                {CV(s.cta)}
+                <svg width={genisEkran ? 13 : 12} height={genisEkran ? 13 : 12} viewBox="0 0 24 24"
+                  fill="none" stroke={metinRengi} strokeWidth={2.5}
+                  strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                  <path d="M4 12h14M13 6l6 6-6 6" />
+                </svg>
+              </div>
+            );
+          })()}
         </div>
       </div>
 
