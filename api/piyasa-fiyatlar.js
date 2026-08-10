@@ -157,22 +157,6 @@ const TRUNCGIL_ESLEME = {
 // var. 8 Ağustos AltinAPI verisinden ürün bazlı oranlar çıkarıldı:
 //   Çeyrek 0,9908/0,9872 · Yarım 0,9876/0,9862 · Tam 0,9930/0,9857
 //   Ata 1,0000/0,9910 · Beşli 1,0000/0,9925 · Gremse 0,9889/0,9914
-// Ata ve Beşli'de ALIŞ oranı tam 1,0000 — sarraf bunları alırken eski/yeni
-// ayrımı yapmıyor, yalnızca satarken yapıyor. Oranların rastgele değil gerçek
-// piyasa davranışını yansıttığının işareti.
-//
-// ⚠️ Bu fiyatlar TÜRETİLMİŞ, kaynaktan gelen gerçek fiyat değil. Oranlar tek
-// günün verisinden çıktı; piyasa sertleştiğinde eski-yeni farkı açılabilir ve
-// bunu fark edemeyiz (karşılaştıracak gerçek veri yok). Oran bandı dar
-// (0,986–1,000) olduğu için sapma sınırlı kalıyor ama sıfır değil.
-const ESKI_ORAN = {
-  CEYREK_YENI:  { hedef: "CEYREK_ESKI",  bid: 0.99079, ask: 0.98716 },
-  YARIM_YENI:   { hedef: "YARIM_ESKI",   bid: 0.98763, ask: 0.98623 },
-  TEK_YENI:     { hedef: "TEK_ESKI",     bid: 0.99304, ask: 0.98572 },
-  ATA_YENI:     { hedef: "ATA_ESKI",     bid: 1.00000, ask: 0.99101 },
-  ATA5_YENI:    { hedef: "ATA5_ESKI",    bid: 1.00000, ask: 0.99252 },
-  GREMESE_YENI: { hedef: "GREMESE_ESKI", bid: 0.98886, ask: 0.99137 },
-};
 
 async function altinApiCek() {
   let json = null, sonHata = "";
@@ -212,19 +196,6 @@ async function altinApiCek() {
   for (const [tSembol, uSembol] of Object.entries(TRUNCGIL_ESLEME)) {
     const a = truncgilAlanlar(rates[tSembol]);
     if (a) ekle(uSembol, a.bid, a.ask, a.change);
-  }
-
-  // 2) Eski sarrafiye — yeni fiyattan oranla türetiliyor
-  for (const [kaynak, k] of Object.entries(ESKI_ORAN)) {
-    const y = harita[kaynak];
-    if (!y) continue;
-    harita[k.hedef] = {
-      symbol: k.hedef,
-      bid: Math.round(y.bid * k.bid * 100) / 100,
-      ask: Math.round(y.ask * k.ask * 100) / 100,
-      close: y.close != null ? Math.round(y.close * k.ask * 100) / 100 : null,
-      turetilmis: true,   // arayüz isterse "tahmini" işareti koyabilir
-    };
   }
 
   // 3) Döviz — Truncgil "USD" gibi düz kodlar veriyor, uygulama "USDTRY"
@@ -294,30 +265,57 @@ async function altinApiCek() {
   //   • TAKIP_SEMBOLLER ve gecmis.js'teki KIYMETLI_SEMBOLLER
   // Frontend ise Fiziki Altın tablosunda "ONS" adını kullanıyor. İki ad da
   // aynı kayda işaret ediyor.
-  onsTuret("ALTIN", ["ONS", "XAUUSD"]);
-  onsTuret("GUMUSTRY", ["XAGUSD"]);
+  //
+  // ⚠️ SIRA ÖNEMLİ: onsTuret çağrıları AŞAĞIDA, gümüş açılımından SONRA.
+  // Ons gümüş gram gümüşten türetiliyor; gram gümüş de "orta fiyat" olarak
+  // gelip açılıyor. Çağrı yukarıda kalırsa ons gümüş açılmamış (orta) değerden
+  // hesaplanır ve %4 düşük çıkar.
 
   // ═════════════════════════════════════════════════════════════════════════
-  // 5) 22 / 14 AYAR — TRUNCGIL'DEN DEĞİL, GRAM ALTINDAN TÜRETİLİR
+  // 5) TÜM AYARLI ALTIN VE SARRAFİYE — GRAM ALTINDAN TÜRETİLİR
   // ═════════════════════════════════════════════════════════════════════════
-  // Truncgil'in "YIA" sembolü 22 ayar diye geliyor ama SATIŞ fiyatı Harem'den
-  // %2,75 sapıyor (bizde 6.063,19 · Harem 6.234,27) — muhtemelen farklı bir
-  // ürün, bilezik vs külçe 22 ayar. Yalnız alışı düzeltmek yetmiyor: yanlış
-  // tabana doğru oran uygulayınca hata katlanıyor (ölçüldü: %+0,35 → %-2,74).
+  // Truncgil'in sarrafiye kotasyonları Harem'den kayıyor ve kayma YÖNÜ
+  // TUTARSIZ (10 Ağustos 17:52 ölçümü, satış tarafı):
+  //     çeyrek %-0,59   ·   tam %-0,58   ·   ata %+0,84
+  // 22 ayarda ise sapma %2,75'e çıkıyordu ("YIA" muhtemelen farklı bir ürün,
+  // bilezik vs külçe). Tek tek düzeltmek yerine kaynağın sarrafiye alanları
+  // hiç kullanılmıyor: her ürün gram altından çarpanla türetiliyor.
   //
-  // ÇÖZÜM: Ayarlı altını gram altına oranla türet. Harem'in kendi verisinde bu
-  // oran şaşırtıcı derecede kararlı — 22 ayar/gram altın SATIŞ oranı:
-  //     12:53 → 0,935144      17:15 → 0,935106      kayma 0,004 puan
-  // Karşılaştırma: makas oranlarının kendisi aynı sürede 0,057 puan kaydı.
-  // Yani ayar/gram ilişkisi makastan on kat daha kararlı.
+  // GEREKÇE — bu zaten piyasanın işleyişi. Sarrafiye has altından milyem
+  // katsayısıyla fiyatlanır, bağımsız kotasyon almaz. Harem verisinde çarpanlar
+  // ÜÇ ölçümde de neredeyse hiç oynamadı (12:53 / 17:15 / 17:52):
+  //     çeyrek yeni  1,63156  1,63146  1,63150   → yayılım %0,006
+  //     ata yeni     6,64998  6,64907  6,65000   → yayılım %0,014
+  //     ata5 yeni   33,34183 33,33790 33,34268   → yayılım %0,014
+  // Karşılaştırma: makas oranlarının kendisi aynı sürede %0,13 oynadı, yani
+  // ürün/gram ilişkisi makastan on kat kararlı.
   //
-  // Doğrulama: 6.664,70 × 0,935125 = 6.232,2 · Harem 6.234,27 → sapma %0,03
-  // (Truncgil'in kendi rakamı %2,75 sapıyordu.)
-  const AYAR_GRAM_ORAN = {
-    AYAR22: 0.935125,   // 2 ölçümün ortalaması (12:53 + 17:15)
-    AYAR14: 0.723734,   // 14 ayar / gram altın satış oranı
+  // ÖLÇÜLEN KAZANÇ (17:52, gram altından türetilse):
+  //     çeyrek yeni %-0,59 → %0,00   ·   tam eski %-0,58 → %-0,04
+  //     ata yeni    %+0,84 → %0,00   ·   22 ayar  %+0,003 (zaten türetiliyordu)
+  //
+  // ⚠️ Bu fiyatlar TÜRETİLMİŞ. Çarpanlar tek günün üç ölçümünden çıktı; piyasa
+  // sertleştiğinde ürün primleri açılabilir ve karşılaştıracak gerçek veri
+  // olmadığı için bunu fark edemeyiz. Aylık gözden geçirilmeli.
+  const GRAM_ORAN = {
+    // sembol         satış / gram altın satış      ölçüm  yayılım
+    KULCEALTIN:    0.998008,   // 3   %0,003   HAS ALTIN
+    AYAR22:        0.935125,   // 3   %0,004
+    AYAR14:        0.723741,   // 2   %0,002
+    CEYREK_YENI:   1.631507,   // 3   %0,006
+    CEYREK_ESKI:   1.607537,   // 3   %0,003
+    YARIM_YENI:    3.260113,   // 1
+    YARIM_ESKI:    3.208213,   // 1
+    TEK_YENI:      6.498176,   // 1
+    TEK_ESKI:      6.409830,   // 3   %0,112
+    ATA_YENI:      6.649685,   // 3   %0,014
+    ATA_ESKI:      6.599842,   // 3   %0,014
+    ATA5_YENI:    33.340803,   // 3   %0,014
+    ATA5_ESKI:    33.091288,   // 3   %0,015
+    GREMESE_YENI: 16.195067,   // 3   %0,014
+    GREMESE_ESKI: 16.055137,   // 2   %0,015
   };
-  for (const [sembol, oran] of Object.entries(AYAR_GRAM_ORAN)) {
+  for (const [sembol, oran] of Object.entries(GRAM_ORAN)) {
     const gram = harita.ALTIN;
     if (!gram || !(Number(gram.ask) > 0)) continue;
     const ask = Math.round(Number(gram.ask) * oran * 100) / 100;
@@ -326,6 +324,35 @@ async function altinApiCek() {
     // bid aşağıdaki HAREM_MAKAS döngüsünde hesaplanıyor
     harita[sembol] = { symbol: sembol, bid: null, ask, close, turetilmis: true };
   }
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // 5b) GÜMÜŞ — TRUNCGIL DEĞERİ ORTA FİYATTIR, SATIŞ DEĞİL
+  // ═════════════════════════════════════════════════════════════════════════
+  // Truncgil'in gram gümüşü Harem'in ORTA fiyatına denk düşüyor:
+  //     17:52  Truncgil 99,51  ·  Harem alış 96,04 / orta 99,97 / satış 103,91
+  // Onu "satış" sayıp üstüne %7,6'lık fiziki makası aşağı doğru uygulamak,
+  // alışı Harem'in alışının bile ALTINA düşürüyordu (ölçüldü: ons gümüşte
+  // %-5,8 sapma). 22 ayardaki hatanın aynısı: doğru oran, yanlış taban.
+  //
+  // ÇÖZÜM: değer orta kabul edilip iki yöne açılıyor. r = alış/satış olmak
+  // üzere  satış = orta × 2/(1+r).  Ölçülen sonuç: %-5,8 → %-0,44.
+  const GUMUS_MAKAS_R = 0.923966;   // 2 ölçüm, yayılım %0,076
+  {
+    const g = harita.GUMUSTRY;
+    const orta = g ? Number(g.ask) : NaN;
+    if (isFinite(orta) && orta > 0) {
+      const acilim = 2 / (1 + GUMUS_MAKAS_R);
+      g.ask = Math.round(orta * acilim * 10000) / 10000;
+      if (Number(g.close) > 0) g.close = Math.round(Number(g.close) * acilim * 10000) / 10000;
+      g.bid = null;   // HAREM_MAKAS döngüsünde hesaplanacak
+      g.turetilmis = true;
+    }
+  }
+
+  // ── ONS TÜRETME (sıra: gümüş açılımından SONRA) ─────────────────────────
+  // Ons altın gram altından, ons gümüş AÇILMIŞ gram gümüşten hesaplanıyor.
+  onsTuret("ALTIN", ["ONS", "XAUUSD"]);
+  onsTuret("GUMUSTRY", ["XAGUSD"]);
 
   // ═════════════════════════════════════════════════════════════════════════
   // 6) ALIŞ FİYATI — HAREM'DEN ÖLÇÜLEN MAKAS ORANLARI
@@ -340,7 +367,7 @@ async function altinApiCek() {
   //       çeyrek: bizde 10.625 · Harem 10.747  (satış neredeyse birebir)
   //
   // ÇÖZÜM: Alış artık Truncgil'den okunmuyor; SATIŞ × Harem'in ölçülen makas
-  // oranı. ESKI_ORAN'daki desenin aynısı (o da Harem'e karşı doğrulandı).
+  // oranı. Yukarıdaki GRAM_ORAN türetmesiyle aynı mantık.
   //
   // ── ORANLARIN KARARLILIĞI ÖLÇÜLDÜ ────────────────────────────────────────
   // İki ayrı an karşılaştırıldı (10 Ağustos 12:53 ve 17:15; arada altın %0,54
@@ -349,30 +376,31 @@ async function altinApiCek() {
   // Aşağıdaki değerlerin sağındaki sayı, kaç ölçümün ortalaması olduğudur.
   //
   // ⚠️ Yine de piyasa rejimi değişince (sert oynaklık, tatil, kur şoku)
-  // makaslar açılır. AYLIK gözden geçirilmeli; ESKI_ORAN için de aynı kural.
+  // makaslar açılır. AYLIK gözden geçirilmeli; GRAM_ORAN için de aynı kural.
   const HAREM_MAKAS = {
-    // sembol           alış/satış   ölçüm
-    KULCEALTIN:   0.996796,   // 2  HAS ALTIN
-    ALTIN:        0.989832,   // 2  GRAM ALTIN
-    AYAR22:       0.967762,   // 2
-    AYAR14:       0.750590,   // 1  makas %24,9 — işçilik + alaşım payı
-    ONS:          0.999908,   // 2  iki ölçümde de BİREBİR aynı
-    XAUUSD:       0.999908,   // 2  (ONS takma adı)
-    XAGUSD:       0.923237,   // 2  ALTIN GÜMÜŞ (ons)
-    GUMUSTRY:     0.923616,   // 1  GÜMÜŞ TL (gram)
-    CEYREK_YENI:  0.987799,   // 2
-    CEYREK_ESKI:  0.990141,   // 2
-    YARIM_YENI:   0.988957,   // 1
-    YARIM_ESKI:   0.992566,   // 1
-    TEK_YENI:     0.992336,   // 1
-    TEK_ESKI:     0.994233,   // 2
-    ATA_YENI:     0.985880,   // 2
-    ATA_ESKI:     0.993330,   // 2
-    ATA5_YENI:    0.984635,   // 2
-    ATA5_ESKI:    0.992059,   // 2
-    GREMESE_YENI: 0.992036,   // 2
-    GREMESE_ESKI: 0.989232,   // 1
+    // sembol         alış / satış    ölçüm  yayılım
+    ALTIN:         0.989504,   // 3   %0,128   GRAM ALTIN
+    KULCEALTIN:    0.996465,   // 3   %0,128   HAS ALTIN
+    AYAR22:        0.967439,   // 3   %0,128
+    AYAR14:        0.750500,   // 2   %0,024   makas %25 — işçilik + alaşım
+    ONS:           0.999908,   // 3   %0,000   üç ölçümde de BİREBİR aynı
+    XAUUSD:        0.999908,   // 3            (ONS takma adı)
+    XAGUSD:        0.923169,   // 3   %0,043   ons gümüş
+    GUMUSTRY:      0.923966,   // 2   %0,076   gram gümüş
+    CEYREK_YENI:   0.987455,   // 3   %0,130
+    CEYREK_ESKI:   0.989821,   // 3   %0,122
+    YARIM_YENI:    0.988957,   // 1
+    YARIM_ESKI:    0.992566,   // 1
+    TEK_YENI:      0.992336,   // 1
+    TEK_ESKI:      0.993981,   // 3   %0,081
+    ATA_YENI:      0.985551,   // 3   %0,128
+    ATA_ESKI:      0.992994,   // 3   %0,130
+    ATA5_YENI:     0.984309,   // 3   %0,128
+    ATA5_ESKI:     0.991731,   // 3   %0,128
+    GREMESE_YENI:  0.991707,   // 3   %0,128
+    GREMESE_ESKI:  0.988878,   // 2   %0,072
   };
+
   for (const [sembol, oran] of Object.entries(HAREM_MAKAS)) {
     const k = harita[sembol];
     if (!k) continue;
