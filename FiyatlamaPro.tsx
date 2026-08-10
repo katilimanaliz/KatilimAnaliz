@@ -10824,6 +10824,55 @@ function SiteAltBilgi({onEkran}:{onEkran:(sc:string)=>void}){
         ])}
       </div>
 
+      {/* ── BİZİ TAKİP EDİN + İLETİŞİM ────────────────────────────────────
+          Masaüstü footer'ının doğal yeri burası: "Yasal" sütununda zaten
+          İletişim bağlantısı vardı, sosyal hesaplar da yanına geldi.
+          İkonlar inline SVG — raster görsel yok. */}
+      <div style={{
+        marginTop: 22, paddingTop: 18, borderTop: `1px solid ${WA(0.07)}`,
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        gap: 18, flexWrap: "wrap",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 11.5, fontWeight: 700, color: WA(0.45) }}>
+            {CV("Bizi takip edin")}
+          </span>
+          {[
+            { ad: "X", url: "https://x.com/Katilimplus",
+              yol: "M18.9 2H22l-7.3 8.3L23.3 22h-6.8l-5.3-6.9L4.9 22H1.8l7.8-8.9L1 2h6.9l4.8 6.4L18.9 2Zm-1.1 18h1.9L7.3 3.9H5.3L17.8 20Z" },
+            { ad: "Instagram", url: "https://instagram.com/katilimplus",
+              yol: "M12 2.2c3.2 0 3.6 0 4.9.1 1.2.1 1.8.2 2.2.4.6.2 1 .5 1.4.9.4.4.7.8.9 1.4.2.4.3 1 .4 2.2.1 1.3.1 1.7.1 4.9s0 3.6-.1 4.9c-.1 1.2-.2 1.8-.4 2.2-.2.6-.5 1-.9 1.4-.4.4-.8.7-1.4.9-.4.2-1 .3-2.2.4-1.3.1-1.7.1-4.9.1s-3.6 0-4.9-.1c-1.2-.1-1.8-.2-2.2-.4-.6-.2-1-.5-1.4-.9-.4-.4-.7-.8-.9-1.4-.2-.4-.3-1-.4-2.2C2.2 15.6 2.2 15.2 2.2 12s0-3.6.1-4.9c.1-1.2.2-1.8.4-2.2.2-.6.5-1 .9-1.4.4-.4.8-.7 1.4-.9.4-.2 1-.3 2.2-.4 1.3-.1 1.7-.1 4.8-.1Zm0 5.4a4.4 4.4 0 1 0 0 8.8 4.4 4.4 0 0 0 0-8.8Zm0 7.2a2.8 2.8 0 1 1 0-5.6 2.8 2.8 0 0 1 0 5.6Zm5.6-7.4a1 1 0 1 1-2.1 0 1 1 0 0 1 2.1 0Z" },
+            { ad: "Facebook", url: "https://facebook.com/katilimplus",
+              yol: "M22 12a10 10 0 1 0-11.6 9.9v-7H7.9V12h2.5V9.8c0-2.5 1.5-3.9 3.8-3.9 1.1 0 2.2.2 2.2.2v2.5h-1.3c-1.2 0-1.6.8-1.6 1.6V12h2.8l-.4 2.9h-2.3v7A10 10 0 0 0 22 12Z" },
+          ].map(sm => (
+            <a key={sm.ad} href={sm.url} target="_blank" rel="noopener noreferrer"
+              aria-label={sm.ad} title={sm.ad}
+              style={{
+                width: 32, height: 32, borderRadius: 9, display: "flex",
+                alignItems: "center", justifyContent: "center",
+                background: WA(0.05), border: `1px solid ${WA(0.08)}`,
+                color: WA(0.55), textDecoration: "none",
+              }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+                <path d={sm.yol} />
+              </svg>
+            </a>
+          ))}
+        </div>
+
+        <a href="mailto:katilimplus2026@gmail.com" style={{
+          display: "flex", alignItems: "center", gap: 7, textDecoration: "none",
+          fontSize: 12, fontWeight: 600, color: WA(0.55),
+        }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="4" width="20" height="16" rx="2.5" />
+            <path d="m2 7 10 6 10-6" />
+          </svg>
+          katilimplus2026@gmail.com
+        </a>
+      </div>
+
       <p style={{margin:"20px 0 0", fontSize:10.5, color:WA(0.38), lineHeight:1.6}}>
         Bu uygulamadaki hesaplamalar bilgilendirme amaçlıdır; kesin teklif, resmî belge
         veya hukuki taahhüt niteliği taşımaz ve yatırım danışmanlığı kapsamında değildir.
@@ -23648,57 +23697,6 @@ function App(){
               );
             })()}
 
-            {/* ── SOSYAL MEDYA + İLETİŞİM (yalnızca masaüstü) ─────────────
-                Mobilde alt bar ve Profil ekranı zaten bu bağlantıları
-                taşıyor; orada tekrar etmek ekranı uzatırdı. Masaüstünde ise
-                sayfa altında boşluk var ve bu bilgiler bir "footer" beklentisi
-                oluşturuyor. genisEkran koşuluyla sadece geniş ekranda çıkıyor. */}
-            {genisEkran && (
-              <div style={{
-                marginTop: 28, paddingTop: 22, borderTop: `1px solid ${WA(0.08)}`,
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                gap: 20, flexWrap: "wrap",
-              }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: WA(0.45), letterSpacing: 0.3 }}>
-                    {CV("Bizi takip edin")}
-                  </span>
-                  {[
-                    { ad: "X", url: "https://x.com/Katilimplus",
-                      yol: "M18.9 2H22l-7.3 8.3L23.3 22h-6.8l-5.3-6.9L4.9 22H1.8l7.8-8.9L1 2h6.9l4.8 6.4L18.9 2Zm-1.1 18h1.9L7.3 3.9H5.3L17.8 20Z" },
-                    { ad: "Instagram", url: "https://instagram.com/katilimplus",
-                      yol: "M12 2.2c3.2 0 3.6 0 4.9.1 1.2.1 1.8.2 2.2.4.6.2 1 .5 1.4.9.4.4.7.8.9 1.4.2.4.3 1 .4 2.2.1 1.3.1 1.7.1 4.9s0 3.6-.1 4.9c-.1 1.2-.2 1.8-.4 2.2-.2.6-.5 1-.9 1.4-.4.4-.8.7-1.4.9-.4.2-1 .3-2.2.4-1.3.1-1.7.1-4.9.1s-3.6 0-4.9-.1c-1.2-.1-1.8-.2-2.2-.4-.6-.2-1-.5-1.4-.9-.4-.4-.7-.8-.9-1.4-.2-.4-.3-1-.4-2.2C2.2 15.6 2.2 15.2 2.2 12s0-3.6.1-4.9c.1-1.2.2-1.8.4-2.2.2-.6.5-1 .9-1.4.4-.4.8-.7 1.4-.9.4-.2 1-.3 2.2-.4 1.3-.1 1.7-.1 4.8-.1Zm0 5.4a4.4 4.4 0 1 0 0 8.8 4.4 4.4 0 0 0 0-8.8Zm0 7.2a2.8 2.8 0 1 1 0-5.6 2.8 2.8 0 0 1 0 5.6Zm5.6-7.4a1 1 0 1 1-2.1 0 1 1 0 0 1 2.1 0Z" },
-                    { ad: "Facebook", url: "https://facebook.com/katilimplus",
-                      yol: "M22 12a10 10 0 1 0-11.6 9.9v-7H7.9V12h2.5V9.8c0-2.5 1.5-3.9 3.8-3.9 1.1 0 2.2.2 2.2.2v2.5h-1.3c-1.2 0-1.6.8-1.6 1.6V12h2.8l-.4 2.9h-2.3v7A10 10 0 0 0 22 12Z" },
-                  ].map(sm => (
-                    <a key={sm.ad} href={sm.url} target="_blank" rel="noopener noreferrer"
-                      aria-label={sm.ad} title={sm.ad}
-                      style={{
-                        width: 34, height: 34, borderRadius: 10, display: "flex",
-                        alignItems: "center", justifyContent: "center",
-                        background: WA(0.05), border: `1px solid ${WA(0.08)}`,
-                        color: acikTemaMi() ? "#46617A" : WA(0.62), textDecoration: "none",
-                      }}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                        <path d={sm.yol} />
-                      </svg>
-                    </a>
-                  ))}
-                </div>
-
-                <a href="mailto:katilimplus2026@gmail.com" style={{
-                  display: "flex", alignItems: "center", gap: 8, textDecoration: "none",
-                  fontSize: 12.5, fontWeight: 600, color: acikTemaMi() ? "#46617A" : WA(0.62),
-                }}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-                    stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="2" y="4" width="20" height="16" rx="2.5" />
-                    <path d="m2 7 10 6 10-6" />
-                  </svg>
-                  katilimplus2026@gmail.com
-                </a>
-              </div>
-            )}
           </div>
           );
         })()}

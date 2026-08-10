@@ -81,15 +81,15 @@
   ],
   "finansman": {
     "guncelleme": {
-      "konut": "2026-08-03",
-      "tasit": "2026-08-03",
-      "ihtiyac": "2026-08-03"
+      "konut": "2026-08-10",
+      "tasit": "2026-08-10",
+      "ihtiyac": "2026-08-10"
     },
     "bankalar": [
       {
         "ad": "Vakıf Katılım",
         "konut60": 2.99,
-        "konut120": 2.89,
+        "konut120": 2.99,
         "tasit12": 3.39,
         "tasit24": 3.29,
         "ihtiyac12": 3.85,
@@ -119,8 +119,8 @@
         "konut120": 2.95,
         "tasit12": 3.63,
         "tasit24": 3.52,
-        "ihtiyac12": 4.05,
-        "ihtiyac24": 3.99
+        "ihtiyac12": 4.15,
+        "ihtiyac24": 4.05
       },
       {
         "ad": "Dünya Katılım",
@@ -137,8 +137,8 @@
         "konut120": 2.89,
         "tasit12": 3.49,
         "tasit24": 3.49,
-        "ihtiyac12": 4.99,
-        "ihtiyac24": 4.99
+        "ihtiyac12": 4.89,
+        "ihtiyac24": 4.89
       },
       {
         "ad": "Emlak Katılım",
