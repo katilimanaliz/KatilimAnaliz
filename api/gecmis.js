@@ -84,18 +84,27 @@ async function altinApiHaritaGetir() {
   // Merkezi önbellek boşsa Truncgil'den taze çek. (AltinAPI kotası dolduğu
   // için 2026-08-10'da kaynak Truncgil'e taşındı; anahtar gerektirmiyor.)
   try {
-    const r = await fetch("https://finance.truncgil.com/v4/today.json", {
-      headers: { "User-Agent": "Mozilla/5.0" },
-    });
-    if (!r.ok) return null;
-    const json = await r.json();
-    const rates = (json && json.Rates) || {};
+    // İki adres sırayla denenir: v4 sunucudan 404 dönebiliyor (tarayıcıdan
+    // çalışsa bile). Yanıt biçimi de sürüme göre değişiyor, ikisi de tanınır.
+    let json = null;
+    for (const url of ["https://finance.truncgil.com/v4/today.json",
+                       "https://finance.truncgil.com/api/today.json"]) {
+      try {
+        const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0", "Accept": "application/json" } });
+        if (!r.ok) continue;
+        const j = await r.json();
+        if (j && (j.Rates || j.GRA)) { json = j; break; }
+      } catch { /* sıradaki adrese geç */ }
+    }
+    if (!json) return null;
+    const rates = json.Rates || json;
     const ESL = { GRA: "ALTIN", GUMUS: "GUMUSTRY" };
     const harita = {};
     for (const [t, u] of Object.entries(ESL)) {
       const d = rates[t];
       if (!d) continue;
-      const b = Number(d.Buying), a = Number(d.Selling), ch = Number(d.Change);
+      const say = (v) => (typeof v === "string" ? Number(v.replace(/\./g, "").replace(",", ".")) : Number(v));
+      const b = say(d.Buying ?? d["Alış"]), a = say(d.Selling ?? d["Satış"]), ch = say(d.Change ?? d["Değişim"]);
       if (!isFinite(a) || a <= 0) continue;
       const bid = isFinite(b) && b > 0 ? b : a;
       const orta = (bid + a) / 2;

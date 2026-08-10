@@ -118,7 +118,31 @@ async function altinApiPaylasimli() {
 // hesap Truncgil'in yüzdesini birebir veriyor. Ayrıca AltinAPI'nin bozuk close
 // alanı yüzünden eklediğimiz "%10'u aşan değişimi gizle" filtresi de artık
 // gereksiz kalıyor (veri doğru).
-const TRUNCGIL_URL = "https://finance.truncgil.com/v4/today.json";
+// İKİ ADRES SIRAYLA DENENİYOR (2026-08-10): v4 adresi sunucudan HTTP 404
+// döndü (tarayıcıdan çalışmasına rağmen). Hangi sürümün ayakta olduğunu
+// tahmin etmek yerine ikisi de deneniyor; ilk başarılı yanıt kullanılıyor.
+// Yanıt biçimleri farklı olduğu için ayrıştırıcı ikisini de tanıyor:
+//   v4 → { Meta_Data:{...}, Rates:{ USD:{Buying,Selling,Change}, ... } }
+//   v3 → { USD:{Alış,Satış,Değişim}, ... }  (düz, sarmalayıcısız)
+const TRUNCGIL_URLLER = [
+  "https://finance.truncgil.com/v4/today.json",
+  "https://finance.truncgil.com/api/today.json",
+];
+
+// Her iki sürümün alan adlarını normalize eder.
+function truncgilAlanlar(d) {
+  if (!d || typeof d !== "object") return null;
+  const al = d.Buying ?? d["Alış"] ?? d["Alis"];
+  const sat = d.Selling ?? d["Satış"] ?? d["Satis"];
+  const deg = d.Change ?? d["Değişim"] ?? d["Degisim"];
+  const say = (v) => {
+    if (v == null) return NaN;
+    // v3 sayıları "6.638,81" gibi metin olabilir
+    if (typeof v === "string") return Number(v.replace(/\./g, "").replace(",", "."));
+    return Number(v);
+  };
+  return { bid: say(al), ask: say(sat), change: say(deg) };
+}
 
 // Truncgil sembolü → uygulamanın kullandığı (AltinAPI kökenli) sembol adı.
 const TRUNCGIL_ESLEME = {
@@ -151,10 +175,23 @@ const ESKI_ORAN = {
 };
 
 async function altinApiCek() {
-  const r = await fetch(TRUNCGIL_URL, { headers: { "User-Agent": "Mozilla/5.0" } });
-  if (!r.ok) throw new Error("Truncgil HTTP " + r.status);
-  const json = await r.json();
-  const rates = (json && json.Rates) || {};
+  let json = null, sonHata = "";
+  for (const url of TRUNCGIL_URLLER) {
+    try {
+      const r = await fetch(url, {
+        headers: { "User-Agent": "Mozilla/5.0", "Accept": "application/json" },
+      });
+      if (!r.ok) { sonHata = "HTTP " + r.status; continue; }
+      const j = await r.json();
+      // Geçerli bir yanıt mı? (v4'te Rates, v3'te doğrudan sembol anahtarları)
+      if (j && (j.Rates || j.USD || j.GRA)) { json = j; break; }
+      sonHata = "beklenmeyen yanit bicimi";
+    } catch (e) { sonHata = e.message; }
+  }
+  if (!json) throw new Error("Truncgil alinamadi (" + sonHata + ")");
+
+  // v4 sarmalayıcısı varsa Rates'i, yoksa nesnenin kendisini kullan
+  const rates = json.Rates || json;
 
   const harita = {};
   const ekle = (sembol, bid, ask, change) => {
@@ -173,8 +210,8 @@ async function altinApiCek() {
 
   // 1) Kıymetli madenler
   for (const [tSembol, uSembol] of Object.entries(TRUNCGIL_ESLEME)) {
-    const d = rates[tSembol];
-    if (d) ekle(uSembol, d.Buying, d.Selling, d.Change);
+    const a = truncgilAlanlar(rates[tSembol]);
+    if (a) ekle(uSembol, a.bid, a.ask, a.change);
   }
 
   // 2) Eski sarrafiye — yeni fiyattan oranla türetiliyor
@@ -197,11 +234,39 @@ async function altinApiCek() {
   const DOVIZ = ["USD","EUR","GBP","CHF","CAD","AUD","SAR","AED","RUB","CNY","JPY",
                  "DKK","SEK","NOK","KWD","ZAR","BHD","QAR","INR","PKR","AZN"];
   for (const kod of DOVIZ) {
-    const d = rates[kod];
-    if (!d) continue;
+    const a = truncgilAlanlar(rates[kod]);
+    if (!a) continue;
     const carpan = kod === "JPY" ? 100 : 1;
-    ekle(kod + "TRY", Number(d.Buying) * carpan, Number(d.Selling) * carpan, d.Change);
+    ekle(kod + "TRY", a.bid * carpan, a.ask * carpan, a.change);
   }
+
+  if (!Object.keys(harita).length) throw new Error("Truncgil yaniti bos");
+
+  // 4) ONS ALTIN / ONS GÜMÜŞ — Truncgil'de "ONS" sembolü 0 dönüyor, ons
+  //    cinsinden gümüş hiç yok. Fiziki Altın ekranı bu ikisini istiyor, bu
+  //    yüzden Yahoo futures'tan (GC=F, SI=F) tamamlanıyor. Tek fiyat geldiği
+  //    için alış = satış; makas yok.
+  try {
+    const [gc, si] = await Promise.allSettled([
+      fetch("https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1d&range=1d", { headers: { "User-Agent": "Mozilla/5.0" } }),
+      fetch("https://query1.finance.yahoo.com/v8/finance/chart/SI=F?interval=1d&range=1d", { headers: { "User-Agent": "Mozilla/5.0" } }),
+    ]);
+    const oku = async (res) => {
+      if (res.status !== "fulfilled" || !res.value.ok) return null;
+      const j = await res.value.json();
+      const m = j?.chart?.result?.[0]?.meta;
+      return m ? { fiyat: Number(m.regularMarketPrice), onceki: Number(m.chartPreviousClose ?? m.previousClose) } : null;
+    };
+    const altin = await oku(gc), gumus = await oku(si);
+    if (altin && isFinite(altin.fiyat) && altin.fiyat > 0) {
+      harita.ONS = { symbol: "ONS", bid: altin.fiyat, ask: altin.fiyat,
+        close: isFinite(altin.onceki) && altin.onceki > 0 ? altin.onceki : null };
+    }
+    if (gumus && isFinite(gumus.fiyat) && gumus.fiyat > 0) {
+      harita.XAGUSD = { symbol: "XAGUSD", bid: gumus.fiyat, ask: gumus.fiyat,
+        close: isFinite(gumus.onceki) && gumus.onceki > 0 ? gumus.onceki : null };
+    }
+  } catch { /* ons verisi gelmezse diğer semboller yine döner */ }
 
   return harita;
 }
