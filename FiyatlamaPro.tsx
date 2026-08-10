@@ -18058,7 +18058,10 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla}:{ad:string,sembol:stri
           </span>
         )
       )}
-      <p style={{margin:0,fontSize:10,fontWeight:700,color:WA(0.45),textTransform:"uppercase",letterSpacing:0.2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingRight:28}}>{TR(ad)}</p>
+      {/* Etiket alanı sağdaki ikon için 28px daralıyor; "GRAM ALTIN" gibi uzun
+          adlar kesiliyordu. Punto ada göre kademelendi — kısa kodlar (USD/TRY)
+          eski boyutunda kalıyor, uzunlar sığacak kadar küçülüyor. */}
+      <p style={{margin:0,fontSize:ad.length>=10?8.5:ad.length>=8?9.2:10,fontWeight:700,color:WA(0.45),textTransform:"uppercase",letterSpacing:ad.length>=10?0:0.2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingRight:28}}>{TR(ad)}</p>
       {guncel!=null ? (
         <>
           <p className="spark-in" style={{margin:"4px 0 2px",fontSize:15,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:4}}>
@@ -18252,7 +18255,7 @@ const PIYASA_TABLO_VERISI:any = {
     {ad:"Altın (Ons)",   sembol:"GC=F", dec:2, paraOnek:"$"},
     {ad:"Gram Altın",    sembol:"GRAM_ALTIN", dec:2, paraOnek:"₺"},
     {ad:"Gümüş (Ons)",   sembol:"SI=F", dec:3, paraOnek:"$"},
-    {ad:"Gümüş (Gram)",  sembol:"GRAM_GUMUS", dec:2, paraOnek:"₺"},
+    {ad:"Gram Gümüş",    sembol:"GRAM_GUMUS", dec:2, paraOnek:"₺"},
     {ad:"Platin (Ons)",   sembol:"PL=F", dec:2, paraOnek:"$"},
     {ad:"Paladyum (Ons)", sembol:"PA=F", dec:2, paraOnek:"$"},
     {ad:"Brent Petrol",  sembol:"BZ=F", dec:2, paraOnek:"$"},
@@ -18304,7 +18307,11 @@ for(const kat of ["doviz","emtia","borsa","gostergeler","kripto"]){
   }
 }
 // Ana sayfa Piyasa Özeti'nin fabrika ayarı — kullanıcı hiç düzenlemediyse bu görünür.
-const PIYASA_OZETI_VARSAYILAN=["USDTRY=X","EURTRY=X","GBPTRY=X","GRAM_ALTIN","XU100.IS","BTC-USD","ETH-USD","GRAM_GUMUS","BZ=F","^GSPC"];
+// Gram Gümüş, Gram Altın'ın hemen yanına alındı (2026-08-10): ikisi de fiziki
+// kıymetli maden, ayrı yerlerde durmaları anlamsızdı.
+// ⚠️ Bu liste yalnızca VARSAYILAN. Kullanıcı Piyasa Özeti'ni bir kez
+// düzenlediyse seçimi localStorage'da saklanır ve bu sıra ona uygulanmaz.
+const PIYASA_OZETI_VARSAYILAN=["USDTRY=X","EURTRY=X","GBPTRY=X","GRAM_ALTIN","GRAM_GUMUS","XU100.IS","BTC-USD","ETH-USD","BZ=F","^GSPC"];
 
 // Tablo satırı: sembol solda, son fiyat + günlük % ortada, sparkline sağda
 function PiyasaSatiri({ad,sembol,paraOnek,dec,onTikla,sira,alisGoster}:{ad:string,sembol:string,paraOnek?:string,dec:number,onTikla:()=>void,sira?:number,alisGoster?:boolean}){
