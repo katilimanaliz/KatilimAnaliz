@@ -11916,6 +11916,19 @@ const ANASAYFA_HERO_SAYFALAR: { renk: string; eyebrow: string; baslik: string; s
 // Dolgulu CTA butonunun ÜZERİNDEKİ metin rengi. Accent renklerin çoğu koyu
 // olduğu için beyaz uygun; ama altın (#D4A03C) yeterince açık ve üzerinde
 // beyaz metin okunmuyor — orada koyu metne düşülüyor. Parlaklık eşiği 0.6.
+// Accent renginin düşük opaklıklı hâli — kutu yüzeyindeki renk tonu için.
+// Hex → rgba çevrimi elle yapılıyor: CSS'in renk karıştırma işlevi eski
+// WebView'larda (Capacitor) desteklenmiyor ve native'de tint hiç görünmezdi.
+function heroTint(hex: string, alfa: number): string {
+  const h = String(hex || "").replace("#", "");
+  if (h.length !== 6) return `rgba(255,255,255,${alfa})`;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  if ([r, g, b].some(v => isNaN(v))) return `rgba(255,255,255,${alfa})`;
+  return `rgba(${r},${g},${b},${alfa})`;
+}
+
 function heroCtaMetinRengi(hex: string): string {
   const h = String(hex || "").replace("#", "");
   if (h.length !== 6) return "#FFFFFF";
@@ -11966,9 +11979,15 @@ function AnaSayfaHeroSerit({ git, selamlama, bugunMetni, kullaniciAdi, genisEkra
   // Yüzey rengi kartlarla AYNI aileden — önceki sürümdeki mavi gradyan
   // uygulamanın geri kalanına yabancı duruyordu ("yapay" geri bildirimi).
   // Artık kart yüzeyi + sayfanın kendi renginden çok hafif bir ışıma.
+  // Sayfanın accent rengi artık YÜZEYDE de hissediliyor (2026-08-10).
+  // Önceden renk yalnızca etiket ve butondaydı; kutu her sayfada aynı nötr
+  // griydi ve hangi konuda olduğun ancak yazıyı okuyunca anlaşılıyordu.
+  // Sol üstten sağ alta doğru sönen çok düşük opaklıkta bir tint: konuyu
+  // sezdiriyor ama metin kontrastını bozmuyor.
+  const tint = heroTint(s.renk, acikTema ? 0.10 : 0.13);
   const yuzey = acikTema
-    ? `linear-gradient(150deg, #FFFFFF 0%, #F4F8FC 100%)`
-    : `linear-gradient(150deg, ${WA(0.055)} 0%, ${WA(0.025)} 100%)`;
+    ? `linear-gradient(150deg, ${tint} 0%, #FFFFFF 62%)`
+    : `linear-gradient(150deg, ${tint} 0%, ${WA(0.03)} 62%)`;
 
   return (
     <div style={{ marginBottom: 6 }}>
@@ -18231,7 +18250,7 @@ const PIYASA_TABLO_VERISI:any = {
   ],
   emtia: [
     {ad:"Altın (Ons)",   sembol:"GC=F", dec:2, paraOnek:"$"},
-    {ad:"Altın (Gram)",  sembol:"GRAM_ALTIN", dec:2, paraOnek:"₺"},
+    {ad:"Gram Altın",    sembol:"GRAM_ALTIN", dec:2, paraOnek:"₺"},
     {ad:"Gümüş (Ons)",   sembol:"SI=F", dec:3, paraOnek:"$"},
     {ad:"Gümüş (Gram)",  sembol:"GRAM_GUMUS", dec:2, paraOnek:"₺"},
     {ad:"Platin (Ons)",   sembol:"PL=F", dec:2, paraOnek:"$"},

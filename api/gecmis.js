@@ -52,6 +52,15 @@ const ALTINAPI_ESLEME = {
   // Truncgil'de ONS sembolü 0 dönüyor; ons altın/gümüş Yahoo'da kaldı.
   "GRAM_ALTIN": "ALTIN",
   "GRAM_GUMUS": "GUMUSTRY",
+  // KUR SEMBOLLERİ GERİ EKLENDİ (2026-08-10): AltinAPI döneminde kota
+  // baskısı yüzünden çıkarılmışlardı. Truncgil'de o kısıt yok ve veri zaten
+  // MERKEZİ önbellekten okunuyor — kur eklemek ek istek doğurmuyor. Ana
+  // sayfadaki Piyasa Özeti bu uçtan beslendiği için kurlar da artık serbest
+  // piyasa fiyatı gösteriyor (Yahoo'nun interbank kuru yerine).
+  "USDTRY=X": "USDTRY", "EURTRY=X": "EURTRY", "GBPTRY=X": "GBPTRY",
+  "CHFTRY=X": "CHFTRY", "SARTRY=X": "SARTRY", "JPYTRY=X": "JPYTRY",
+  "CADTRY=X": "CADTRY", "AUDTRY=X": "AUDTRY", "CNYTRY=X": "CNYTRY",
+  "RUBTRY=X": "RUBTRY", "AEDTRY=X": "AEDTRY",
 };
 
 // ─── MAKAS AKIL KONTROLÜ ───────────────────────────────────────────────────
@@ -98,7 +107,12 @@ async function altinApiHaritaGetir() {
     }
     if (!json) return null;
     const rates = json.Rates || json;
-    const ESL = { GRA: "ALTIN", GUMUS: "GUMUSTRY" };
+    const ESL = {
+      GRA: "ALTIN", GUMUS: "GUMUSTRY",
+      USD: "USDTRY", EUR: "EURTRY", GBP: "GBPTRY", CHF: "CHFTRY",
+      SAR: "SARTRY", JPY: "JPYTRY", CAD: "CADTRY", AUD: "AUDTRY",
+      CNY: "CNYTRY", RUB: "RUBTRY", AED: "AEDTRY",
+    };
     const harita = {};
     for (const [t, u] of Object.entries(ESL)) {
       const d = rates[t];
@@ -106,11 +120,15 @@ async function altinApiHaritaGetir() {
       const say = (v) => (typeof v === "string" ? Number(v.replace(/\./g, "").replace(",", ".")) : Number(v));
       const b = say(d.Buying ?? d["Alış"]), a = say(d.Selling ?? d["Satış"]), ch = say(d.Change ?? d["Değişim"]);
       if (!isFinite(a) || a <= 0) continue;
-      const bid = isFinite(b) && b > 0 ? b : a;
-      const orta = (bid + a) / 2;
+      // JPY ölçek: Truncgil 1 JPY için 0,003022 veriyor, gerçek ~0,3024 —
+      // tam 100 kat küçük. piyasa-fiyatlar.js ile aynı düzeltme.
+      const carpan = t === "JPY" ? 100 : 1;
+      const bid = (isFinite(b) && b > 0 ? b : a) * carpan;
+      const askD = a * carpan;
+      const orta = (bid + askD) / 2;
       harita[u] = {
         bid: Math.round(bid * 10000) / 10000,
-        ask: Math.round(a * 10000) / 10000,
+        ask: Math.round(askD * 10000) / 10000,
         close: isFinite(ch) ? Math.round(orta / (1 + ch / 100) * 10000) / 10000 : null,
       };
     }
@@ -442,7 +460,7 @@ export default async function handler(req, res) {
   // v1 → v2 (2026-08-04): Brent kaynak sırası değişti.
   // v2 → v3 (2026-08-08): Güncel fiyat + alış/satış AltinAPI'den geliyor;
   // eski önbellekteki Yahoo fiyatının TTL'i dolana kadar beklenmesin.
-  const kvAnahtar = `gecmis:v5:${sembol}`;
+  const kvAnahtar = `gecmis:v6:${sembol}`;
   const debugMi = debug === "1";
 
   try {
