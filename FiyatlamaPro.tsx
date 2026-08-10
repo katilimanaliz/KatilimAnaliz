@@ -22195,6 +22195,19 @@ function App(){
           box-shadow: 0 0 0 3px rgba(91,155,216,0.25);
           caret-color: #5B9BD8;
         }
+        /* ── BASILI TUTUNCA METİN SEÇİLMESİNİ ENGELLE (2026-08-10) ────────
+           Kartları sürüklerken iOS parmak basılı tutulduğu anda metin seçimi
+           ve büyüteci devreye sokuyordu; mavi seçim alanı sürüklemenin üstüne
+           biniyordu. Mevcut koruma yalnızca MouseEvent üzerinden ve ancak
+           sürükleme BAŞLADIKTAN sonra userSelect'i kapatıyordu — dokunmatikte
+           o ana yetişmiyor. Bu yüzden kart ve şeritlerde seçim kalıcı olarak
+           kapatıldı. Girdi alanları bu sınıfların dışında, etkilenmiyor. */
+        .press-card, .piyasa-scroll, .kp-side-item {
+          -webkit-user-select: none;
+          user-select: none;
+          -webkit-touch-callout: none;
+          -webkit-tap-highlight-color: transparent;
+        }
         .piyasa-scroll::-webkit-scrollbar { display:none; }
         .piyasa-scroll { scrollbar-width: none; -ms-overflow-style: none; }
         /* Masaüstü: yatay şeritlerde kaba beyaz scrollbar yerine ince/koyu görünüm */
