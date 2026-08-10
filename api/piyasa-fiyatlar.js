@@ -47,20 +47,162 @@ const redis = new Redis({
 // Tek istekte 260+ sembol dönüyor; altin/kur/altinapi tiplerinin hepsi bunu
 // kullanıyor. Her tip kendi Redis anahtarında önbelleklendiği için AltinAPI'ye
 // giden istek sayısı artmıyor.
-async function altinApiCek() {
-  const apiKey = process.env.ALTINAPI_KEY;
-  if (!apiKey) throw new Error("ALTINAPI_KEY tanimli degil");
-  const r = await fetch("https://altinapi.com/api/v1/prices", {
-    headers: { "X-API-Key": apiKey },
-  });
-  if (!r.ok) throw new Error("AltinAPI HTTP " + r.status);
-  const json = await r.json();
-  const items = (json && json.data) || [];
-  const harita = {};
-  for (const item of items) {
-    if (!item || !item.symbol) continue;
-    harita[item.symbol] = item;
+// ═══════════════════════════════════════════════════════════════════════════
+// MERKEZİ ALTINAPI ÖNBELLEĞİ (2026-08-10) — HTTP 429 DÜZELTMESİ
+// ═══════════════════════════════════════════════════════════════════════════
+// OLAN: altin, kur ve altinapi tiplerinin ÜÇÜ DE ayrı ayrı altinApiCek()
+// çağırıyordu. Her tipin kendi Redis anahtarı olduğu için aynı veri günde üç
+// kez, üstelik 300sn TTL ile çekiliyordu: ~864 istek/gün. Öncesinde tek tip
+// (altinapi) 3600sn TTL ile ~24 istek/gün yapıyordu. 36 katlık artış AltinAPI
+// kotasını doldurdu ve servis HTTP 429 (Too Many Requests) dönmeye başladı;
+// altın fiyatları uygulamada tamamen boş kaldı.
+//
+// ÇÖZÜM: AltinAPI'ye giden TEK bir paylaşımlı önbellek. Hangi tip isterse
+// istesin aynı anahtardan okunur, dolayısıyla dış servise giden istek sayısı
+// tipe göre çoğalmaz. TTL 900sn: günde ~96 istek. Fiziki altın için 15
+// dakikalık tazelik yeterli, kota ise rahat.
+const KV_ALTINAPI_HAM = "altinapi:ham:v2";
+
+// ── KOTA: ÜCRETSİZ PLAN AYDA 1000 İSTEK ───────────────────────────────────
+// Ölçüldü (2026-08-10): sabit TTL ile aylık istek sayısı
+//    300sn -> 8.640   (limitin 8,6 katı — kotayı bitiren ayar buydu)
+//    900sn -> 2.880   (hâlâ 2,9 kat aşım)
+//   3600sn ->   720   (eski ayar; limitin altındaydı, bu yüzden sorunsuz çalışıyordu)
+//
+// Sabit 1 saat kotayı korur ama Kapalı Çarşı açıkken fiyat bir saat bayat
+// kalır. Bunun yerine piyasa saatine göre ayrım: mesaide 20 dakika, dışında
+// 6 saat. Aylık ~666 istek — limitin %33 altında, üstelik işlem saatlerinde
+// veri eski ayardan üç kat taze.
+//
+// Kapalı Çarşı / serbest piyasa: hafta içi 09:00–18:00 (Türkiye saati).
+// Hafta sonu ve gece fiyat hareket etmediği için uzun TTL bir kayıp değil.
+// TTL: Truncgil anahtar istemiyor ve limitini ilan etmiyor. Sınırsız olduğu
+// anlamına gelmez — AltinAPI'de tam bu varsayımla kota patladı. Bu yüzden yine
+// piyasa saatine göre ayrım: Kapalı Çarşı açıkken (hafta içi 09:00–18:00)
+// 60 saniye, dışında 1 saat. Aylık ~12.100 istek.
+// Gece ve hafta sonu fiyat hareket etmediği için orada sık çekmenin faydası yok;
+// tüm gün 60sn olsaydı ayda 43.200 isteğe çıkardı.
+function altinApiTtl() {
+  try {
+    const tr = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Istanbul" }));
+    const gun = tr.getDay();            // 0 = Pazar, 6 = Cumartesi
+    const saat = tr.getHours();
+    const haftaIci = gun >= 1 && gun <= 5;
+    const mesai = saat >= 9 && saat < 18;
+    return (haftaIci && mesai) ? 60 : 3600;
+  } catch {
+    return 300; // saat dilimi okunamazsa güvenli tarafta kal
   }
+}
+
+async function altinApiPaylasimli() {
+  const { veri } = await kilitliGetir(redis, KV_ALTINAPI_HAM, altinApiTtl(), altinApiCek);
+  if (!veri) throw new Error("AltinAPI verisi alinamadi");
+  return veri;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// KAYNAK: TRUNCGIL (2026-08-10) — AltinAPI'nin yerine
+// ═══════════════════════════════════════════════════════════════════════════
+// AltinAPI ücretsiz planı ayda 1000 istekle sınırlı ve kota tükendi (HTTP 429),
+// altın fiyatları uygulamada tamamen boş kaldı. Truncgil anahtar istemiyor,
+// alış/satış ve günlük değişimi birlikte veriyor, döviz tarafı da serbest
+// piyasa (USD 47,71 — AltinAPI'nin verdiğiyle neredeyse birebir).
+//
+// ÇIKTI ŞEKLİ DEĞİŞMEDİ: Truncgil yanıtı AltinAPI'nin {SEMBOL:{bid,ask,close}}
+// yapısına çevriliyor. Böylece frontend'de tek satır değişiklik gerekmiyor.
+//
+// close ALANI: Truncgil "Change" (yüzde) veriyor, close vermiyor. Frontend ise
+// değişimi (orta - close)/close üzerinden hesaplıyor. Bu yüzden close, Change'
+// ten GERİ TÜRETİLİYOR: close = orta / (1 + Change/100). Doğrulandı — geri
+// hesap Truncgil'in yüzdesini birebir veriyor. Ayrıca AltinAPI'nin bozuk close
+// alanı yüzünden eklediğimiz "%10'u aşan değişimi gizle" filtresi de artık
+// gereksiz kalıyor (veri doğru).
+const TRUNCGIL_URL = "https://finance.truncgil.com/v4/today.json";
+
+// Truncgil sembolü → uygulamanın kullandığı (AltinAPI kökenli) sembol adı.
+const TRUNCGIL_ESLEME = {
+  GRA: "ALTIN", HAS: "KULCEALTIN", YIA: "AYAR22", "14AYARALTIN": "AYAR14",
+  CEYREKALTIN: "CEYREK_YENI", YARIMALTIN: "YARIM_YENI", TAMALTIN: "TEK_YENI",
+  ATAALTIN: "ATA_YENI", BESLIALTIN: "ATA5_YENI", GREMSEALTIN: "GREMESE_YENI",
+  GUMUS: "GUMUSTRY", GPL: "PLATIN", PAL: "PALADYUM",
+};
+
+// ── ESKİ SARRAFİYE FİYATI TÜRETME ─────────────────────────────────────────
+// Truncgil eski/yeni ayrımı yapmıyor, tek fiyat veriyor. Uygulamada bu ayrım
+// var. 8 Ağustos AltinAPI verisinden ürün bazlı oranlar çıkarıldı:
+//   Çeyrek 0,9908/0,9872 · Yarım 0,9876/0,9862 · Tam 0,9930/0,9857
+//   Ata 1,0000/0,9910 · Beşli 1,0000/0,9925 · Gremse 0,9889/0,9914
+// Ata ve Beşli'de ALIŞ oranı tam 1,0000 — sarraf bunları alırken eski/yeni
+// ayrımı yapmıyor, yalnızca satarken yapıyor. Oranların rastgele değil gerçek
+// piyasa davranışını yansıttığının işareti.
+//
+// ⚠️ Bu fiyatlar TÜRETİLMİŞ, kaynaktan gelen gerçek fiyat değil. Oranlar tek
+// günün verisinden çıktı; piyasa sertleştiğinde eski-yeni farkı açılabilir ve
+// bunu fark edemeyiz (karşılaştıracak gerçek veri yok). Oran bandı dar
+// (0,986–1,000) olduğu için sapma sınırlı kalıyor ama sıfır değil.
+const ESKI_ORAN = {
+  CEYREK_YENI:  { hedef: "CEYREK_ESKI",  bid: 0.99079, ask: 0.98716 },
+  YARIM_YENI:   { hedef: "YARIM_ESKI",   bid: 0.98763, ask: 0.98623 },
+  TEK_YENI:     { hedef: "TEK_ESKI",     bid: 0.99304, ask: 0.98572 },
+  ATA_YENI:     { hedef: "ATA_ESKI",     bid: 1.00000, ask: 0.99101 },
+  ATA5_YENI:    { hedef: "ATA5_ESKI",    bid: 1.00000, ask: 0.99252 },
+  GREMESE_YENI: { hedef: "GREMESE_ESKI", bid: 0.98886, ask: 0.99137 },
+};
+
+async function altinApiCek() {
+  const r = await fetch(TRUNCGIL_URL, { headers: { "User-Agent": "Mozilla/5.0" } });
+  if (!r.ok) throw new Error("Truncgil HTTP " + r.status);
+  const json = await r.json();
+  const rates = (json && json.Rates) || {};
+
+  const harita = {};
+  const ekle = (sembol, bid, ask, change) => {
+    const b = Number(bid), a = Number(ask);
+    if (!isFinite(a) || a <= 0) return;
+    // Yuvarlama: JPY 100 ile çarpılınca 0.30219999999999997 gibi kayan nokta
+    // artığı çıkıyor; 4 haneye yuvarlanıyor (kurlar için yeterli hassasiyet).
+    const yuv = (v) => Math.round(v * 10000) / 10000;
+    const gecerliBid = yuv(isFinite(b) && b > 0 ? b : a);
+    const askY = yuv(a);
+    const orta = (gecerliBid + askY) / 2;
+    const ch = Number(change);
+    const close = isFinite(ch) && (1 + ch / 100) !== 0 ? yuv(orta / (1 + ch / 100)) : null;
+    harita[sembol] = { symbol: sembol, bid: gecerliBid, ask: askY, close };
+  };
+
+  // 1) Kıymetli madenler
+  for (const [tSembol, uSembol] of Object.entries(TRUNCGIL_ESLEME)) {
+    const d = rates[tSembol];
+    if (d) ekle(uSembol, d.Buying, d.Selling, d.Change);
+  }
+
+  // 2) Eski sarrafiye — yeni fiyattan oranla türetiliyor
+  for (const [kaynak, k] of Object.entries(ESKI_ORAN)) {
+    const y = harita[kaynak];
+    if (!y) continue;
+    harita[k.hedef] = {
+      symbol: k.hedef,
+      bid: Math.round(y.bid * k.bid * 100) / 100,
+      ask: Math.round(y.ask * k.ask * 100) / 100,
+      close: y.close != null ? Math.round(y.close * k.ask * 100) / 100 : null,
+      turetilmis: true,   // arayüz isterse "tahmini" işareti koyabilir
+    };
+  }
+
+  // 3) Döviz — Truncgil "USD" gibi düz kodlar veriyor, uygulama "USDTRY"
+  //    bekliyor. JPY ÖLÇEK HATASI: Truncgil 1 JPY için 0,003022 veriyor, oysa
+  //    gerçek ~0,3024 (USD 47,71 ÷ USD/JPY 157,8). Tam 100 kat küçük —
+  //    doğrulandı. Bu yüzden JPY 100 ile çarpılıyor.
+  const DOVIZ = ["USD","EUR","GBP","CHF","CAD","AUD","SAR","AED","RUB","CNY","JPY",
+                 "DKK","SEK","NOK","KWD","ZAR","BHD","QAR","INR","PKR","AZN"];
+  for (const kod of DOVIZ) {
+    const d = rates[kod];
+    if (!d) continue;
+    const carpan = kod === "JPY" ? 100 : 1;
+    ekle(kod + "TRY", Number(d.Buying) * carpan, Number(d.Selling) * carpan, d.Change);
+  }
+
   return harita;
 }
 
@@ -115,9 +257,17 @@ async function gunlukReferansAlVeYaz(h) {
 }
 
 // Bir sembol için alış/satış/kapanış/değişim paketi
+// Bir sembol için alış/satış/kapanış/değişim paketi.
+// KAPANIŞ ÖNCELİĞİ (2026-08-10): Truncgil "Change" veriyor ve bundan geri
+// türetilen close, kaynağın kendi yüzdesini birebir veriyor. Bu yüzden önce
+// haritadaki close kullanılıyor; kendi tuttuğumuz günlük referans (ref) yalnız
+// yedek. AltinAPI döneminde close güvenilmez olduğu için tersi geçerliydi.
 function cift(h, sembol, ref) {
   const a = alis(h, sembol), s = satis(h, sembol);
-  const k = ref && ref[sembol] != null ? ref[sembol] : null;
+  const kaynakClose = h && h[sembol] ? Number(h[sembol].close) : NaN;
+  const k = isFinite(kaynakClose) && kaynakClose > 0
+    ? kaynakClose
+    : (ref && ref[sembol] != null ? ref[sembol] : null);
   return {
     alis: a,
     satis: s,
@@ -131,7 +281,7 @@ function cift(h, sembol, ref) {
 // XAG_TRY_gram). Tek fark: gram fiyatları artık ons × kur ile HESAPLANMIYOR,
 // doğrudan Kapalı Çarşı verisinden (ALTIN / GUMUSTRY) geliyor.
 async function altinTaze() {
-  const h = await altinApiCek();
+  const h = await altinApiPaylasimli();
   const ref = await gunlukReferansAlVeYaz(h);
 
   const XAU_USD = satis(h, "XAUUSD");
@@ -232,7 +382,7 @@ const ALTINAPI_GARANTI = [
 ];
 
 async function altinApiTaze() {
-  const harita = await altinApiCek();
+  const harita = await altinApiPaylasimli();
   const sonuc = {};
   for (const sembol of Object.keys(harita)) {
     const i = harita[sembol];
@@ -250,67 +400,64 @@ async function altinApiTaze() {
 //
 // RUB/CNY/AED: AltinAPI'de ana sembol boş dönüyor (USDRUB bid=ask=0), bu
 // yüzden DS_ önekli karşılıkları yedek olarak kullanılıyor.
+// ─── KUR (Kaynak: Truncgil — merkezi önbellekten; Bitcoin/ons Yahoo) ──────
+// Truncgil döviz de veriyor ve SERBEST PİYASA kuru (USD 47,71 — AltinAPI'nin
+// verdiğiyle neredeyse birebir; Frankfurter'ın ECB referans kuru ise gün içinde
+// hiç güncellenmiyordu). Üstelik altınla AYNI yanıtta geldiği için merkezi
+// önbellekten okunuyor: kur için ek bir dış istek yapılmıyor.
+//
+// Truncgil'de OLMAYANLAR eski kaynaklarında bırakıldı:
+//   • Ons altın/gümüş (ONS sembolü 0 dönüyor) → Yahoo GC=F / SI=F
+//   • Bitcoin → CoinGecko
 async function kurTaze() {
-  const [haritaRes, btcRes] = await Promise.allSettled([
-    altinApiCek(),
+  const [haritaRes, gcRes, siRes, btcRes] = await Promise.allSettled([
+    altinApiPaylasimli(),
+    fetch("https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1d&range=1d", {headers:{"User-Agent":"Mozilla/5.0"}}),
+    fetch("https://query1.finance.yahoo.com/v8/finance/chart/SI=F?interval=1d&range=1d", {headers:{"User-Agent":"Mozilla/5.0"}}),
     fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"),
   ]);
 
   if (haritaRes.status !== "fulfilled") {
-    throw new Error("AltinAPI alınamadı: " + (haritaRes.reason?.message || "bilinmeyen hata"));
+    throw new Error("Truncgil alınamadı: " + (haritaRes.reason?.message || "bilinmeyen hata"));
   }
   const h = haritaRes.value;
-  const ref = await gunlukReferansAlVeYaz(h);
 
-  const btcData = btcRes.status === "fulfilled" && btcRes.value.ok ? await btcRes.value.json() : null;
-  const BTC_USD = btcData?.bitcoin?.usd ?? null;
+  const gcData = gcRes.status==="fulfilled" && gcRes.value.ok ? await gcRes.value.json() : null;
+  const siData = siRes.status==="fulfilled" && siRes.value.ok ? await siRes.value.json() : null;
+  const btcData = btcRes.status==="fulfilled" && btcRes.value.ok ? await btcRes.value.json() : null;
 
-  const kurSatis = (ana, yedek) => satis(h, ana) ?? (yedek ? satis(h, yedek) : null);
-  const kurCift  = (ana, yedek) => (satis(h, ana) != null ? cift(h, ana, ref) : (yedek ? cift(h, yedek, ref) : cift(h, ana, ref)));
-
-  const USD_TRY = kurSatis("USDTRY");
+  const USD_TRY = satis(h, "USDTRY");
   if (USD_TRY == null) throw new Error("USDTRY alınamadı");
 
-  const JPY = kurSatis("JPYTRY");
+  const JPY = satis(h, "JPYTRY");   // kaynakta 100 ile çarpılmış hâliyle geliyor
 
   return {
     USD_TRY,
-    EUR_TRY: kurSatis("EURTRY"),
-    GBP_TRY: kurSatis("GBPTRY"),
-    CHF_TRY: kurSatis("CHFTRY"),
-    SAR_TRY: kurSatis("SARTRY"),
-    RUB_TRY: kurSatis("RUBTRY", "DS_RUBTRY"),
-    AED_TRY: kurSatis("AEDTRY", "DS_AEDTRY"),
-    CNY_TRY: kurSatis("CNYTRY", "DS_CNYTRY"),
+    EUR_TRY: satis(h, "EURTRY"),
+    GBP_TRY: satis(h, "GBPTRY"),
+    CHF_TRY: satis(h, "CHFTRY"),
+    SAR_TRY: satis(h, "SARTRY"),
+    RUB_TRY: satis(h, "RUBTRY"),
+    AED_TRY: satis(h, "AEDTRY"),
+    CNY_TRY: satis(h, "CNYTRY"),
     JPY_TRY: JPY,
     JPY100_TRY: JPY != null ? Math.round(JPY * 100 * 10000) / 10000 : null,
-    CAD_TRY: kurSatis("CADTRY"),
-    AUD_TRY: kurSatis("AUDTRY"),
-    EUR_USD: kurSatis("EURUSD"),
-    XAU_USD: satis(h, "XAUUSD"),
+    CAD_TRY: satis(h, "CADTRY"),
+    AUD_TRY: satis(h, "AUDTRY"),
+    EUR_USD: (() => { const e = satis(h, "EURTRY"); return e && USD_TRY ? Math.round(e / USD_TRY * 10000) / 10000 : null; })(),
+    XAU_USD: gcData?.chart?.result?.[0]?.meta?.regularMarketPrice ?? null,
     XAU_TRY_gram: satis(h, "ALTIN"),
     XAG_TRY_gram: satis(h, "GUMUSTRY"),
-    BTC_USD,
+    BTC_USD: btcData?.bitcoin?.usd ?? null,
     detay: {
-      USD_TRY: kurCift("USDTRY"),
-      EUR_TRY: kurCift("EURTRY"),
-      GBP_TRY: kurCift("GBPTRY"),
-      CHF_TRY: kurCift("CHFTRY"),
-      SAR_TRY: kurCift("SARTRY"),
-      RUB_TRY: kurCift("RUBTRY", "DS_RUBTRY"),
-      AED_TRY: kurCift("AEDTRY", "DS_AEDTRY"),
-      CNY_TRY: kurCift("CNYTRY", "DS_CNYTRY"),
-      JPY_TRY: kurCift("JPYTRY"),
-      CAD_TRY: kurCift("CADTRY"),
-      AUD_TRY: kurCift("AUDTRY"),
-      EUR_USD: kurCift("EURUSD"),
-      XAU_USD: cift(h, "XAUUSD", ref),
-      XAG_USD: cift(h, "XAGUSD", ref),
-      XAU_TRY_gram: cift(h, "ALTIN", ref),
-      XAG_TRY_gram: cift(h, "GUMUSTRY", ref),
+      USD_TRY: cift(h, "USDTRY", null), EUR_TRY: cift(h, "EURTRY", null),
+      GBP_TRY: cift(h, "GBPTRY", null), CHF_TRY: cift(h, "CHFTRY", null),
+      SAR_TRY: cift(h, "SARTRY", null), RUB_TRY: cift(h, "RUBTRY", null),
+      AED_TRY: cift(h, "AEDTRY", null), CNY_TRY: cift(h, "CNYTRY", null),
+      JPY_TRY: cift(h, "JPYTRY", null), CAD_TRY: cift(h, "CADTRY", null),
+      AUD_TRY: cift(h, "AUDTRY", null),
+      XAU_TRY_gram: cift(h, "ALTIN", null), XAG_TRY_gram: cift(h, "GUMUSTRY", null),
     },
-    // Arayüz, referans yokken (ilk gün) değişim alanlarını gizlemek için bakar
-    referansVar: ref != null,
     ts: new Date().toISOString(),
   };
 }
@@ -319,11 +466,16 @@ async function kurTaze() {
 // Anahtarlar v3'e yükseltildi (günlük değişim eklendi) — aksi halde eski
 // şekildeki önbellek dönmeye devam eder ve değişiklik görünmez.
 const YAPILANDIRMA = {
-  altin:    { anahtar: "altin:v3",    ttl: 300,  fn: altinTaze,    cacheControl: "s-maxage=300" },
+  // altin/altinapi TTL 900: ikisi de MERKEZİ altinapi:ham:v1 önbelleğinden
+  // besleniyor, dolayısıyla dış servise giden istek burada değil orada
+  // sınırlanıyor. Yine de bu iki anahtarın TTL'i merkezi TTL'den kısa olursa
+  // gereksiz yeniden hesaplama olur; eşit tutuldu.
+  altin:    { anahtar: "altin:v5",    ttl: 60,   fn: altinTaze,    cacheControl: "s-maxage=60" },
   kripto:   { anahtar: "kripto:v1",   ttl: 300,  fn: kriptoTaze,   cacheControl: "s-maxage=300" },
   petrol:   { anahtar: "petrol:v1",   ttl: 1800, fn: petrolTaze,   cacheControl: "s-maxage=1800" },
-  kur:      { anahtar: "kur:v3",      ttl: 300,  fn: kurTaze,      cacheControl: "s-maxage=300" },
-  altinapi: { anahtar: "altinapi:v5", ttl: 300,  fn: altinApiTaze, cacheControl: "s-maxage=300" },
+  // kur AltinAPI kullanmıyor (bkz. kurTaze notu) — eski 300sn TTL'ine döndü.
+  kur:      { anahtar: "kur:v4",      ttl: 300,  fn: kurTaze,      cacheControl: "s-maxage=300" },
+  altinapi: { anahtar: "altinapi:v7", ttl: 60,   fn: altinApiTaze, cacheControl: "s-maxage=60" },
 };
 
 export default async function handler(req, res) {

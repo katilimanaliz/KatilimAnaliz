@@ -44,37 +44,14 @@ const BAYATLIK_ESIGI_GUN = 5;
 // DS_ önekliler: AltinAPI'nin ana sembolü boş döndürdüğü pariteler
 // (örn. USDRUB bid=ask=0), farklı sağlayıcıdan gelen yedek seri.
 const ALTINAPI_ESLEME = {
-  "USDTRY=X": "USDTRY",
-  "EURTRY=X": "EURTRY",
-  "GBPTRY=X": "GBPTRY",
-  "CHFTRY=X": "CHFTRY",
-  "SARTRY=X": "SARTRY",
-  "JPYTRY=X": "JPYTRY",
-  "CADTRY=X": "CADTRY",
-  "AUDTRY=X": "AUDTRY",
-  "CNYTRY=X": "DS_CNYTRY",
-  "RUBTRY=X": "DS_RUBTRY",
-  "AEDTRY=X": "DS_AEDTRY",
+  // YALNIZCA KIYMETLİ MADEN (2026-08-10): Kur sembolleri bu tablodan
+  // ÇIKARILDI. Kur artık AltinAPI'den değil Yahoo/Frankfurter'dan geliyor —
+  // üç ayrı tipin aynı servisi çağırması kotayı doldurup HTTP 429'a yol
+  // açmıştı. Altın/gümüşün AltinAPI'de kalması kritik: Kapalı Çarşı fiyatının
+  // başka kaynağı yok, Yahoo yalnızca ons × kur ile TÜRETİLMİŞ değer verir.
+  // Truncgil'de ONS sembolü 0 dönüyor; ons altın/gümüş Yahoo'da kaldı.
   "GRAM_ALTIN": "ALTIN",
   "GRAM_GUMUS": "GUMUSTRY",
-  "GC=F": "XAUUSD",
-  "SI=F": "XAGUSD",
-  // Pariteler (TRY içermeyen)
-  "EURUSD=X": "EURUSD",
-  "GBPUSD=X": "GBPUSD",
-  "AUDUSD=X": "AUDUSD",
-  "JPY=X": "USDJPY",
-  "CHF=X": "USDCHF",
-  "SAR=X": "USDSAR",
-  "CNY=X": "DS_USDCNY",
-  "RUB=X": "USDRUB",
-  // Makası aşağıdaki kontrolden geçemeyenler burada dursa da elenecek;
-  // AltinAPI verisi düzelirse kod değişikliği olmadan devreye girsinler.
-  "ZARTRY=X": "DS_ZARTRY",
-  "SEKTRY=X": "SEKTRY",
-  "NOKTRY=X": "NOKTRY",
-  "DKKTRY=X": "DKKTRY",
-  "KWDTRY=X": "KWDTRY",
 };
 
 // ─── MAKAS AKIL KONTROLÜ ───────────────────────────────────────────────────
@@ -96,7 +73,7 @@ const MAKAS_ESIGI_DOVIZ = 5;
 const MAKAS_ESIGI_KIYMETLI = 12;
 const KIYMETLI_SEMBOLLER = new Set(["ALTIN","GUMUSTRY","XAUUSD","XAGUSD"]);
 
-const KV_ALTINAPI = "altinapi:v5"; // piyasa-fiyatlar.js ile AYNI anahtar
+const KV_ALTINAPI = "altinapi:ham:v2"; // piyasa-fiyatlar.js MERKEZİ önbelleği (Truncgil)
 
 async function altinApiHaritaGetir() {
   try {
@@ -104,20 +81,38 @@ async function altinApiHaritaGetir() {
     if (onbellek && typeof onbellek === "object") return onbellek;
   } catch { /* Redis erişilemezse aşağıda taze çekilir */ }
 
-  const apiKey = process.env.ALTINAPI_KEY;
-  if (!apiKey) return null;
+  // Merkezi önbellek boşsa Truncgil'den taze çek. (AltinAPI kotası dolduğu
+  // için 2026-08-10'da kaynak Truncgil'e taşındı; anahtar gerektirmiyor.)
   try {
-    const r = await fetch("https://altinapi.com/api/v1/prices", {
-      headers: { "X-API-Key": apiKey },
+    const r = await fetch("https://finance.truncgil.com/v4/today.json", {
+      headers: { "User-Agent": "Mozilla/5.0" },
     });
     if (!r.ok) return null;
     const json = await r.json();
-    const items = (json && json.data) || [];
+    const rates = (json && json.Rates) || {};
+    const ESL = { GRA: "ALTIN", GUMUS: "GUMUSTRY" };
     const harita = {};
-    for (const it of items) {
-      if (it && it.symbol) harita[it.symbol] = { bid: it.bid, ask: it.ask, close: it.close };
+    for (const [t, u] of Object.entries(ESL)) {
+      const d = rates[t];
+      if (!d) continue;
+      const b = Number(d.Buying), a = Number(d.Selling), ch = Number(d.Change);
+      if (!isFinite(a) || a <= 0) continue;
+      const bid = isFinite(b) && b > 0 ? b : a;
+      const orta = (bid + a) / 2;
+      harita[u] = {
+        bid: Math.round(bid * 10000) / 10000,
+        ask: Math.round(a * 10000) / 10000,
+        close: isFinite(ch) ? Math.round(orta / (1 + ch / 100) * 10000) / 10000 : null,
+      };
     }
-    try { await redis.set(KV_ALTINAPI, harita, { ex: 300 }); } catch {}
+    if (!Object.keys(harita).length) return null;
+    // TTL merkezi önbellekle aynı mantıkta: mesaide 60sn, dışında 1 saat.
+    const _tr = (() => { try {
+      const t = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Istanbul" }));
+      return { gun: t.getDay(), saat: t.getHours() };
+    } catch { return null; } })();
+    const _ttl = _tr && _tr.gun >= 1 && _tr.gun <= 5 && _tr.saat >= 9 && _tr.saat < 18 ? 60 : 3600;
+    try { await redis.set(KV_ALTINAPI, harita, { ex: _ttl }); } catch {}
     return harita;
   } catch { return null; }
 }
@@ -438,7 +433,7 @@ export default async function handler(req, res) {
   // v1 → v2 (2026-08-04): Brent kaynak sırası değişti.
   // v2 → v3 (2026-08-08): Güncel fiyat + alış/satış AltinAPI'den geliyor;
   // eski önbellekteki Yahoo fiyatının TTL'i dolana kadar beklenmesin.
-  const kvAnahtar = `gecmis:v3:${sembol}`;
+  const kvAnahtar = `gecmis:v5:${sembol}`;
   const debugMi = debug === "1";
 
   try {

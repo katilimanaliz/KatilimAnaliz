@@ -11878,7 +11878,7 @@ function zekatTarihYaz(gg: string): string {
 const ANASAYFA_HERO_SAYFALAR: { renk: string; eyebrow: string; baslik: string; sub: string; cta: string; hedef: string }[] = [
   { renk: "#5B9BD8", eyebrow: "",
     baslik: "Hoş geldin",
-    sub: "Katılım finansına dair her hesap, tek uygulamada. Bugün ne yapmak istersin?",
+    sub: "Bugün ne hesaplamak istersin?",
     cta: "", hedef: "" },
   { renk: "#D4A03C", eyebrow: "Fiziki Altın",
     baslik: "Kapalı Çarşı fiyatları",
@@ -11976,7 +11976,7 @@ function AnaSayfaHeroSerit({ git, selamlama, bugunMetni, kullaniciAdi, genisEkra
         onTouchStart={dokunmaBasla} onTouchMove={dokunmaHareket} onTouchEnd={dokunmaBitti}
         onClick={() => { if (!surukleniyor.current && s.hedef) git(s.hedef); }}
         style={{
-          position: "relative", borderRadius: genisEkran ? 22 : 20, overflow: "hidden", height: genisEkran ? 148 : 142,
+          position: "relative", borderRadius: genisEkran ? 22 : 20, overflow: "hidden", height: genisEkran ? 158 : 152,
           cursor: s.hedef ? "pointer" : "default",
           background: yuzey,
           border: `1px solid ${acikTema ? "#E2E9F0" : WA(0.09)}`,
@@ -11999,7 +11999,7 @@ function AnaSayfaHeroSerit({ git, selamlama, bugunMetni, kullaniciAdi, genisEkra
             <span style={{ width: 3, height: 11, borderRadius: 2, background: s.renk, flexShrink: 0 }} />
             <span style={{
               fontSize: genisEkran ? 10.5 : 10, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase",
-              color: karsilama ? (acikTema ? "#5A7488" : "#8FA8BC") : s.renk,
+              color: karsilama ? (acikTema ? "#46617A" : "#9DB4C6") : s.renk,
             }}>{karsilama ? `${selamlama} · ${bugunMetni}` : TR(s.eyebrow)}</span>
           </div>
 
@@ -12018,9 +12018,13 @@ function AnaSayfaHeroSerit({ git, selamlama, bugunMetni, kullaniciAdi, genisEkra
 
           {s.sub && (
             <div style={{
-              fontSize: genisEkran ? 12.5 : 11.5, lineHeight: 1.35, flexShrink: 0,
+              // Punto 11.5 -> 12.5 ve açık temada renk #5A7488 -> #46617A.
+              // Ölçüldü: #5A7488 beyaz kartta 4.52 kontrast veriyordu — WCAG AA
+              // eşiğini (4.5) kıl payı geçiyor ama küçük puntoyla birleşince
+              // okunmuyordu. #46617A ile kontrast 5.96'ya çıkıyor.
+              fontSize: genisEkran ? 13.5 : 12.5, lineHeight: 1.4, flexShrink: 0,
               marginBottom: 10,
-              color: acikTema ? "#5A7488" : WA(0.55),
+              color: acikTema ? "#46617A" : WA(0.62),
               overflow: "hidden", textOverflow: "ellipsis",
               display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
             } as any}>{CV(s.sub)}</div>
