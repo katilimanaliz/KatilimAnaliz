@@ -18048,20 +18048,20 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla}:{ad:string,sembol:stri
           <span style={{position:"absolute",top:7,right:8,fontSize:15,lineHeight:1,borderRadius:3,overflow:"hidden",boxShadow:"0 1px 2px rgba(0,0,0,0.25)"}}>{kucukIkon.deger}</span>
         ) : (
           <span style={{
-            position:"absolute",top:7,right:7,width:19,height:19,borderRadius:"50%",
+            position:"absolute",top:7,right:6,width:17,height:17,borderRadius:"50%",
             background:kucukIkon.bg,display:"flex",alignItems:"center",justifyContent:"center",
             boxShadow:"0 1px 3px rgba(0,0,0,0.25)",flexShrink:0,
           }}>
             {kucukIkon.tip==="ikon"
-              ? <kucukIkon.Comp size={11} color="#fff" strokeWidth={2.5}/>
-              : <span style={{fontSize:kucukIkon.deger.length>1?9:11,fontWeight:800,color:"#fff",lineHeight:1}}>{kucukIkon.deger}</span>}
+              ? <kucukIkon.Comp size={10} color="#fff" strokeWidth={2.5}/>
+              : <span style={{fontSize:kucukIkon.deger.length>1?8:10,fontWeight:800,color:"#fff",lineHeight:1}}>{kucukIkon.deger}</span>}
           </span>
         )
       )}
       {/* Etiket alanı sağdaki ikon için 28px daralıyor; "GRAM ALTIN" gibi uzun
           adlar kesiliyordu. Punto ada göre kademelendi — kısa kodlar (USD/TRY)
           eski boyutunda kalıyor, uzunlar sığacak kadar küçülüyor. */}
-      <p style={{margin:0,fontSize:ad.length>=10?8.5:ad.length>=8?9.2:10,fontWeight:700,color:WA(0.45),textTransform:"uppercase",letterSpacing:ad.length>=10?0:0.2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingRight:28}}>{TR(ad)}</p>
+      <p style={{margin:0,fontSize:ad.length>=12?7.8:ad.length>=10?8.3:ad.length>=8?9.2:10,fontWeight:700,color:WA(0.45),textTransform:"uppercase",letterSpacing:ad.length>=10?-0.1:0.2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingRight:24}}>{TR(ad)}</p>
       {guncel!=null ? (
         <>
           <p className="spark-in" style={{margin:"4px 0 2px",fontSize:15,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:4}}>
@@ -18252,14 +18252,14 @@ const PIYASA_TABLO_VERISI:any = {
     {ad:"USD/RUB", sembol:"RUB=X",    dec:2},
   ],
   emtia: [
-    {ad:"Altın (Ons)",   sembol:"GC=F", dec:2, paraOnek:"$"},
+    {ad:"Ons Altın",   sembol:"GC=F", dec:2, paraOnek:"$"},
     {ad:"Gram Altın",    sembol:"GRAM_ALTIN", dec:2, paraOnek:"₺"},
-    {ad:"Gümüş (Ons)",   sembol:"SI=F", dec:3, paraOnek:"$"},
+    {ad:"Ons Gümüş",   sembol:"SI=F", dec:3, paraOnek:"$"},
     {ad:"Gram Gümüş",    sembol:"GRAM_GUMUS", dec:2, paraOnek:"₺"},
-    {ad:"Platin (Ons)",   sembol:"PL=F", dec:2, paraOnek:"$"},
-    {ad:"Paladyum (Ons)", sembol:"PA=F", dec:2, paraOnek:"$"},
-    {ad:"Brent Petrol",  sembol:"BZ=F", dec:2, paraOnek:"$"},
-    {ad:"WTI Petrol",    sembol:"CL=F", dec:2, paraOnek:"$"},
+    {ad:"Platin",   sembol:"PL=F", dec:2, paraOnek:"$"},
+    {ad:"Paladyum", sembol:"PA=F", dec:2, paraOnek:"$"},
+    {ad:"Brent",  sembol:"BZ=F", dec:2, paraOnek:"$"},
+    {ad:"WTI",    sembol:"CL=F", dec:2, paraOnek:"$"},
     {ad:"Doğalgaz",      sembol:"NG=F", dec:3, paraOnek:"$"},
     {ad:"Bakır",         sembol:"HG=F", dec:3, paraOnek:"$"},
     {ad:"Buğday",        sembol:"ZW=F", dec:2, paraOnek:"¢"},
@@ -18280,8 +18280,8 @@ const PIYASA_TABLO_VERISI:any = {
   // sparkline'lı satır olarak gösterilir (PiyasaSatiri ile — diğer kataloglarla
   // aynı mekanizma, ayrı bir şey kurmaya gerek kalmadı).
   gostergeler: [
-    {ad:"VIX (Korku Endeksi)", sembol:"^VIX",     dec:2, paraOnek:""},
-    {ad:"DXY (Dolar Endeksi)", sembol:"DX-Y.NYB", dec:2, paraOnek:""},
+    {ad:"VIX", sembol:"^VIX",     dec:2, paraOnek:""},
+    {ad:"DXY", sembol:"DX-Y.NYB", dec:2, paraOnek:""},
   ],
   kripto: [
     {ad:"Bitcoin",   sembol:"BTC-USD",  dec:0, paraOnek:"$"},
