@@ -154,6 +154,49 @@ async function altinApiHaritaGetir() {
       };
     }
     if (!Object.keys(harita).length) return null;
+
+    // ── piyasa-fiyatlar.js İLE AYNI İKİ KURAL (2026-08-10) ────────────────
+    // Bu yedek yol merkezi önbellek boşken devreye giriyor. Aynı sembol için
+    // iki dosyanın FARKLI sayı üretmesi, kullanıcının aynı ekranda tablo ile
+    // grafiğin uyuşmadığını görmesi demek olurdu. Kurallar birebir kopya —
+    // asıl gerekçeler piyasa-fiyatlar.js'teki onsTuret ve MAKAS_TABANI
+    // notlarında yazılı, değiştirilecekse İKİSİ BİRDEN değişmeli.
+
+    // 1) Ons, gram fiyatından türetilir (Yahoo GC=F vadeli kontrat olduğu
+    //    için spot'tan %1,4 sapıyordu).
+    const GRAM_ONS = 31.1034768;
+    const onsTuret = (kaynak, hedefler) => {
+      const g = harita[kaynak], d = harita.USDTRY;
+      if (!g || !d || !(d.ask > 0) || !(g.ask > 0)) return;
+      const ons = Math.round((g.ask * GRAM_ONS / d.ask) * 100) / 100;
+      const onsClose = (g.close > 0 && d.close > 0)
+        ? Math.round((g.close * GRAM_ONS / d.close) * 100) / 100 : null;
+      for (const hedef of hedefler) {
+        harita[hedef] = { bid: ons, ask: ons, close: onsClose, turetilmis: true };
+      }
+    };
+    onsTuret("ALTIN", ["ONS", "XAUUSD"]);
+    onsTuret("GUMUSTRY", ["XAGUSD"]);
+
+    // 2) Alış, Harem'den ölçülen makas oranıyla hesaplanır (Truncgil'in
+    //    "Buying" alanı gram altında satışın kopyası: %0,013 vs Harem %1,00).
+    //    Oranlar piyasa-fiyatlar.js'teki HAREM_MAKAS tablosuyla BİREBİR aynı
+    //    olmalı. Bu yedek harita yalnız gram altın/gümüş ve ons ürettiği için
+    //    kısa liste yeterli. Değerler iki Harem ölçümünün ortalaması
+    //    (10 Ağustos 12:53 ve 17:15; oran kayması 0,057 puanın altında).
+    const HAREM_MAKAS = {
+      ALTIN:    0.989832,
+      ONS:      0.999908,
+      XAUUSD:   0.999908,
+      XAGUSD:   0.923237,
+      GUMUSTRY: 0.923616,
+    };
+    for (const [s, oran] of Object.entries(HAREM_MAKAS)) {
+      const k = harita[s];
+      if (!k || !(k.ask > 0)) continue;
+      k.bid = Math.round(k.ask * oran * 100) / 100;
+      k.makasKaynak = "harem-2026-08-10";
+    }
     // TTL merkezi önbellekle aynı mantıkta: mesaide 60sn, dışında 1 saat.
     const _tr = (() => { try {
       const t = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Istanbul" }));
