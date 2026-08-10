@@ -261,6 +261,17 @@ async function altinApiCek() {
     if (altin && isFinite(altin.fiyat) && altin.fiyat > 0) {
       harita.ONS = { symbol: "ONS", bid: altin.fiyat, ask: altin.fiyat,
         close: isFinite(altin.onceki) && altin.onceki > 0 ? altin.onceki : null };
+      // ⚠️ XAUUSD TAKMA ADI (2026-08-10) — ZORUNLU, SİLİNMEMELİ
+      // AltinAPI döneminde ons altın "XAUUSD" sembolüyle geliyordu ve kodun
+      // birkaç yeri hâlâ o adı arıyor:
+      //   • altinTaze() → satis(h,"XAUUSD"); bulamazsa THROW ediyor, yani
+      //     /api/piyasa-fiyatlar?tip=altin ucu tamamen çalışmaz hâle geliyor
+      //     (Göstergeler ekranındaki "Ons Altın/USD" satırı buradan besleniyor)
+      //   • TAKIP_SEMBOLLER ve gecmis.js'teki KIYMETLI_SEMBOLLER
+      // Truncgil bu sembolü hiç üretmiyor (ons Yahoo GC=F'ten geliyor, adı ONS).
+      // Çağrı yerlerini tek tek değiştirmek yerine burada takma ad veriliyor:
+      // tek nokta, geriye dönük uyumlu, ek dış istek yok.
+      harita.XAUUSD = { ...harita.ONS, symbol: "XAUUSD" };
     }
     if (gumus && isFinite(gumus.fiyat) && gumus.fiyat > 0) {
       harita.XAGUSD = { symbol: "XAGUSD", bid: gumus.fiyat, ask: gumus.fiyat,
@@ -341,10 +352,21 @@ function cift(h, sembol, ref) {
   };
 }
 
-// ─── ALTIN (Kaynak: AltinAPI) ──────────────────────────────────────────────
+// ─── ALTIN (Kaynak: Truncgil + ons için Yahoo) ─────────────────────────────
 // Alan adları BİREBİR korundu (XAU_USD, XAG_USD, USD_TRY, XAU_TRY_gram,
 // XAG_TRY_gram). Tek fark: gram fiyatları artık ons × kur ile HESAPLANMIYOR,
 // doğrudan Kapalı Çarşı verisinden (ALTIN / GUMUSTRY) geliyor.
+//
+// ── ZORUNLULUK HİYERARŞİSİ (2026-08-10) ──────────────────────────────────
+// Eskiden ons altın (XAU_USD) da ZORUNLU alandı; yoksa fonksiyon THROW edip
+// bütün ucu düşürüyordu. Bu iki ayrı soruna yol açtı:
+//   1) XAUUSD sembolü Truncgil geçişinde hiç üretilmez oldu → uç tamamen kırık
+//      (yukarıdaki takma adla çözüldü)
+//   2) Kırık olmasa bile: Yahoo GC=F'e erişilemediği bir anda, ELDE OLAN gram
+//      altın/gümüş/kur verileri de kullanıcıya hiç ulaşmıyordu
+// Bu yüzden zorunluluk daraltıldı: uygulamanın gerçekten muhtaç olduğu alanlar
+// gram altın ve USD/TRY. Ons altın gelmezse null döner, arayüz o satırı
+// göstermez — geri kalan fiyatlar akmaya devam eder.
 async function altinTaze() {
   const h = await altinApiPaylasimli();
   const ref = await gunlukReferansAlVeYaz(h);
@@ -355,10 +377,10 @@ async function altinTaze() {
   const XAU_TRY_gram = satis(h, "ALTIN");
   const XAG_TRY_gram = satis(h, "GUMUSTRY");
 
-  if (XAU_USD == null) throw new Error("XAUUSD (ons altın) alınamadı");
   if (XAU_TRY_gram == null) throw new Error("ALTIN (gram altın) alınamadı");
   if (USD_TRY == null) throw new Error("USDTRY alınamadı");
-  if (XAG_USD != null && XAG_USD >= XAU_USD) {
+  // Akıl kontrolü yalnızca İKİSİ DE varken anlamlı; ons altın yoksa atlanır.
+  if (XAU_USD != null && XAG_USD != null && XAG_USD >= XAU_USD) {
     throw new Error(`Gümüş/Altın oranı anormal (XAG=${XAG_USD}, XAU=${XAU_USD}) — kaynak veri şüpheli`);
   }
 
@@ -538,7 +560,11 @@ const YAPILANDIRMA = {
   altin:    { anahtar: "altin:v5",    ttl: 60,   fn: altinTaze,    cacheControl: "s-maxage=60" },
   kripto:   { anahtar: "kripto:v1",   ttl: 300,  fn: kriptoTaze,   cacheControl: "s-maxage=300" },
   petrol:   { anahtar: "petrol:v1",   ttl: 1800, fn: petrolTaze,   cacheControl: "s-maxage=1800" },
-  // kur AltinAPI kullanmıyor (bkz. kurTaze notu) — eski 300sn TTL'ine döndü.
+  // kur ARTIK merkezi önbelleği kullanıyor (Truncgil döviz de veriyor), yani
+  // buradaki TTL dış servise giden istek sayısını belirlemiyor — o iş
+  // altinApiTtl() içinde yapılıyor. 300sn yalnızca bu uca özel tazelik.
+  // (Eski yorum "kur AltinAPI kullanmıyor" diyordu; Truncgil geçişinden sonra
+  //  yanlış kaldı, düzeltildi.)
   kur:      { anahtar: "kur:v4",      ttl: 300,  fn: kurTaze,      cacheControl: "s-maxage=300" },
   altinapi: { anahtar: "altinapi:v7", ttl: 60,   fn: altinApiTaze, cacheControl: "s-maxage=60" },
 };

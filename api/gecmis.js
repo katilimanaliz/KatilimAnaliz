@@ -17,8 +17,8 @@
 //   • GÜNCEL FİYAT + ALIŞ/SATIŞ → AltinAPI (Harem Altın, serbest piyasa).
 //     Investing.com ile karşılaştırıldı, birebir tutuyor.
 //
-// ORTAK ÖNBELLEK: AltinAPI verisi piyasa-fiyatlar.js'in yazdığı
-// "altinapi:v5" Redis anahtarından okunuyor. Bu uç her sembol için ayrı
+// ORTAK ÖNBELLEK: Fiyat verisi piyasa-fiyatlar.js'in yazdığı MERKEZİ
+// "altinapi:ham:v2" Redis anahtarından okunuyor. Bu uç her sembol için ayrı
 // çağrıldığından (tabloda 10+ satır = 10+ istek), her seferinde AltinAPI'ye
 // gitmek kotayı hızla tüketirdi. Anahtar boşsa (henüz yazılmamışsa) bir kez
 // doldurulup paylaşılıyor.
@@ -84,13 +84,34 @@ const KIYMETLI_SEMBOLLER = new Set(["ALTIN","GUMUSTRY","XAUUSD","XAGUSD"]);
 
 const KV_ALTINAPI = "altinapi:ham:v2"; // piyasa-fiyatlar.js MERKEZİ önbelleği (Truncgil)
 
+// ⚠️ AYRI YEDEK ANAHTAR (2026-08-10) — MERKEZİ ANAHTARA YAZMA
+// Bu dosyanın aşağıdaki yedek yolu Truncgil'den YALNIZCA ihtiyaç duyduğu 13
+// sembolü (gram altın/gümüş + kurlar) çıkarıyor: ONS, AYAR22, çeyrek/yarım/
+// tam/ata, platin YOK. Önceden bu daraltılmış harita doğrudan KV_ALTINAPI'ye
+// yazılıyordu. Sonuç: gecmis.js önce çağrılırsa piyasa-fiyatlar.js aynı
+// anahtardan bu eksik haritayı okuyup Fiziki Altın tablosunu TTL boyunca
+// (mesai dışında 1 saate kadar) yarı boş gösteriyordu — üstelik hata
+// vermeden. Devir belgesindeki "sessiz veri bayatlaması" deseninin aynısı.
+//
+// Kural: merkezi anahtarı YALNIZCA onu tam dolduran dosya yazar. Buradaki
+// yedek kendi anahtarına yazar; okuma sırası önce merkezi, sonra yedek.
+const KV_ALTINAPI_YEDEK = "gecmis:altin:ham:v1";
+
 async function altinApiHaritaGetir() {
   try {
     const onbellek = await redis.get(KV_ALTINAPI);
     if (onbellek && typeof onbellek === "object") return onbellek;
-  } catch { /* Redis erişilemezse aşağıda taze çekilir */ }
+  } catch { /* Redis erişilemezse aşağıda yedeğe/taze çekime düşülür */ }
 
-  // Merkezi önbellek boşsa Truncgil'den taze çek. (AltinAPI kotası dolduğu
+  // Merkezi önbellek boşsa önce KENDİ yedeğimize bak — böylece her istekte
+  // Truncgil'e gitmiyoruz (bu uç sembol başına ayrı çağrılıyor: tabloda 10+
+  // satır = 10+ istek).
+  try {
+    const yedek = await redis.get(KV_ALTINAPI_YEDEK);
+    if (yedek && typeof yedek === "object") return yedek;
+  } catch { /* yedek de okunamazsa taze çekilir */ }
+
+  // İkisi de boşsa Truncgil'den taze çek. (AltinAPI kotası dolduğu
   // için 2026-08-10'da kaynak Truncgil'e taşındı; anahtar gerektirmiyor.)
   try {
     // İki adres sırayla denenir: v4 sunucudan 404 dönebiliyor (tarayıcıdan
@@ -139,7 +160,8 @@ async function altinApiHaritaGetir() {
       return { gun: t.getDay(), saat: t.getHours() };
     } catch { return null; } })();
     const _ttl = _tr && _tr.gun >= 1 && _tr.gun <= 5 && _tr.saat >= 9 && _tr.saat < 18 ? 60 : 3600;
-    try { await redis.set(KV_ALTINAPI, harita, { ex: _ttl }); } catch {}
+    // MERKEZİ anahtara DEĞİL, kendi yedeğimize yazıyoruz (yukarıdaki nota bak).
+    try { await redis.set(KV_ALTINAPI_YEDEK, harita, { ex: _ttl }); } catch {}
     return harita;
   } catch { return null; }
 }
