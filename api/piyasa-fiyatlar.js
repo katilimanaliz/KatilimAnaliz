@@ -242,42 +242,164 @@ async function altinApiCek() {
 
   if (!Object.keys(harita).length) throw new Error("Truncgil yaniti bos");
 
-  // 4) ONS ALTIN / ONS GÜMÜŞ — Truncgil'de "ONS" sembolü 0 dönüyor, ons
-  //    cinsinden gümüş hiç yok. Fiziki Altın ekranı bu ikisini istiyor, bu
-  //    yüzden Yahoo futures'tan (GC=F, SI=F) tamamlanıyor. Tek fiyat geldiği
-  //    için alış = satış; makas yok.
-  try {
-    const [gc, si] = await Promise.allSettled([
-      fetch("https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1d&range=1d", { headers: { "User-Agent": "Mozilla/5.0" } }),
-      fetch("https://query1.finance.yahoo.com/v8/finance/chart/SI=F?interval=1d&range=1d", { headers: { "User-Agent": "Mozilla/5.0" } }),
-    ]);
-    const oku = async (res) => {
-      if (res.status !== "fulfilled" || !res.value.ok) return null;
-      const j = await res.value.json();
-      const m = j?.chart?.result?.[0]?.meta;
-      return m ? { fiyat: Number(m.regularMarketPrice), onceki: Number(m.chartPreviousClose ?? m.previousClose) } : null;
-    };
-    const altin = await oku(gc), gumus = await oku(si);
-    if (altin && isFinite(altin.fiyat) && altin.fiyat > 0) {
-      harita.ONS = { symbol: "ONS", bid: altin.fiyat, ask: altin.fiyat,
-        close: isFinite(altin.onceki) && altin.onceki > 0 ? altin.onceki : null };
-      // ⚠️ XAUUSD TAKMA ADI (2026-08-10) — ZORUNLU, SİLİNMEMELİ
-      // AltinAPI döneminde ons altın "XAUUSD" sembolüyle geliyordu ve kodun
-      // birkaç yeri hâlâ o adı arıyor:
-      //   • altinTaze() → satis(h,"XAUUSD"); bulamazsa THROW ediyor, yani
-      //     /api/piyasa-fiyatlar?tip=altin ucu tamamen çalışmaz hâle geliyor
-      //     (Göstergeler ekranındaki "Ons Altın/USD" satırı buradan besleniyor)
-      //   • TAKIP_SEMBOLLER ve gecmis.js'teki KIYMETLI_SEMBOLLER
-      // Truncgil bu sembolü hiç üretmiyor (ons Yahoo GC=F'ten geliyor, adı ONS).
-      // Çağrı yerlerini tek tek değiştirmek yerine burada takma ad veriliyor:
-      // tek nokta, geriye dönük uyumlu, ek dış istek yok.
-      harita.XAUUSD = { ...harita.ONS, symbol: "XAUUSD" };
+  // ═════════════════════════════════════════════════════════════════════════
+  // 4) ONS ALTIN / ONS GÜMÜŞ — YAHOO FUTURES'TAN KENDİ GRAM FİYATIMIZA
+  //    (2026-08-10, Harem Altın ile karşılaştırma sonrası)
+  // ═════════════════════════════════════════════════════════════════════════
+  // ÖNCEKİ DAVRANIŞ: Truncgil'de "ONS" sembolü 0 döndüğü için ons altın Yahoo
+  // GC=F'ten, ons gümüş SI=F'ten alınıyordu.
+  //
+  // SORUN: GC=F bir VADELİ (futures) kontrattır, Harem'in verdiği SPOT
+  // kotasyon değildir. Vadeli fiyat spot'un üzerinde işlem görür. Ölçüldü
+  // (10 Ağustos 12:53):
+  //     Bizim (GC=F) 4.402,6   ·   Harem ONS 4.342,1   ·   fark %1,4
+  // Bu, 23 Temmuz'daki Brent BZ=F hatasının birebir aynısı: doğru görünen bir
+  // Yahoo sembolü, aslında farklı bir enstrüman.
+  //
+  // ÇÖZÜM: Ons'u kendi gram fiyatımızdan türetiyoruz. Elimizdeki veriden
+  // çıkıyor, ek dış istek YOK, üstelik uygulama içi tutarlılığı garanti
+  // ediyor (gram ile ons artık aynı sayıyı anlatıyor):
+  //     ons = gram × 31,1034768 ÷ USDTRY
+  // Doğrulama (aynı an): 6.664,70 × 31,1034768 ÷ 47,7189 = 4.344,0
+  // Harem 4.342,1 → fark %0,04. Yahoo'nun %1,4'lük sapmasının otuzda biri.
+  //
+  // ALIŞ = SATIŞ, bilerek: Harem'de ONS 4.341,7 / 4.342,1 — yani %0,01.
+  // Ons altında makasın olmaması VERİ EKSİKLİĞİ DEĞİL, piyasa gerçeğidir
+  // (ons bir kotasyon birimidir, fiziki teslim ürünü değil). Bu yüzden
+  // aşağıdaki makas tabanı filtresi ons sembollerini muaf tutuyor.
+  const GRAM_ONS = 31.1034768;
+  const onsTuret = (kaynakSembol, hedefler) => {
+    const g = harita[kaynakSembol], d = harita.USDTRY;
+    if (!g || !d) return;
+    const gAsk = Number(g.ask), dAsk = Number(d.ask);
+    if (!isFinite(gAsk) || gAsk <= 0 || !isFinite(dAsk) || dAsk <= 0) return;
+    const ons = Math.round((gAsk * GRAM_ONS / dAsk) * 100) / 100;
+    // Kapanış da aynı formülle türetilir ki yüzde değişim TL/ons karışımı
+    // olmasın: ons cinsinden değişim, kur etkisinden arındırılmış olmalı.
+    const gCl = Number(g.close), dCl = Number(d.close);
+    const onsClose = (isFinite(gCl) && gCl > 0 && isFinite(dCl) && dCl > 0)
+      ? Math.round((gCl * GRAM_ONS / dCl) * 100) / 100
+      : null;
+    for (const hedef of hedefler) {
+      harita[hedef] = { symbol: hedef, bid: ons, ask: ons, close: onsClose, turetilmis: true };
     }
-    if (gumus && isFinite(gumus.fiyat) && gumus.fiyat > 0) {
-      harita.XAGUSD = { symbol: "XAGUSD", bid: gumus.fiyat, ask: gumus.fiyat,
-        close: isFinite(gumus.onceki) && gumus.onceki > 0 ? gumus.onceki : null };
+  };
+
+  // ⚠️ XAUUSD TAKMA ADI — ZORUNLU, SİLİNMEMELİ
+  // AltinAPI döneminde ons altın "XAUUSD" sembolüyle geliyordu ve kodun birkaç
+  // yeri hâlâ o adı arıyor:
+  //   • altinTaze() → satis(h,"XAUUSD"); bulamazsa THROW ediyor, yani
+  //     /api/piyasa-fiyatlar?tip=altin ucu tamamen çalışmaz hâle geliyor
+  //     (Göstergeler ekranındaki "Ons Altın/USD" satırı buradan besleniyor)
+  //   • TAKIP_SEMBOLLER ve gecmis.js'teki KIYMETLI_SEMBOLLER
+  // Frontend ise Fiziki Altın tablosunda "ONS" adını kullanıyor. İki ad da
+  // aynı kayda işaret ediyor.
+  onsTuret("ALTIN", ["ONS", "XAUUSD"]);
+  onsTuret("GUMUSTRY", ["XAGUSD"]);
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // 5) 22 / 14 AYAR — TRUNCGIL'DEN DEĞİL, GRAM ALTINDAN TÜRETİLİR
+  // ═════════════════════════════════════════════════════════════════════════
+  // Truncgil'in "YIA" sembolü 22 ayar diye geliyor ama SATIŞ fiyatı Harem'den
+  // %2,75 sapıyor (bizde 6.063,19 · Harem 6.234,27) — muhtemelen farklı bir
+  // ürün, bilezik vs külçe 22 ayar. Yalnız alışı düzeltmek yetmiyor: yanlış
+  // tabana doğru oran uygulayınca hata katlanıyor (ölçüldü: %+0,35 → %-2,74).
+  //
+  // ÇÖZÜM: Ayarlı altını gram altına oranla türet. Harem'in kendi verisinde bu
+  // oran şaşırtıcı derecede kararlı — 22 ayar/gram altın SATIŞ oranı:
+  //     12:53 → 0,935144      17:15 → 0,935106      kayma 0,004 puan
+  // Karşılaştırma: makas oranlarının kendisi aynı sürede 0,057 puan kaydı.
+  // Yani ayar/gram ilişkisi makastan on kat daha kararlı.
+  //
+  // Doğrulama: 6.664,70 × 0,935125 = 6.232,2 · Harem 6.234,27 → sapma %0,03
+  // (Truncgil'in kendi rakamı %2,75 sapıyordu.)
+  const AYAR_GRAM_ORAN = {
+    AYAR22: 0.935125,   // 2 ölçümün ortalaması (12:53 + 17:15)
+    AYAR14: 0.723734,   // 14 ayar / gram altın satış oranı
+  };
+  for (const [sembol, oran] of Object.entries(AYAR_GRAM_ORAN)) {
+    const gram = harita.ALTIN;
+    if (!gram || !(Number(gram.ask) > 0)) continue;
+    const ask = Math.round(Number(gram.ask) * oran * 100) / 100;
+    const close = Number(gram.close) > 0
+      ? Math.round(Number(gram.close) * oran * 100) / 100 : null;
+    // bid aşağıdaki HAREM_MAKAS döngüsünde hesaplanıyor
+    harita[sembol] = { symbol: sembol, bid: null, ask, close, turetilmis: true };
+  }
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // 6) ALIŞ FİYATI — HAREM'DEN ÖLÇÜLEN MAKAS ORANLARI
+  // ═════════════════════════════════════════════════════════════════════════
+  // SORUN: Truncgil'in "Buying" alanı güvenilmez. İki ayrı biçimde bozuk:
+  //   • gram altın / gram gümüş → alış fiilen satışın kopyası
+  //       gram altın: bizde %0,013 makas   ·   Harem'de %1,00
+  //     Fiziki altında %0,01 makas diye bir şey yoktur; sarraf o fiyattan geri
+  //     almaz. Bu sayıyı "Alış" diye göstermek, kullanıcıya bozdurduğunda
+  //     alacağından ~%1 fazlasını vaat etmek olur.
+  //   • sarrafiyede ise TERS yönde — alış fazla düşük
+  //       çeyrek: bizde 10.625 · Harem 10.747  (satış neredeyse birebir)
+  //
+  // ÇÖZÜM: Alış artık Truncgil'den okunmuyor; SATIŞ × Harem'in ölçülen makas
+  // oranı. ESKI_ORAN'daki desenin aynısı (o da Harem'e karşı doğrulandı).
+  //
+  // ── ORANLARIN KARARLILIĞI ÖLÇÜLDÜ ────────────────────────────────────────
+  // İki ayrı an karşılaştırıldı (10 Ağustos 12:53 ve 17:15; arada altın %0,54
+  // düştü). 13 ortak sembolde EN BÜYÜK KAYMA 0,057 PUAN. Yani makaslar gün
+  // içinde neredeyse hiç oynamıyor; sabit katsayı güvenli.
+  // Aşağıdaki değerlerin sağındaki sayı, kaç ölçümün ortalaması olduğudur.
+  //
+  // ⚠️ Yine de piyasa rejimi değişince (sert oynaklık, tatil, kur şoku)
+  // makaslar açılır. AYLIK gözden geçirilmeli; ESKI_ORAN için de aynı kural.
+  const HAREM_MAKAS = {
+    // sembol           alış/satış   ölçüm
+    KULCEALTIN:   0.996796,   // 2  HAS ALTIN
+    ALTIN:        0.989832,   // 2  GRAM ALTIN
+    AYAR22:       0.967762,   // 2
+    AYAR14:       0.750590,   // 1  makas %24,9 — işçilik + alaşım payı
+    ONS:          0.999908,   // 2  iki ölçümde de BİREBİR aynı
+    XAUUSD:       0.999908,   // 2  (ONS takma adı)
+    XAGUSD:       0.923237,   // 2  ALTIN GÜMÜŞ (ons)
+    GUMUSTRY:     0.923616,   // 1  GÜMÜŞ TL (gram)
+    CEYREK_YENI:  0.987799,   // 2
+    CEYREK_ESKI:  0.990141,   // 2
+    YARIM_YENI:   0.988957,   // 1
+    YARIM_ESKI:   0.992566,   // 1
+    TEK_YENI:     0.992336,   // 1
+    TEK_ESKI:     0.994233,   // 2
+    ATA_YENI:     0.985880,   // 2
+    ATA_ESKI:     0.993330,   // 2
+    ATA5_YENI:    0.984635,   // 2
+    ATA5_ESKI:    0.992059,   // 2
+    GREMESE_YENI: 0.992036,   // 2
+    GREMESE_ESKI: 0.989232,   // 1
+  };
+  for (const [sembol, oran] of Object.entries(HAREM_MAKAS)) {
+    const k = harita[sembol];
+    if (!k) continue;
+    const a = Number(k.ask);
+    if (!isFinite(a) || a <= 0) continue;
+    k.bid = Math.round(a * oran * 100) / 100;
+    k.makasKaynak = "harem-2026-08-10";
+  }
+
+  // ── ORAN TABLOSUNDA OLMAYANLAR İÇİN GÜVENLİK AĞI ────────────────────────
+  // PLATIN ve PALADYUM Harem'in Altın sekmesinde yok, ölçüm yapılamadı. Sahte
+  // bir makas (satışın kopyası) göstermektense hiç göstermemek yeğdir:
+  // %0,15'in altında makas çıkarsa alış null döner, arayüz "—" gösterir
+  // (v94'te hisse/fon için eklenen davranış). Döviz KAPSAM DIŞI: kur makasları
+  // zaten bu eşiğin altında kalır ve Döviz sekmesi tamamen boşalırdı.
+  const MAKAS_TABANI_YUZDE = 0.15;
+  const TABAN_KAPSAMI = new Set(["PLATIN", "PALADYUM"]);
+  for (const sembol of TABAN_KAPSAMI) {
+    const k = harita[sembol];
+    if (!k) continue;
+    const b = Number(k.bid), a = Number(k.ask);
+    if (!isFinite(b) || !isFinite(a) || a <= 0) continue;
+    if (((a - b) / a) * 100 < MAKAS_TABANI_YUZDE) {
+      k.bid = null;
+      k.alisGuvenilmez = true;   // teşhis için; arayüz okumak zorunda değil
     }
-  } catch { /* ons verisi gelmezse diğer semboller yine döner */ }
+  }
 
   return harita;
 }
@@ -352,17 +474,20 @@ function cift(h, sembol, ref) {
   };
 }
 
-// ─── ALTIN (Kaynak: Truncgil + ons için Yahoo) ─────────────────────────────
+// ─── ALTIN (Kaynak: tamamen Truncgil; ons gram fiyatından türetilir) ──────
 // Alan adları BİREBİR korundu (XAU_USD, XAG_USD, USD_TRY, XAU_TRY_gram,
-// XAG_TRY_gram). Tek fark: gram fiyatları artık ons × kur ile HESAPLANMIYOR,
-// doğrudan Kapalı Çarşı verisinden (ALTIN / GUMUSTRY) geliyor.
+// XAG_TRY_gram). İki fark var:
+//   • Gram fiyatları ons × kur ile HESAPLANMIYOR, doğrudan Kapalı Çarşı
+//     verisinden (ALTIN / GUMUSTRY) geliyor.
+//   • Ons fiyatları ise TERSİ yönde, gram fiyatından türetiliyor — Yahoo'nun
+//     vadeli kontratı spot'tan %1,4 sapıyordu (bkz. onsTuret notu).
 //
 // ── ZORUNLULUK HİYERARŞİSİ (2026-08-10) ──────────────────────────────────
 // Eskiden ons altın (XAU_USD) da ZORUNLU alandı; yoksa fonksiyon THROW edip
 // bütün ucu düşürüyordu. Bu iki ayrı soruna yol açtı:
 //   1) XAUUSD sembolü Truncgil geçişinde hiç üretilmez oldu → uç tamamen kırık
 //      (yukarıdaki takma adla çözüldü)
-//   2) Kırık olmasa bile: Yahoo GC=F'e erişilemediği bir anda, ELDE OLAN gram
+//   2) Kırık olmasa bile: dış bir kaynağa erişilemediği anda ELDE OLAN gram
 //      altın/gümüş/kur verileri de kullanıcıya hiç ulaşmıyordu
 // Bu yüzden zorunluluk daraltıldı: uygulamanın gerçekten muhtaç olduğu alanlar
 // gram altın ve USD/TRY. Ons altın gelmezse null döner, arayüz o satırı
@@ -487,20 +612,20 @@ async function altinApiTaze() {
 //
 // RUB/CNY/AED: AltinAPI'de ana sembol boş dönüyor (USDRUB bid=ask=0), bu
 // yüzden DS_ önekli karşılıkları yedek olarak kullanılıyor.
-// ─── KUR (Kaynak: Truncgil — merkezi önbellekten; Bitcoin/ons Yahoo) ──────
+// ─── KUR (Kaynak: Truncgil — merkezi önbellekten; yalnız Bitcoin CoinGecko) ─
 // Truncgil döviz de veriyor ve SERBEST PİYASA kuru (USD 47,71 — AltinAPI'nin
 // verdiğiyle neredeyse birebir; Frankfurter'ın ECB referans kuru ise gün içinde
 // hiç güncellenmiyordu). Üstelik altınla AYNI yanıtta geldiği için merkezi
 // önbellekten okunuyor: kur için ek bir dış istek yapılmıyor.
 //
-// Truncgil'de OLMAYANLAR eski kaynaklarında bırakıldı:
-//   • Ons altın/gümüş (ONS sembolü 0 dönüyor) → Yahoo GC=F / SI=F
-//   • Bitcoin → CoinGecko
+// Truncgil'de OLMAYAN tek kalem Bitcoin → CoinGecko.
+// ONS ALTIN ARTIK YAHOO'DAN GELMİYOR (2026-08-10): GC=F vadeli kontrat olduğu
+// için spot'tan %1,4 sapıyordu; ons artık gram fiyatından türetiliyor
+// (bkz. altinApiCek içindeki onsTuret notu). Bu iki Yahoo isteği tamamen
+// kaldırıldı — hem daha doğru hem iki dış çağrı daha az.
 async function kurTaze() {
-  const [haritaRes, gcRes, siRes, btcRes] = await Promise.allSettled([
+  const [haritaRes, btcRes] = await Promise.allSettled([
     altinApiPaylasimli(),
-    fetch("https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=1d&range=1d", {headers:{"User-Agent":"Mozilla/5.0"}}),
-    fetch("https://query1.finance.yahoo.com/v8/finance/chart/SI=F?interval=1d&range=1d", {headers:{"User-Agent":"Mozilla/5.0"}}),
     fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"),
   ]);
 
@@ -509,8 +634,6 @@ async function kurTaze() {
   }
   const h = haritaRes.value;
 
-  const gcData = gcRes.status==="fulfilled" && gcRes.value.ok ? await gcRes.value.json() : null;
-  const siData = siRes.status==="fulfilled" && siRes.value.ok ? await siRes.value.json() : null;
   const btcData = btcRes.status==="fulfilled" && btcRes.value.ok ? await btcRes.value.json() : null;
 
   const USD_TRY = satis(h, "USDTRY");
@@ -532,7 +655,7 @@ async function kurTaze() {
     CAD_TRY: satis(h, "CADTRY"),
     AUD_TRY: satis(h, "AUDTRY"),
     EUR_USD: (() => { const e = satis(h, "EURTRY"); return e && USD_TRY ? Math.round(e / USD_TRY * 10000) / 10000 : null; })(),
-    XAU_USD: gcData?.chart?.result?.[0]?.meta?.regularMarketPrice ?? null,
+    XAU_USD: satis(h, "ONS"),
     XAU_TRY_gram: satis(h, "ALTIN"),
     XAG_TRY_gram: satis(h, "GUMUSTRY"),
     BTC_USD: btcData?.bitcoin?.usd ?? null,
