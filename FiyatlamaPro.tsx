@@ -13388,65 +13388,692 @@ function ZekatHesabi() {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// KFK NEDİR — VERİ MODELİ (2026-08-11)
+// ═══════════════════════════════════════════════════════════════════════════
+// Tamamı katilimkefalet.com.tr, KOSGEB ve TKBB'den doğrulandı. Site ürün
+// listesi bu ekranın önceki sürümünden bu yana büyük güncellendi: 4 pakete
+// karşı şu an 9 aktif ürün sayfası var, ikisi (Hazine Yatırım, kadın
+// girişimci içeren Mikro Girişim ve Tarım paketi) daha önce yanlışlıkla
+// "kaldırıldı" diye işaretlenmişti — o karar eksik bilgiye dayanıyordu.
+//
+// KFK_REFERANS_TARIHI: içerik derleme tarihi. Paket durumları ("N gün kaldı" /
+// "Süresi doldu") bu tarihe göre HESAPLANIR, elle statik metin yazılmaz.
+// Devir sırasında bu sabiti güncelle.
+const KFK_REFERANS_TARIHI = new Date("2026-08-11T00:00:00");
+
+type KfkPaket = {
+  id:string; kategori:string; kategoriRenk:"blue"|"green"|"purple";
+  ad:string; amac:string;
+  kefaletOrani:string; kefaletUstLimiti:string;
+  vade:string; vadeAlt?:string;
+  komisyon:string; basvuruUcreti:string;
+  finansmanTuru:string; hedefHacim?:string; bankalar:string;
+  sonBasvuru:string|null; ozelKosul?:string;
+  alan:string[]; kobiSart:"kobi"|"ikisi"; limitAlt:number; limitUst:number;
+  dogrulanamadi?:boolean; kaynakUrl:string;
+};
+
+const KFK_PAKETLER: KfkPaket[] = [
+  {
+    id:"hazine-isletme", kategori:"Hazine", kategoriRenk:"blue",
+    ad:"Hazine İşletme Giderleri Destek Paketi",
+    amac:"KOBİ ve KOBİ dışı işletmelerin işletme harcamalarına yönelik kefalet verilmesi amaçlanır.",
+    kefaletOrani:"%85",
+    kefaletUstLimiti:"KOBİ: 20.000.000 ₺\nKOBİ Dışı: 40.000.000 ₺",
+    vade:"24 ay", vadeAlt:"6 ay ödemesiz dönem dahil",
+    komisyon:"%0,5", basvuruUcreti:"Yok",
+    finansmanTuru:"İşletme Giderleri Finansmanı (TL)",
+    bankalar:"Albaraka Türk, Kuveyt Türk, Vakıf Katılım, Ziraat Katılım, Emlak Katılım, Türkiye Finans",
+    sonBasvuru:"2026-12-31",
+    alan:["genel"], kobiSart:"ikisi", limitAlt:0, limitUst:40000000,
+    kaynakUrl:"https://katilimkefalet.com.tr/urunlerimiz/urunleer/hazine-destekli-paketler/hazine-isletme-giderleri-destek-paketi",
+  },
+  {
+    id:"hazine-yatirim", kategori:"Hazine", kategoriRenk:"blue",
+    ad:"Hazine Yatırım Destek Paketi",
+    amac:"KOBİ ve KOBİ dışı işletmelerin yatırım harcamalarına yönelik kefalet verilmesi amaçlanır.",
+    kefaletOrani:"YTB'li: %85\nYTB'siz: %80",
+    kefaletUstLimiti:"YTB'li — KOBİ: 45.000.000 ₺, KOBİ Dışı: 90.000.000 ₺\nYTB'siz — KOBİ: 30.000.000 ₺, KOBİ Dışı: 60.000.000 ₺",
+    vade:"60 ay", vadeAlt:"6 ay ödemesiz dönem dahil",
+    komisyon:"%0,5", basvuruUcreti:"Yok",
+    finansmanTuru:"Yatırım Harcamaları (TL)",
+    bankalar:"Albaraka Türk, Kuveyt Türk, Vakıf Katılım, Ziraat Katılım, Emlak Katılım, Türkiye Finans",
+    sonBasvuru:"2026-12-31",
+    ozelKosul:"Kefalet oranı ve limiti, Yatırım Teşvik Belgesi (YTB) olup olmamasına göre değişir. YTB'li başvurularda hem oran hem limit daha yüksektir.",
+    alan:["yatirim"], kobiSart:"ikisi", limitAlt:0, limitUst:90000000,
+    kaynakUrl:"https://katilimkefalet.com.tr/urunlerimiz/urunleer/hazine-destekli-kefaletler",
+  },
+  {
+    id:"hazine-ihracat", kategori:"Hazine", kategoriRenk:"blue",
+    ad:"Hazine İhracat Destek Paketi",
+    amac:"İhracatçı veya döviz kazandırıcı hizmetler sektörlerinde faaliyet gösteren KOBİ ve KOBİ dışı firmalara kefalet verilmesi amaçlanır.",
+    kefaletOrani:"Resmi kaynaktan doğrulanmalı",
+    kefaletUstLimiti:"Resmi kaynaktan doğrulanmalı",
+    vade:"Resmi kaynaktan doğrulanmalı",
+    komisyon:"Resmi kaynaktan doğrulanmalı",
+    basvuruUcreti:"Resmi kaynaktan doğrulanmalı",
+    finansmanTuru:"İhracat Finansmanı",
+    bankalar:"Resmi kaynaktan doğrulanmalı",
+    sonBasvuru:null,
+    ozelKosul:"KFK'nın ürün sayfası bu paket için ayrıntılı koşul tablosu yayımlamıyor; yalnızca amaç metni var. Kesin oran, limit ve vade için 444 53 30'dan veya bankanızdan teyit alın.",
+    alan:["ihracat"], kobiSart:"ikisi", limitAlt:0, limitUst:999000000,
+    dogrulanamadi:true,
+    kaynakUrl:"https://katilimkefalet.com.tr/urunlerimiz/urunleer/hazine-destekli-paketler/hazine-destekli-kefaletler",
+  },
+  {
+    id:"ozkaynak-idf", kategori:"Özkaynak", kategoriRenk:"green",
+    ad:"KFK Özkaynak İDF Kefalet Destek Paketi",
+    amac:"Türk Eximbank'ın katılım bankalarına sağladığı reeskont imkânları kapsamında ihracat finansmanına kefalet verir.",
+    kefaletOrani:"%80",
+    kefaletUstLimiti:"KOBİ: 25.000.000 ₺\nKOBİ Dışı: 50.000.000 ₺\nRisk grubu: 100.000.000 ₺",
+    vade:"12 ay", vadeAlt:"azami, ödemesiz dönem dahil",
+    komisyon:"%1,5", basvuruUcreti:"10.000 ₺",
+    finansmanTuru:"İhracat Finansmanı (TL)", hedefHacim:"5 milyar ₺",
+    bankalar:"Katılım bankaları (Eximbank reeskontuna erişimi olan)",
+    sonBasvuru:"2026-12-31",
+    alan:["ihracat"], kobiSart:"ikisi", limitAlt:0, limitUst:50000000,
+    kaynakUrl:"https://katilimkefalet.com.tr/urunlerimiz/urunler/ozkaynak-kefaletleri/katilim-finans-kefalet-ozkaynak-idf-kefalet-destek-paketi",
+  },
+  {
+    id:"ozkaynak-mikro", kategori:"Özkaynak", kategoriRenk:"green",
+    ad:"KFK Özkaynak Mikro Girişim ve Tarım Destek Paketi",
+    amac:"Mikro ölçekli işletmeler, esnaf/sanatkârlar, kadınların oluşturduğu kooperatifler, çiftçiler ve kadın girişimcilerin finansmana erişimini sağlar.",
+    kefaletOrani:"%80",
+    kefaletUstLimiti:"400.000 ₺\nRisk grubu: 400.000 ₺",
+    vade:"18 ay", vadeAlt:"6 ay ödemesiz dönem dahil",
+    komisyon:"0–12 ay: %1\n12 ay üzeri: %1,5",
+    basvuruUcreti:"1.000 ₺",
+    finansmanTuru:"İşletme Giderleri Finansmanı (TL)", hedefHacim:"880 milyon ₺",
+    bankalar:"Yalnızca Kuveyt Türk ve Ziraat Katılım",
+    sonBasvuru:"2026-12-31",
+    ozelKosul:"Yararlanıcı tipi dar tutulmuştur: kadın girişimci, esnaf/mikro işletme, tarım faaliyeti yapan çiftçiler. Yalnızca iki bankada geçerlidir.",
+    alan:["tarim","mikro"], kobiSart:"kobi", limitAlt:0, limitUst:400000,
+    kaynakUrl:"https://katilimkefalet.com.tr/kfk-ozkaynak-mikro-girisim-ve-tarim-destek-paketi",
+  },
+  {
+    id:"ozkaynak-isletme", kategori:"Özkaynak", kategoriRenk:"green",
+    ad:"KFK Özkaynak İşletme Giderleri Destek Paketi",
+    amac:"KOBİ ve KOBİ dışı firmaların işletme giderlerini (üretim, hammadde vb.) karşılayarak rekabet güçlerini artırmayı hedefler.",
+    kefaletOrani:"%80",
+    kefaletUstLimiti:"KOBİ: 20.000.000 ₺\nKOBİ Dışı: 30.000.000 ₺\nRisk grubu: 40.000.000 ₺",
+    vade:"18 ay", vadeAlt:"3 ay ödemesiz dönem dahil",
+    komisyon:"%1,5",
+    basvuruUcreti:"5M ₺'ye kadar 12.500 ₺\n5–10M ₺ arası 20.000 ₺\n10M ₺ üzeri 25.000 ₺",
+    finansmanTuru:"İşletme Giderleri Finansmanı (TL)", hedefHacim:"10 milyar ₺",
+    bankalar:"Albaraka Türk, Kuveyt Türk, Vakıf Katılım, Ziraat Katılım, Emlak Katılım, Türkiye Finans",
+    sonBasvuru:"2026-06-30",
+    alan:["genel"], kobiSart:"ikisi", limitAlt:0, limitUst:30000000,
+    kaynakUrl:"https://katilimkefalet.com.tr/ozkaynak-kefaletlerii",
+  },
+  {
+    id:"ozkaynak-savunma", kategori:"Özkaynak", kategoriRenk:"green",
+    ad:"KFK Özkaynak Savunma Sanayi Destek Paketi",
+    amac:"Savunma sanayii sektöründe faaliyet gösteren firmaların işletme harcamalarına kefalet ve ödemesiz dönem imkânı sağlar.",
+    kefaletOrani:"%80",
+    kefaletUstLimiti:"10.000.000 ₺\nRisk grubu: 10.000.000 ₺",
+    vade:"24 ay", vadeAlt:"6 ay ödemesiz dönem dahil",
+    komisyon:"%0,75",
+    basvuruUcreti:"3M ₺'ye kadar 5.000 ₺\n3M ₺ üzeri 10.000 ₺",
+    finansmanTuru:"İşletme Giderleri Finansmanı (TL)", hedefHacim:"1 milyar ₺",
+    bankalar:"Yalnızca Ziraat Katılım ve Emlak Katılım",
+    sonBasvuru:"2026-06-30",
+    ozelKosul:"Yararlanıcı: TSK Vakfı şirketleri, Savunma Sanayii Başkanlığı ortağı şirketler, sektöre alt yüklenicilik yapan KOBİ/KOBİ dışı firmalar.",
+    alan:["diger"], kobiSart:"ikisi", limitAlt:0, limitUst:10000000,
+    kaynakUrl:"https://katilimkefalet.com.tr/urunlerimiz/urunler/ozkaynak-kefaletleri/kfk-özkaynak-savunma-sanayi-destek-paketi",
+  },
+  {
+    id:"hazine-turizm", kategori:"Hazine", kategoriRenk:"blue",
+    ad:"Hazine Turizm Destek Paketi",
+    amac:"Turizm İşletme Belgeli işletmelerin işletme harcamalarına yönelik kefalet verilmesi amaçlanır.",
+    kefaletOrani:"KOBİ: %85\nKOBİ Dışı: %80",
+    kefaletUstLimiti:"KOBİ: 15.000.000 ₺\nKOBİ Dışı: 25.000.000 ₺",
+    vade:"12 ay", vadeAlt:"6 ay ödemesiz dönem dahil",
+    komisyon:"%0,5", basvuruUcreti:"Yok",
+    finansmanTuru:"İşletme Giderleri Finansmanı (TL, USD, EUR)", hedefHacim:"10 milyar ₺",
+    bankalar:"Kuveyt Türk, Vakıf Katılım, Ziraat Katılım",
+    sonBasvuru:"2026-07-31",
+    alan:["diger"], kobiSart:"ikisi", limitAlt:0, limitUst:25000000,
+    kaynakUrl:"https://katilimkefalet.com.tr/urunlerimiz/urunleer/hazine-destekli-paketler/kfk-hazine-turizm-destek-paketi",
+  },
+  {
+    id:"kosgeb", kategori:"KOSGEB", kategoriRenk:"purple",
+    ad:"KOSGEB İstihdam Koruma Destek Paketi",
+    amac:"İmalat sanayinde (NACE Kısım C) istihdamın korunmasına yönelik kredilere kefalet desteği verir.",
+    kefaletOrani:"%90",
+    kefaletUstLimiti:"45.000.000 ₺ (yalnızca KOBİ)",
+    vade:"36 ay", vadeAlt:"6 ay ödemesiz dönem dahil",
+    komisyon:"%1,5",
+    basvuruUcreti:"1M ₺'ye kadar 3.000 ₺\n1–5M ₺ arası 5.000 ₺\n5M ₺ üzeri 10.000 ₺",
+    finansmanTuru:"İşletme Giderleri Finansmanı (TL)", hedefHacim:"10 milyar ₺",
+    bankalar:"Albaraka Türk, Kuveyt Türk, Vakıf Katılım, Ziraat Katılım, Emlak Katılım, Türkiye Finans",
+    sonBasvuru:"2026-06-30",
+    ozelKosul:"İki destekten yalnızca biri seçilebilir (performans veya finansman). İstihdam şartı: 2025 Kasım–Aralık ortalama prim gün sayısı 2026 boyunca korunmalı. Kefalet KFK, KGF veya İGE'den alınabilir.",
+    alan:["diger"], kobiSart:"kobi", limitAlt:0, limitUst:45000000,
+    kaynakUrl:"https://katilimkefalet.com.tr/urunlerimiz/urunlerr/kosgeb-destekli-kefaletler/kosgeb-istihdam-koruma-destek-paketi",
+  },
+];
+
+const KFK_GECMIS_PAKETLER = [
+  {ad:"KFK Özkaynak İhracat Destek Paketi", kaynakUrl:"https://katilimkefalet.com.tr/ozkaynak-kefaletleri"},
+  {ad:"KFK Özkaynak Kefalet Destek Paketi", kaynakUrl:"https://katilimkefalet.com.tr/gecmis-paketler/gecmis-paketler/kfk-ozkaynak-kefalet-destek-paketi"},
+  {ad:"KFK Özkaynak Sürdürülebilir Büyüme Paketi", kaynakUrl:"https://katilimkefalet.com.tr/kfk-ozkaynak-surdurulebilir-buyume-paketi"},
+  {ad:"KFK Özkaynak Finansal Kiralama Destek Paketi", kaynakUrl:"https://katilimkefalet.com.tr/kfk-ozkaynak-finansal-kiralama-destek-paketii"},
+];
+
+const KFK_ORTAKLIK = [
+  {ad:"Albaraka Türk", pay:15.0}, {ad:"Kuveyt Türk", pay:15.0},
+  {ad:"Türkiye Finans", pay:15.0}, {ad:"Vakıf Katılım", pay:15.0},
+  {ad:"Ziraat Katılım", pay:15.0}, {ad:"Emlak Katılım", pay:15.0},
+  {ad:"Hazine ve Maliye Bakanlığı", pay:4.0, turuncu:true},
+  {ad:"Hayat Finans", pay:3.0}, {ad:"TOM Katılım", pay:3.0},
+];
+
+const KFK_SSS: {s:string; c:string}[] = [
+  {s:"KFK'ya doğrudan başvurabilir miyim?",
+   c:"Hayır. KFK bireysel başvuru almaz. Önce çalıştığın katılım bankasına finansman başvurusu yaparsın. Banka finansmanı uygun görür ve teminat açığı varsa kefalet talebini KFK'ya kendisi iletir."},
+  {s:"KFK kefaleti nasıl alınır?",
+   c:"Kefalet, bankanın başvurusu üzerine KFK tarafından değerlendirilip verilir. Kullanıcı kefaleti doğrudan satın alamaz; sürecin tamamı banka üzerinden yürür."},
+  {s:"Kefalet komisyonu ile banka maliyeti aynı mı?",
+   c:"Hayır, iki ayrı maliyettir. Kefalet komisyonunu KFK alır ve kefalet tutarı üzerinden hesaplanır. Banka kendi komisyonunu ayrıca belirler ve genelde anapara üzerinden alır. Toplam maliyeti hesaplarken ikisini birlikte değerlendir."},
+  {s:"Kefalet oranı %85 ise kalan risk kime ait?",
+   c:"Kalan kısmın riskini banka üstlenir. KFK ile banka arasında risk paylaşımı esası vardır; bu yüzden banka kendi değerlendirmesini yapmadan kefalet talebi iletmez."},
+  {s:"Vergi veya SGK borcum varsa başvurabilir miyim?",
+   c:"Hayır. Başvuru sırasında borç bulunmaması aranır. Bu şart yalnızca işletme için değil, dahil olunan risk grubu ile ortakların ayrı ayrı veya birlikte ortak olduğu şirketler için de geçerlidir."},
+  {s:"Başvurum reddedilirse tekrar başvurabilir miyim?",
+   c:"Evet, ancak en az bir mali dönem geçmesi gerekir."},
+  {s:"Onaylanan limit parça parça kullanılabilir mi?",
+   c:"Evet, dilimler halinde kullanım mümkündür. Dilim kararı bankanın takdirindedir ve tüm dilimlerin kefaletten yararlanma süresi içinde kullanılması gerekir."},
+  {s:"KFK ile KGF arasındaki fark nedir?",
+   c:"KGF hem faizli hem faizsiz finansmanlara kefalet verir ve mevduat bankalarını da kapsar. KFK yalnızca katılım finans esaslarına uygun finansmanlara kefalet verir ve sadece katılım bankalarıyla çalışır."},
+  {s:"Hangi katılım bankaları KFK ile çalışıyor?",
+   c:"Pakete göre değişir. Çoğu paket altı büyük katılım bankasını (Albaraka Türk, Kuveyt Türk, Vakıf Katılım, Ziraat Katılım, Emlak Katılım, Türkiye Finans) kapsar; bazı paketler (Mikro Girişim ve Tarım, Savunma Sanayi) yalnızca iki bankayla sınırlıdır."},
+  {s:"KFK kefaleti borcu ortadan kaldırır mı?",
+   c:"Hayır. KFK müteselsil kefildir, borcu üstlenen taraf değildir. Ödeme yapılmazsa KFK bankaya ödeme yapabilir; bu durumda borç sona ermez, alacaklı taraf değişir. Ayrıntılar sözleşmene göre değişir."},
+];
+
+function kfkGunFarki(iso: string|null): number|null {
+  if (!iso) return null;
+  const hedef = new Date(iso + "T23:59:59");
+  return Math.round((hedef.getTime() - KFK_REFERANS_TARIHI.getTime()) / 86400000);
+}
+function kfkPaketDurumu(p: KfkPaket): {sinif:"aktif"|"yakin"|"doldu"; etiket:string; aktif:boolean|null} {
+  if (!p.sonBasvuru) return {sinif:"yakin", etiket:"Tarih doğrulanmalı", aktif:null};
+  const gun = kfkGunFarki(p.sonBasvuru)!;
+  if (gun < 0) return {sinif:"doldu", etiket:"Süresi doldu", aktif:false};
+  if (gun <= 30) return {sinif:"yakin", etiket:gun+" gün kaldı", aktif:true};
+  return {sinif:"aktif", etiket:gun+" gün kaldı", aktif:true};
+}
+function kfkTarihUzun(iso: string|null): string {
+  if (!iso) return "belirtilmemiş";
+  const d = new Date(iso+"T00:00:00");
+  return d.toLocaleDateString("tr-TR",{day:"2-digit",month:"long",year:"numeric"});
+}
+const KFK_TUTAR_ARALIK: Record<string,[number,number]> = {
+  "0-400bin":[0,400000], "400bin-5m":[400000,5000000],
+  "5m-20m":[5000000,20000000], "20m-50m":[20000000,50000000],
+  "50m+":[50000000,Infinity],
+};
+const KFK_RENK: Record<string,[string,string]> = {
+  blue:[C.blueLight,C.blue], green:[C.greenLight,C.green], purple:[C.purpleLight,C.purple],
+};
+
+// ─── Alt render bileşenleri — component GÖVDESİ DIŞINDA tanımlı ───────────
+function KfkChevron({acik}:{acik:boolean}){
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"
+    strokeLinecap="round" strokeLinejoin="round"
+    style={{color:C.sub2,flexShrink:0,marginTop:2,transition:"transform .18s",transform:acik?"rotate(90deg)":"none"}}>
+    <path d="M9 6l6 6-6 6"/>
+  </svg>;
+}
+function KfkRozet({metin,bg,fg}:{metin:string; bg:string; fg:string}){
+  return <span style={{fontSize:9,fontWeight:800,padding:"2.5px 6px",borderRadius:4,letterSpacing:0.3,whiteSpace:"nowrap",background:bg,color:fg}}>{metin}</span>;
+}
+function KfkPaketSatir({k,v,duz}:{k:string; v:React.ReactNode; duz?:boolean}){
+  return <tr>
+    <td style={{padding:"7px 0",fontSize:11.5,color:C.sub2,width:"44%",paddingRight:10,verticalAlign:"top",borderBottom:`1px solid ${WA(0.055)}`}}>{k}</td>
+    <td style={{padding:"7px 0",fontSize:11.5,fontWeight:duz?600:700,fontFamily:duz?"inherit":"ui-monospace,monospace",color:C.soft,textAlign:"right",verticalAlign:"top",borderBottom:`1px solid ${WA(0.055)}`,lineHeight:duz?1.5:undefined}}>{v}</td>
+  </tr>;
+}
+function KfkCokSatirli({metin}:{metin:string}){
+  return <>{metin.split("\n").map((satir,i)=>(<span key={i}>{i>0 && <br/>}{satir}</span>))}</>;
+}
+function KfkPaketKart({p, acik, onToggle}:{p:KfkPaket; acik:boolean; onToggle:()=>void}){
+  const durum = kfkPaketDurumu(p);
+  const [kbg,kfg] = KFK_RENK[p.kategoriRenk];
+  const durumRenk = durum.sinif==="aktif" ? [C.greenLight,C.green] : durum.sinif==="doldu" ? ["rgba(248,113,113,0.15)",C.red] : [C.orangeLight,C.orange];
+  return (
+    <div style={{background:WA(0.05),border:`1px solid ${WA(0.08)}`,borderRadius:14,marginBottom:10,overflow:"hidden",opacity:durum.aktif===false?0.68:1}}>
+      <div onClick={onToggle} style={{padding:"13px 14px",cursor:"pointer",display:"flex",alignItems:"flex-start",gap:10,minHeight:44}}>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:5,flexWrap:"wrap"}}>
+            <KfkRozet metin={TR(p.kategori)} bg={kbg} fg={kfg}/>
+            <KfkRozet metin={durum.etiket} bg={durumRenk[0]} fg={durumRenk[1]}/>
+          </div>
+          <h3 style={{margin:0,fontSize:13,fontWeight:800,color:TEMA==="acik"?C.label:"#fff",lineHeight:1.35}}>{CV(p.ad)}</h3>
+          <div style={{marginTop:6,fontSize:10.5,color:C.sub2,fontFamily:"ui-monospace,monospace"}}>
+            <b style={{color:C.teal,fontWeight:800,fontSize:11.5}}>{p.kefaletOrani.split("\n")[0]}</b> {CV("kefalet")}
+          </div>
+        </div>
+        <KfkChevron acik={acik}/>
+      </div>
+      {acik && (
+        <div style={{borderTop:`1px solid ${WA(0.07)}`,padding:"12px 14px 14px"}}>
+          <p style={{margin:"0 0 11px",fontSize:11.5,color:C.sub,lineHeight:1.6}}>{CV(p.amac)}</p>
+          {!p.dogrulanamadi && (
+            <table style={{width:"100%",borderCollapse:"collapse"}}><tbody>
+              <KfkPaketSatir k={TR("Kefalet oranı")} v={<span style={{color:C.green}}><KfkCokSatirli metin={p.kefaletOrani}/></span>}/>
+              <KfkPaketSatir k={TR("Kefalet üst limiti")} v={<KfkCokSatirli metin={p.kefaletUstLimiti}/>}/>
+              <KfkPaketSatir k={TR("Vade")} v={<>{p.vade}{p.vadeAlt && <span style={{fontSize:10,color:C.sub2,fontFamily:"inherit",fontWeight:600,display:"block",marginTop:2}}>{p.vadeAlt}</span>}</>}/>
+              <KfkPaketSatir k={TR("Kefalet komisyonu")} v={<span style={{color:C.green}}><KfkCokSatirli metin={p.komisyon}/></span>}/>
+              <KfkPaketSatir k={TR("Başvuru ücreti")} v={<KfkCokSatirli metin={p.basvuruUcreti}/>} duz={p.basvuruUcreti.indexOf("\n")>-1}/>
+              <KfkPaketSatir k={TR("Finansman türü")} v={p.finansmanTuru} duz/>
+              {p.hedefHacim && <KfkPaketSatir k={TR("Hedeflenen hacim")} v={p.hedefHacim}/>}
+              <KfkPaketSatir k={TR("İlgili katılım bankaları")} v={p.bankalar} duz/>
+              <KfkPaketSatir k={TR("Son başvuru")} v={kfkTarihUzun(p.sonBasvuru)}/>
+            </tbody></table>
+          )}
+          {p.ozelKosul && (
+            <div style={{margin:"10px 0 0",padding:"9px 11px",background:"rgba(224,165,61,0.09)",border:"1px solid rgba(224,165,61,0.22)",borderRadius:9,fontSize:11,color:C.soft,lineHeight:1.55}}>
+              {CV(p.ozelKosul)}
+            </div>
+          )}
+          <a href={p.kaynakUrl} target="_blank" rel="noopener noreferrer"
+             style={{display:"inline-flex",alignItems:"center",gap:4,marginTop:11,fontSize:10.5,color:C.blue,textDecoration:"none",fontWeight:700}}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/>
+            </svg>
+            {TR("Resmi kaynak")}
+          </a>
+        </div>
+      )}
+    </div>
+  );
+}
+function KfkSssOge({q, acik, onToggle}:{q:{s:string;c:string}; acik:boolean; onToggle:()=>void}){
+  return (
+    <div style={{borderBottom:`1px solid ${WA(0.06)}`}}>
+      <div onClick={onToggle} style={{display:"flex",alignItems:"flex-start",gap:9,padding:"13px 14px",cursor:"pointer",minHeight:44}}>
+        <b style={{flex:1,fontSize:12.5,fontWeight:700,color:C.soft,lineHeight:1.45}}>{CV(q.s)}</b>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={acik?C.teal:C.sub2} strokeWidth="2.5" strokeLinecap="round"
+          style={{flexShrink:0,marginTop:2,transition:"transform .2s",transform:acik?"rotate(45deg)":"none"}}>
+          <path d="M12 5v14M5 12h14"/>
+        </svg>
+      </div>
+      {acik && <p style={{margin:0,padding:"0 14px 14px 37px",fontSize:11.5,color:C.sub,lineHeight:1.62}}>{CV(q.c)}</p>}
+    </div>
+  );
+}
+
 function KfkNedir(){
-  const kimlerYararlanir=["Gerçek ve tüzel KOBİ'ler","Esnaf ve sanatkârlar","Tarım işletmeleri","Kadın ve genç girişimciler","KOBİ dışı firmalar"];
-  const paketler=[
-    {ad:"Özkaynak İşletme Giderleri Destek Paketi", aciklama:"İşletmelerin günlük faaliyetlerini sürdürebilmesi için gerekli nakit akışını desteklemeye yönelik finansman paketi."},
-    {ad:"Hazine İhracat Destek Paketi", aciklama:"İhracat yapan ya da döviz kazandırıcı hizmet sunan işletmelerin ihracat hacmini artırmasına yönelik destek paketi."},
-    {ad:"Hazine Yatırım Destek Paketi", aciklama:"Üretim kapasitesini artırmak ya da modernize etmek isteyen, Yatırım Teşvik Belgesi sahibi işletmelerin makine/ekipman yatırımlarına yönelik destek."},
-    {ad:"Hazine İşletme Giderleri Destek Paketi", aciklama:"Katılım bankacılığı ilke ve esaslarına uygun olmak koşuluyla, işletme harcamalarının karşılanmasına yönelik kefalet desteği."},
-  ];
-  const avantajlar=[
-    "Teminat yetersizliği nedeniyle finansmana erişemeyen KOBİ ve KOBİ dışı işletmelere kefalet desteği sağlar.",
-    "TL veya döviz cinsinden nakdi/gayrinakdi finansmanlara, katılım finans prensiplerine uygun şekilde kefalet verir.",
-    "Destek; işletme sermayesi ihtiyaçları, yatırım projeleri ve ihracat gibi farklı alanlarda kullanılabilir.",
-    "Başvuru ve değerlendirme süreci nispeten hızlı işler.",
-  ];
+  const [acikPaketler,setAcikPaketler]=useState<Set<string>>(new Set(["hazine-isletme"]));
+  const [acikSss,setAcikSss]=useState<Set<number>>(new Set([0]));
+  const [fikhiAcik,setFikhiAcik]=useState(false);
+  const [gecmisAcik,setGecmisAcik]=useState(false);
+
+  const [bulAlan,setBulAlan]=useState<string|null>(null);
+  const [bulTutar,setBulTutar]=useState<string|null>(null);
+  const [bulKobi,setBulKobi]=useState<string|null>(null);
+  const [bulGosterildi,setBulGosterildi]=useState(false);
+
+  const paketToggle=(id:string)=>{
+    setAcikPaketler(onceki=>{
+      const yeni=new Set(onceki);
+      if(yeni.has(id)) yeni.delete(id); else yeni.add(id);
+      return yeni;
+    });
+  };
+  const sssToggle=(i:number)=>{
+    setAcikSss(onceki=>{
+      const yeni=new Set(onceki);
+      if(yeni.has(i)) yeni.delete(i); else yeni.add(i);
+      return yeni;
+    });
+  };
+
+  const siralanmisPaketler=useMemo(()=>{
+    return [...KFK_PAKETLER].sort((a,b)=>{
+      const da=kfkPaketDurumu(a).aktif, db=kfkPaketDurumu(b).aktif;
+      if(da===db) return 0;
+      if(da===false) return 1;
+      if(db===false) return -1;
+      return 0;
+    });
+  },[]);
+
+  const aktifPaketSayisi=useMemo(()=>KFK_PAKETLER.filter(p=>kfkPaketDurumu(p).aktif!==false).length,[]);
+
+  const bulTamam = !!bulAlan && !!bulTutar && !!bulKobi;
+  const bulSonuclar=useMemo(()=>{
+    if(!bulGosterildi || !bulAlan || !bulTutar || !bulKobi) return [];
+    const [tAlt,tUst]=KFK_TUTAR_ARALIK[bulTutar];
+    return KFK_PAKETLER.filter(p=>{
+      if(kfkPaketDurumu(p).aktif===false) return false;
+      if(p.dogrulanamadi) return false;
+      if(bulAlan==="diger"){ if(!p.alan.includes("diger")) return false; }
+      else if(!p.alan.includes(bulAlan)) return false;
+      const kesisiyor = p.limitAlt<=tUst && p.limitUst>=tAlt;
+      if(!kesisiyor) return false;
+      if(bulKobi==="hayir" && p.kobiSart==="kobi") return false;
+      return true;
+    });
+  },[bulGosterildi,bulAlan,bulTutar,bulKobi]);
+
+  const bulNeden=(p:KfkPaket)=>{
+    const nedenler:string[]=[];
+    const araliktutar = bulTutar ? KFK_TUTAR_ARALIK[bulTutar] : null;
+    if(araliktutar){
+      const tUst=araliktutar[1];
+      if(p.limitUst>=tUst || (tUst===Infinity && p.limitUst>0)) nedenler.push("Belirttiğiniz tutar bu paket kapsamına giriyor.");
+    }
+    if(p.alan.includes("yatirim")) nedenler.push("Yatırım finansmanı için uygun.");
+    if(p.alan.includes("ihracat")) nedenler.push("İhracat/döviz kazandırıcı faaliyet için uygun.");
+    if(p.alan.includes("tarim")||p.alan.includes("mikro")) nedenler.push("Tarım/mikro işletme kapsamında değerlendirilebilir.");
+    if(p.alan.includes("genel")) nedenler.push("Genel işletme giderleri için uygun.");
+    if(p.kobiSart==="kobi") nedenler.push("Yalnızca KOBİ'lere açık bir pakettir.");
+    return nedenler.length ? nedenler.join(" ") : "Girdiğiniz kriterlerle genel olarak örtüşüyor.";
+  };
+
+  const eyebrow:React.CSSProperties = {margin:"0 0 8px",fontSize:11,fontWeight:800,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5};
+  const secenekStil=(secili:boolean):React.CSSProperties=>({
+    padding:"8px 12px",borderRadius:9,border:`1px solid ${secili?C.blue:WA(0.14)}`,
+    background:secili?C.blue:WA(0.04),fontSize:11,color:secili?"#fff":C.sub,fontWeight:secili?700:400,
+    cursor:"pointer",minHeight:36,display:"flex",alignItems:"center",transition:"all .15s",
+  });
 
   return (
     <div style={{background:C.bg,padding:"12px 14px 92px",minHeight:"100%"}}>
-      <div style={{background:"rgba(44,203,154,0.08)",border:"1px solid rgba(44,203,154,0.25)",borderRadius:14,padding:"14px 15px",marginBottom:18}}>
-        <p style={{margin:0,fontSize:13,color:C.soft,lineHeight:1.65}}>
-          Katılım Finans Kefalet A.Ş. (KFK), 29 Mart 2023'te Hazine ve Maliye Bakanlığı, Türkiye Katılım Bankaları Birliği (TKBB) ve katılım bankalarının ortaklığıyla kurulan kurumsal bir kefalet kuruluşudur. Teminat yetersizliği nedeniyle finansman ihtiyacını karşılayamayan KOBİ'lerin ve KOBİ dışı işletmelerin finansmana erişimini kolaylaştırmayı amaçlar — kredi verilmesini uygun bulan bankanın kefalet talebini değerlendirip teminat açığını kapatır.
+
+      {/* 1) ÖZET + İSTATİSTİKLER */}
+      <div style={{background:"rgba(94,234,212,0.07)",border:"1px solid rgba(94,234,212,0.22)",borderRadius:14,padding:"14px 15px",marginBottom:18}}>
+        <p style={{margin:0,fontSize:13,color:C.soft,lineHeight:1.6}}>
+          Teminat yetersizliği nedeniyle finansmana erişmekte zorlanan işletmelere, katılım finans esaslarına uygun kefalet desteği sağlayan kurumsal bir kefalet kuruluşudur. Krediyi kendisi vermez; bankanın istediği teminatın bir kısmını üstlenir.
+        </p>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginTop:12}}>
+          <div style={{background:WA(0.04),border:`1px solid ${WA(0.07)}`,borderRadius:10,padding:"10px 8px",textAlign:"center"}}>
+            <b style={{display:"block",fontSize:16,fontWeight:800,color:C.label,fontFamily:"ui-monospace,monospace",letterSpacing:-0.02,lineHeight:1.2}}>{aktifPaketSayisi}</b>
+            <span style={{display:"block",fontSize:8.5,color:C.sub2,textTransform:"uppercase",letterSpacing:0.3,marginTop:3,lineHeight:1.3}}>{TR("Aktif Paket")}</span>
+          </div>
+          <div style={{background:WA(0.04),border:`1px solid ${WA(0.07)}`,borderRadius:10,padding:"10px 8px",textAlign:"center"}}>
+            <b style={{display:"block",fontSize:16,fontWeight:800,color:C.label,fontFamily:"ui-monospace,monospace",letterSpacing:-0.02,lineHeight:1.2}}>%80–90</b>
+            <span style={{display:"block",fontSize:8.5,color:C.sub2,textTransform:"uppercase",letterSpacing:0.3,marginTop:3,lineHeight:1.3}}>{TR("Kefalet Oranı")}</span>
+          </div>
+          <div style={{background:WA(0.04),border:`1px solid ${WA(0.07)}`,borderRadius:10,padding:"10px 8px",textAlign:"center"}}>
+            <b style={{display:"block",fontSize:15,fontWeight:800,color:C.label,fontFamily:"ui-monospace,monospace",letterSpacing:-0.02,lineHeight:1.2}}>400B–90M</b>
+            <span style={{display:"block",fontSize:8.5,color:C.sub2,textTransform:"uppercase",letterSpacing:0.3,marginTop:3,lineHeight:1.3}}>{TR("Limit Aralığı (₺)")}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 2) DOĞRUDAN BAŞVURU YOK */}
+      <div style={{background:"rgba(224,165,61,0.08)",border:"1px solid rgba(224,165,61,0.28)",borderRadius:14,padding:"13px 15px",marginBottom:18,display:"flex",gap:10}}>
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke={C.orange} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0,marginTop:1}}>
+          <circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16h.01"/>
+        </svg>
+        <div>
+          <b style={{display:"block",fontSize:12.5,fontWeight:800,color:TEMA==="acik"?C.label:"#fff",marginBottom:4}}>{CV("KFK'ya doğrudan başvuru yapılmaz")}</b>
+          <p style={{margin:0,fontSize:11.5,color:C.soft,lineHeight:1.55}}>{CV("Finansman başvurusu önce çalıştığınız katılım bankasına yapılır. Banka finansmanı uygun görür ve teminat açığı bulunması halinde KFK kefalet talebini iletir.")}</p>
+        </div>
+      </div>
+
+      {/* 3) GÜNCEL PAKETLER */}
+      <p style={eyebrow}>{TR("Güncel KFK Paketleri")}</p>
+      <div style={{marginBottom:6}}>
+        {siralanmisPaketler.map(p=>(
+          <KfkPaketKart key={p.id} p={p} acik={acikPaketler.has(p.id)} onToggle={()=>paketToggle(p.id)}/>
+        ))}
+      </div>
+      <p style={{margin:"4px 0 18px",fontSize:10.5,color:C.sub2,lineHeight:1.55}}>
+        {CV("Durum, KFK'nın yayımladığı son başvuru tarihine göre otomatik hesaplanır. Geçmiş bir tarih \"süresi doldu\" olarak işaretlenir; paket uzatılmış olabilir, bankanızdan teyit alın.")}
+      </p>
+
+      {/* 4) BANA UYGUN PAKETİ BUL */}
+      <div style={{background:"linear-gradient(135deg,rgba(91,155,216,0.10),rgba(167,139,250,0.08))",border:"1px solid rgba(91,155,216,0.25)",borderRadius:16,padding:16,marginBottom:18}}>
+        <h3 style={{margin:"0 0 4px",fontSize:14.5,fontWeight:800,color:TEMA==="acik"?C.label:"#fff"}}>{CV("Bana Uygun Paketi Bul")}</h3>
+        <p style={{margin:"0 0 14px",fontSize:11.5,color:C.sub,lineHeight:1.5}}>{CV("İhtiyacınıza göre uygun olabilecek KFK paketlerini hızlıca karşılaştırın.")}</p>
+
+        <div style={{marginBottom:14}}>
+          <label style={{display:"block",fontSize:11,fontWeight:700,color:C.soft,marginBottom:7}}>{CV("1. İşletmenizin faaliyet alanı nedir?")}</label>
+          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+            {[["genel","Genel işletme"],["yatirim","Yatırım"],["ihracat","İhracat"],["tarim","Tarım"],["mikro","Mikro işletme"],["diger","Diğer"]].map(([val,etiket])=>(
+              <div key={val} onClick={()=>setBulAlan(val)} style={secenekStil(bulAlan===val)}>{CV(etiket)}</div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{marginBottom:14}}>
+          <label style={{display:"block",fontSize:11,fontWeight:700,color:C.soft,marginBottom:7}}>{CV("2. Yaklaşık finansman ihtiyacınız nedir?")}</label>
+          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+            {[["0-400bin","400 bin ₺'ye kadar"],["400bin-5m","400 bin – 5 milyon ₺"],["5m-20m","5 – 20 milyon ₺"],["20m-50m","20 – 50 milyon ₺"],["50m+","50 milyon ₺ üzeri"]].map(([val,etiket])=>(
+              <div key={val} onClick={()=>setBulTutar(val)} style={secenekStil(bulTutar===val)}>{CV(etiket)}</div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{marginBottom:14}}>
+          <label style={{display:"block",fontSize:11,fontWeight:700,color:C.soft,marginBottom:7}}>{CV("3. İşletmeniz KOBİ mi?")}</label>
+          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+            {[["evet","Evet"],["hayir","Hayır"],["bilmiyor","Emin değilim"]].map(([val,etiket])=>(
+              <div key={val} onClick={()=>setBulKobi(val)} style={secenekStil(bulKobi===val)}>{CV(etiket)}</div>
+            ))}
+          </div>
+        </div>
+
+        <button
+          disabled={!bulTamam}
+          onClick={()=>setBulGosterildi(true)}
+          style={{width:"100%",marginTop:4,padding:13,borderRadius:11,border:"none",
+            background:bulTamam?C.teal:WA(0.1),color:bulTamam?"#0A1620":C.sub2,
+            fontSize:13,fontWeight:800,cursor:bulTamam?"pointer":"not-allowed",minHeight:44}}>
+          {TR("Uygun Paketleri Göster")}
+        </button>
+
+        {bulGosterildi && (
+          <div style={{marginTop:14,paddingTop:14,borderTop:`1px solid ${WA(0.1)}`}}>
+            <h4 style={{margin:"0 0 10px",fontSize:12.5,fontWeight:800,color:TEMA==="acik"?C.label:"#fff"}}>{CV("Size uygun olabilecek paketler")}</h4>
+            {bulSonuclar.length===0 ? (
+              <p style={{fontSize:11.5,color:C.sub,lineHeight:1.6,padding:"6px 0"}}>
+                {CV('Girdiğiniz kriterlere tam uyan aktif bir paket bulunamadı. Yakın kriterler için "Genel işletme" veya "Diğer" seçeneğini deneyebilir, ya da doğrudan bankanızla görüşebilirsiniz.')}
+              </p>
+            ) : bulSonuclar.map(p=>(
+              <div key={p.id} style={{background:"rgba(74,222,128,0.07)",border:"1px solid rgba(74,222,128,0.22)",borderRadius:11,padding:"11px 12px",marginBottom:8}}>
+                <div style={{fontSize:12,fontWeight:800,color:TEMA==="acik"?C.label:"#fff",marginBottom:3}}>{CV(p.ad)}</div>
+                <div style={{fontSize:10.5,color:C.sub,lineHeight:1.5}}>{CV(bulNeden(p))}</div>
+              </div>
+            ))}
+            <p style={{marginTop:10,fontSize:10,color:C.sub2,lineHeight:1.55,padding:"9px 11px",background:WA(0.04),borderRadius:9}}>
+              {CV("Bu sonuç ön bir yönlendirmedir. Kesin uygunluk banka ve KFK değerlendirmesine tabidir.")}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* 5) BAŞVURU SÜRECİ */}
+      <p style={eyebrow}>{TR("Başvuru Süreci")}</p>
+      <div style={{background:WA(0.05),border:`1px solid ${WA(0.08)}`,borderRadius:14,padding:14,marginBottom:18}}>
+        {[
+          ["Bankana başvur","KFK'ya doğrudan başvuru yapılmaz."],
+          ["Banka değerlendirir","Finansmanı uygun bulmazsa süreç burada biter."],
+          ["Teminat açığı varsa kefalet talebi oluşturulur","Banka, teminat açığını KFK'ya iletir."],
+          ["KFK değerlendirmesi yapılır","Hazine destekli paketlerde yalnızca uygunluk kontrol edilir; özkaynak paketlerinde KFK ayrıca inceleme yapar."],
+          ["Finansman kullandırılır","Limit, süresi içinde dilimler halinde de kullanılabilir."],
+        ].map(([baslik,aciklama],i,arr)=>(
+          <div key={i} style={{display:"flex",gap:11,paddingBottom:i<arr.length-1?13:0,position:"relative"}}>
+            <div style={{width:22,height:22,borderRadius:"50%",background:C.blueLight,color:C.blue,fontSize:11,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,zIndex:1}}>{i+1}</div>
+            {i<arr.length-1 && <div style={{position:"absolute",left:10.5,top:22,bottom:0,width:1,background:WA(0.12)}}/>}
+            <div style={{paddingTop:2}}>
+              <b style={{display:"block",fontSize:12,fontWeight:800,color:TEMA==="acik"?C.label:"#fff",marginBottom:2}}>{CV(baslik)}</b>
+              <p style={{margin:0,fontSize:11.5,color:C.sub,lineHeight:1.5}}>{CV(aciklama)}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* 6) KİMLER YARARLANABİLİR */}
+      <p style={eyebrow}>{TR("Kimler Yararlanabilir")}</p>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+        {["KOBİ'ler","KOBİ dışı işletmeler","Esnaf ve sanatkârlar","Mikro işletmeler","Tarım işletmeleri ve çiftçiler","Girişimciler"].map((k,i)=>(
+          <div key={i} style={{background:WA(0.05),border:`1px solid ${WA(0.08)}`,borderRadius:12,padding:"12px 10px",textAlign:"center"}}>
+            <div style={{fontSize:20,marginBottom:6}}>◆</div>
+            <span style={{display:"block",fontSize:11,fontWeight:700,color:C.soft,lineHeight:1.4}}>{CV(k)}</span>
+          </div>
+        ))}
+      </div>
+      <div style={{background:"rgba(91,155,216,0.08)",border:"1px solid rgba(91,155,216,0.2)",borderRadius:14,padding:"13px 15px",marginBottom:18}}>
+        <p style={{margin:0,fontSize:12.5,color:C.soft,lineHeight:1.62}}>
+          <b style={{color:TEMA==="acik"?C.label:"#fff"}}>{CV("Yararlanıcı profili pakete göre değişebilir.")}</b> {CV("Örneğin Mikro Girişim ve Tarım paketi yalnızca kadın girişimci, esnaf/mikro işletme ve çiftçileri; KOSGEB paketi yalnızca imalat sektöründeki KOBİ'leri kapsar.")}
+          <br/><br/>
+          <b style={{color:TEMA==="acik"?C.label:"#fff"}}>{CV("KOBİ sayılmak için:")}</b> {CV("yıllık çalışan sayısı 250'den az olmalı; yıllık net satış hasılatı veya mali bilançosundan biri 500 milyon ₺'yi aşmamalı.")}
         </p>
       </div>
 
-      <p style={{margin:"0 0 8px",fontSize:11,fontWeight:800,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Kimler Yararlanabilir")}</p>
-      <div style={{background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,borderRadius:14,overflow:"hidden",marginBottom:18}}>
-        {kimlerYararlanir.map((k,i)=>(
-          <div key={i} style={{display:"flex",gap:10,padding:"11px 14px",borderBottom:i<kimlerYararlanir.length-1?`1px solid ${WA(0.06)}`:"none"}}>
-            <span style={{color:"#2CCB9A",fontSize:14,flexShrink:0,marginTop:1}}>◆</span>
-            <span style={{fontSize:12.5,color:C.soft,lineHeight:1.5}}>{k}</span>
+      {/* 7) BAŞVURU KOŞULLARI */}
+      <p style={eyebrow}>{TR("Başvuru Koşulları")}</p>
+      <div style={{background:WA(0.05),border:`1px solid ${WA(0.08)}`,borderRadius:14,overflow:"hidden",marginBottom:18}}>
+        {[
+          ["✓",C.green,"Uygunluk:","Onaylanan limit, süresi içinde kalmak kaydıyla dilimler halinde kullanılabilir. Dilim kararı bankanın takdirindedir."],
+          ["!",C.orange,"Dikkat:","Kefalet talebi reddedilirse yeniden başvuru için en az bir mali dönem geçmesi gerekir."],
+          ["✕",C.red,"Engel:","Başvuru sırasında SGK veya vergi borcu bulunmamalı. Bu şart dahil olunan risk grubu ve ortakların ayrı/birlikte ortak olduğu şirketler için de aranır."],
+        ].map(([isaret,renk,baslik,metin],i,arr)=>(
+          <div key={i} style={{display:"flex",gap:10,padding:"11px 14px",borderBottom:i<arr.length-1?`1px solid ${WA(0.06)}`:"none"}}>
+            <span style={{color:renk as string,fontSize:13,flexShrink:0,marginTop:1}}>{isaret}</span>
+            <span style={{fontSize:12.5,color:C.soft,lineHeight:1.5}}><b style={{color:TEMA==="acik"?C.label:"#fff"}}>{CV(baslik as string)}</b> {CV(metin as string)}</span>
           </div>
         ))}
       </div>
 
-      <p style={{margin:"0 0 8px",fontSize:11,fontWeight:800,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Kefalet Paketleri")}</p>
-      <div style={{marginBottom:18}}>
-        {paketler.map((p,i)=>(
-          <div key={i} style={{background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,borderRadius:12,padding:"12px 14px",marginBottom:8}}>
-            <p style={{margin:0,fontSize:12.5,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff")}}>{p.ad}</p>
-            <p style={{margin:"4px 0 0",fontSize:11.5,color:WA(0.55),lineHeight:1.5}}>{p.aciklama}</p>
+      {/* 8) KFK NEDEN AYRI YAPI */}
+      <p style={eyebrow}>{TR("KFK Neden Ayrı Bir Yapı?")}</p>
+      <div style={{background:WA(0.05),border:`1px solid ${WA(0.08)}`,borderRadius:14,marginBottom:18,overflow:"hidden"}}>
+        <div onClick={()=>setFikhiAcik(a=>!a)} style={{padding:"13px 14px",cursor:"pointer",display:"flex",alignItems:"flex-start",gap:10,minHeight:44}}>
+          <h3 style={{flex:1,margin:0,fontSize:12.5,fontWeight:800,color:TEMA==="acik"?C.label:"#fff",lineHeight:1.4}}>
+            {CV("KFK, katılım finans ilkelerine uygun finansmanlara kefalet sağlamak amacıyla oluşturulmuş müstakil bir kefalet kuruluşudur.")}
+          </h3>
+          <KfkChevron acik={fikhiAcik}/>
+        </div>
+        {fikhiAcik && (
+          <div style={{borderTop:`1px solid ${WA(0.07)}`,padding:"12px 14px 14px"}}>
+            <p style={{margin:0,fontSize:12,color:C.soft,lineHeight:1.62}}>
+              {CV("Katılım bankaları, faizli kredilere de kefalet veren mevcut yapılara ortak olmak yerine kendi kefalet kurumlarını kurdu. TKBB Danışma Kurulu bunu üç gerekçeyle uygun buldu. Kefalet yalnızca katılım esaslı finansmanlara verilir. Alınan kefalet ücreti ortaklara kâr olarak dağıtılmaz, sermayeye eklenir. Tasfiye halinde anaparayı aşan kısım mahzurlu gelir kalemine yazılır.")}
+            </p>
+            <p style={{margin:"9px 0 0",fontSize:10.5,color:C.sub2}}>{CV("Kaynak: TKBB Danışma Kurulu, 16.03.2022 tarihli 45 no.lu karar")}</p>
           </div>
-        ))}
+        )}
       </div>
 
-      <p style={{margin:"0 0 8px",fontSize:11,fontWeight:800,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Avantajları")}</p>
-      <div style={{background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,borderRadius:14,overflow:"hidden",marginBottom:18}}>
-        {avantajlar.map((a,i)=>(
-          <div key={i} style={{display:"flex",gap:10,padding:"11px 14px",borderBottom:i<avantajlar.length-1?`1px solid ${WA(0.06)}`:"none"}}>
-            <span style={{color:"#2CCB9A",fontSize:14,flexShrink:0,marginTop:1}}>✓</span>
-            <span style={{fontSize:12.5,color:C.soft,lineHeight:1.5}}>{a}</span>
-          </div>
-        ))}
+      {/* 9) KFK vs KGF */}
+      <p style={eyebrow}>{TR("KFK ile KGF Arasındaki Fark Nedir?")}</p>
+      <div style={{background:WA(0.05),border:`1px solid ${WA(0.08)}`,borderRadius:14,padding:"4px 8px",marginBottom:10}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+          <tbody>
+            <tr>
+              <th style={{padding:"9px 6px",textAlign:"left"}}></th>
+              <th style={{padding:"9px 6px",textAlign:"center",fontSize:10,fontWeight:800,color:C.sub2,textTransform:"uppercase",letterSpacing:0.3,borderBottom:`1px solid ${WA(0.12)}`}}>KFK</th>
+              <th style={{padding:"9px 6px",textAlign:"center",fontSize:10,fontWeight:800,color:C.sub2,textTransform:"uppercase",letterSpacing:0.3,borderBottom:`1px solid ${WA(0.12)}`}}>KGF</th>
+            </tr>
+            {[
+              ["Katılım finans esaslı finansman","var","Ürüne göre değişir"],
+              ["Mevduat bankaları","yok","var"],
+              ["Katılım bankaları","var","var"],
+              ["Faizli kredilere kefalet","yok","var"],
+            ].map(([etiket,kfkDeger,kgfDeger],i,arr)=>(
+              <tr key={i}>
+                <td style={{padding:"10px 6px",textAlign:"left",color:C.sub,fontSize:10.5,borderBottom:i<arr.length-1?`1px solid ${WA(0.06)}`:"none"}}>{CV(etiket)}</td>
+                <td style={{padding:"10px 6px",textAlign:"center",color:kfkDeger==="var"?C.green:C.sub2,fontWeight:kfkDeger==="var"?800:400,borderBottom:i<arr.length-1?`1px solid ${WA(0.06)}`:"none"}}>{kfkDeger==="var"?"✓":kfkDeger==="yok"?"—":kfkDeger}</td>
+                <td style={{padding:"10px 6px",textAlign:"center",color:kgfDeger==="var"?C.green:C.soft,fontWeight:kgfDeger==="var"?800:400,borderBottom:i<arr.length-1?`1px solid ${WA(0.06)}`:"none"}}>{kgfDeger==="var"?"✓":kgfDeger}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
+      <p style={{margin:"0 0 18px",fontSize:10.5,color:C.sub2,lineHeight:1.55}}>
+        {CV("Ürün ve program koşullarına göre farklılık gösterebilir. KOSGEB İstihdam Koruma gibi bazı paketlerde kefalet KFK, KGF veya İGE'den alınabilir; seçim bankanın çalıştığı kefalet kuruluşuna bağlıdır.")}
+      </p>
 
-      <p style={{margin:"0 0 8px",fontSize:11,fontWeight:800,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Nasıl Başvurulur")}</p>
-      <div style={{background:"rgba(91,155,216,0.08)",border:"1px solid rgba(91,155,216,0.2)",borderRadius:14,padding:"13px 15px"}}>
-        <p style={{margin:0,fontSize:12.5,color:C.soft,lineHeight:1.65}}>
-          KFK kefaleti doğrudan başvurulan bir ürün değildir — talep, işletmenin çalıştığı katılım bankası aracılığıyla iletilir. Banka önce kredi/finansman başvurunuzu değerlendirir; teminat yetersizliği varsa kefalet talebiniz KFK'ya iletilir, KFK onayının ardından finansmanı bankanız üzerinden kullanabilirsiniz. Kendi katılım bankanızdan "KFK destekli finansman" seçeneğinin uygunluğunu sorabilirsiniz.
+      {/* 10) BANKALARIN KFK TEMİNATLI ÜRÜNLERİ */}
+      <p style={eyebrow}>{TR("Bankaların KFK Teminatlı Finansmanları")}</p>
+      <div style={{background:"rgba(91,155,216,0.08)",border:"1px solid rgba(91,155,216,0.2)",borderRadius:14,padding:"13px 15px",marginBottom:10}}>
+        <p style={{margin:0,fontSize:12.5,color:C.soft,lineHeight:1.62}}>
+          {CV("Bankalar kendi finansman ürünlerinde KFK kefaletini teminat olarak kullanabilir. Bu ürünlerin fiyatlama ve koşulları KFK tarafından değil, ilgili banka tarafından belirlenir.")}
         </p>
       </div>
+      <div style={{background:WA(0.05),border:`1px solid ${WA(0.08)}`,borderRadius:14,marginBottom:8,overflow:"hidden"}}>
+        <div style={{padding:"13px 14px"}}>
+          <span style={{fontSize:9,fontWeight:800,padding:"2.5px 6px",borderRadius:4,letterSpacing:0.3,background:C.tealLight,color:C.teal,textTransform:"uppercase"}}>Kuveyt Türk</span>
+          <h3 style={{margin:"6px 0 0",fontSize:13,fontWeight:800,color:TEMA==="acik"?C.label:"#fff"}}>{CV("E-İhracatınıza Güç Veren Finansman")}</h3>
+          <p style={{margin:"6px 0 0",fontSize:10.5,color:C.sub2,fontFamily:"ui-monospace,monospace"}}>{CV("İlk 6 ay ödemesiz · 18 aya varan vade")}</p>
+        </div>
+        <div style={{padding:"0 14px 13px"}}>
+          <p style={{margin:0,fontSize:11,color:C.sub,lineHeight:1.55}}>
+            {CV("E-ihracat yapan şahıs ve tüzel firmalara yönelik. KFK teminatı sayesinde ek teminat istenmiyor. Koşullar Kuveyt Türk'e aittir, KFK'nın resmi paketi değildir. (Mayıs 2026'da duyuruldu)")}
+          </p>
+        </div>
+      </div>
+      <p style={{margin:"0 0 18px",fontSize:10.5,color:C.sub2}}>
+        {CV('Kendi bankana "KFK teminatlı bir kampanyanız var mı" diye sorman yeterli.')}
+      </p>
+
+      {/* 11) ORTAKLIK YAPISI */}
+      <p style={eyebrow}>{TR("Ortaklık Yapısı")}</p>
+      <div style={{background:WA(0.05),border:`1px solid ${WA(0.08)}`,borderRadius:14,overflow:"hidden",marginBottom:10}}>
+        {KFK_ORTAKLIK.map((o,i)=>{
+          const maxPay=Math.max(...KFK_ORTAKLIK.map(x=>x.pay));
+          return (
+            <div key={i} style={{padding:"10px 14px",borderBottom:i<KFK_ORTAKLIK.length-1?`1px solid ${WA(0.06)}`:"none"}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+                <span style={{fontSize:12,color:C.soft}}>{CV(o.ad)}</span>
+                <span style={{fontSize:12,fontWeight:800,color:C.label,fontFamily:"ui-monospace,monospace"}}>%{o.pay.toFixed(1)}</span>
+              </div>
+              <div style={{height:5,borderRadius:3,background:WA(0.07),overflow:"hidden"}}>
+                <div style={{height:"100%",borderRadius:3,width:`${(o.pay/maxPay*100).toFixed(0)}%`,background:o.turuncu?C.orange:C.blue}}/>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <p style={{margin:"0 0 18px",fontSize:10.5,color:C.sub2,lineHeight:1.55}}>
+        {CV("Dünya Katılım KFK ortağı değildir. Kuruluşta %6 payı bulunan TKBB güncel ortaklık listesinde yer almamaktadır. Ortaklık yapısı resmi kaynaklara göre güncellenmiştir.")}
+      </p>
+
+      {/* 12) SSS */}
+      <p style={eyebrow}>{TR("Sıkça Sorulan Sorular")}</p>
+      <div style={{background:WA(0.05),border:`1px solid ${WA(0.08)}`,borderRadius:14,overflow:"hidden",marginBottom:18}}>
+        {KFK_SSS.map((q,i)=>(
+          <KfkSssOge key={i} q={q} acik={acikSss.has(i)} onToggle={()=>sssToggle(i)}/>
+        ))}
+      </div>
+
+      {/* 13) GEÇMİŞ PAKETLER */}
+      <div style={{background:WA(0.05),border:`1px solid ${WA(0.08)}`,borderRadius:14,overflow:"hidden",marginBottom:18}}>
+        <div onClick={()=>setGecmisAcik(a=>!a)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"13px 14px",cursor:"pointer",minHeight:44}}>
+          <b style={{fontSize:12.5,fontWeight:800,color:C.sub}}>{CV(`Geçmiş / Süresi Dolan Paketler (${KFK_GECMIS_PAKETLER.length})`)}</b>
+          <KfkChevron acik={gecmisAcik}/>
+        </div>
+        {gecmisAcik && (
+          <div style={{padding:"0 14px 12px"}}>
+            {KFK_GECMIS_PAKETLER.map((g,i,arr)=>(
+              <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:i<arr.length-1?`1px solid ${WA(0.05)}`:"none",fontSize:11}}>
+                <span style={{color:C.sub}}>{CV(g.ad)}</span>
+                <a href={g.kaynakUrl} target="_blank" rel="noopener noreferrer" style={{color:C.blue,textDecoration:"none",fontSize:10,fontWeight:700}}>{TR("Kaynak")} →</a>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* 14) KAYNAKLAR */}
+      <p style={eyebrow}>{TR("Kaynaklar")}</p>
+      <div style={{background:WA(0.04),border:`1px solid ${WA(0.08)}`,borderRadius:12,padding:"13px 14px"}}>
+        <ul style={{margin:0,padding:"0 0 0 16px",fontSize:11,color:C.sub,lineHeight:2}}>
+          <li>Katılım Finans Kefalet A.Ş. — katilimkefalet.com.tr</li>
+          <li>TKBB Danışma Kurulu</li>
+          <li>KOSGEB — kosgeb.gov.tr</li>
+          <li>T.C. Hazine ve Maliye Bakanlığı</li>
+        </ul>
+      </div>
+      <p style={{textAlign:"center",fontSize:10.5,color:C.sub2,padding:"12px 0 0",lineHeight:1.6}}>
+        {TR("Son güncelleme")}: {KFK_REFERANS_TARIHI.toLocaleDateString("tr-TR",{day:"2-digit",month:"long",year:"numeric"})}
+      </p>
     </div>
   );
 }
@@ -15256,7 +15883,7 @@ const MENU = {
   getiriKarsilastirma:{title:"Getiri Karşılaştırma",back:"home"},
   haftalikOzet:{title:"Haftalık Piyasa Özeti",back:"home"},
   katilimBankalari:{title:"Katılım Bankaları",back:"araclarMenu"},
-  kfkNedir:{title:"KFK Nedir?",back:"araclarMenu"},
+  kfkNedir:{title:"Katılım Finans Kefalet (KFK) Nedir?",back:"araclarMenu"},
   katilimSektoru:{title:"Katılım Bankacılığı Sektörü",back:"araclarMenu"},
   ekonomiSozluk:{title:"Ekonomi Sözlüğü",back:"araclarMenu"},
   zekatHesabi:{title:"Zekât Hesaplayıcı",back:"araclarMenu"},
@@ -15472,7 +16099,7 @@ const MENU_ARAMA_LIST=[
   {key:"getiriKarsilastirma",label:"Getiri Karşılaştırma",                        icon:"📊", grup:"Araçlar", alt:["getiri","karşılaştırma","dolar","euro","altın","gümüş","bist","katılım endeksi","performans"]},
   {key:"haftalikOzet",       label:"Haftalık Piyasa Özeti",                       icon:"📰", grup:"Araçlar", alt:["haftalık","bülten","özet","piyasa","hafta"]},
   {key:"katilimBankalari",   label:"Katılım Bankaları",                          icon:"🏛️", grup:"Araçlar"},
-  {key:"kfkNedir",           label:"KFK Nedir?",                                 icon:"🤝", grup:"Araçlar", alt:["kfk","kefalet","katılım finans kefalet","kgf","teminat","kobi"]},
+  {key:"kfkNedir",           label:"Katılım Finans Kefalet (KFK) Nedir?",         icon:"🤝", grup:"Araçlar", alt:["kfk","kefalet","katılım finans kefalet","kgf","teminat","kobi"]},
   {key:"katilimSektoru",     label:"Katılım Bankacılığı Sektörü",               icon:"🏦", grup:"Araçlar", alt:["sektör","bddk","pay","aktif","toplanan fon","kullandırılan fon","katılma hesabı","özel cari","roe","kârlılık"]},
   {key:"ekonomiSozluk",      label:"Ekonomi Sözlüğü",                           icon:"📚", grup:"Araçlar", alt:["ekonomi","terim","sözlük","enflasyon","gsyh","faiz","tanım","kavram","makro"]},
   {key:"zekatHesabi",        label:"Zekât Hesaplayıcı",                               icon:"🌙", grup:"Araçlar", alt:["zekat","zekât","nisap","nisab","kırkta bir","sadaka","altın nisabı","dini","ibadet","hesapla"]},
@@ -23712,7 +24339,7 @@ function App(){
               {key:"katilimBankalari", icon:"🏛️", label:"Katılım Bankaları", desc:"Türkiye'deki katılım bankaları, kuruluş tarihleri ve bilgileri", renk:C.blue, bg:"rgba(91,155,216,0.15)"},
               {key:"katilimSektoru", icon:"🏦", label:"Katılım Bankacılığı Sektörü", desc:"Sektör payı, fon büyüklükleri ve kârlılık — BDDK resmî verisiyle", renk:"#5B9BD8", bg:"rgba(91,155,216,0.15)"},
               {key:"ekonomiSozluk", icon:"📚", label:"Ekonomi Sözlüğü", desc:"196 ekonomi ve finans terimi — enflasyondan rezervlere, sade tanımlarla", renk:"#A78BFA", bg:"rgba(167,139,250,0.15)"},
-              {key:"kfkNedir", icon:"🤝", label:"KFK Nedir?", desc:"Teminat yetersizliğinde işletmenize kefalet desteği — Katılım Finans Kefalet A.Ş.", renk:"#2CCB9A", bg:"rgba(44,203,154,0.15)"},
+              {key:"kfkNedir", icon:"🤝", label:"Katılım Finans Kefalet (KFK) Nedir?", desc:"9 kefalet paketi, size uygun olanı bulun — Katılım Finans Kefalet A.Ş.", renk:"#2CCB9A", bg:"rgba(44,203,154,0.15)"},
               {key:"zekatHesabi", icon:"🌙", label:"Zekât Hesaplayıcı", desc:"Nisap güncel altın fiyatıyla, varlıkların portföyünden — zekât gününde hatırlatma", renk:"#16A34A", bg:"rgba(22,163,74,0.15)"},
               {key:"kiraSertifikasi", icon:"📜", label:"Kira Sertifikası İhraçları", desc:"Türkiye'de sukuk ihraçları — SPK resmî verisiyle tür ve yıl bazında", renk:"#F5A623", bg:"rgba(245,166,35,0.15)"},
               {key:"sozluk",     icon:"📖", label:"Katılım Bankacılığı Sözlüğü",     desc:"Terim ve tanımları hızlıca ara", renk:"#60A5FA", bg:"rgba(96,165,250,0.15)"},
