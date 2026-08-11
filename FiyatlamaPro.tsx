@@ -22988,7 +22988,7 @@ function App(){
               {key:"portfoyum",label:"Portföyüm"},
               {key:"kiraSertifikasi",label:"Kira Sertifikası İhraçları"},
               {key:"katilimBankalari",label:"Katılım Bankaları"},
-              {key:"kfkNedir",label:"KFK Nedir?"},
+              {key:"kfkNedir",label:"Katılım Finans Kefalet (KFK) Nedir?"},
               {key:"katilimSektoru",label:"Katılım Bankacılığı Sektörü"},
               {key:"ekonomiSozluk",label:"Ekonomi Sözlüğü"},
               {key:"zekatHesabi",label:"Zekât Hesaplayıcı"},
