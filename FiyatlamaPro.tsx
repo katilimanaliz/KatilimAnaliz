@@ -13912,10 +13912,22 @@ function KfkNedir(){
       {/* 6) KİMLER YARARLANABİLİR */}
       <p style={eyebrow}>{TR("Kimler Yararlanabilir")}</p>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
-        {["KOBİ'ler","KOBİ dışı işletmeler","Esnaf ve sanatkârlar","Mikro işletmeler","Tarım işletmeleri ve çiftçiler","Girişimciler"].map((k,i)=>(
+        {[
+          {ad:"KOBİ'ler", yol:"M3 21h18M5 21V7l8-4v18M13 21V11l6 4v6"},
+          {ad:"KOBİ dışı işletmeler", yol:"M3 21h18M6 21V10l6-6 6 6v11"},
+          {ad:"Esnaf ve sanatkârlar", yol:"M4 21c0-4 4-6 8-6s8 2 8 6", daire:{cx:12,cy:8,r:4}},
+          {ad:"Mikro işletmeler", yol:"M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2", dikdortgen:{x:3,y:7,w:18,h:13,rx:2}},
+          {ad:"Tarım işletmeleri ve çiftçiler", yol:"M12 2v20M2 12h20", daire:{cx:12,cy:12,r:9}},
+          {ad:"Girişimciler", yol:"M13 2L3 14h7l-1 8 10-12h-7l1-8z"},
+        ].map((k,i)=>(
           <div key={i} style={{background:WA(0.05),border:`1px solid ${WA(0.08)}`,borderRadius:12,padding:"12px 10px",textAlign:"center"}}>
-            <div style={{fontSize:20,marginBottom:6}}>◆</div>
-            <span style={{display:"block",fontSize:11,fontWeight:700,color:C.soft,lineHeight:1.4}}>{CV(k)}</span>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={C.teal} strokeWidth="2"
+                 strokeLinecap="round" strokeLinejoin="round" style={{marginBottom:6}}>
+              {k.daire && <circle cx={k.daire.cx} cy={k.daire.cy} r={k.daire.r}/>}
+              {k.dikdortgen && <rect x={k.dikdortgen.x} y={k.dikdortgen.y} width={k.dikdortgen.w} height={k.dikdortgen.h} rx={k.dikdortgen.rx}/>}
+              <path d={k.yol}/>
+            </svg>
+            <span style={{display:"block",fontSize:11,fontWeight:700,color:C.soft,lineHeight:1.4}}>{CV(k.ad)}</span>
           </div>
         ))}
       </div>
