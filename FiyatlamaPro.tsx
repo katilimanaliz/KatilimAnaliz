@@ -2868,7 +2868,16 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri 
   const [hata, setHata]                 = useState<string|null>(null);
   const [arama, setArama]               = useState("");
   const [sektor, setSektor]             = useState("Tümü");
-  const [sadeceKatilim, setSadeceKatilim] = useState(false);
+  // ⚠️ VARSAYILAN AÇIK (2026-08-12): Kullanıcı geri bildirimi — "Katılım
+  // Endeksi ayrı olarak planlanmalı mutlaka". Ayrı bir gösterge kutusu
+  // eklemek yerine (endeksVeri'ye yeni sembol/istek eklemeden) daha basit
+  // ve etkili çözüm: hisse listesi zaten uygulamanın kimliğine uygun olarak
+  // varsayılan AÇIK (filtrelenmiş) başlıyor. Tüm BIST hisselerine bakmak
+  // isteyen kullanıcı, aşağıdaki "Katılım Endeksi" butonuna basıp filtreyi
+  // kapatabilir — buton ve filtre mantığı DEĞİŞMEDİ, sadece başlangıç durumu.
+  // Diğer filtreler (siraBy, endeksFiltre) de kalıcı değil; bu da onlarla
+  // TUTARLI — ekran her açıldığında varsayılana döner.
+  const [sadeceKatilim, setSadeceKatilim] = useState(true);
   const [siraBy, setSiraBy]             = useState<"degisim1g"|"degisim1h"|"degisim1a"|"degisim1y"|"fk"|"pddd"|"roe"|"temetu"|"hacim">("degisim1g");
   const [siraDir, setSiraDir]           = useState<1|-1>(-1); // Değişim için azalan başlasın
   const [secilen, setSecilen]           = useState<any>(null);
@@ -19682,7 +19691,7 @@ function AltinUrunleriTablo(){
 // tutarlı (uygulama hesap/kişisel veri toplamıyor).
 type PortfoyKalemi = {
   id: string;
-  tur: "hisse" | "fon" | "altin" | "kripto" | "emtia" | "doviz";
+  tur: "hisse" | "fon" | "altin" | "kripto" | "emtia" | "doviz" | "katilim";
   kod: string;           // hisse ticker / fon kodu / GRAM_ALTIN vb sembol / kripto-emtia-döviz sembolü
   ad: string;
   altinCarpan?: number;  // SADECE eski (2026-07-24 öncesi) sabit-çarpan sistemiyle eklenmiş altın kayıtlarında dolu — yeni kayıtlar AltinAPI'den gerçek fiyat kullanır, bu alanı hiç set etmez (bkz. portfoyTarihselFiyat, portfoyKalemTikla)
@@ -19696,6 +19705,20 @@ type PortfoyKalemi = {
   alisKalemleri?: { tarih: string; fiyat: number; miktar: number; kaynak: "otomatik" | "elle" }[]; // 2026-07-15: aynı ürün tekrar eklenince tek satırda birleşiyor, her alış burada ayrı satır olarak tutulur (ortalama maliyet + tarih geçmişi için)
   eklenmeTarihi: string;
   eklenmeFiyat?: number | null; // 2026-07-29: eklendiği andaki fiyat — DONDURULMUŞ, tazelenmez. "Eklendiğinden beri %" bunun üzerinden hesaplanır. Eski kayıtlarda portfoyOku() içindeki tek seferlik geçişle fiyat alanından kopyalanır (o tarihe kadar fiyat hiç tazelenmiyordu, yani zaten eklenme fiyatıydı).
+
+  // ── KATILIM HESABI (2026-08-12) — SADECE tur==="katilim" iken dolu ───────
+  // Diğer türlerden farklı: canlı piyasa fiyatı yok, kullanıcı elle giriyor.
+  // "miktar" alanı burada ANAPARA (₺/$/€) olarak kullanılıyor — fon türünün
+  // "miktar = ₺ tutar" deseniyle aynı yaklaşım, yeni bir alan icat edilmedi.
+  katilimOran?: number;          // yıllık brüt kâr payı oranı (%)
+  katilimVadeGun?: number;       // vade gün sayısı
+  katilimAcilisTarihi?: string;  // hesabın açıldığı tarih (ISO, YYYY-MM-DD)
+  katilimParaBirimi?: "TL" | "USD" | "EUR";
+  // EKLENME ANINDAKİ kademeli stopaj oranı (%), DONDURULMUŞ — eklenmeFiyat
+  // alanıyla AYNI mantık. Ayarlar'daki stopaj oranları kullanıcı tarafından
+  // sonradan değiştirilebiliyor; dondurulmazsa geçmişte açılmış bir hesabın
+  // değeri, bugünkü ayar değişikliğiyle SESSİZCE yanlış hesaplanmaya başlardı.
+  katilimStopajOrani?: number;
 };
 
 // ── SON ALIŞI DÜZENLEME (2026-08-04) ───────────────────────────────────────
@@ -19930,6 +19953,27 @@ function portfoyGuncelDeger(k: PortfoyKalemi): number {
   // ulaşılamadığı için alis!=null her zaman miktar!=null demektir.)
   if (k.alis == null) return 0;
   if (k.tur === "fon") return k.miktar!; // fon miktarı zaten ₺ tutar olarak tutuluyor
+  // ── KATILIM HESABI (2026-08-12) ─────────────────────────────────────────
+  // VadeliKatilim ekranındaki (Hesapla > Katılım Hesabı Getiri Hesaplama) İLE
+  // BİREBİR AYNI formül: basit oran × geçen gün, dondurulmuş kademeli stopaj.
+  // Tutarlılık şart — aynı hesap iki ekranda iki farklı sonuç vermemeli.
+  // Vade dolduysa (gecenGun >= vadeGun) tahakkuk VADE GÜNÜNDE durur, fazlası
+  // sayılmaz — aksi halde vadesi çoktan dolmuş bir hesap sonsuza dek büyümeye
+  // devam ederdi ki bu gerçekçi değil. Gerçekte hesap ya yenilenir ya vadesiz
+  // orana döner; ikisini de bilemediğimiz için "vade sonu değerinde sabitlenir"
+  // en az yanlış varsayım.
+  if (k.tur === "katilim") {
+    const anapara = k.miktar || 0;
+    if (!k.katilimAcilisTarihi || !k.katilimOran || !k.katilimVadeGun) return anapara;
+    const acilisMs = new Date(k.katilimAcilisTarihi + "T00:00:00").getTime();
+    const gecenGunHam = Math.floor((Date.now() - acilisMs) / 86400000);
+    const gecenGun = Math.max(0, Math.min(gecenGunHam, k.katilimVadeGun));
+    const gunlukOran = k.katilimOran / 100 / 365;
+    const brut = anapara * gunlukOran * gecenGun;
+    const stopajOrani = k.katilimStopajOrani ?? 17.5; // dondurulmuş oran yoksa (eski/bozuk kayıt) en yaygın dilime düş
+    const net = brut * (1 - stopajOrani / 100);
+    return anapara + net;
+  }
   return k.miktar! * (k.fiyat || 0);
 }
 function portfoyBugunkuKatki(k: PortfoyKalemi): number {
@@ -19939,6 +19983,10 @@ function portfoyBugunkuKatki(k: PortfoyKalemi): number {
 function portfoyMaliyet(k: PortfoyKalemi): number | null {
   if (!k.alis || k.miktar == null) return null;
   if (k.tur === "fon") return null; // fon için maliyet konsepti Faz 2'de (geçmiş fiyat backend'i) netleşecek
+  // Katılım hesabında miktar zaten anapara — maliyet tanımı gereği anaparanın
+  // kendisi (portfoyGuncelDeger'deki "anapara + net tahakkuk" formülüyle
+  // tutarlı: kâr/zarar = tahakkuk eden net kâr payı).
+  if (k.tur === "katilim") return k.miktar;
   // Birden fazla lot varsa (aynı ürün 2+ kez eklendiyse) toplam maliyet =
   // her lotun kendi miktar×fiyatının toplamı — tek bir "ortalama fiyat ×
   // toplam miktar" ile aynı sonucu verir ama yuvarlama hatasına daha az açık.
@@ -20372,6 +20420,9 @@ const PORTFOY_TUR_META: Record<string, {label:string; Icon:any; renk:string; bg:
   kripto: { label: "Kripto", Icon: Bitcoin,     renk: "#F7931A", bg: "rgba(247,147,26,0.15)" },
   emtia:  { label: "Emtia",  Icon: Package,     renk: "#94A3B8", bg: "rgba(148,163,184,0.15)" },
   doviz:  { label: "Döviz",  Icon: ArrowLeftRight, renk: "#38BDF8", bg: "rgba(56,189,248,0.15)" },
+  // 2026-08-12: Wallet ikonu "Katılım Hesabı Getiri Hesaplama" menü ikonuyla
+  // AYNI (bkz. IKON_MAP.vadeliKatilim) — kavramsal tutarlılık için bilerek.
+  katilim: { label: "Katılım Hesabı", Icon: Wallet, renk: "#A78BFA", bg: "rgba(167,139,250,0.15)" },
 };
 function portfoyFmtTL(n: number): string {
   const isaret = n < 0 ? "-" : "";
@@ -20391,6 +20442,10 @@ function portfoyKodGoster(k: PortfoyKalemi): string {
   // Altın (2026-07-24): AYAR22/CEYREK_YENI gibi ham AltinAPI sembolleri
   // yerine emtia'da olduğu gibi anlaşılır ürün adı gösteriliyor.
   if (k.tur === "emtia" || k.tur === "altin") return k.ad;
+  // Katılım hesabı (2026-08-12): k.kod benzersizlik için üretilen anlamsız
+  // bir string (KATILIM_1234567890) — kullanıcıya k.ad ("TL Katılım Hesabı")
+  // gösterilir, aynen emtia/altın deseninde olduğu gibi.
+  if (k.tur === "katilim") return k.ad;
   return k.kod.replace(/=X$/, "");
 }
 // Her kalemin KENDİ para birimini (paraOnek) ve ondalık hassasiyetini (dec)
@@ -20405,6 +20460,21 @@ function portfoyFmtDeger(n: number, k: PortfoyKalemi): string {
   const dec = k.dec ?? 2;
   const isaret = n < 0 ? "-" : "";
   return isaret + onek + Math.abs(n).toLocaleString("tr-TR", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+}
+// ── KATILIM HESABI ÖZET/İLERLEME (2026-08-12) ─────────────────────────────
+// Widget satırındaki alt bilgi metni ("₺250.000 · %42 yıllık · 154 gün
+// kaldı") ve ilerleme çubuğu (açılıştan vadeye kaç % geçildi) için ortak
+// hesaplama — portfoyGuncelDeger'deki gün mantığıyla TUTARLI olmalı, aksi
+// halde çubuk %30 gösterirken değer %50'ye karşılık gelen bir tahakkuk
+// gösterebilir.
+function portfoyKatilimIlerleme(k: PortfoyKalemi): { gecenGun: number; kalanGun: number; yuzde: number; vadeDoldu: boolean } | null {
+  if (k.tur !== "katilim" || !k.katilimAcilisTarihi || !k.katilimVadeGun) return null;
+  const acilisMs = new Date(k.katilimAcilisTarihi + "T00:00:00").getTime();
+  const gecenGunHam = Math.floor((Date.now() - acilisMs) / 86400000);
+  const gecenGun = Math.max(0, Math.min(gecenGunHam, k.katilimVadeGun));
+  const kalanGun = Math.max(0, k.katilimVadeGun - gecenGunHam);
+  const yuzde = k.katilimVadeGun > 0 ? Math.min(100, (gecenGun / k.katilimVadeGun) * 100) : 0;
+  return { gecenGun, kalanGun, yuzde, vadeDoldu: gecenGunHam >= k.katilimVadeGun };
 }
 // "Toplam Değer" gibi TOPLAMLARDA kullanılır — kalemin kendi para biriminden
 // TL'ye çevirmek için çarpan döndürür. $ ve ¢ (en yaygın iki durum — çoğu
@@ -20835,16 +20905,45 @@ function PortfoyWidgetSatir({k, gizli, sonSatirMi, onTikla, onSil, onDuzenle, ac
             <span style={{fontSize:8.5,fontWeight:700,color:meta.renk,background:meta.bg,borderRadius:4,padding:"1px 5px"}}>{meta.label}</span>
             {izlemeModu && <span style={{fontSize:8.5,fontWeight:700,color:PORTFOY_ETIKET,background:WA(0.1),borderRadius:4,padding:"1px 5px"}}>İzleniyor</span>}
           </div>
-          {k.tur!=="emtia" && k.tur!=="altin" && <div style={{fontSize:10.5,color:PORTFOY_YAZI,opacity:0.78,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{k.ad}</div>}
+          {/* Katılım hesabı: isim yerine anapara/oran/vade özeti + ilerleme
+              çubuğu. k.ad zaten üstte (portfoyKodGoster ile) gösterildiği
+              için burada tekrar edilmiyor. */}
+          {k.tur==="katilim" ? (()=>{ const ilerleme = portfoyKatilimIlerleme(k);
+            return (
+            <div style={{marginTop:2}}>
+              <div style={{fontSize:10,color:PORTFOY_YAZI,opacity:0.78,fontFamily:"ui-monospace,monospace"}}>
+                {portfoyFmtDeger(k.miktar||0,k)} · %{fmtN(k.katilimOran||0,1)} yıllık
+                {ilerleme && (ilerleme.vadeDoldu ? " · vade doldu" : ` · ${ilerleme.kalanGun} gün kaldı`)}
+              </div>
+              {ilerleme && (
+                <div style={{height:3,borderRadius:2,background:WA(0.1),marginTop:4,maxWidth:140,overflow:"hidden"}}>
+                  <div style={{height:"100%",borderRadius:2,width:`${ilerleme.yuzde}%`,background:C.purple}}/>
+                </div>
+              )}
+            </div>
+            );
+          })() : (
+            k.tur!=="emtia" && k.tur!=="altin" && <div style={{fontSize:10.5,color:PORTFOY_YAZI,opacity:0.78,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{k.ad}</div>
+          )}
         </div>
         {/* Fiyat ve değişim SABİT genişlikte — üstteki başlık satırıyla hizalı */}
         <span style={{width:PORTFOY_SUT_FIYAT,flexShrink:0,textAlign:"right",fontSize:13,fontWeight:700,color:PORTFOY_YAZI,fontVariantNumeric:"tabular-nums"}}>
           {izlemeModu && k.fiyat==null ? "—" : (gizli?"₺••••":(izlemeModu ? portfoyFmtDeger(k.fiyat||0, k) : portfoyFmtDeger(portfoyGuncelDeger(k), k)))}
         </span>
         <span style={{width:PORTFOY_SUT_DEGISIM,flexShrink:0,textAlign:"right"}}>
-          <PortfoyDegisimEtiket deger={k.g} boyut={13}/>
+          {/* Katılım hesabında piyasa % değişimi kavramı yok (k.g her zaman
+              null) — PortfoyDegisimEtiket "—" gösterirdi, onun yerine
+              MUTLAK tahakkuk tutarı (bugüne kadar birikmiş net kâr payı). */}
+          {k.tur==="katilim" && !izlemeModu ? (
+            <span style={{fontSize:10,fontWeight:700,color:C.purple}}>
+              +{portfoyFmtDeger(portfoyGuncelDeger(k)-(k.miktar||0), k)}
+            </span>
+          ) : (
+            <PortfoyDegisimEtiket deger={k.g} boyut={13}/>
+          )}
         </span>
       </div>
+
     </div>
   );
 }
@@ -21176,7 +21275,14 @@ function PortfoyWidget({liste, gizli, onGizliToggle, onDetay, onEkle, onSil, onD
                   sonSatirMi={i===aktifListe.length-1}
                   onTikla={()=>onDetay(k)}
                   onSil={onSil}
-                  onDuzenle={onDuzenle}
+                  // Katılım hesabı: "fiyat" kavramı olmadığı için mevcut
+                  // Alışı Düzenle formu (miktar/fiyat/tarih) uygun değil —
+                  // hatalı girişte silip yeniden eklemek yeterli. Panel
+                  // genişliği izlemeModu deseniyle AYNI mekanizmayla
+                  // otomatik daralıyor (bkz. PortfoyWidgetSatir'daki
+                  // panelGenislik hesabı — onDuzenle undefined olunca
+                  // sadece Sil butonu genişliği kullanılıyor).
+                  onDuzenle={k.tur==="katilim" ? undefined : onDuzenle}
                   acik={acikSwipeId===k.id}
                   onAcikDegistir={(acikMi:boolean)=>setAcikSwipeId(acikMi?k.id:null)}
                   onUzunBasma={aktifListe.length>1 ? surukleBasla : undefined}
@@ -21329,9 +21435,9 @@ function useGorunurYukseklik(): number | null {
   return yukseklik;
 }
 
-function PortfoyEkleModal({onKapat, onEklendi}:{onKapat:()=>void; onEklendi:(k:PortfoyKalemi)=>void}){
+function PortfoyEkleModal({onKapat, onEklendi, settings}:{onKapat:()=>void; onEklendi:(k:PortfoyKalemi)=>void; settings?:any}){
   const gorunurYukseklik = useGorunurYukseklik();
-  const [asama, setAsama] = useState<"tur"|"altinAlt"|"ara"|"miktar"|"alis">("tur");
+  const [asama, setAsama] = useState<"tur"|"altinAlt"|"ara"|"miktar"|"alis"|"katilimForm">("tur");
   const [tur, setTur] = useState<PortfoyKalemi["tur"]|null>(null);
   const [altinTuru, setAltinTuru] = useState<{ad:string;sembol:string;birim:string;paraOnek:string}|null>(null);
   const [aramaMetni, setAramaMetni] = useState("");
@@ -21346,6 +21452,84 @@ function PortfoyEkleModal({onKapat, onEklendi}:{onKapat:()=>void; onEklendi:(k:P
   const [alisFiyatInput, setAlisFiyatInput] = useState("");
   const [alisAraniyor, setAlisAraniyor] = useState(false);
   const [alisHata, setAlisHata] = useState<string|null>(null);
+
+  // ── KATILIM HESABI FORM ALANLARI (2026-08-12) ────────────────────────────
+  // VadeliKatilim ekranındaki (Hesapla > Katılım Hesabı Getiri Hesaplama)
+  // AYNI alan isimleri/tipleri — iki ekran arasında kavramsal fark olmasın.
+  const [katilimTutar, setKatilimTutar] = useState("");
+  const [katilimVade, setKatilimVade] = useState("");
+  const [katilimOranInput, setKatilimOranInput] = useState("");
+  const [katilimDoviz, setKatilimDoviz] = useState<"TL"|"USD"|"EUR">("TL");
+  const [katilimAcilisInput, setKatilimAcilisInput] = useState(""); // boşsa bugün
+
+  // Ayarlar'daki stopaj oranları — VadeliKatilim'in kullandığı AYNI alanlar,
+  // yoksa (settings hiç geçmediyse) uygulama genelindeki varsayılanlara düşer
+  // (bkz. satır ~596 civarındaki DEFAULT_SETTINGS: stopajTL_0_180 vb.).
+  const kStopajTL_0_180  = settings?.stopajTL_0_180  ?? 17.5;
+  const kStopajTL_181_365 = settings?.stopajTL_181_365 ?? 15;
+  const kStopajTL_365plus = settings?.stopajTL_365plus ?? 10;
+  const kStopajYP_tum     = settings?.stopajYP_tum     ?? 25;
+
+  // Canlı önizleme — form doldukça anlık hesaplanır. VadeliKatilim'deki
+  // formülle BİREBİR aynı (bkz. o fonksiyondaki `r` hesaplaması).
+  const katilimOnizleme = useMemo(() => {
+    const T = parseFloat(katilimTutar.replace(/\./g,"").replace(",", "."));
+    const G = parseInt(katilimVade);
+    const oranSayisi = sayiOku(katilimOranInput);
+    if (!T || !G || !oranSayisi) return null;
+    const sOran = katilimDoviz === "TL"
+      ? (G <= 180 ? kStopajTL_0_180 : G <= 365 ? kStopajTL_181_365 : kStopajTL_365plus)
+      : kStopajYP_tum;
+    const acilisIso = katilimAcilisInput || new Date().toISOString().slice(0,10);
+    const acilisMs = new Date(acilisIso + "T00:00:00").getTime();
+    const gecenGunHam = Math.floor((Date.now() - acilisMs) / 86400000);
+    const gecenGun = Math.max(0, Math.min(gecenGunHam, G));
+    const gunlukOran = oranSayisi / 100 / 365;
+    const brutSuAn = T * gunlukOran * gecenGun;
+    const netSuAn = brutSuAn * (1 - sOran/100);
+    const brutVadeSonu = T * gunlukOran * G;
+    const netVadeSonu = brutVadeSonu * (1 - sOran/100);
+    return {
+      T, G, oran: oranSayisi, sOran, acilisIso, gecenGun,
+      brutSuAn, netSuAn, degerSuAn: T + netSuAn,
+      vadeSonuDeger: T + netVadeSonu,
+    };
+  }, [katilimTutar, katilimVade, katilimOranInput, katilimDoviz, katilimAcilisInput, kStopajTL_0_180, kStopajTL_181_365, kStopajTL_365plus, kStopajYP_tum]);
+
+  const katilimEkle = () => {
+    if (!katilimOnizleme) return;
+    const o = katilimOnizleme;
+    const simdi = new Date().toISOString();
+    const yeniKalem: PortfoyKalemi = {
+      id: `katilim_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,
+      // ⚠️ kod HER KAYITTA BENZERSİZ olmalı — portfoyBirlestir kod eşleşmesine
+      // bakıyor; aynı kodla iki katılım hesabı verilirse FARKLI vade/oranlı
+      // hesaplar yanlışlıkla "ortalama"ya karıştırılır. Her hesap kendi
+      // bağımsız satırı olarak kalmalı.
+      tur: "katilim",
+      kod: `KATILIM_${Date.now()}`,
+      ad: `${katilimDoviz} Katılım Hesabı`,
+      birim: "₺ tutar",
+      miktar: o.T,
+      fiyat: null,
+      paraOnek: katilimDoviz==="TL"?"₺":katilimDoviz==="USD"?"$":"€",
+      dec: 2,
+      g: null, h: null, a: null, y: null, // katılım hesabında piyasa fiyatı yok, günlük/haftalık % değişim kavramı yok
+      // alis.fiyat=1 SABİT — bu alan katılım hesabı için hiçbir hesaplamada
+      // kullanılmıyor (portfoyGuncelDeger/portfoyMaliyet kendi özel dalına
+      // sahip), sadece "alis != null" kontrolünün (Takip Listem/Portföyüm
+      // ayrımı) doğru çalışması için dolu olması gerekiyor.
+      alis: { tarih: o.acilisIso, fiyat: 1, kaynak: "elle" },
+      eklenmeTarihi: simdi,
+      eklenmeFiyat: null,
+      katilimOran: o.oran,
+      katilimVadeGun: o.G,
+      katilimAcilisTarihi: o.acilisIso,
+      katilimParaBirimi: katilimDoviz,
+      katilimStopajOrani: o.sOran,
+    };
+    onEklendi(yeniKalem);
+  };
 
   // Hisse/fon listeleri "ara" aşamasına girince (lazy) çekilir.
   useEffect(()=>{
@@ -21366,6 +21550,7 @@ function PortfoyEkleModal({onKapat, onEklendi}:{onKapat:()=>void; onEklendi:(k:P
   const turSec = (t: PortfoyKalemi["tur"]) => {
     setTur(t);
     if (t==="altin") setAsama("altinAlt");
+    else if (t==="katilim") setAsama("katilimForm");
     else setAsama("ara");
   };
 
@@ -21555,6 +21740,54 @@ function PortfoyEkleModal({onKapat, onEklendi}:{onKapat:()=>void; onEklendi:(k:P
                 </div>
               </div>
             )}
+          </>
+        )}
+
+        {/* ── KATILIM HESABI FORMU (2026-08-12) ────────────────────────────
+            Diğer türler "ara" aşamasına gidip sembol arıyor; katılım hesabının
+            arayacağı bir sembol yok — VadeliKatilim ekranındaki (Hesapla >
+            Katılım Hesabı Getiri Hesaplama) formun BİREBİR AYNISI burada. */}
+        {asama==="katilimForm" && (
+          <>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+              <span onClick={()=>setAsama("tur")} style={{fontSize:18,color:C.sub,cursor:"pointer"}}>‹</span>
+              <span style={{fontSize:16,fontWeight:800,color:C.text}}>Katılım Hesabı Bilgileri</span>
+              <div style={{flex:1}}/>
+              <button onClick={onKapat} style={{background:WA(0.1),border:"none",width:30,height:30,borderRadius:15,fontSize:16,color:C.text,cursor:"pointer"}}>×</button>
+            </div>
+
+            <Seg options={[{v:"TL",l:"TL Katılım"},{v:"USD",l:"USD Katılım"},{v:"EUR",l:"EUR Katılım"}]} value={katilimDoviz} onChange={setKatilimDoviz}/>
+            <Field label="Katılım Tutarı" value={katilimTutar} onChange={setKatilimTutar} suffix={katilimDoviz==="TL"?"₺":katilimDoviz==="USD"?"$":"€"}/>
+            <Field label="Vade (Gün)" value={katilimVade} onChange={setKatilimVade} suffix="Gün" hint="Örn: 32 gün, 91 gün, 182 gün, 365 gün"/>
+            <Field label="Kâr Payı Oranı (Yıllık, Brüt)" value={katilimOranInput} onChange={setKatilimOranInput} suffix="%"/>
+            <Field label="Açılış Tarihi" value={katilimAcilisInput} onChange={setKatilimAcilisInput} suffix="📅" hint="Boş bırakılırsa bugün kabul edilir."/>
+
+            {katilimOnizleme && (()=>{ const o=katilimOnizleme; const sembol=katilimDoviz==="TL"?"₺":katilimDoviz==="USD"?"$":"€";
+              const fmtP=(n:number)=>`${sembol}${fmtN(n,2)}`;
+              return (
+              <div style={{marginTop:14,background:WA(0.04),border:`1px solid ${C.purple}40`,borderRadius:12,padding:"12px 14px"}}>
+                <RRow label="Bugüne kadar geçen süre" value={`${o.gecenGun} gün`} sub/>
+                <RRow label="Tahakkuk eden brüt kâr payı" value={fmtP(o.brutSuAn)} sub/>
+                <RRow label={`Stopaj (%${fmtN(o.sOran)})`} value={`- ${fmtP(o.brutSuAn-o.netSuAn)}`} sub accent={C.red}/>
+                <RRow label="Şu an tahmini değer" value={fmtP(o.degerSuAn)} accent={C.green} big/>
+                <RRow label={`Vade sonu (${o.G}. gün) tahmini`} value={fmtP(o.vadeSonuDeger)} sub/>
+                <div style={{marginTop:10,fontSize:10,color:C.sub2,lineHeight:1.5,display:"flex",gap:5}}>
+                  <span style={{flexShrink:0}}>⚠</span>
+                  <span>Bu, vade dolmadan bozdurma senaryosunu DEĞİL, bugüne kadar birikmiş olması gereken basit tahakkuku gösterir. Gerçek erken bozdurma tutarı bankanızın kendi kurallarına göre değişebilir.</span>
+                </div>
+              </div>
+              );
+            })()}
+
+            <button
+              onClick={katilimEkle}
+              disabled={!katilimOnizleme}
+              style={{width:"100%",marginTop:16,padding:13,borderRadius:12,border:"none",
+                background:katilimOnizleme?C.purple:WA(0.1),
+                color:katilimOnizleme?"#0A1620":C.sub2,
+                fontWeight:800,fontSize:14,cursor:katilimOnizleme?"pointer":"not-allowed"}}>
+              Portföye Ekle
+            </button>
           </>
         )}
 
@@ -21940,8 +22173,18 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onDuzen
                   <span style={{fontSize:13,fontWeight:800,color:PORTFOY_YAZI}}>{portfoyKodGoster(k)}</span>
                   <span style={{fontSize:8.5,fontWeight:700,color:meta.renk,background:meta.bg,borderRadius:4,padding:"1px 5px"}}>{meta.label}</span>
                 </div>
-                {k.tur!=="emtia" && k.tur!=="altin" && <div style={{fontSize:10.5,color:PORTFOY_YAZI,opacity:0.8,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{k.ad}</div>}
-                {sekme!=="takip" && (
+                {k.tur!=="emtia" && k.tur!=="altin" && k.tur!=="katilim" && <div style={{fontSize:10.5,color:PORTFOY_YAZI,opacity:0.8,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{k.ad}</div>}
+                {/* Katılım hesabı: "miktar birim" yerine anapara/oran/vade özeti
+                    (Widget'taki (PortfoyWidgetSatir) AYNI portfoyKatilimIlerleme
+                    yardımcı fonksiyonu — iki ekran farklı sayı göstermesin). */}
+                {k.tur==="katilim" ? (()=>{ const ilerleme = portfoyKatilimIlerleme(k);
+                  return (
+                  <div style={{fontSize:10.5,color:PORTFOY_YAZI,opacity:0.8,marginTop:1,fontFamily:"ui-monospace,monospace"}}>
+                    {gizli?"₺••••":portfoyFmtDeger(k.miktar||0,k)} · %{fmtN(k.katilimOran||0,1)} yıllık
+                    {ilerleme && (ilerleme.vadeDoldu ? " · vade doldu" : ` · ${ilerleme.kalanGun} gün kaldı`)}
+                  </div>
+                  );
+                })() : sekme!=="takip" && (
                   <div style={{fontSize:10.5,color:PORTFOY_YAZI,opacity:0.8,marginTop:1}}>
                     {gizli?"••":k.miktar!.toLocaleString("tr-TR")} {k.birim}
                   </div>
@@ -21958,7 +22201,7 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onDuzen
               {/* Düzenle YALNIZ alış bilgisi olan kalemde (Takip sekmesinde
                   alis==null, düzenlenecek alan yok). Ana sayfa kartındaki
                   kaydırmalı panelle aynı kural. */}
-              {onDuzenle && k.alis!=null && (
+              {onDuzenle && k.alis!=null && k.tur!=="katilim" && (
                 <Pencil size={13} color={PORTFOY_ETIKET} style={{cursor:"pointer",flexShrink:0}}
                         onClick={(e:any)=>{e.stopPropagation();onDuzenle(k);}}/>
               )}
@@ -21966,13 +22209,32 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onDuzen
             </div>
 
             <div style={{display:"flex",justifyContent:"space-between",marginBottom:sekme==="takip"?0:10}}>
-              {[["Günlük",k.g],["Haftalık",k.h],["Aylık",k.a],["Yıllık",k.y]].map(([lbl,val]:any)=>(
+              {k.tur==="katilim" ? (()=>{ const ilerleme = portfoyKatilimIlerleme(k);
+                const kutular:[string,string][] = [
+                  ["Oran (Yıllık)", `%${fmtN(k.katilimOran||0,1)}`],
+                  ["Vade", `${k.katilimVadeGun||0} gün`],
+                  ["Geçen", `${ilerleme?.gecenGun ?? 0} gün`],
+                  ["Kalan", ilerleme?.vadeDoldu ? "Doldu" : `${ilerleme?.kalanGun ?? 0} gün`],
+                ];
+                return kutular.map(([lbl,val])=>(
+                  <div key={lbl} style={{textAlign:"center"}}>
+                    <div style={{fontSize:9.5,fontWeight:700,color:PORTFOY_ETIKET,marginBottom:3}}>{lbl}</div>
+                    <span style={{fontSize:12,fontWeight:700,color:PORTFOY_YAZI,fontFamily:"ui-monospace,monospace"}}>{val}</span>
+                  </div>
+                ));
+              })() : [["Günlük",k.g],["Haftalık",k.h],["Aylık",k.a],["Yıllık",k.y]].map(([lbl,val]:any)=>(
                 <div key={lbl} style={{textAlign:"center"}}>
                   <div style={{fontSize:9.5,fontWeight:700,color:PORTFOY_ETIKET,marginBottom:3}}>{lbl}</div>
                   <PortfoyDegisimEtiket deger={val} boyut={12}/>
                 </div>
               ))}
             </div>
+            {k.tur==="katilim" && (
+              <div style={{display:"flex",alignItems:"center",gap:5,fontSize:10,color:PORTFOY_ETIKET,marginBottom:8}}>
+                <Info size={11} style={{flexShrink:0}}/>
+                <span>Değer, basit oran ve dondurulmuş %{fmtN(k.katilimStopajOrani||0,1)} stopajla tahmin edilir — gerçek erken bozdurma tutarı bankanıza göre değişebilir.</span>
+              </div>
+            )}
 
             {sekme==="takip" ? (
               (()=>{
@@ -21994,18 +22256,22 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onDuzen
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:6}}>
                   <div style={{display:"flex",alignItems:"center",gap:5,fontSize:10,color:PORTFOY_ETIKET}}>
                     <Calendar size={11}/>
+                    {k.tur==="katilim" ? (
+                      <span>{portfoyTarihGoster(k.alis!.tarih)} tarihinde açıldı</span>
+                    ) : (
                     <span>
                       {(k.alisKalemleri?.length||0)>1 ? "Ort. maliyet " : ""}
                       {(k.alisKalemleri?.length||0)>1 ? "" : `${portfoyTarihGoster(k.alis!.tarih)} · `}
                       {gizli?"₺••••":portfoyFmtDeger(k.alis!.fiyat, k)}{k.tur!=="fon"?`/${k.birim==="lot"?"hisse":k.birim}`:""}
                     </span>
-                    {(k.alisKalemleri?.length||0)>1 ? (
+                    )}
+                    {k.tur!=="katilim" && ((k.alisKalemleri?.length||0)>1 ? (
                       <span style={{fontSize:8.5,fontWeight:700,color:PORTFOY_ETIKET,background:WA(0.1),borderRadius:4,padding:"1px 5px",marginLeft:2}}>{k.alisKalemleri!.length} alış</span>
                     ) : (
                       <span style={{fontSize:8.5,fontWeight:700,color:k.alis!.kaynak==="otomatik"?C.blue:C.orange,background:k.alis!.kaynak==="otomatik"?C.blueLight:"rgba(224,165,61,0.15)",borderRadius:4,padding:"1px 5px",marginLeft:2}}>
                         {k.alis!.kaynak==="otomatik"?"otomatik bulundu":"elle girildi"}
                       </span>
-                    )}
+                    ))}
                   </div>
                   {kz!=null ? (
                     <span style={{fontSize:11.5,fontWeight:800,color:kz>=0?C.green:C.red}}>
@@ -23337,7 +23603,7 @@ function App(){
       {bildirimGecmisiAcik&&<BildirimGecmisiModal gecmis={bildirimGecmisi} onClose={()=>setBildirimGecmisiAcik(false)} onSil={bildirimSil} onTumunuSil={bildirimTumunuSil}/>}
       {piyasaOzetiDuzenleAcik&&<PiyasaOzetiDuzenleModal secili={piyasaOzetiSecim} onToggle={piyasaOzetiToggle} onClose={()=>setPiyasaOzetiDuzenleAcik(false)}/>}
       {secilikur&&<KurGrafikModal kur={secilikur} onClose={()=>setSeciliKur(null)}/>}
-      {portfoyEkleAcik&&<PortfoyEkleModal onKapat={()=>setPortfoyEkleAcik(false)} onEklendi={portfoyEkle}/>}
+      {portfoyEkleAcik&&<PortfoyEkleModal onKapat={()=>setPortfoyEkleAcik(false)} onEklendi={portfoyEkle} settings={settings}/>}
       {(()=>{ const dk = portfoyDuzenleId ? portfoy.find(x=>x.id===portfoyDuzenleId) : null;
         return dk ? <PortfoyDuzenleModal kalem={dk} onKapat={()=>setPortfoyDuzenleId(null)}
                       onKaydet={(g)=>portfoyAlisGuncelle(dk.id,g)}/> : null; })()}
