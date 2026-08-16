@@ -21349,14 +21349,13 @@ function PortfoyWidget({liste, gizli, onGizliToggle, onDetay, onEkle, onSil, onD
                   sonSatirMi={i===aktifListe.length-1}
                   onTikla={()=>onDetay(k)}
                   onSil={onSil}
-                  // Katılım hesabı VE Sukuk: "fiyat" kavramı olmadığı için
-                  // mevcut Alışı Düzenle formu (miktar/fiyat/tarih) uygun
-                  // değil — hatalı girişte silip yeniden eklemek yeterli.
-                  // Panel genişliği izlemeModu deseniyle AYNI mekanizmayla
-                  // otomatik daralıyor (bkz. PortfoyWidgetSatir'daki
-                  // panelGenislik hesabı — onDuzenle undefined olunca
-                  // sadece Sil butonu genişliği kullanılıyor).
-                  onDuzenle={(k.tur==="katilim"||k.tur==="sukuk") ? undefined : onDuzenle}
+                  // ⚠️ GÜNCELLEME (2026-08-13): Katılım Hesabı/Sukuk için de
+                  // Düzenle artık ÇALIŞIYOR — üst component'te (satır ~23862)
+                  // bu türlerde PortfoyDuzenleModal yerine PortfoyEkleModal'ın
+                  // kendi formu "düzenleme modunda" açılıyor. Önceki turda
+                  // "silip yeniden ekle yeterli" denip gizlenmişti, ama
+                  // mükerrer kayıt bug'ı sonrası bu yetersiz kaldı.
+                  onDuzenle={onDuzenle}
                   acik={acikSwipeId===k.id}
                   onAcikDegistir={(acikMi:boolean)=>setAcikSwipeId(acikMi?k.id:null)}
                   onUzunBasma={aktifListe.length>1 ? surukleBasla : undefined}
@@ -21509,10 +21508,15 @@ function useGorunurYukseklik(): number | null {
   return yukseklik;
 }
 
-function PortfoyEkleModal({onKapat, onEklendi, settings}:{onKapat:()=>void; onEklendi:(k:PortfoyKalemi)=>void; settings?:any}){
+function PortfoyEkleModal({onKapat, onEklendi, settings, duzenlenecekKalem}:{onKapat:()=>void; onEklendi:(k:PortfoyKalemi)=>void; settings?:any; duzenlenecekKalem?:PortfoyKalemi|null}){
   const gorunurYukseklik = useGorunurYukseklik();
-  const [asama, setAsama] = useState<"tur"|"altinAlt"|"ara"|"miktar"|"alis"|"katilimForm"|"sukukForm">("tur");
-  const [tur, setTur] = useState<PortfoyKalemi["tur"]|null>(null);
+  // ⚠️ DÜZENLEME MODU (2026-08-13): duzenlenecekKalem verilmişse tür SABİT —
+  // kullanıcı bir Katılım Hesabını "Sukuk'a çevir" gibi bir şey yapamaz,
+  // doğrudan ilgili forma başlanır, tür seçim ekranı hiç gösterilmez.
+  const duzenleTuru = duzenlenecekKalem?.tur === "katilim" ? "katilimForm"
+    : duzenlenecekKalem?.tur === "sukuk" ? "sukukForm" : null;
+  const [asama, setAsama] = useState<"tur"|"altinAlt"|"ara"|"miktar"|"alis"|"katilimForm"|"sukukForm">(duzenleTuru ?? "tur");
+  const [tur, setTur] = useState<PortfoyKalemi["tur"]|null>(duzenlenecekKalem?.tur ?? null);
   const [altinTuru, setAltinTuru] = useState<{ad:string;sembol:string;birim:string;paraOnek:string}|null>(null);
   const [aramaMetni, setAramaMetni] = useState("");
   const [hisseListesi, setHisseListesi] = useState<any[]>([]);
@@ -21530,11 +21534,14 @@ function PortfoyEkleModal({onKapat, onEklendi, settings}:{onKapat:()=>void; onEk
   // ── KATILIM HESABI FORM ALANLARI (2026-08-12) ────────────────────────────
   // VadeliKatilim ekranındaki (Hesapla > Katılım Hesabı Getiri Hesaplama)
   // AYNI alan isimleri/tipleri — iki ekran arasında kavramsal fark olmasın.
-  const [katilimTutar, setKatilimTutar] = useState("");
-  const [katilimVade, setKatilimVade] = useState("");
-  const [katilimOranInput, setKatilimOranInput] = useState("");
-  const [katilimDoviz, setKatilimDoviz] = useState<"TL"|"USD"|"EUR">("TL");
-  const [katilimAcilisInput, setKatilimAcilisInput] = useState(""); // boşsa bugün
+  // Düzenleme modunda (duzenlenecekKalem dolu) başlangıç değerleri kalemin
+  // mevcut alanlarından DOLDURULUR — kod tekrarı olmasın diye AYNI state'ler
+  // hem "yeni ekle" hem "düzenle" akışında kullanılıyor.
+  const [katilimTutar, setKatilimTutar] = useState(duzenlenecekKalem?.tur==="katilim" ? String(duzenlenecekKalem.miktar) : "");
+  const [katilimVade, setKatilimVade] = useState(duzenlenecekKalem?.tur==="katilim" ? String(duzenlenecekKalem.katilimVadeGun) : "");
+  const [katilimOranInput, setKatilimOranInput] = useState(duzenlenecekKalem?.tur==="katilim" ? String(duzenlenecekKalem.katilimOran) : "");
+  const [katilimDoviz, setKatilimDoviz] = useState<"TL"|"USD"|"EUR">(duzenlenecekKalem?.tur==="katilim" ? (duzenlenecekKalem.katilimParaBirimi ?? "TL") : "TL");
+  const [katilimAcilisInput, setKatilimAcilisInput] = useState(duzenlenecekKalem?.tur==="katilim" ? (duzenlenecekKalem.katilimAcilisTarihi ?? "") : ""); // boşsa bugün
 
   // Ayarlar'daki stopaj oranları — VadeliKatilim'in kullandığı AYNI alanlar,
   // yoksa (settings hiç geçmediyse) uygulama genelindeki varsayılanlara düşer
@@ -21581,14 +21588,20 @@ function PortfoyEkleModal({onKapat, onEklendi, settings}:{onKapat:()=>void; onEk
     if (!katilimOnizleme) return;
     const o = katilimOnizleme;
     const simdi = new Date().toISOString();
+    // ⚠️ DÜZENLEME MODU (2026-08-13): duzenlenecekKalem varsa id/kod/
+    // eklenmeTarihi KORUNUR — portfoyBirlestir kod eşleşmesine göre
+    // ÜZERİNE YAZAR, böylece yeni bir satır oluşmaz, mevcut satır güncellenir.
+    // Yeni kayıtta olduğu gibi rastgele id/kod üretilirse bu bir GÜNCELLEME
+    // değil YENİ EKLEME olurdu.
+    const duzenleniyor = duzenlenecekKalem?.tur === "katilim";
     const yeniKalem: PortfoyKalemi = {
-      id: `katilim_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,
+      id: duzenleniyor ? duzenlenecekKalem!.id : `katilim_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,
       // ⚠️ kod HER KAYITTA BENZERSİZ olmalı — portfoyBirlestir kod eşleşmesine
       // bakıyor; aynı kodla iki katılım hesabı verilirse FARKLI vade/oranlı
       // hesaplar yanlışlıkla "ortalama"ya karıştırılır. Her hesap kendi
       // bağımsız satırı olarak kalmalı.
       tur: "katilim",
-      kod: `KATILIM_${Date.now()}`,
+      kod: duzenleniyor ? duzenlenecekKalem!.kod : `KATILIM_${Date.now()}`,
       ad: `${katilimDoviz} Katılım Hesabı`,
       birim: "₺ tutar",
       miktar: o.T,
@@ -21601,7 +21614,7 @@ function PortfoyEkleModal({onKapat, onEklendi, settings}:{onKapat:()=>void; onEk
       // sahip), sadece "alis != null" kontrolünün (Takip Listem/Portföyüm
       // ayrımı) doğru çalışması için dolu olması gerekiyor.
       alis: { tarih: o.acilisIso, fiyat: 1, kaynak: "elle" },
-      eklenmeTarihi: simdi,
+      eklenmeTarihi: duzenleniyor ? duzenlenecekKalem!.eklenmeTarihi : simdi, // orijinal ekleme tarihi korunur, güncelleme tarihi değil
       eklenmeFiyat: null,
       katilimOran: o.oran,
       katilimVadeGun: o.G,
@@ -21623,11 +21636,11 @@ function PortfoyEkleModal({onKapat, onEklendi, settings}:{onKapat:()=>void; onEk
   // Katılım hesabıyla AYNI veri modeli/UI deseni, ama Seg seçimi PARA BİRİMİ
   // (TL/USD/EUR) DEĞİL, YATIRIMCI TİPİ (bireysel/tüzel) — TahvilBono'daki
   // gerçek Sukuk kuralında stopajı belirleyen eksen bu.
-  const [sukukTutar, setSukukTutar] = useState("");
-  const [sukukVade, setSukukVade] = useState("");
-  const [sukukOranInput, setSukukOranInput] = useState("");
-  const [sukukTip, setSukukTip] = useState<"bireysel"|"tuzel">("bireysel");
-  const [sukukAcilisInput, setSukukAcilisInput] = useState("");
+  const [sukukTutar, setSukukTutar] = useState(duzenlenecekKalem?.tur==="sukuk" ? String(duzenlenecekKalem.miktar) : "");
+  const [sukukVade, setSukukVade] = useState(duzenlenecekKalem?.tur==="sukuk" ? String(duzenlenecekKalem.sukukVadeGun) : "");
+  const [sukukOranInput, setSukukOranInput] = useState(duzenlenecekKalem?.tur==="sukuk" ? String(duzenlenecekKalem.sukukOran) : "");
+  const [sukukTip, setSukukTip] = useState<"bireysel"|"tuzel">(duzenlenecekKalem?.tur==="sukuk" ? (duzenlenecekKalem.sukukYatirimciTipi ?? "bireysel") : "bireysel");
+  const [sukukAcilisInput, setSukukAcilisInput] = useState(duzenlenecekKalem?.tur==="sukuk" ? (duzenlenecekKalem.sukukAcilisTarihi ?? "") : "");
 
   // Canlı önizleme — TahvilBono'daki formülle BİREBİR AYNI (bkz. o
   // fonksiyondaki `r` hesaplaması: donemselOran, brutGetiri, stopaj).
@@ -21659,12 +21672,14 @@ function PortfoyEkleModal({onKapat, onEklendi, settings}:{onKapat:()=>void; onEk
     if (!sukukOnizleme) return;
     const o = sukukOnizleme;
     const simdi = new Date().toISOString();
+    // ⚠️ DÜZENLEME MODU (2026-08-13): katilimEkle'deki AYNI mantık.
+    const duzenleniyor = duzenlenecekKalem?.tur === "sukuk";
     const yeniKalem: PortfoyKalemi = {
-      id: `sukuk_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,
+      id: duzenleniyor ? duzenlenecekKalem!.id : `sukuk_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,
       tur: "sukuk",
       // ⚠️ Benzersiz kod — katılım hesabındaki AYNI gerekçe: portfoyBirlestir
       // farklı vade/oranlı iki sukuk kaydını yanlışlıkla birleştirmesin.
-      kod: `SUKUK_${Date.now()}`,
+      kod: duzenleniyor ? duzenlenecekKalem!.kod : `SUKUK_${Date.now()}`,
       ad: `Sukuk (${sukukTip==="bireysel"?"Bireysel":"Tüzel"})`,
       birim: "₺ tutar",
       miktar: o.T,
@@ -21673,7 +21688,7 @@ function PortfoyEkleModal({onKapat, onEklendi, settings}:{onKapat:()=>void; onEk
       dec: 2,
       g: null, h: null, a: null, y: null,
       alis: { tarih: o.acilisIso, fiyat: 1, kaynak: "elle" },
-      eklenmeTarihi: simdi,
+      eklenmeTarihi: duzenleniyor ? duzenlenecekKalem!.eklenmeTarihi : simdi,
       eklenmeFiyat: null,
       sukukOran: o.oran,
       sukukVadeGun: o.G,
@@ -21906,8 +21921,11 @@ function PortfoyEkleModal({onKapat, onEklendi, settings}:{onKapat:()=>void; onEk
         {asama==="katilimForm" && (
           <>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
-              <span onClick={()=>setAsama("tur")} style={{fontSize:18,color:C.sub,cursor:"pointer"}}>‹</span>
-              <span style={{fontSize:16,fontWeight:800,color:C.text}}>Katılım Hesabı Bilgileri</span>
+              {/* Düzenleme modunda tür SABİT (kullanıcı "başka türe çevir"
+                  yapamaz) — geri tuşu tür seçim ekranına DEĞİL, doğrudan
+                  kapatmaya gider; o ekran bu bağlamda anlamsız. */}
+              <span onClick={()=>duzenlenecekKalem?onKapat():setAsama("tur")} style={{fontSize:18,color:C.sub,cursor:"pointer"}}>‹</span>
+              <span style={{fontSize:16,fontWeight:800,color:C.text}}>{duzenlenecekKalem?"Katılım Hesabını Güncelle":"Katılım Hesabı Bilgileri"}</span>
               <div style={{flex:1}}/>
               <button onClick={onKapat} style={{background:WA(0.1),border:"none",width:30,height:30,borderRadius:15,fontSize:16,color:C.text,cursor:"pointer"}}>×</button>
             </div>
@@ -21959,7 +21977,7 @@ function PortfoyEkleModal({onKapat, onEklendi, settings}:{onKapat:()=>void; onEk
                 background:katilimOnizleme?C.purple:WA(0.1),
                 color:katilimOnizleme?"#0A1620":C.sub2,
                 fontWeight:800,fontSize:14,cursor:katilimOnizleme?"pointer":"not-allowed"}}>
-              Portföye Ekle
+              {duzenlenecekKalem?"Güncelle":"Portföye Ekle"}
             </button>
           </>
         )}
@@ -21971,8 +21989,8 @@ function PortfoyEkleModal({onKapat, onEklendi, settings}:{onKapat:()=>void; onEk
         {asama==="sukukForm" && (
           <>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
-              <span onClick={()=>setAsama("tur")} style={{fontSize:18,color:C.sub,cursor:"pointer"}}>‹</span>
-              <span style={{fontSize:16,fontWeight:800,color:C.text}}>Sukuk Bilgileri</span>
+              <span onClick={()=>duzenlenecekKalem?onKapat():setAsama("tur")} style={{fontSize:18,color:C.sub,cursor:"pointer"}}>‹</span>
+              <span style={{fontSize:16,fontWeight:800,color:C.text}}>{duzenlenecekKalem?"Sukuk Bilgilerini Güncelle":"Sukuk Bilgileri"}</span>
               <div style={{flex:1}}/>
               <button onClick={onKapat} style={{background:WA(0.1),border:"none",width:30,height:30,borderRadius:15,fontSize:16,color:C.text,cursor:"pointer"}}>×</button>
             </div>
@@ -22017,7 +22035,7 @@ function PortfoyEkleModal({onKapat, onEklendi, settings}:{onKapat:()=>void; onEk
                 background:sukukOnizleme?C.teal:WA(0.1),
                 color:sukukOnizleme?"#0A1620":C.sub2,
                 fontWeight:800,fontSize:14,cursor:sukukOnizleme?"pointer":"not-allowed"}}>
-              Portföye Ekle
+              {duzenlenecekKalem?"Güncelle":"Portföye Ekle"}
             </button>
           </>
         )}
@@ -22431,9 +22449,11 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onDuzen
               </span>
               {/* Düzenle YALNIZ alış bilgisi olan kalemde (Takip sekmesinde
                   alis==null, düzenlenecek alan yok). Ana sayfa kartındaki
-                  kaydırmalı panelle aynı kural. Katılım hesabı/Sukuk'ta da
-                  gizli — "fiyat" kavramı olmadığı için mevcut form uygun değil. */}
-              {onDuzenle && k.alis!=null && k.tur!=="katilim" && k.tur!=="sukuk" && (
+                  kaydırmalı panelle aynı kural. Katılım Hesabı/Sukuk'ta da
+                  ARTIK ÇALIŞIYOR (2026-08-13) — PortfoyEkleModal'ın kendi
+                  formu düzenleme modunda açılıyor (bkz. üst component,
+                  ~satır 23862). */}
+              {onDuzenle && k.alis!=null && (
                 <Pencil size={13} color={PORTFOY_ETIKET} style={{cursor:"pointer",flexShrink:0}}
                         onClick={(e:any)=>{e.stopPropagation();onDuzenle(k);}}/>
               )}
@@ -22999,6 +23019,22 @@ function App(){
   const portfoyAlisGuncelle=(id:string, g:{miktar:number;fiyat:number;tarih:string})=>{
     setPortfoy(liste=>{
       const yeni=liste.map(k=> k.id===id ? portfoySonAlisGuncelle(k,g) : k);
+      portfoyYaz(yeni);
+      return yeni;
+    });
+    setPortfoyDuzenleId(null);
+  };
+  // ⚠️ KATILIM HESABI/SUKUK GÜNCELLEME (2026-08-13) — portfoyEkle (yani
+  // portfoyBirlestir) BURADA KULLANILAMAZ: o fonksiyon aynı kod bulunca
+  // "üzerine yazmıyor", TOPLUYOR (toplamMiktar = eski.miktar + yeni.miktar)
+  // ve ...eski spread'i yüzünden katilimOran/katilimVadeGun gibi alanlar
+  // ESKİ DEĞERDE KALIYOR — kullanıcı tutarı değiştirmeye çalışsa anapara
+  // YANLIŞLIKLA TOPLANIR, oranı değiştirmeye çalışsa HİÇBİR ŞEY DEĞİŞMEZ.
+  // Bu fonksiyon id'ye göre kalemi TAMAMEN DEĞİŞTİRİR (map ile üzerine
+  // yazar) — portfoyAlisGuncelle'nin izlediği AYNI güvenli desen.
+  const portfoyVadeliGuncelle=(guncellenmisKalem:PortfoyKalemi)=>{
+    setPortfoy(liste=>{
+      const yeni=liste.map(k=> k.id===guncellenmisKalem.id ? guncellenmisKalem : k);
       portfoyYaz(yeni);
       return yeni;
     });
@@ -23840,9 +23876,28 @@ function App(){
       {piyasaOzetiDuzenleAcik&&<PiyasaOzetiDuzenleModal secili={piyasaOzetiSecim} onToggle={piyasaOzetiToggle} onClose={()=>setPiyasaOzetiDuzenleAcik(false)}/>}
       {secilikur&&<KurGrafikModal kur={secilikur} onClose={()=>setSeciliKur(null)}/>}
       {portfoyEkleAcik&&<PortfoyEkleModal onKapat={()=>setPortfoyEkleAcik(false)} onEklendi={portfoyEkle} settings={settings}/>}
+      {/* ⚠️ DÜZENLEME AKSİYONU (2026-08-13): Katılım Hesabı/Sukuk için mevcut
+          PortfoyDuzenleModal (miktar/fiyat/tarih, "parti" tabanlı ortalama
+          maliyet mantığı) UYGUN DEĞİL — bu türlerde "fiyat" kavramı yok.
+          Bunun yerine PortfoyEkleModal'ın KENDİ formu (katilimForm/sukukForm)
+          "düzenleme modunda" (duzenlenecekKalem dolu) yeniden kullanılıyor —
+          aynı hesaplama/önizleme, kod tekrarı yok.
+          ⚠️ onEklendi burada BİLEREK portfoyEkle DEĞİL, portfoyVadeliGuncelle
+          — portfoyEkle (portfoyBirlestir) aynı kodu bulunca ÜZERİNE YAZMAZ,
+          PARTİ olarak TOPLAR (miktar toplanır, oran/vade gibi alanlar ...eski
+          spread'i yüzünden ESKİ DEĞERDE KALIR) — bu düzenleme için YANLIŞ
+          sonuç verirdi (anapara yanlışlıkla artar, oran hiç değişmez).
+          portfoyVadeliGuncelle id'ye göre kalemi TAMAMEN DEĞİŞTİRİR.
+          key={dk.id}: kalem değiştiğinde React'in state'i yanlışlıkla
+          taşımaması için ekstra güvence. */}
       {(()=>{ const dk = portfoyDuzenleId ? portfoy.find(x=>x.id===portfoyDuzenleId) : null;
-        return dk ? <PortfoyDuzenleModal kalem={dk} onKapat={()=>setPortfoyDuzenleId(null)}
-                      onKaydet={(g)=>portfoyAlisGuncelle(dk.id,g)}/> : null; })()}
+        if (!dk) return null;
+        if (dk.tur==="katilim" || dk.tur==="sukuk") {
+          return <PortfoyEkleModal key={dk.id} onKapat={()=>setPortfoyDuzenleId(null)}
+                    onEklendi={portfoyVadeliGuncelle} settings={settings} duzenlenecekKalem={dk}/>;
+        }
+        return <PortfoyDuzenleModal kalem={dk} onKapat={()=>setPortfoyDuzenleId(null)}
+                      onKaydet={(g)=>portfoyAlisGuncelle(dk.id,g)}/>; })()}
       {gostergeTablo&&<GostergeTabloModal ad={gostergeTablo.ad} seri={gostergeTablo.seri||[]} birim={gostergeTablo.birim} onClose={()=>setGostergeTablo(null)}/>}
       {gostergeUyari&&<div style={{position:"fixed",top:64,left:`calc(50% + ${SIDEBAR_W/2}px)`,transform:"translateX(-50%)",background:C.thead,color:"#fff",borderRadius:20,padding:"10px 20px",fontSize:13,fontWeight:600,zIndex:700,boxShadow:"0 4px 14px rgba(0,0,0,0.35)"}}>{gostergeUyari}</div>}
       {hakkindaAcik&&<HakkindaModal onClose={()=>setHakkindaAcik(false)}/>}
