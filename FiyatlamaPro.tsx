@@ -20965,7 +20965,12 @@ function PortfoyWidgetSatir({k, gizli, sonSatirMi, onTikla, onSil, onDuzenle, ac
         <div style={{flex:1,minWidth:0}}>
           <div style={{display:"flex",alignItems:"center",gap:6}}>
             <span style={{fontSize:12.5,fontWeight:800,color:PORTFOY_YAZI}}>{portfoyKodGoster(k)}</span>
-            <span style={{fontSize:8.5,fontWeight:700,color:meta.renk,background:meta.bg,borderRadius:4,padding:"1px 5px"}}>{meta.label}</span>
+            {/* SADELEŞTİRME (2026-08-13): Katılım/Sukuk'ta rozet kaldırıldı —
+                ikon zaten renkli ve türü gösteriyor (mor=katılım, teal=sukuk),
+                rozet + alttaki anapara/oran satırı BİRLİKTE ekranı kalabalık
+                gösteriyordu. Diğer türlerde (hisse/fon vb.) rozet kalıyor,
+                orada tekrar eden bir bilgi değil. */}
+            {k.tur!=="katilim" && k.tur!=="sukuk" && <span style={{fontSize:8.5,fontWeight:700,color:meta.renk,background:meta.bg,borderRadius:4,padding:"1px 5px"}}>{meta.label}</span>}
             {izlemeModu && <span style={{fontSize:8.5,fontWeight:700,color:PORTFOY_ETIKET,background:WA(0.1),borderRadius:4,padding:"1px 5px"}}>İzleniyor</span>}
           </div>
           {/* Katılım hesabı / Sukuk: isim yerine anapara/oran/vade özeti +
@@ -20975,7 +20980,13 @@ function PortfoyWidgetSatir({k, gizli, sonSatirMi, onTikla, onSil, onDuzenle, ac
             return (
             <div style={{marginTop:2}}>
               <div style={{fontSize:10,color:PORTFOY_YAZI,opacity:0.78,fontFamily:"ui-monospace,monospace"}}>
-                {portfoyFmtDeger(k.miktar||0,k)} · %{fmtN(portfoyVadeliOran(k)||0,1)} yıllık
+                {/* SADELEŞTİRME (2026-08-13): anapara buradan kaldırıldı —
+                    sağdaki DEĞER sütunu zaten anaparaya yakın bir rakam
+                    gösteriyor (₺1.009.041 gibi), burada tekrar etmek
+                    kalabalık yaratıyordu. Detaylı anapara/vade/geçen-gün
+                    kırılımı tıklanınca açılan TAM Portföy ekranında (4'lü
+                    ızgara) hâlâ var, sadece bu kompakt özet sadeleşti. */}
+                %{fmtN(portfoyVadeliOran(k)||0,1)} yıllık
                 {ilerleme && (ilerleme.vadeDoldu ? " · vade doldu" : ` · ${ilerleme.kalanGun} gün kaldı`)}
               </div>
               {ilerleme && (
@@ -21598,7 +21609,14 @@ function PortfoyEkleModal({onKapat, onEklendi, settings}:{onKapat:()=>void; onEk
       katilimParaBirimi: katilimDoviz,
       katilimStopajOrani: o.sOran,
     };
+    // ⚠️ DÜZELTME (2026-08-13): onKapat() EKSİKTİ — kaydetVeKapat (diğer
+    // türlerin ortak final adımı, satır ~21785) hem onEklendi HEM onKapat
+    // çağırıyor; burada sadece onEklendi vardı. Sonuç: buton her tıklamada
+    // GERÇEKTEN kaydı ekliyordu ama modal AÇIK KALIYORDU — kullanıcı hiçbir
+    // tepki görmeyince tekrar tekrar bastı, aynı hesap mükerrer eklendi
+    // (ekran görüntüsüyle doğrulandı: 3 kez basıp 3 kayıt oluşmuş).
     onEklendi(yeniKalem);
+    onKapat();
   };
 
   // ── SUKUK / KİRA SERTİFİKASI FORM ALANLARI (2026-08-13) ─────────────────
@@ -21663,7 +21681,9 @@ function PortfoyEkleModal({onKapat, onEklendi, settings}:{onKapat:()=>void; onEk
       sukukYatirimciTipi: sukukTip,
       sukukStopajOrani: o.sOran,
     };
+    // ⚠️ DÜZELTME (2026-08-13): katilimEkle'deki AYNI eksiklik/gerekçe.
     onEklendi(yeniKalem);
+    onKapat();
   };
 
   // Hisse/fon listeleri "ara" aşamasına girince (lazy) çekilir.
