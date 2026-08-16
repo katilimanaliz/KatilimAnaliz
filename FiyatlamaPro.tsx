@@ -1009,6 +1009,23 @@ const FC = TEMA === "acik" ? {
 // Vakıf Katılım öncelikli sıralama için oncelik değeri API'den sonra atanır
 const VAKIF_KODLARI = ["VLT","VHS","VKK","VKV","VPA"];
 
+// ── TEFAS'TA İŞLEM GÖRMEYEN FONLARI FİLTRELE (2026-08-13) ──────────────────
+// islemDurumu alanı Fonoloji'den geliyor (mapFon: f.trading_status || null).
+// null/undefined İSE "bilinmiyor" demektir — YANLIŞLIKLA elenmez, sadece
+// DOLU VE "AKTİF" DEĞİLSE elenir. Aynı mantık daha önce sadece bir uyarı
+// ikonu (⚠️) göstermek için kullanılıyordu; şimdi üç ekranda da (Yatırım
+// Fonları Getiri İzleme, Ana Sayfa Top Hareketliler, Haftalık Piyasa Özeti)
+// bu fonlar TAMAMEN LİSTEDEN ÇIKARILIYOR — TEFAS'ta işlem görmeyen bir fon
+// "En İyi Performans" ya da "Top Hareketliler" gibi listelerde görünürse
+// yanıltıcı olur, kullanıcı zaten o fona yatırım yapamaz.
+// Bu üç ekran AYNI sessionStorage anahtarını ("kea_fonlar") paylaştığı için
+// filtre hem cache okuma hem API çekme noktalarının HEPSİNDE tutarlı
+// uygulanmalı — aksi halde ekranlar birbirinin cache'ini "kirletebilir".
+// NOT: Portföy/FonDetay ekranındaki ayrı uyarı (kullanıcı zaten portföyüne
+// eklemiş bir fonun artık işlem görmediğini bildiren) BU FİLTREDEN
+// ETKİLENMEZ — kullanıcı geçmişte eklediği bir kaydı görebilmeli.
+const fonAktifMi = (f: any) => !(f.islemDurumu && f.islemDurumu !== "AKTİF");
+
 const PERIODS = [
   { key:"gunluk",   label:"Günlük"   },
   { key:"haftalik", label:"Haftalık" },
@@ -1481,7 +1498,7 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
       if (!raw) return [];
       const { data } = JSON.parse(raw);
       // Boş dizi cache'i güvenilir "yüklendi" verisi sayma — gerçek veri gelene kadar boş başla
-      return Array.isArray(data) && data.length > 0 ? data : [];
+      return Array.isArray(data) && data.length > 0 ? data.filter(fonAktifMi) : [];
     } catch { return []; }
   });
   const [yukleniyor,  setYukleniyor]  = useState(() => {
@@ -1538,10 +1555,16 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
         }));
         // Sessiz (arka plan) tazelemede boş sonuç dönerse, ekranda zaten gösterilen
         // geçerli veriyi SİLME — bu geçici bir API aksaklığı olabilir.
+        // ⚠️ "boş mu" kontrolü HAM veriyle (veriyle) yapılıyor, filtrelenmiş
+        // değil — aksi halde "API'den 50 fon geldi ama hepsi TEFAS'ta pasifti"
+        // durumu "API'den hiç veri gelmedi" ile karışır, mevcut ekran
+        // YANLIŞLIKLA boşaltılabilir.
         if (veriyle.length > 0 || !sessiz) {
-          setFonlar(veriyle);
+          setFonlar(veriyle.filter(fonAktifMi));
         }
-        // Sadece dolu sonuçları cache'e yaz — boş/geçici aksaklığı 5 dk kilitleme
+        // Cache'e HAM veri yazılır (filtrelenmemiş) — islemDurumu ileride
+        // değişebilir (fon yeniden aktif olabilir), cache "ham veri deposu"
+        // olarak kalır; her ekran kendi useState başlangıcında filtreler.
         if (veriyle.length > 0) {
           try { sessionStorage.setItem("kea_fonlar", JSON.stringify({ data: veriyle, ts: Date.now() })); } catch {}
         }
@@ -3392,7 +3415,7 @@ function KatilimEndeksiTopHareketliler({ nav, onSecim }: { nav: (sc: string) => 
 
   // İlk render'da varsa önbellekteki veriyi hemen göster (boş ekran/bekleme olmasın)
   const [hisseler, setHisseler] = useState<any[]>(() => okuCache("kea_hisseler"));
-  const [fonlar, setFonlar]     = useState<any[]>(() => okuCache("kea_fonlar"));
+  const [fonlar, setFonlar]     = useState<any[]>(() => okuCache("kea_fonlar").filter(fonAktifMi));
   const [sekme, setSekme]       = useState<"hisse" | "fon">("hisse");
 
   useEffect(() => {
@@ -3418,8 +3441,11 @@ function KatilimEndeksiTopHareketliler({ nav, onSecim }: { nav: (sc: string) => 
               oncelik: VAKIF_KODLARI.includes(f.kod) ? 1 : 2,
             }));
             // Boş sonuç, ekranda zaten gösterilen geçerli veriyi silmesin
+            // ⚠️ "boş mu" kontrolü HAM veriyle yapılıyor, cache'e de HAM
+            // veri yazılıyor — sadece state'e geçerken filtreleniyor (bkz.
+            // fonAktifMi tanımındaki gerekçe: cache "ham veri deposu" kalır).
             if (veriyle.length > 0) {
-              setFonlar(veriyle);
+              setFonlar(veriyle.filter(fonAktifMi));
               yazCache("kea_fonlar", veriyle);
             }
           }
@@ -9685,7 +9711,7 @@ function HaftalikPiyasaOzeti(){
     }catch{return false;}
   };
   const [hisseler,setHisseler]=useState<any[]>(()=>hpOkuCache("kea_hisseler"));
-  const [fonlar,setFonlar]=useState<any[]>(()=>hpOkuCache("kea_fonlar"));
+  const [fonlar,setFonlar]=useState<any[]>(()=>hpOkuCache("kea_fonlar").filter(fonAktifMi));
   useEffect(()=>{
     if(!hpCacheTaze("kea_hisseler")){
       fetch(`${API_BASE}/api/hisse-proxy`).then(r=>r.ok?r.json():null).then(d=>{
@@ -9698,7 +9724,7 @@ function HaftalikPiyasaOzeti(){
     if(!hpCacheTaze("kea_fonlar")){
       fetch(`${API_BASE}/api/tefas-proxy`).then(r=>r.ok?r.json():null).then(d=>{
         if(d?.success&&(d.data||[]).length>0){
-          setFonlar(d.data);
+          setFonlar(d.data.filter(fonAktifMi));
           try{sessionStorage.setItem("kea_fonlar",JSON.stringify({data:d.data,ts:Date.now()}));}catch{}
         }
       }).catch(()=>{});
