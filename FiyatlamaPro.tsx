@@ -2179,11 +2179,43 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
     <div style={{background:C.bg,minHeight:"100%",paddingBottom:80}}>
       {/* Header */}
       <div style={{background:C.card,padding:"12px 16px 16px",borderBottom:`1px solid ${C.border}`}}>
-        <button onClick={onGeri} style={{
-          background:"rgba(91,155,216,0.12)",border:"1px solid rgba(91,155,216,0.35)",
-          color:(TEMA==="acik"?"#2E6DA8":"#9FC1EA"),fontWeight:600,fontSize:13,cursor:"pointer",padding:"6px 12px 6px 9px",
-          borderRadius:999,display:"flex",alignItems:"center",gap:3,marginBottom:10,fontFamily:"inherit",
-        }}><span style={{fontSize:16,lineHeight:1,marginTop:-1}}>‹</span><span>Geri</span></button>
+        {/* ── ALARM + FAVORİ ÜSTE TAŞINDI (2026-08-16) ────────────────────
+            Önceden grafik bölümünde, dönem butonlarının yanındaydı. Kullanıcı
+            başka bir uygulamadaki gibi (Geri butonuyla aynı satırda, sağa
+            yaslı, en üstte) görmek istedi. Ticker/Şirket adı — Fiyat/Değişim
+            satırı BİLEREK değiştirilmedi (kullanıcı "yapı bozulmasın" dedi;
+            ilk denemede ikonlar fiyatın üstüne konunca sol/sağ blok satır
+            sayıları farklılaşıp hizasız görünmüştü — o yüzden AYRI bir üst
+            satıra alındı). İkon boyutu 24px onaylanmadı ("çok büyük"), 19px'e
+            küçültüldü — eski boyutlara (Bell 17 / Yıldız 20) yakın. */}
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+          <button onClick={onGeri} style={{
+            background:"rgba(91,155,216,0.12)",border:"1px solid rgba(91,155,216,0.35)",
+            color:(TEMA==="acik"?"#2E6DA8":"#9FC1EA"),fontWeight:600,fontSize:13,cursor:"pointer",padding:"6px 12px 6px 9px",
+            borderRadius:999,display:"flex",alignItems:"center",gap:3,fontFamily:"inherit",
+          }}><span style={{fontSize:16,lineHeight:1,marginTop:-1}}>‹</span><span>Geri</span></button>
+          <div style={{display:"flex",alignItems:"center",gap:2}}>
+            <button onClick={()=>setAlarmAcik(true)} title="Fiyat alarmı / KAP bildirimi" style={{
+              background:"none",border:"none",padding:4,cursor:"pointer",display:"flex",
+              alignItems:"center",justifyContent:"center",fontFamily:"inherit",
+            }}>
+              <Bell size={19} color={C.blue}/>
+            </button>
+            <TakipYildizi
+              tur="hisse"
+              kod={hisse.ticker}
+              ad={hisse.sirket || hisse.ticker}
+              birim="lot"
+              fiyat={hisse.fiyat ?? null}
+              dec={2}
+              g={hisse.degisim1g ?? null}
+              h={hisse.degisim1h ?? null}
+              a={hisse.degisim1a ?? null}
+              y={hisse.degisim1y ?? null}
+              boyut={19}
+            />
+          </div>
+        </div>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
           <div>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
@@ -2201,7 +2233,7 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
 
       {/* Grafik */}
       <div style={{background:C.card,margin:"10px 0",padding:"12px 16px"}}>
-        {/* Dönem butonları + takip yıldızı */}
+        {/* Dönem butonları — Alarm/Favori artık üstte (Header), burada tekrar edilmiyor */}
         <div style={{display:"flex",gap:6,marginBottom:10,alignItems:"center"}}>
           {([["1a","1 Ay"],["3a","3 Ay"],["1y","1 Yıl"]] as ["1a"|"3a"|"1y",string][]).map(([k,l]) => (
             <button key={k} onClick={() => setDonem(k)} style={{
@@ -2210,27 +2242,6 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
               fontSize:11,fontWeight:donem===k?700:400,cursor:"pointer",fontFamily:"inherit"
             }}>{l}</button>
           ))}
-          {/* Alarm çanı + takip yıldızı — dönem butonlarının sağ ucunda */}
-          <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:2}}>
-            <button onClick={()=>setAlarmAcik(true)} title="Fiyat alarmı / KAP bildirimi" style={{
-              background:"none",border:"none",padding:4,cursor:"pointer",display:"flex",
-              alignItems:"center",justifyContent:"center",fontFamily:"inherit",
-            }}>
-              <Bell size={17} color={C.blue}/>
-            </button>
-            <TakipYildizi
-              tur="hisse"
-              kod={hisse.ticker}
-              ad={hisse.sirket || hisse.ticker}
-              birim="lot"
-              fiyat={hisse.fiyat ?? null}
-              dec={2}
-              g={hisse.degisim1g ?? null}
-              h={hisse.degisim1h ?? null}
-              a={hisse.degisim1a ?? null}
-              y={hisse.degisim1y ?? null}
-            />
-          </div>
         </div>
         {grafikYukl
           ? <div style={{height:120,display:"flex",alignItems:"center",justifyContent:"center",color:C.sub,fontSize:12}}>⟳ Yükleniyor…</div>
