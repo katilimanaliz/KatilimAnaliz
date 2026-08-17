@@ -1995,7 +1995,7 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
   const [grafikRef, grafikW] = useOlculenGenislik(320);
   const [grafik, setGrafik]       = useState<any[]>([]);
   const [grafikYukl, setGrafikYukl] = useState(true);
-  const [donem, setDonem]         = useState<"1a"|"3a"|"1y">("1a");
+  const [donem, setDonem]         = useState<"1a"|"3a"|"6a"|"ytd"|"1y">("1a");
   // O hisseye ait son KAP bildirimleri — ayrı uçtan, grafikten bağımsız
   // yükleniyor ki KAP erişilemezse sayfanın geri kalanı beklemesin.
   const [kapBildirim, setKapBildirim] = useState<any[]>([]);
@@ -2024,6 +2024,8 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
     const baslangic = new Date(bugun);
     if (donem === "1a") baslangic.setMonth(bugun.getMonth() - 1);
     else if (donem === "3a") baslangic.setMonth(bugun.getMonth() - 3);
+    else if (donem === "6a") baslangic.setMonth(bugun.getMonth() - 6);
+    else if (donem === "ytd") { baslangic.setDate(1); baslangic.setMonth(0); } // yılın 1 Ocak'ı — önce gün sonra ay (taşma riski olmasın diye)
     else baslangic.setFullYear(bugun.getFullYear() - 1);
     const bas = fmt(baslangic);
 
@@ -2039,14 +2041,15 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
 
   const renk = hisse.degisim1g >= 0 ? C.green : C.red;
 
-  // Seçili dönem (1a/3a/1y) için GERÇEK getiri — grafikteki ilk ve son
+  // Seçili dönem (1a/3a/6a/ytd/1y) için GERÇEK getiri — grafikteki ilk ve son
   // kapanış fiyatından hesaplanır. "3 Ay" için backend'de ayrı bir alan
   // (degisim3a gibi) hiç yok — bu yüzden tek doğru kaynak zaten yüklenmiş
   // olan grafik verisi. "1 Ay"/"1 Yıl" seçiliyken de TUTARLILIK için aynı
   // hesaplama kullanılıyor (backend'deki hisse.degisim1a/1y ile birebir
   // aynı takas günü aralığını kapsamayabilir, grafikten hesaplamak dönem
-  // butonuyla her zaman birebir eşleşir).
-  const donemEtiket = donem === "1a" ? "1 Ay" : donem === "3a" ? "3 Ay" : "1 Yıl";
+  // butonuyla her zaman birebir eşleşir). 6 Ay/YTD eklenirken (2026-08-16)
+  // AYNI mantık korundu — backend'de bu alanlar için ayrı bir kaynak yok.
+  const donemEtiket = donem === "1a" ? "1 Ay" : donem === "3a" ? "3 Ay" : donem === "6a" ? "6 Ay" : donem === "ytd" ? "Yılbaşından" : "1 Yıl";
   const donemGetiri = grafik.length > 1 && grafik[0]?.kapanis > 0
     ? ((grafik[grafik.length-1].kapanis / grafik[0].kapanis) - 1) * 100
     : null;
@@ -2242,13 +2245,16 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
 
       {/* Grafik */}
       <div style={{background:C.card,margin:"10px 0",padding:"12px 16px"}}>
-        {/* Dönem butonları — Alarm/Favori artık üstte (Header), burada tekrar edilmiyor */}
-        <div style={{display:"flex",gap:6,marginBottom:10,alignItems:"center"}}>
-          {([["1a","1 Ay"],["3a","3 Ay"],["1y","1 Yıl"]] as ["1a"|"3a"|"1y",string][]).map(([k,l]) => (
+        {/* Dönem butonları — Alarm/Favori artık üstte (Header), burada tekrar edilmiyor.
+            ⚠️ 6 Ay/YTD eklendi (2026-08-16, kullanıcı onayıyla "A" seçeneği): 3'ten
+            5 butona çıkınca sığma riski vardı — gap 6→5, padding 12→11 küçültülerek
+            tek satıra sığdırıldı (yatay kaydırma yerine). */}
+        <div style={{display:"flex",gap:5,marginBottom:10,alignItems:"center"}}>
+          {([["1a","1 Ay"],["3a","3 Ay"],["6a","6 Ay"],["ytd","YTD"],["1y","1 Yıl"]] as ["1a"|"3a"|"6a"|"ytd"|"1y",string][]).map(([k,l]) => (
             <button key={k} onClick={() => setDonem(k)} style={{
-              padding:"4px 12px",borderRadius:6,border:`1px solid ${C.border}`,
+              padding:"4px 11px",borderRadius:6,border:`1px solid ${C.border}`,
               background:donem===k?C.blue:"none",color:donem===k?"#fff":C.sub,
-              fontSize:11,fontWeight:donem===k?700:400,cursor:"pointer",fontFamily:"inherit"
+              fontSize:11,fontWeight:donem===k?700:400,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"
             }}>{l}</button>
           ))}
         </div>
