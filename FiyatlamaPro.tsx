@@ -2201,6 +2201,15 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
             }}>
               <Bell size={19} color={C.blue}/>
             </button>
+            {/* ⚠️ BOYUT NOTU (2026-08-16): Bell gerçek bir SVG ikon (lucide-
+                react, size=19 → 19px viewBox dolduruyor). TakipYildizi ise
+                Unicode karakter (★/☆) kullanıyor, boyut prop'u aslında
+                fontSize — aynı 19 değerinde bile font glyph'i SVG'den daha
+                küçük/ince render oluyor (boş ☆ hali özellikle ince çizgili).
+                Kullanıcı ekran görüntüsüyle bildirdi. Bileşenin kendisine
+                dokunulmadı (uygulama genelinde kullanılıyor) — sadece BU
+                çağrıda boyut Bell ile görsel ağırlıkça eşleşsin diye
+                büyütüldü. */}
             <TakipYildizi
               tur="hisse"
               kod={hisse.ticker}
@@ -2212,7 +2221,7 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
               h={hisse.degisim1h ?? null}
               a={hisse.degisim1a ?? null}
               y={hisse.degisim1y ?? null}
-              boyut={19}
+              boyut={23}
             />
           </div>
         </div>
