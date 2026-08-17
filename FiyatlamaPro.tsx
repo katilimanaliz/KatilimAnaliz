@@ -2243,6 +2243,53 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
         </div>
       </div>
 
+      {/* ── ŞİRKET BİLGİLERİ ŞERİDİ (2026-08-17) ────────────────────────────
+          Backend'de Midas ana kaynak olduğundan beri gelen ama önceden hiç
+          gösterilmeyen alanlar: Taban/Tavan/Ağırlıklı Ort./Sermaye/Halka
+          Açıklık/Net Kâr/Hacim(TL). Kullanıcı FVT örneğindeki gibi yatay
+          kaydırmalı bir şerit istedi ("A" seçeneği, önizlemede onaylandı).
+          ⚠️ Bu alanlar SADECE kaynak Midas iken dolu gelir (bkz. backend'deki
+          hisse-proxy.js) — kaynak TradingView'a düşerse (Midas bayat/erişilemez
+          olursa) hepsi null olur. fmtBuyukSayi/kartDeger null'ı "—" gösterir,
+          şerit KAYBOLMAZ ama boş kartlar görünür — bu bilinçli bir tercih:
+          "veri yok" demek "kart hiç yok" demekten daha az şaşırtıcı, kullanıcı
+          şeridin varlığını her zaman tutarlı görür. */}
+      {(()=>{
+        const fmtBuyukSayi = (n: number | null | undefined): string => {
+          if (n == null) return "—";
+          if (Math.abs(n) >= 1e9) return (n/1e9).toLocaleString("tr-TR",{maximumFractionDigits:2}) + " Mr";
+          if (Math.abs(n) >= 1e6) return (n/1e6).toLocaleString("tr-TR",{maximumFractionDigits:2}) + " Mn";
+          return n.toLocaleString("tr-TR",{maximumFractionDigits:2});
+        };
+        const fmtFiyat = (n: number | null | undefined): string =>
+          n == null ? "—" : n.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2});
+        const fmtYuzde = (n: number | null | undefined): string =>
+          n == null ? "—" : "%" + n.toLocaleString("tr-TR",{maximumFractionDigits:1});
+
+        const kartlar: [string,string,string?][] = [
+          ["TABAN", fmtFiyat(hisse.taban), "red"],
+          ["TAVAN", fmtFiyat(hisse.tavan), "green"],
+          ["AĞ. ORT.", fmtFiyat(hisse.agirlikliOrtalama)],
+          ["SERMAYE", fmtBuyukSayi(hisse.sermaye)],
+          ["HALKA AÇIK", fmtYuzde(hisse.halkaAciklikOrani)],
+          ["NET KÂR", fmtBuyukSayi(hisse.netKar)],
+          ["HACİM (TL)", fmtBuyukSayi(hisse.hacimTL)],
+        ];
+        return (
+          <div style={{display:"flex",gap:8,overflowX:"auto",padding:"12px 16px",background:C.card,
+                       borderBottom:`1px solid ${C.border}`,scrollbarWidth:"none"}}>
+            {kartlar.map(([lbl,val,renkAd]) => (
+              <div key={lbl} style={{flexShrink:0,background:WA(0.04),border:`1px solid ${C.border}`,
+                                      borderRadius:10,padding:"9px 12px",minWidth:76}}>
+                <div style={{fontSize:9,color:C.sub2,marginBottom:3,whiteSpace:"nowrap"}}>{lbl}</div>
+                <div style={{fontSize:13,fontWeight:800,color:renkAd==="green"?C.green:renkAd==="red"?C.red:C.text,
+                             fontFamily:"ui-monospace,monospace",whiteSpace:"nowrap"}}>{val}</div>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
       {/* Grafik */}
       <div style={{background:C.card,margin:"10px 0",padding:"12px 16px"}}>
         {/* Dönem butonları — Alarm/Favori artık üstte (Header), burada tekrar edilmiyor.
@@ -2388,6 +2435,56 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
           </div>
         );
       })()}
+
+      {/* ── GEÇMİŞ TABLOSU (2026-08-17) ─────────────────────────────────────
+          Grafik zaten günlük kapanış verisi çekiyor (donem state'ine göre) —
+          aynı veriyi tablo formatında da göstermek YENİ bir API isteği
+          gerektirmiyor. Açılış sütunu YOK — backend'in (api/hisse-gecmis.js,
+          erişimim yok) bu alanı sağlayıp sağlamadığını doğrulayamadım, tahmin
+          üzerine yanlış/boş bir sütun göstermek yerine sadece DOĞRULANMIŞ
+          alanları (tarih, kapanış) kullanıyorum. Getiri, ardışık günler
+          arasındaki kapanış farkından hesaplanıyor — grafik dizisi kronolojik
+          (eski→yeni) geldiği için, tabloda YENİ→ESKİ göstermek üzere ters
+          çevriliyor, "bir önceki güne göre getiri" hesabı orijinal (ters
+          çevrilmemiş) index üzerinden yapılıyor. */}
+      {grafik.length > 1 && (
+        <div style={{padding:"18px 14px 0"}}>
+          <div style={{fontSize:11,fontWeight:700,color:C.sub,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>
+            Geçmiş Fiyatlar ({donemEtiket})
+          </div>
+          <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,overflow:"hidden"}}>
+            <div style={{display:"flex",padding:"9px 14px",borderBottom:`1px solid ${C.border}`,background:WA(0.03)}}>
+              <span style={{flex:1,fontSize:10,fontWeight:700,color:C.sub2}}>TARİH</span>
+              <span style={{width:80,textAlign:"right",fontSize:10,fontWeight:700,color:C.sub2}}>KAPANIŞ</span>
+              <span style={{width:70,textAlign:"right",fontSize:10,fontWeight:700,color:C.sub2}}>GETİRİ</span>
+            </div>
+            {[...grafik].reverse().slice(0, 30).map((p, i, arr) => {
+              const orijinalIdx = grafik.length - 1 - i;
+              const oncekiKapanis = orijinalIdx > 0 ? grafik[orijinalIdx - 1].kapanis : null;
+              const getiri = oncekiKapanis && oncekiKapanis > 0
+                ? ((p.kapanis - oncekiKapanis) / oncekiKapanis) * 100 : null;
+              return (
+                <div key={p.tarih + i} style={{display:"flex",padding:"9px 14px",
+                  borderBottom:i<arr.length-1?`1px solid ${C.border}`:"none",alignItems:"center"}}>
+                  <span style={{flex:1,fontSize:12,color:C.sub}}>{p.tarih}</span>
+                  <span style={{width:80,textAlign:"right",fontSize:12,fontWeight:700,color:C.text,fontFamily:"ui-monospace,monospace"}}>
+                    {p.kapanis.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2})}
+                  </span>
+                  <span style={{width:70,textAlign:"right",fontSize:11,fontWeight:700,fontFamily:"ui-monospace,monospace",
+                    color:getiri==null?C.sub2:getiri>0?C.green:getiri<0?C.red:C.sub}}>
+                    {getiri==null?"—":(getiri>0?"+":"")+getiri.toFixed(2)+"%"}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          {grafik.length > 30 && (
+            <div style={{textAlign:"center",fontSize:10,color:C.sub2,marginTop:8}}>
+              Son 30 gün gösteriliyor · toplam {grafik.length} kayıt
+            </div>
+          )}
+        </div>
+      )}
 
       {/* KAP BİLDİRİMLERİ — bildirim yoksa bölüm hiç görünmez. */}
       {kapBildirim.length > 0 && (
