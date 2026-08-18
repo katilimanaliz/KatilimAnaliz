@@ -42,6 +42,20 @@ const KATILIM_TTL = 24 * 3600;
 const KV_HISSE_FIYAT_KEY = "hisse:fiyat:v1";
 const HISSE_FIYAT_TTL = 3 * 3600;
 
+// ── HİSSE EK VERİ ÖNBELLEĞİ (2026-08-18) ────────────────────────────────────
+// GEREKÇE: Midas ana kaynak olduğundan beri (bkz. "KAYNAK SECIMI" notu aşağıda)
+// TradingView'a özgü alanlar (sektör, endüstri, borç/özkaynak, beta, net kâr
+// marjı, hisse başı kâr, 10 günlük ort. hacim, 3A/6A/YTD getiri) her istekte
+// null geliyordu — kullanıcı ekran görüntüsüyle bildirdi (Bilgi sekmesi ve
+// Getiri sekmesindeki 6 Ay/YTD kutuları boş). Kullanıcının önerisi doğru:
+// bu alanlar (sektör, beta, F/K gibi temel göstergeler) günlük hızla
+// DEĞİŞMEZ — her istekte canlı TradingView çağrısı yapmak yerine, GÜNDE
+// BİR-İKİ KEZ Redis'e yazılıp buradan okunabilir. Aynen katılimUyelikGetir()
+// deseninin (Redis → canlı istek → yedek, 24 saatlik TTL) burada da
+// uygulanması — TEK FARK: veri kod→obje haritası, tek bir dizi değil.
+const KV_HISSE_EK_VERI_KEY = "hisse:ek-veri:v1";
+const HISSE_EK_VERI_TTL = 24 * 3600; // 24 saat — sektör/beta gibi yavaş değişen alanlar için yeterli
+
 const KATILIM_ENDEKS_ESLEME = {
   "BIST:XKTUM": "tum",
   "BIST:XK100": "yuz",
@@ -280,6 +294,63 @@ function tradingViewNormalize(tvJson, isimMap, katilimSet) {
     .sort((a, b) => (b.piyasaDegeri || 0) - (a.piyasaDegeri || 0));
 }
 
+// ── HİSSE EK VERİ (2026-08-18) ──────────────────────────────────────────────
+// katilimUyelikGetir() ile AYNI desen: Redis → taze TradingView çekimi →
+// (bulunamazsa) boş/bayat harita. Midas ana kaynak olduğundan beri sektör/
+// beta/borç-özkaynak/net kâr marjı/hisse başı kâr/ort. hacim/3A-6A-YTD gibi
+// alanlar her istekte null geliyordu (bkz. midasHisseler map'indeki null
+// atamalar) — kullanıcı bunu fark etti ve haklı bir öneri getirdi: bu
+// alanlar günlük hızla değişmiyor, her istekte canlı TradingView çağrısı
+// GEREKMİYOR. Günde bir-iki kez (cron ile) tazelenip Redis'te tutuluyor,
+// ana istek akışı buradan (hızlı, ağsız) okuyor.
+// isimMap/katilimSet'e gerçekte ihtiyaç YOK (sirket/katilimEndeksi alanlarını
+// kullanmıyoruz) — tradingViewNormalize()'ı kodu tekrarlamadan kullanmak
+// için boş/dummy değerlerle çağrılıyor.
+async function hisseEkVeriGetir(zorlaTazele = false) {
+  if (!zorlaTazele) {
+    try {
+      const kayit = await redis.get(KV_HISSE_EK_VERI_KEY);
+      if (kayit && kayit.veri && Object.keys(kayit.veri).length > 100) {
+        const yasSaat = (Date.now() - (kayit.yazilmaTs || 0)) / 3600000;
+        if (yasSaat < 24) return { veri: kayit.veri, kaynak: "onbellek", yasSaat };
+      }
+    } catch {}
+  }
+
+  try {
+    const tv = await tradingViewCek();
+    const tvHisseler = tradingViewNormalize(tv, {}, new Set());
+    if (tvHisseler.length < 100) throw new Error(`TV yetersiz kayit (${tvHisseler.length})`);
+
+    const harita = {};
+    for (const h of tvHisseler) {
+      harita[h.ticker] = {
+        sektorEn: h.sektorEn, endustri: h.endustri, borcOzkaynak: h.borcOzkaynak,
+        yuksek52h: h.yuksek52h, dusuk52h: h.dusuk52h,
+        degisim3a: h.degisim3a, degisim6a: h.degisim6a, degisimYtd: h.degisimYtd,
+        beta: h.beta, netMarj: h.netMarj, hisseBasiKar: h.hisseBasiKar,
+        ortHacim10g: h.ortHacim10g, temetu: h.temetu,
+      };
+    }
+    try {
+      await redis.set(KV_HISSE_EK_VERI_KEY, { veri: harita, yazilmaTs: Date.now() }, { ex: HISSE_EK_VERI_TTL });
+    } catch {}
+    return { veri: harita, kaynak: "canli", yasSaat: 0 };
+  } catch (e) {
+    console.error("Hisse ek veri cekilemedi:", e.message);
+    // Redis'te ESKİ (24 saatten eski de olsa) bir kayıt varsa onu kullan —
+    // hiç veri göstermemekten (tüm alanlar "—") iyidir.
+    try {
+      const kayit = await redis.get(KV_HISSE_EK_VERI_KEY);
+      if (kayit && kayit.veri) {
+        const yasSaat = (Date.now() - (kayit.yazilmaTs || 0)) / 3600000;
+        return { veri: kayit.veri, kaynak: "onbellek-bayat", yasSaat };
+      }
+    } catch {}
+    return { veri: {}, kaynak: "yok", yasSaat: null };
+  }
+}
+
 function originIzinliMi(origin) {
   if (!origin) return false;
   if (/^https:\/\/katilim-analiz(-[a-z0-9-]+)?\.vercel\.app$/i.test(origin)) return true;
@@ -317,6 +388,23 @@ export default async function handler(req, res) {
       } catch (e) {
         return res.status(200).json({ tv_calisti: false, hata: String(e && e.message || e) });
       }
+    }
+
+    // ── HİSSE EK VERİ CRON MODU (2026-08-18) ────────────────────────────────
+    // ?ekveri=1 ile tetiklenir — TradingView'dan sektör/beta/6A-YTD gibi
+    // yavaş değişen alanları ÇEKİP Redis'e YAZAR, ana hisse listesini
+    // DÖNDÜRMEZ. vercel.json'da ayrı bir cron tanımıyla günde 1-2 kez
+    // tetiklenmesi gerekiyor (bkz. paylaşım mesajındaki kurulum notu).
+    // ⚠️ Bu dosyanın geri kalanı gibi (tefas-proxy.js'nin aksine) CRON_SECRET
+    // kontrolü YOK — mevcut güvenlik modeliyle tutarlı bırakıldı, kapsam dışı.
+    if (req.query.ekveri === "1") {
+      const sonuc = await hisseEkVeriGetir(true); // zorlaTazele=true, Redis'i yok say
+      return res.status(200).json({
+        success: sonuc.kaynak === "canli",
+        kaynak: sonuc.kaynak,
+        adet: Object.keys(sonuc.veri).length,
+        guncelleme: new Date().toISOString(),
+      });
     }
 
     const [midasRes, isimMap] = await Promise.all([
@@ -498,6 +586,46 @@ export default async function handler(req, res) {
       }
     }
 
+    // ── EK VERİ BİRLEŞTİRME (2026-08-18) ────────────────────────────────────
+    // Midas ana kaynak olduğunda sektör/beta/6A-YTD gibi alanlar null kalıyor
+    // (Midas bu alanları sağlamıyor). Redis'te (günde 1-2 kez cron ile
+    // tazelenen) TradingView kaynaklı ek veri varsa, SADECE null olan
+    // alanları doldurmak için burada birleştiriliyor — Midas'ın kendi
+    // sağladığı alanlara (taban/tavan/sermaye gibi) DOKUNULMUYOR.
+    // kaynak==="tradingview" iken bu alanlar zaten dolu geldiği için
+    // birleştirmeye gerek yok — gereksiz Redis okumasını önlemek için
+    // sadece midas dalında çalıştırılıyor.
+    let ekVeriKaynak = null;
+    if (kaynak === "midas") {
+      try {
+        const ekSonuc = await hisseEkVeriGetir();
+        ekVeriKaynak = ekSonuc.kaynak;
+        if (Object.keys(ekSonuc.veri).length > 0) {
+          for (const h of hisseler) {
+            const ek = ekSonuc.veri[h.ticker];
+            if (!ek) continue;
+            if (h.sektorEn == null) h.sektorEn = ek.sektorEn;
+            if (h.endustri == null) h.endustri = ek.endustri;
+            if (h.borcOzkaynak == null) h.borcOzkaynak = ek.borcOzkaynak;
+            if (h.yuksek52h == null) h.yuksek52h = ek.yuksek52h;
+            if (h.dusuk52h == null) h.dusuk52h = ek.dusuk52h;
+            if (h.degisim3a == null) h.degisim3a = ek.degisim3a;
+            if (h.degisim6a == null) h.degisim6a = ek.degisim6a;
+            if (h.degisimYtd == null) h.degisimYtd = ek.degisimYtd;
+            if (h.beta == null) h.beta = ek.beta;
+            if (h.netMarj == null) h.netMarj = ek.netMarj;
+            if (h.hisseBasiKar == null) h.hisseBasiKar = ek.hisseBasiKar;
+            if (h.ortHacim10g == null) h.ortHacim10g = ek.ortHacim10g;
+            if (h.temetu == null) h.temetu = ek.temetu;
+          }
+        }
+      } catch (e) {
+        console.error("Ek veri birlestirilemedi:", e.message);
+        // Hata olsa bile ana veri (fiyat vb.) ETKİLENMEZ — sadece ek alanlar
+        // null kalmaya devam eder, kullanıcı "—" görür (hatalı sayı değil).
+      }
+    }
+
     const tazelenmeli = veriTazelenirMi();
     const onbellekSn = tazelenmeli ? 600 : 3600;
     res.setHeader("Cache-Control", `s-maxage=${onbellekSn}, stale-while-revalidate=120`);
@@ -531,6 +659,12 @@ export default async function handler(req, res) {
       midasBayat: midasBayatMi(veriZamani),
       katilimKaynak,
       katilimSayisi: katilimSet.size,
+      // Sektör/beta/6A-YTD gibi alanların nereden geldiği: "onbellek" (Redis,
+      // taze), "canli" (bu istekte TradingView'dan çekildi, nadiren olur),
+      // "onbellek-bayat" (24 saatten eski ama veri yok'tan iyi), "yok" (hiç
+      // veri yok, tüm bu alanlar "—" görünür), null (kaynak zaten tradingview
+      // olduğu için birleştirmeye hiç gerek kalmadı).
+      ekVeriKaynak,
       ...(yedekHata ? { yedekHata } : {}),
       data: hisseler,
     });

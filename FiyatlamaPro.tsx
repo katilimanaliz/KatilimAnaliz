@@ -1799,8 +1799,25 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
                     </div>
                     <div onClick={(e)=>{ if(onFonGrafikAc){ e.stopPropagation(); onFonGrafikAc(fon); } }} style={{flex:1,minWidth:0,paddingRight:2,textAlign:"left",cursor:onFonGrafikAc?"pointer":"default"}}>
                       <div style={{fontSize:11,fontWeight:800,color:FC.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",lineHeight:1.3,textDecoration:onFonGrafikAc?"underline":"none",textDecorationColor:FC.border}}>{fon.ad}</div>
-                      <div style={{fontSize:10.5,fontWeight:600,color:FC.text,marginTop:1.5}}>
-                        {typeof fon.fiyat==="number" ? `${fonFiyatBicimle(fon.fiyat)} ₺` : "—"}
+                      <div style={{fontSize:10.5,fontWeight:600,color:FC.text,marginTop:1.5,display:"flex",alignItems:"baseline",gap:4,overflow:"hidden"}}>
+                        <span style={{flexShrink:0}}>{typeof fon.fiyat==="number" ? `${fonFiyatBicimle(fon.fiyat)} ₺` : "—"}</span>
+                        {/* ── FİYAT TARİHİ (2026-08-18) ─────────────────────────────
+                            Backend zaten fiyatTarihi alanını dönüyordu (mapFon →
+                            f.current_date) ama ekranda hiç gösterilmiyordu —
+                            "Para Piyasası kategorisi hepsi eski" şikayeti
+                            doğrulanamıyordu, çünkü hangi fonun ne kadar güncel
+                            olduğunu görmenin hiçbir yolu yoktu. Fonoloji'nin
+                            tarih formatı garantili değil — önce parse etmeyi
+                            dene, başarısız olursa ham string'i göster (Hisse
+                            Detay'daki tooltip.p.tarih'te izlenen aynı güvenli
+                            desen — bkz. HisseDetay içindeki tooltip render'ı). */}
+                        {fon.fiyatTarihi && (()=>{
+                          const d = new Date(fon.fiyatTarihi);
+                          const gosterim = isFinite(d.getTime())
+                            ? d.toLocaleDateString("tr-TR",{day:"2-digit",month:"short"})
+                            : String(fon.fiyatTarihi).slice(0,10);
+                          return <span style={{fontSize:9,color:FC.sub,fontWeight:400,flexShrink:0}}>· {gosterim}</span>;
+                        })()}
                       </div>
                     </div>
                     <span style={{width:genisEkran?130:58,textAlign:genisEkran?"left":"right",paddingLeft:genisEkran?6:0,flexShrink:0,fontSize:genisEkran?10.5:8,color:genisEkran?FC.text:FC.sub,fontWeight:genisEkran?600:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
@@ -2008,7 +2025,12 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
   // bir sekme göstermek yanıltıcı olurdu. `donem`/`grafik` state'leri BURADA
   // (üst seviyede) kalmaya devam ediyor — hem Fiyat sekmesindeki grafik hem
   // Geçmiş sekmesindeki tablo AYNI veriyi paylaşıyor, iki ayrı çekim olmuyor.
-  const [aktifSekme, setAktifSekme] = useState<"fiyat"|"bilgi"|"getiri"|"gecmis">("fiyat");
+  // ── SEKME YAPISI GÜNCELLENDİ (2026-08-18) ────────────────────────────────
+  // Kullanıcı isteği: "Getiri" sekmesi kaldırıldı, içeriği (Değişim kutuları)
+  // Fiyat sekmesine taşındı — fiyat hareketiyle ilgili bir bilgi olduğu için
+  // grafiğin yakınında daha doğal duruyor. KAP Bildirimleri (önceden Fiyat
+  // sekmesinin en altındaydı) kendi ayrı sekmesine taşındı.
+  const [aktifSekme, setAktifSekme] = useState<"fiyat"|"bilgi"|"kap"|"gecmis">("fiyat");
 
   useEffect(() => {
     if (!hisse?.ticker) return;
@@ -2257,7 +2279,7 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
           şu an gerekmiyor (4 sekme rahat sığıyor) ama overflowX:"auto" ileride
           "Analiz"/"Fon Pozisyonları" eklenirse taşmayı otomatik çözer. */}
       <div style={{display:"flex",background:C.card,borderBottom:`1px solid ${C.border}`,overflowX:"auto"}}>
-        {([["fiyat","Fiyat"],["bilgi","Bilgi"],["getiri","Getiri"],["gecmis","Geçmiş"]] as ["fiyat"|"bilgi"|"getiri"|"gecmis",string][]).map(([k,l]) => (
+        {([["fiyat","Fiyat"],["bilgi","Bilgi"],["kap","KAP"],["gecmis","Geçmiş"]] as ["fiyat"|"bilgi"|"kap"|"gecmis",string][]).map(([k,l]) => (
           <button key={k} onClick={()=>setAktifSekme(k)} style={{
             flexShrink:0,padding:"11px 18px",fontSize:13,fontWeight:700,fontFamily:"inherit",
             background:"none",border:"none",borderBottom:`2.5px solid ${aktifSekme===k?C.blue:"transparent"}`,
@@ -2344,8 +2366,8 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
       </div>
       )}
 
-      {/* Değişimler */}
-      {aktifSekme==="getiri" && (
+      {/* Değişimler — Getiri sekmesinden Fiyat sekmesine taşındı (2026-08-18) */}
+      {aktifSekme==="fiyat" && (
       <div style={{margin:"0 0 10px",padding:"0 14px"}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
           {/* ⚠️ 3 AY BURAYA EKLENMEZ (2026-08-05).
@@ -2518,7 +2540,9 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
       )}
 
       {/* KAP BİLDİRİMLERİ — bildirim yoksa bölüm hiç görünmez. */}
-      {aktifSekme==="fiyat" && kapBildirim.length > 0 && (
+      {/* KAP BİLDİRİMLERİ — kendi ayrı sekmesine taşındı (2026-08-18), önceden
+          Fiyat sekmesinin en altındaydı. */}
+      {aktifSekme==="kap" && kapBildirim.length > 0 && (
         <div style={{padding:"18px 14px 0"}}>
           <div style={{fontSize:11,fontWeight:700,color:C.sub,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>{TR("Son KAP Bildirimleri")} · SON 15 GÜN</div>
           <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,overflow:"hidden"}}>
@@ -2552,6 +2576,16 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
           <p style={{margin:"7px 2px 0",fontSize:10.5,color:C.sub,lineHeight:1.5}}>
             Kaynak: Kamuyu Aydınlatma Platformu. Bir bildirime dokunduğunuzda KAP'ın kendi sayfası açılır.
           </p>
+        </div>
+      )}
+
+      {/* KAP sekmesi aktif ama son 15 günde bildirim yoksa: sekme AYRI bir
+          sekme olduğu için (2026-08-18'den önce Fiyat sekmesinin İÇİNDEYDİ,
+          orada başka içerik zaten olduğu için "boş görünme" riski yoktu)
+          boş bir sayfa yerine açık bir mesaj göstermek gerekiyor. */}
+      {aktifSekme==="kap" && kapBildirim.length === 0 && (
+        <div style={{padding:"40px 20px",textAlign:"center"}}>
+          <div style={{fontSize:13,color:C.sub,lineHeight:1.5}}>Son 15 günde KAP bildirimi bulunmuyor.</div>
         </div>
       )}
 

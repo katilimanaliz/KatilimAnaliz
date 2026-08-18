@@ -20,6 +20,14 @@
 // PARCALAR'a bkz), her parçaya vercel.json'da bir cron saati tanımlandı.
 // Her çağrı ~20-45sn sürer, güvenli. Son parça bittiğinde tam liste oluşur.
 //
+// ⚠️ NOT (2026-08-18): Yukarıdaki "8 parçaya bölündü" açıklaması ARTIK GÜNCEL
+// DEĞİL — bkz. _lib/fonFetch.js başındaki not. 3 Ağustos'ta fonVerisiCek()
+// Fonoloji'nin ?katilim=1 sunucu-taraflı süzgeciyle TEK istekte tüm katılım
+// fonlarını (434 kayıt) çeken mimariye geçti. `parcaNo` parametresi (cron
+// URL'leri hâlâ ?parca=N gönderdiği için) geriye dönük uyumluluk için duruyor
+// ama fonVerisiCek() içinde YOK SAYILIYOR. Bu dosyadaki eski açıklama silinmedi
+// (tarihsel bağlam için), ama GÜNCEL DAVRANIŞ budur.
+//
 // NEDEN TEK DOSYA (ayrı bir cron-*.js/fon-gecmis.js değil): Vercel Hobby plan
 // deployment başına en fazla 12 Serverless Function'a izin veriyor (bu repo
 // zaten sınırda). Cron mantığını VE tek-fon geçmiş ucunu buraya taşıyarak
@@ -65,6 +73,18 @@
 // kategorilerinin teşhisini günceller, diğerlerini korur). Böylece "bizde
 // olmayan fonlar var" tarzı raporlarda tarayıcıdan /api/tefas-proxy açıp
 // hangi kategorinin boş/hatalı olduğu anında görülebiliyor.
+//
+// ⚠️ DÜZELTME (2026-08-18): "parça bazında birleştirilerek" yukarıdaki notta
+// tarif edilen davranış, teshisBirlestir()'in ESKİ mimari (parçalı cron)
+// için doğruydu — her parça sadece KENDİ kategorilerini güncelleyip
+// diğerlerini KV'de korurdu. Ama 3 Ağustos'ta fonVerisiCek() tek-istek
+// mimarisine geçtikten SONRA bu birleştirme mantığı DEĞİŞTİRİLMEDİ — spread
+// ile birleştirme, artık üretilmeyen Temmuz ayı anahtarlarını ("Tam Tarama",
+// "Fon Sepeti Şemsiye Fonu" vb.) KV'de SİLİNMEDEN taşımaya devam etti.
+// Kullanıcı /api/tefas-proxy yanıtına baktığında, aylar önce yazılmış
+// "sayfalama kırık" teşhisini GÜNCEL sanabiliyordu. teshisBirlestir() artık
+// eskiyi hiç karıştırmadan sadece yeni teşhisi döndürüyor (bkz. fonksiyon
+// tanımı aşağıda).
 export const config = { maxDuration: 280 };
 
 import { Redis } from "@upstash/redis";
@@ -246,10 +266,22 @@ function birlestir(eskiData, yeniData) {
   return [...map.values()];
 }
 
-// kategoriTeshis birleştirme: parça sadece kendi kategorilerini işlediği için
-// eski teşhisin üzerine yalnızca bu parçanın kategorileri yazılır.
+// ⚠️ DÜZELTİLDİ (2026-08-18) — bkz. dosya başındaki "DÜZELTME" notu.
+// ESKİ (parçalı cron mimarisi, Temmuz 2026): her parça sadece KENDİ
+// kategorilerini taradığı için, eski teşhisin üzerine sadece o parçanın
+// kategorileri YAZILIYORDU — spread ile birleştirme doğruydu:
+//   return { ...(eskiTeshis || {}), ...(yeniTeshis || {}) };
+// YENİ (tek istek mimarisi, 3 Ağustos 2026'dan beri): fonVerisiCek() ARTIK
+// PARÇALI ÇALIŞMIYOR — her çağrıda TÜM katılım fonlarını (434 kayıt) TEK
+// seferde çekip TEK bir "Katılım Taraması" anahtarı üretiyor. Parça kavramı
+// yok, dolayısıyla "diğer parçaların teşhisini koru" mantığına da gerek yok.
+// Spread ile birleştirmeye DEVAM ETMEK, artık üretilmeyen eski anahtarları
+// ("Tam Tarama", "Fon Sepeti Şemsiye Fonu" vb.) KV'de SİLİNMEDEN sonsuza dek
+// taşımak anlamına geliyordu — /api/tefas-proxy yanıtına bakan biri, aylar
+// önce yazılmış "sayfalama kırık" teşhisini GÜNCEL sanabiliyordu.
+// Artık her taramada YENİ teşhis ESKİSİNİN YERİNİ TAMAMEN ALIYOR.
 function teshisBirlestir(eskiTeshis, yeniTeshis) {
-  return { ...(eskiTeshis || {}), ...(yeniTeshis || {}) };
+  return yeniTeshis || {};
 }
 
 function kategoriDagilimHesapla(data) {
@@ -306,6 +338,7 @@ async function cronYaz(req, res) {
         kategori_dagilim: kategoriDagilimHesapla(sonucData),
         // TEŞHİS KALICILIĞI (2026-07-13): parça teşhisi eski teşhisle
         // birleştirilerek saklanır — /api/tefas-proxy yanıtında görünür.
+        // ⚠️ 2026-08-18: teshisBirlestir artık ESKİYİ KORUMUYOR, bkz. tanım.
         kategoriTeshis: teshisBirlestir(eski?.kategoriTeshis, yeni.kategoriTeshis),
         // Cron zaten gerçek veri yazdığı için "eksik" bayrağını temizliyoruz —
         // bootstrap'tan kalma eksik işareti kalıcı olmasın.
