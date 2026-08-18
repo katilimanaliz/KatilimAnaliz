@@ -2001,6 +2001,14 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
   const [kapBildirim, setKapBildirim] = useState<any[]>([]);
   // 2026-07-30: Fiyat alarmı / KAP bildirim aboneliği modalı
   const [alarmAcik, setAlarmAcik] = useState(false);
+  // ── SEKMELİ MİMARİ (2026-08-17) ──────────────────────────────────────────
+  // Önceden tek uzun sayfa (aşağı kaydırmalı) idi. Kullanıcı FVT örneğindeki
+  // gibi Fiyat/Bilgi/Getiri/Geçmiş sekmelerine bölünmesini istedi. "Analiz"
+  // ve "Fon Pozisyonları" BİLEREK eklenmedi — içerikleri bizde hiç yok, boş
+  // bir sekme göstermek yanıltıcı olurdu. `donem`/`grafik` state'leri BURADA
+  // (üst seviyede) kalmaya devam ediyor — hem Fiyat sekmesindeki grafik hem
+  // Geçmiş sekmesindeki tablo AYNI veriyi paylaşıyor, iki ayrı çekim olmuyor.
+  const [aktifSekme, setAktifSekme] = useState<"fiyat"|"bilgi"|"getiri"|"gecmis">("fiyat");
 
   useEffect(() => {
     if (!hisse?.ticker) return;
@@ -2243,6 +2251,22 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
         </div>
       </div>
 
+      {/* ── SEKME ÇUBUĞU (2026-08-17) ────────────────────────────────────────
+          Aktif sekme: mavi metin + altında kalın bir çizgi (border-bottom),
+          geçişte transition ile yumuşak renk/çizgi animasyonu. Yatay kaydırma
+          şu an gerekmiyor (4 sekme rahat sığıyor) ama overflowX:"auto" ileride
+          "Analiz"/"Fon Pozisyonları" eklenirse taşmayı otomatik çözer. */}
+      <div style={{display:"flex",background:C.card,borderBottom:`1px solid ${C.border}`,overflowX:"auto"}}>
+        {([["fiyat","Fiyat"],["bilgi","Bilgi"],["getiri","Getiri"],["gecmis","Geçmiş"]] as ["fiyat"|"bilgi"|"getiri"|"gecmis",string][]).map(([k,l]) => (
+          <button key={k} onClick={()=>setAktifSekme(k)} style={{
+            flexShrink:0,padding:"11px 18px",fontSize:13,fontWeight:700,fontFamily:"inherit",
+            background:"none",border:"none",borderBottom:`2.5px solid ${aktifSekme===k?C.blue:"transparent"}`,
+            color:aktifSekme===k?C.blue:C.sub,cursor:"pointer",transition:"color 0.15s, border-color 0.15s",
+          }}>{l}</button>
+        ))}
+      </div>
+
+      {aktifSekme==="fiyat" && (<>
       {/* ── ŞİRKET BİLGİLERİ ŞERİDİ (2026-08-17) ────────────────────────────
           Backend'de Midas ana kaynak olduğundan beri gelen ama önceden hiç
           gösterilmeyen alanlar: Taban/Tavan/Ağırlıklı Ort./Sermaye/Halka
@@ -2289,8 +2313,10 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
           </div>
         );
       })()}
+      </>)}
 
       {/* Grafik */}
+      {aktifSekme==="fiyat" && (
       <div style={{background:C.card,margin:"10px 0",padding:"12px 16px"}}>
         {/* Dönem butonları — Alarm/Favori artık üstte (Header), burada tekrar edilmiyor.
             ⚠️ 6 Ay/YTD eklendi (2026-08-16, kullanıcı onayıyla "A" seçeneği): 3'ten
@@ -2316,8 +2342,10 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
           </div>
         )}
       </div>
+      )}
 
       {/* Değişimler */}
+      {aktifSekme==="getiri" && (
       <div style={{margin:"0 0 10px",padding:"0 14px"}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
           {/* ⚠️ 3 AY BURAYA EKLENMEZ (2026-08-05).
@@ -2346,8 +2374,10 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
           ))}
         </div>
       </div>
+      )}
 
       {/* Temel Veriler */}
+      {aktifSekme==="bilgi" && (
       <div style={{padding:"0 14px"}}>
         <div style={{fontSize:11,fontWeight:700,color:C.sub,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>{TR("Temel Göstergeler")}</div>
         <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,overflow:"hidden"}}>
@@ -2394,12 +2424,13 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
           ))}
         </div>
       </div>
+      )}
 
       {/* ── 52 HAFTA ARALIĞI (2026-08-05) ─────────────────────────────────
           Fiyatın yıllık bandın neresinde olduğunu tek bakışta gösterir.
           "346 ₺" tek başına anlamsız; "167–450 bandında %63'te" anlamlı.
           Veri yoksa (Midas yolu) blok hiç render edilmiyor. */}
-      {typeof hisse.yuksek52h === "number" && typeof hisse.dusuk52h === "number"
+      {aktifSekme==="fiyat" && typeof hisse.yuksek52h === "number" && typeof hisse.dusuk52h === "number"
         && hisse.yuksek52h > hisse.dusuk52h && typeof hisse.fiyat === "number" && (()=>{
         const alt = hisse.dusuk52h, ust = hisse.yuksek52h;
         const oran = Math.min(100, Math.max(0, ((hisse.fiyat - alt) / (ust - alt)) * 100));
@@ -2447,7 +2478,7 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
           (eski→yeni) geldiği için, tabloda YENİ→ESKİ göstermek üzere ters
           çevriliyor, "bir önceki güne göre getiri" hesabı orijinal (ters
           çevrilmemiş) index üzerinden yapılıyor. */}
-      {grafik.length > 1 && (
+      {aktifSekme==="gecmis" && grafik.length > 1 && (
         <div style={{padding:"18px 14px 0"}}>
           <div style={{fontSize:11,fontWeight:700,color:C.sub,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>
             Geçmiş Fiyatlar ({donemEtiket})
@@ -2487,7 +2518,7 @@ function HisseDetay({ hisse, onGeri }: { hisse: any, onGeri: () => void }) {
       )}
 
       {/* KAP BİLDİRİMLERİ — bildirim yoksa bölüm hiç görünmez. */}
-      {kapBildirim.length > 0 && (
+      {aktifSekme==="fiyat" && kapBildirim.length > 0 && (
         <div style={{padding:"18px 14px 0"}}>
           <div style={{fontSize:11,fontWeight:700,color:C.sub,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>{TR("Son KAP Bildirimleri")} · SON 15 GÜN</div>
           <div style={{background:C.card,borderRadius:12,border:`1px solid ${C.border}`,overflow:"hidden"}}>
@@ -20617,6 +20648,9 @@ const PORTFOY_TUR_META: Record<string, {label:string; Icon:any; renk:string; bg:
   // kullanılmayan bir renk).
   sukuk: { label: "Sukuk", Icon: FileText, renk: "#5EEAD4", bg: "rgba(94,234,212,0.15)" },
 };
+// Donut grafik için sıralı (varlık bazında, tür bazında DEĞİL) renk paleti —
+// gerekçe için bkz. PortfoyDetayEkrani içindeki donutVeri yorumu.
+const DONUT_PALET = ["#4ADE80","#5B9BD8","#E0A53D","#F7931A","#A78BFA","#5EEAD4","#38BDF8","#94A3B8"];
 function portfoyFmtTL(n: number): string {
   const isaret = n < 0 ? "-" : "";
   return isaret + "₺" + Math.abs(n).toLocaleString("tr-TR", { maximumFractionDigits: 0 });
@@ -22419,6 +22453,32 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onDuzen
   const toplamKZ = kzToplamlar.kz;
   const toplamKZYuzde = toplamMaliyet>0 ? (toplamKZ/toplamMaliyet)*100 : 0;
 
+  // ── DONUT GRAFİK (2026-08-17) ────────────────────────────────────────────
+  // Kullanıcının paylaştığı örnek uygulamadaki "Özet" sekmesine benzer bir
+  // dağılım grafiği. Tür bazlı renk paleti (PORTFOY_TUR_META) KULLANILMADI —
+  // örnekte aynı türden iki varlık (THF ve PNU, ikisi de "Fon") farklı
+  // renklerde gösteriliyordu, bu yüzden burada SIRALI (varlık bazında) bir
+  // palet kullanılıyor: portföydeki her kalem, büyükten küçüğe sıralandıktan
+  // sonra listedeki konumuna göre bir renk alıyor. 8'den fazla kalem varsa
+  // renkler tekrar eder (DONUT_PALET.length ile mod alınarak).
+  const donutVeri = useMemo(() => {
+    const kalemler = portfoyListesi
+      .map(k => {
+        const c = portfoyTryCarpani(k, usdTry);
+        if (c == null) return null;
+        const deger = portfoyGuncelDeger(k) * c;
+        return deger > 0 ? { kod: portfoyKodGoster(k), deger } : null;
+      })
+      .filter((x): x is {kod:string; deger:number} => x != null)
+      .sort((a,b) => b.deger - a.deger);
+    const toplam = kalemler.reduce((s,x) => s+x.deger, 0);
+    return kalemler.map((x,i) => ({
+      ...x,
+      yuzde: toplam>0 ? (x.deger/toplam)*100 : 0,
+      renk: DONUT_PALET[i % DONUT_PALET.length],
+    }));
+  }, [portfoyListesi, usdTry]);
+
   const takipGunlukOrt = useMemo(()=>{
     const d = takipListesi.map(k=>k.g).filter((v):v is number=>v!=null);
     return d.length ? d.reduce((a,b)=>a+b,0)/d.length : null;
@@ -22506,6 +22566,49 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onDuzen
           )}
         </div>
       )}
+
+      {/* ── DONUT GRAFİK (2026-08-17) ────────────────────────────────────────
+          Sadece Portföyüm sekmesinde (Takip Listem'de miktar/değer bilgisi
+          olmadığı için anlamsız) ve en az 1 kalem varken gösteriliyor.
+          "Gizli" modda (gizli=true) tutarlar zaten gösterilmiyor ama YÜZDELER
+          gösterilmeye devam ediyor — oran, mutlak değeri ifşa etmiyor. */}
+      {sekme==="portfoy" && donutVeri.length>0 && (()=>{
+        const r=56, cx=70, cy=70, cevre=2*Math.PI*r;
+        let kumulatif=0;
+        return (
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:16,marginBottom:14}}>
+            <div style={{fontSize:10.5,fontWeight:700,color:PORTFOY_ETIKET,marginBottom:10}}>Dağılım</div>
+            <div style={{display:"flex",alignItems:"center",gap:16}}>
+              <svg width={130} height={130} viewBox="0 0 140 140" style={{flexShrink:0}}>
+                <circle cx={cx} cy={cy} r={r} fill="none" stroke={WA(0.06)} strokeWidth={18}/>
+                {donutVeri.map(d => {
+                  const uzunluk = (d.yuzde/100)*cevre;
+                  const aci = (kumulatif/100)*360 - 90;
+                  kumulatif += d.yuzde;
+                  return (
+                    <circle key={d.kod} cx={cx} cy={cy} r={r} fill="none" stroke={d.renk} strokeWidth={18}
+                            transform={`rotate(${aci} ${cx} ${cy})`}
+                            strokeDasharray={`${uzunluk} ${cevre}`}/>
+                  );
+                })}
+                <text x={cx} y={cy-3} textAnchor="middle" fill={C.text} fontSize={24} fontWeight={800} fontFamily="inherit">{donutVeri.length}</text>
+                <text x={cx} y={cy+15} textAnchor="middle" fill={PORTFOY_ETIKET} fontSize={10} fontFamily="inherit">Varlık</text>
+              </svg>
+              <div style={{flex:1,minWidth:0}}>
+                {donutVeri.map(d => (
+                  <div key={d.kod} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"5px 0"}}>
+                    <div style={{display:"flex",alignItems:"center",minWidth:0}}>
+                      <span style={{width:9,height:9,borderRadius:5,background:d.renk,flexShrink:0}}/>
+                      <span style={{fontSize:12.5,fontWeight:700,color:PORTFOY_YAZI,marginLeft:8,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.kod}</span>
+                    </div>
+                    <span style={{fontSize:12.5,fontWeight:800,color:PORTFOY_ETIKET,fontFamily:"ui-monospace,monospace",flexShrink:0,marginLeft:8}}>%{d.yuzde.toFixed(1)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {filtreliListe.length===0 && (
         <div style={{textAlign:"center",padding:"20px 0",color:PORTFOY_ETIKET,fontSize:12}}>
