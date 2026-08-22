@@ -489,7 +489,7 @@ const EN_SOZLUK: Record<string, string> = {
   "Mevduat Eşlenik Oran": "Deposit Equivalent Rate",
   "Kaç gün önce uyarı?": "Alert how many days before?",
   "Tutar (isteğe bağlı)": "Amount (optional)",
-  "BIST 100 · CANLI": "BIST 100 · LIVE",
+  "BIST 100 · GECİKMELİ": "BIST 100 · DELAYED",
   "Genel Müdürlük": "Headquarters",
   "Merkez": "Head Office",
   "Sermaye Yapısı": "Ownership Structure",
@@ -3276,7 +3276,7 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri 
           <div>
             <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,color:WA(0.5),textTransform:"uppercase",letterSpacing:0.6}}>
               <span style={{width:6,height:6,borderRadius:3,background:C.green,boxShadow:`0 0 6px ${C.green}`,flexShrink:0}}/>
-              {TR("BIST 100 · CANLI")}
+              {TR("BIST 100 · GECİKMELİ")}
             </div>
             <div style={{fontSize:34,fontWeight:800,fontFamily:"monospace",letterSpacing:"-0.01em",marginTop:4,color:(TEMA==="acik"?C.label:"#fff")}}>
               {endeksVeri["BIST 100"] ? endeksVeri["BIST 100"].deger.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}) : "—"}
