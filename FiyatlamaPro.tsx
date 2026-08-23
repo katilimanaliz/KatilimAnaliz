@@ -22848,6 +22848,41 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onDuzen
   );
 }
 
+// ── YENİ KULLANICI / KURULUM TARİHİ (2026-08-19) ────────────────────────────
+// SORUN: "?islem=duyurular" ucu backend'deki son 20 duyuruyu HER ZAMAN
+// döndürüyordu, kullanıcının UYGULAMAYI NE ZAMAN indirdiğine bakılmaksızın.
+// Yeni bir kullanıcı ilk açılışta, kendisi indirmeden ÖNCE gönderilmiş
+// duyuruları da (localStorage'da hiç yerel geçmişi olmadığı için hiçbiri
+// "zaten var" sayılmıyordu) bildirim sekmesinde görüyordu.
+// ÇÖZÜM: localStorage'da "kp_" önekli HERHANGİ bir anahtar varsa (portföy,
+// tema, takip listesi, vb.) bu MEVCUT bir kullanıcı demektir — kurulum
+// tarihi çok eskiye sabitlenir, filtre hiçbir şeyi engellemez, davranış
+// AYNEN korunur. Hiçbir "kp_" anahtarı yoksa bu YENİ bir kullanıcıdır —
+// kurulum tarihi şu an olarak kaydedilir, bundan ÖNCEKİ duyurular
+// (backend'den gelseler bile) frontend'de filtrelenir.
+const KURULUM_TARIHI_LS_KEY = "kp_kurulum_tarihi";
+function eskiKullaniciMi(): boolean {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith("kp_") && k !== KURULUM_TARIHI_LS_KEY) return true;
+    }
+  } catch {}
+  return false;
+}
+function kurulumTarihiGetir(): number {
+  try {
+    const kayitli = localStorage.getItem(KURULUM_TARIHI_LS_KEY);
+    if (kayitli) { const n = parseInt(kayitli, 10); if (isFinite(n)) return n; }
+    // İlk kez çağrılıyor — mevcut/yeni ayrımını yap, kaydet, döndür.
+    const deger = eskiKullaniciMi() ? 0 : Date.now();
+    localStorage.setItem(KURULUM_TARIHI_LS_KEY, String(deger));
+    return deger;
+  } catch {
+    return 0; // localStorage erişilemezse filtre uygulanmasın (güvenli taraf)
+  }
+}
+
 function App(){
   // Sayfa yenilendiğinde (F5/çekerek yenileme) kullanıcı bulunduğu ekranda
   // kalsın diye ekran adı sessionStorage'da tutuluyor. sessionStorage bilinçli
@@ -23547,7 +23582,12 @@ function App(){
         const r=await fetch(`${API_BASE}/api/bildirim?islem=duyurular`);
         if(!r.ok) return;
         const j=await r.json();
-        const gelen:any[]=Array.isArray(j?.duyurular)?j.duyurular:[];
+        // Kurulum tarihinden ÖNCE gönderilmiş duyurular filtrelenir — bkz.
+        // dosya başındaki KURULUM_TARIHI_LS_KEY notu. Mevcut kullanıcılar
+        // için bu değer 0'dır (hiçbir şey filtrelenmez, davranış aynı kalır).
+        const kurulumTs = kurulumTarihiGetir();
+        const gelen:any[]=(Array.isArray(j?.duyurular)?j.duyurular:[])
+          .filter((d:any)=> typeof d?.ts !== "number" || d.ts >= kurulumTs);
         if(iptal||gelen.length===0) return;
 
         let silinen:string[]=[];
