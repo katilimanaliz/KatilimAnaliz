@@ -20,6 +20,22 @@ import {
 
 const IS_NATIVE = (window as any).Capacitor?.isNativePlatform?.() ?? false;
 
+// ── BİLDİRİM HATA MESAJI (2026-08-19) ───────────────────────────────────────
+// SORUN: Masaüstü/web'de "Alarm Kur" denendiğinde, FCM token alınamadığı için
+// (push bildirimi yalnızca native platformda çalışır) localStorage'daki
+// "kp_push_hata" teknik izleme mesajı ("İLERLEME: native ortam algılanamadı
+// (Capacitor.isNativePlatform()=false) — kayıt hiç başlamadı") DOĞRUDAN
+// kullanıcıya gösteriliyordu — kullanıcı bunu bir HATA sanıyordu, oysa bu
+// PLATFORM SINIRLAMASI (web'de push bildirimi API'si hiç yok). Dört ayrı
+// yerde (Zekât Hatırlatması, Hisse/Fon/Döviz alarm modalları) aynı teknik
+// mesaj gösteriliyordu — tek bir yardımcı fonksiyonda toplandı.
+function bildirimHataMesaji(teknikNeden: string): string {
+  if (!IS_NATIVE) {
+    return "Bildirimler yalnızca mobil uygulamada çalışır. Alarm kurmak için Katılım Plus'ı App Store veya Google Play'den indirin.";
+  }
+  return teknikNeden ? `Bildirim kaydı başarısız: ${teknikNeden}` : "Bildirim izni gerekiyor — cihaz Ayarlar'dan izin verip tekrar deneyin.";
+}
+
 // ── FIREBASE ANALYTICS (2026-07-22) ──────────────────────────────────────
 // @capacitor-firebase/messaging ile aynı desende (dinamik import, yalnızca
 // native'de) kurulu. Web'de HİÇ yüklenmez/çağrılmaz — gizlilik ve gereksiz
@@ -13337,7 +13353,7 @@ function ZekatHesabi() {
     const token = pushTokenAl();
     if (!token) {
       let neden = ""; try { neden = localStorage.getItem("kp_push_hata") || ""; } catch {}
-      setHatirlatmaHata(neden ? `Bildirim kaydı başarısız: ${neden}` : "Bildirim izni gerekiyor — cihaz Ayarlar'dan izin verip tekrar deneyin.");
+      setHatirlatmaHata(bildirimHataMesaji(neden));
       return;
     }
     // Bir sonraki zekât günü geleceğe düşmeli; kullanıcı geçmiş bir gün
@@ -18261,7 +18277,7 @@ function KurGrafikModal({kur, onClose}:{kur:any, onClose:()=>void}){
                           if(!token){
                             let neden="";
                             try{ neden=localStorage.getItem("kp_push_hata")||""; }catch{}
-                            setAlarmHata(neden ? `Bildirim kaydı başarısız: ${neden}` : "Bildirim izni gerekiyor — cihaz Ayarlar'dan izin verip tekrar deneyin.");
+                            setAlarmHata(bildirimHataMesaji(neden));
                             return;
                           }
                           const degerNum=parseFloat(alarmDeger.replace(",","."));
@@ -19529,7 +19545,7 @@ function AltinAlarmModal({urun, onClose}:{urun:{ad:string, sembol:string, bid:nu
                     if(!token){
                       let neden="";
                       try{ neden=localStorage.getItem("kp_push_hata")||""; }catch{}
-                      setAlarmHata(neden ? `Bildirim kaydı başarısız: ${neden}` : "Bildirim izni gerekiyor — cihaz Ayarlar'dan izin verip tekrar deneyin.");
+                      setAlarmHata(bildirimHataMesaji(neden));
                       return;
                     }
                     const degerNum=parseFloat(alarmDeger.replace(",","."));
@@ -19625,7 +19641,7 @@ function HisseAlarmModal({hisse, onClose}:{hisse:{ticker:string, sirket?:string,
     const token=pushTokenAl();
     if(!token){
       let neden=""; try{ neden=localStorage.getItem("kp_push_hata")||""; }catch{}
-      setHata(neden?`Bildirim kaydı başarısız: ${neden}`:"Bildirim izni gerekiyor — cihaz Ayarlar'dan izin verip tekrar deneyin.");
+      setHata(bildirimHataMesaji(neden));
       return;
     }
     let govde:any={token, sembol, ad, tip:mod, yon};
