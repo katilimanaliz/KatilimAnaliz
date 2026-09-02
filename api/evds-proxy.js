@@ -539,7 +539,16 @@ async function fpDisclosureListeCek(gunAralik){
     fromDate: fpKapTarih(baslangic),
     toDate: fpKapTarih(bitis),
     disclosureTypes: ["DG"],
-    memberTypes: ["PYS"],
+    // ⚠️ DÜZELTME (2026-09-02, canlı testte bulundu): memberTypes:["PYS"]
+    // ("Portföy Yönetim Şirketleri") filtresi YANLIŞTI — 101 bildirim
+    // döndü ama hepsi ZRA/ABO/BLP gibi alakasız hisse bildirimleriydi,
+    // "Portföy Dağılım Raporu" başlıklı SIFIR kayıt vardı. KAP'ta "Fonlar"
+    // (Yatırım Fonları/BYF/EYF), Portföy Yönetim Şirketlerinden AYRI bir
+    // üst kategori (kap.org.tr'nin kendi menüsünde de böyle ayrılmış) —
+    // THF gibi bir fonun bildirimi PYS filtresiyle hiç gelmiyordu. Doğru
+    // memberType kodu bilinmediği için filtre tamamen kaldırıldı; API'nin
+    // parametre verilmeyince tüm kategorileri taradığı varsayılıyor —
+    // bu varsayım da ?debug=1 çıktısındaki kapListeUzunluk ile doğrulanmalı.
   };
   const r = await fetchZamanli(KAP_LISTE_URL_FP, {
     method: "POST",
