@@ -539,16 +539,22 @@ async function fpDisclosureListeCek(gunAralik){
     fromDate: fpKapTarih(baslangic),
     toDate: fpKapTarih(bitis),
     disclosureTypes: ["DG"],
-    // ⚠️ DÜZELTME (2026-09-02, canlı testte bulundu): memberTypes:["PYS"]
-    // ("Portföy Yönetim Şirketleri") filtresi YANLIŞTI — 101 bildirim
-    // döndü ama hepsi ZRA/ABO/BLP gibi alakasız hisse bildirimleriydi,
-    // "Portföy Dağılım Raporu" başlıklı SIFIR kayıt vardı. KAP'ta "Fonlar"
-    // (Yatırım Fonları/BYF/EYF), Portföy Yönetim Şirketlerinden AYRI bir
-    // üst kategori (kap.org.tr'nin kendi menüsünde de böyle ayrılmış) —
-    // THF gibi bir fonun bildirimi PYS filtresiyle hiç gelmiyordu. Doğru
-    // memberType kodu bilinmediği için filtre tamamen kaldırıldı; API'nin
-    // parametre verilmeyince tüm kategorileri taradığı varsayılıyor —
-    // bu varsayım da ?debug=1 çıktısındaki kapListeUzunluk ile doğrulanmalı.
+    // ── memberTypes DÜZELTME GEÇMİŞİ ─────────────────────────────────────
+    // v1: ["PYS"] ("Portföy Yönetim Şirketleri") — YANLIŞ. 101 bildirim
+    //   döndü ama hepsi ZRA/ABO/BLP gibi alakasız hisse bildirimleriydi,
+    //   "Portföy Dağılım Raporu" başlıklı SIFIR kayıt vardı.
+    // v2: alan tamamen kaldırıldı — YANLIŞ. KAP HTTP 500 döndürdü; alan
+    //   zorunluymuş (kap=sukuk şubesindeki eski not da bunu doğruluyor:
+    //   "memberTypes ZORUNLU, ilk sürümde yoktu ve KAP HTTP 500 verdi").
+    // v3 (şimdiki): KAP'ta "Fonlar", "Şirketler"den AYRI bir üst kategori
+    //   (kap.org.tr'nin kendi menüsünde ayrı gruplanmış: BYF/YF/EYF/OKS/GMF).
+    //   Bağımsız bir kaynak (kap-client PyPI paketi, FundGroup enum'u) bu
+    //   kodları doğruluyor; KAP'ın kendi export API'si de aynı kodları
+    //   kullanıyor (kap.org.tr/tr/api/exportFundPage/YF/...). THF gibi
+    //   hisse senedi yoğun fonlar YF altında olmalı; BYF/EYF/OKS/GMF de
+    //   güvenli tarafta kalmak için eklendi (yanlış olsalar bile zararsız,
+    //   fpBildirimEslesir zaten stockCode ile doğru fonu ayıklıyor).
+    memberTypes: ["YF", "BYF", "EYF", "OKS", "GMF"],
   };
   const r = await fetchZamanli(KAP_LISTE_URL_FP, {
     method: "POST",
