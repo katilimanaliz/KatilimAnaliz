@@ -97,8 +97,26 @@ const redis = new Redis({
 // ESKİ YANLIŞ rezerv rakamını döndürmeye devam eder.
 // v19 (2026-07-30 ikinci tur): REZERV_NET / REZERV_SWAP / REZERV_NET_SWAPSIZ eklendi.
 // v20 (2026-08-01): Enflasyon beklentisi alanları eklendi.
-const KV_ANLIK_KEY = "evds:anlik:v20";
-const KV_TARIHSEL_PREFIX = "evds:tarihsel:v20:";
+// v21 (2026-08-31): TLREF MEDYAN PENCERESİ 9 → 4 GÜNE İNDİRİLDİ. Kullanıcı
+// bildirimi + doğrulama: 23 Ağustos 2026 (Pazar akşamı) TCMB, 1 Mart'tan beri
+// kapalı olan haftalık repo ihalelerini yeniden açtı — bankaların fiili
+// fonlama kanalı gecelik %40'tan haftalık %37 (politika faizi) seviyesine
+// çekildi ("örtülü faiz indirimi", bkz. 24-25 Ağustos basını: Sözcü, Takvim).
+// TLREF gecelik bankalararası fonlama maliyetini ölçtüğü için bu değişikliğe
+// doğrudan tepki vermesi bekleniyordu. Kullanıcı harici kaynaklarla (Google/
+// Investing.com, ~%36,9) karşılaştırıp uygulamanın (9 günlük medyan ile
+// hesaplanan, ~%39,8) geride kaldığını fark etti. Simülasyonla doğrulandı:
+// medyan, "çoğunluk" ilkesiyle çalıştığı için (pencerenin yarısından fazlası
+// yeni rejimde olmadıkça eski değere yakın kalır), pencere ne kadar büyükse
+// yeni bir rejime o kadar geç yakınsar. 4 güne indirmek, yeni rejim birkaç
+// gün sürdüğünde çok daha hızlı yakınsamayı sağlar; yine de TEK günlük veri
+// hatalarına karşı bir miktar koruma korunuyor (bkz. medyanTlrefOrani —
+// pencerenin en az yarısı aynı yönde olmadıkça tek bir sapan gün medyanı
+// hemen değiştirmez). Versiyon artırılmadan bırakılırsa eski (9 günlük
+// pencereyle hesaplanmış) önbellek 6 saat daha eski/yüksek değeri döndürmeye
+// devam ederdi.
+const KV_ANLIK_KEY = "evds:anlik:v21";
+const KV_TARIHSEL_PREFIX = "evds:tarihsel:v21:";
 
 // Vercel'in varsayılan fonksiyon süresi (Hobby planda genelde 10sn) artık 8 dış
 // isteğe (5 EVDS + 3 FRED) yetmiyor — bu yüzden ERR_CONNECTION_CLOSED alınıyordu
@@ -393,21 +411,7 @@ async function kapSukukCek(gunAralik, tipler){
   const govde = {
     fromDate: kapTarih(baslangic),
     toDate: kapTarih(bitis),
-    // ODA = Özel Durum Açıklaması, DG = Diğer (İhraç Belgesi burada),
-    // DUY = Duyuru. FR (finansal rapor) ve CA (hak kullanımı) bizi
-    // ilgilendirmiyor, isteği küçük tutmak için dışarıda bırakıldı.
-    // Çağıran taraf tip listesi verebilir. Sukuk sorgusu dar (ODA/DG/DUY),
-    // hisse sorgusu geniş tutuluyor — hisse detayında en değerli bildirimler
-    // FR (finansal rapor / bilanço) ve CA (hak kullanımı / temettü).
     disclosureTypes: Array.isArray(tipler) && tipler.length ? tipler : ["ODA", "DG", "DUY"],
-    // memberTypes ZORUNLU (2026-07-28): ilk sürümde bu alan yoktu ve KAP
-    // HTTP 500 döndürdü. Tarayıcının kendi isteğinde bu alan gönderiliyor.
-    // Kodlar KAP'ın şirket kategorileriyle örtüşüyor:
-    //   IGS=İşlem Gören Şirketler, DDK=Diğer KAP üyeleri/işlem görmeyenler,
-    //   YK=Yatırım Kuruluşları, PYS=Portföy Yönetim Şirketleri,
-    //   BDK=Bağımsız Denetim, DCS=Derecelendirme, KVH=Kripto Varlık Hizmet.
-    // Varlık kiralama şirketleri IGS/DDK altında görünüyor; yine de listeyi
-    // geniş tutuyoruz — süzmeyi zaten kendimiz yapıyoruz.
     memberTypes: ["IGS", "DDK", "YK", "PYS", "BDK", "DCS", "KVH"],
   };
 
@@ -416,30 +420,23 @@ async function kapSukukCek(gunAralik, tipler){
     headers: {
       "Content-Type": "application/json",
       "Accept": "application/json",
-      // KAP bazı otomatik istekleri tarayıcı dışı sayıp reddedebiliyor.
       "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
     },
     body: JSON.stringify(govde),
   }, 15000);
 
   if(r.status < 200 || r.status >= 300){
-    // KAP'ın kendi hata mesajını da taşıyoruz — "HTTP 500" tek başına
-    // körlemesine tahmin yürütmeye zorluyor (yaşanmış: eksik memberTypes).
     let govdeOrnek = "";
     try { govdeOrnek = (await r.text()).slice(0, 200); } catch {}
     throw new Error(`KAP HTTP ${r.status}${govdeOrnek ? " — " + govdeOrnek : ""}`);
   }
 
-  // Ayrıştırmadan ÖNCE boyut kontrolü — dev bir yanıtı JSON.parse etmek
-  // fonksiyonu OOM ile düşürüyor (yaşanmış vaka, bkz. yukarıdaki not).
   const uzunlukBasligi = parseInt(r.headers.get("content-length") || "0", 10);
   if(uzunlukBasligi && uzunlukBasligi > KAP_MAX_BAYT){
     throw new Error(`KAP yanıtı çok büyük (${Math.round(uzunlukBasligi/1048576)} MB) — daha dar tarih aralığı gerekiyor`);
   }
 
   const text = await r.text();
-  // content-length gzip'li geldiğinde gerçek boyutu yansıtmayabiliyor;
-  // açılmış metni de ayrıca ölçüyoruz.
   if(text.length > KAP_MAX_BAYT){
     throw new Error(`KAP yanıtı çok büyük (${Math.round(text.length/1048576)} MB açılmış) — daha dar tarih aralığı gerekiyor`);
   }
@@ -448,8 +445,6 @@ async function kapSukukCek(gunAralik, tipler){
   let j;
   try { j = JSON.parse(text); }
   catch(e){ throw new Error(`KAP JSON ayrıştırılamadı: ${String(e.message).slice(0,120)}`); }
-  // Yanıt ya doğrudan dizi ya da { basic: [...] } benzeri sarmalanmış olabilir;
-  // ikisini de karşılıyoruz.
   const ham = Array.isArray(j) ? j
             : Array.isArray(j?.data) ? j.data
             : Array.isArray(j?.basic) ? j.basic
@@ -458,54 +453,6 @@ async function kapSukukCek(gunAralik, tipler){
   return { ham, hamSayi: ham.length };
 }
 
-// KAP kaydını sadeleştirip frontend'in ihtiyacı olan alanlara indirger.
-// İkinci süzgeç: sukuk bildirimleri arasından SADECE İHRAÇLA İLGİLİ olanları
-// bırakır. Canlı veride 7 günde 82 sukuk bildirimi çıkıyor ama çoğu kupon
-// ödemesi / itfa duyurusu — kullanıcı için gürültü. Burada işe yarayanlar:
-//   • İhraç Belgesi, Tertip İhraç Belgesi
-//   • İhraç Tavanına İlişkin Bildirim (yönetim kurulu kararı)
-//   • İzahname / Sermaye Piyasası Aracı Notu (halka arz)
-//   • "...Satışının Tamamlanması" (fiilen gerçekleşen ihraç)
-// Dışarıda bırakılanlar: kupon ödemesi, itfa, getiri ödemesi.
-// NOT: "Kupon Oranının Belirlenmesi" bildirimleri de eleniyor — bunlar getiri
-// oranı içerdiği için ileride ayrı bir bölümde değerlendirilebilir.
-const KAP_IHRAC_OLUMLU = ["IHRAC", "IZAHNAME", "TERTIP", "HALKA ARZ", "SATIS"];
-// "İhraç Tavanına İlişkin Bildirim" de eleniyor: ekranın üst kısmındaki
-// "SPK Onayı Alan İhraççılar" bölümü zaten aynı bilgiyi TUTARLARIYLA
-// gösteriyor, burada tekrar etmek gürültü yapıyor.
-const KAP_IHRAC_OLUMSUZ = ["ITFA", "KUPON", "ODEME", "IHRAC TAVAN"];
-
-function kapIhracMi(k){
-  const metin = spkNormalizeMetin((k?.title||"") + " " + (k?.summary||""));
-  if(KAP_IHRAC_OLUMSUZ.some(x => metin.indexOf(x) >= 0)) return false;
-  return KAP_IHRAC_OLUMLU.some(x => metin.indexOf(x) >= 0);
-}
-
-// ── HİSSE BAZLI KAP BİLDİRİMLERİ (v13) ─────────────────────────────────────
-// Hisse detay ekranında o hisseye ait son KAP bildirimlerini göstermek için.
-//
-// TASARIM: Her hisse için ayrı KAP isteği atmak israf olur — tek istekte
-// zaten TÜM piyasanın bildirimleri geliyor (21 günde birkaç bin kayıt).
-// Bunun yerine liste BİR KEZ çekilip sadeleştirilmiş hâli önbelleğe alınıyor,
-// hisse sorguları bu önbellekten süzülüyor. Böylece 600+ hisse tek bir KAP
-// isteğiyle karşılanıyor.
-const KV_KAP_TUM_KEY = "kap:tum:v3";
-const KAP_TUM_TTL = 3600;          // 1 saat
-// PENCERE/TAVAN AYARI (2026-07-28, canlı testten sonra): İlk sürüm 21 gün
-// isteyip 1.500 kayıtta kesiyordu — 21 gün ~3.500 kayıt olduğu için fiilen
-// yalnızca son ~9 günü kapsıyor, üstelik hangi güne kadar kapsadığı
-// öngörülemiyordu (THYAO gibi büyük bir hissede hiç bildirim çıkmamasının
-// sebebi buydu). Artık DAR AMA TAM kapsama tercih ediliyor: 10 gün, tavan
-// bunu rahatça alacak kadar yüksek.
-const KAP_TUM_GUN = 15;
-const KAP_TUM_MAX = 4000;
-// Hisse detayı için geniş tip listesi — FR = Finansal Rapor (bilanço),
-// CA = hak kullanımı (temettü, bedelsiz, rüçhan). Bunlar kullanıcı için
-// en değerli bildirimler ve ilk sürümde dışarıda kalmışlardı.
-const KAP_HISSE_TIPLER = ["ODA", "DG", "DUY", "FR", "CA"];
-const KAP_HISSE_LIMIT = 8;         // hisse detayında gösterilecek bildirim sayısı
-
-// Sadeleştirilmiş kayıt — önbelleği küçük tutmak için yalnızca gerekli alanlar.
 function kapSadeKayit(k){
   const b = kapTemel(k);
   const idx = b.disclosureIndex;
@@ -515,8 +462,6 @@ function kapSadeKayit(k){
     ilgili: b.relatedStocks || null,
     sirket: b.companyTitle || null,
     baslik: b.title || null,
-    // Özet bazen çok uzun oluyor; önbelleği şişirmemek için kırpılıyor
-    // (ekranda zaten 2-3 satır gösteriliyor, tam metin KAP sayfasında).
     ozet: b.summary ? String(b.summary).slice(0, 170) : null,
     tarih: b.publishDate || null,
     ek: typeof b.attachmentCount === "number" ? b.attachmentCount : 0,
@@ -524,21 +469,252 @@ function kapSadeKayit(k){
   };
 }
 
-// Bir kaydın belirtilen hisseye ait olup olmadığı. İki yol: bildirimi yapan
-// şirketin kodu (stockCode) ya da bildirimde ilgili gösterilen şirketler
-// (relatedStocks — virgül/boşlukla ayrılmış olabiliyor).
 function kapHisseEslesir(kayit, kod){
   const K = String(kod||"").toUpperCase().trim();
   if(!K) return false;
   if(String(kayit.kod||"").toUpperCase().trim() === K) return true;
   const ilgili = String(kayit.ilgili||"").toUpperCase();
   if(!ilgili) return false;
-  // Parçalara ayırıp TAM eşleşme aranıyor — indexOf kullanılsaydı "AKBNK"
-  // ararken "AKBNKX" gibi bir kodu da yanlışlıkla yakalardı.
   return ilgili.split(/[,;\s]+/).filter(Boolean).includes(K);
 }
 
-// Tüm bildirimleri (sadeleştirilmiş) getirir; önce Redis, yoksa KAP.
+// ── FON PORTFÖY DAĞILIMI (v14, 2026-09-02) — KAP kaynaklı, haftalık ───────
+// AMAÇ: Popüler fon listesindeki (THF, DFI, DOH, PBR, PHE, PUK, TLY, TMV)
+// her fonun tekil hisse bazında portföy dağılımını, KAP'ın SPK'nın yeni
+// (Ağustos 2026 sonu) düzenlemesiyle artık HAFTALIK yayımladığı zorunlu
+// "Portföy Dağılım Raporu" bildirimlerinden çıkarır.
+//
+// GÜNCELLEME MANTIĞI (kullanıcı kararı): Her istekte KAP'taki en güncel
+// bildirimi ara. Daha yeni bir rapor bulunursa listeyi güncelle. Bulamazsa
+// (erişim hatası, ya da o fon için henüz yeni haftalık rapor yok) ESKİ
+// LİSTEYİ SESSİZCE KORU — portföy dağılımı haftalar arasında yavaş değişen
+// bir veri olduğu için, hata göstermek yerine son bilineni sunmak doğru.
+//
+// İKİ AŞAMALI KAP SORGUSU:
+//   1) disclosure/list/main (POST, memberTypes=["PYS"]) — "Portföy Dağılım
+//      Raporu" başlıklı bildirimi bul, disclosureIndex al. Bu uç PDF
+//      linkini DOĞRUDAN vermiyor (yalnızca ek sayısı) — 2. adım gerekiyor.
+//   2) Bildirim detay sayfasını (kap.org.tr/tr/Bildirim/{id}) çekip HTML
+//      içinden gerçek PDF indirme linkini (api/file/download/{hash})
+//      regex ile çıkarıyoruz — urdlHtmldenXlsAdaylari'deki "HTML kabuktan
+//      gerçek dosya linkini bul" deseniyle aynı fikir.
+//
+// ⚠️ CANLI TESTTE YAKALANAN HATA (mock ortamda, gerçek ağ olmadan test
+// edilirken): "DA[ĞG]ILIM" gibi bir regex'te case-insensitive ("i")
+// bayrağı Türkçe I/ı çiftini eşleştirmiyor — JS'in varsayılan case-folding'i
+// İngilizce kuralına göre I↔i eşler, ı↔I eşlemez. "Dağılım" kelimesindeki
+// küçük noktasız "ı" harfleri böylece büyük "I" içeren karakter sınıfıyla
+// SESSİZCE eşleşmiyordu (spkNormalizeMetin'in var olma nedeni de bu aynı
+// sorun). Regex yerine fpNormalizeMetin ile Türkçe-güvenli büyük harfe
+// çevirip düz "includes" ile arıyoruz.
+//
+// ⚠️ DOĞRULANMAMIŞ KISIM: Bu kod, dış ağ erişimi olmayan bir ortamda
+// yazılıp SADECE mock'lanmış ağ çağrılarıyla test edildi (PDF ayrıştırma
+// mantığı gerçek bir KAP PDF metniyle doğrulandı, ama disclosure/list/main
+// API'sinin fon kodunu gerçekten stockCode alanı üzerinden THF/DFI gibi
+// kodlarla eşleştirip eşleştirmediği, ve adım 2'deki HTML yapısı GERÇEK
+// DEPLOY sonrası doğrulanmalı — bu yüzden ?debug=1 çıktısı zengin tutuldu.
+const KAP_LISTE_URL_FP = "https://kap.org.tr/tr/api/disclosure/list/main";
+const FP_TAKIP_FONLAR = ["DFI", "DOH", "PBR", "PHE", "PUK", "THF", "TLY", "TMV"];
+const KV_FON_PORTFOY_PREFIX = "fonportfoy:v1:";
+const FP_CACHE_TTL = 7 * 24 * 3600;   // 7 gün — haftalık rapor döngüsüyle uyumlu
+const FP_ARAMA_GUN = 21;              // olası gecikmeleri tolere etmek için 3 hafta geriye bak
+
+function fpKapTarih(d){
+  return `${String(d.getDate()).padStart(2,"0")}.${String(d.getMonth()+1).padStart(2,"0")}.${d.getFullYear()}`;
+}
+
+function fpNormalizeMetin(s){
+  return String(s==null?"":s).toLocaleUpperCase("tr-TR")
+    .split("\u0130").join("I").split("\u015E").join("S")
+    .split("\u00C7").join("C").split("\u00D6").join("O")
+    .split("\u00DC").join("U").split("\u011E").join("G");
+}
+
+async function fpDisclosureListeCek(gunAralik){
+  const bitis = new Date();
+  const baslangic = new Date();
+  baslangic.setDate(baslangic.getDate() - gunAralik);
+  const govde = {
+    fromDate: fpKapTarih(baslangic),
+    toDate: fpKapTarih(bitis),
+    disclosureTypes: ["DG"],
+    memberTypes: ["PYS"],
+  };
+  const r = await fetchZamanli(KAP_LISTE_URL_FP, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+    },
+    body: JSON.stringify(govde),
+  }, 15000);
+  if(r.status < 200 || r.status >= 300) throw new Error(`KAP disclosure list HTTP ${r.status}`);
+  const text = await r.text();
+  if(text.trim().startsWith("<")) throw new Error(`KAP HTML döndü: ${text.slice(0,150)}`);
+  const j = JSON.parse(text);
+  return Array.isArray(j) ? j : Array.isArray(j?.data) ? j.data
+       : Array.isArray(j?.basic) ? j.basic : Array.isArray(j?.disclosures) ? j.disclosures : [];
+}
+
+function fpBildirimEslesir(kayit, fonKodu){
+  const b = kayit?.disclosureBasic || kayit?.basic || kayit || {};
+  const baslik = fpNormalizeMetin(String(b.title || "") + " " + String(b.summary || ""));
+  if(baslik.indexOf("PORTFOY DAGILIM") < 0) return false;
+  const kod = String(b.stockCode || "").toUpperCase().trim();
+  if(kod === fonKodu) return true;
+  const ilgili = String(b.relatedStocks || "").toUpperCase();
+  return ilgili.split(/[,;\s]+/).filter(Boolean).includes(fonKodu);
+}
+
+async function fpPdfLinkiBul(disclosureIndex){
+  const url = `https://kap.org.tr/tr/Bildirim/${disclosureIndex}`;
+  const r = await fetchZamanli(url, { headers:{ "User-Agent":"Mozilla/5.0 (compatible; KatilimPlus/1.0)" } }, 12000);
+  if(!r.ok) throw new Error(`Bildirim sayfası HTTP ${r.status}`);
+  const html = await r.text();
+  const m = html.match(/api\/file\/download\/[0-9a-f]{20,}/i);
+  if(!m) throw new Error("PDF indirme linki bulunamadı");
+  return `https://kap.org.tr/tr/${m[0]}`;
+}
+
+// pdf-parse tercih edildi: saf metin çıkarımı yeterli (tablo ilişkisini
+// kendi regex mantığımızla kuruyoruz), xlsx kütüphanesiyle aynı basitlikte
+// "buffer al, metne çevir" API'si var.
+async function fpPdfMetneCevir(pdfUrl){
+  const r = await fetchZamanli(pdfUrl, { headers:{ "User-Agent":"Mozilla/5.0 (compatible; KatilimPlus/1.0)" } }, 15000);
+  if(!r.ok) throw new Error(`PDF indirilemedi HTTP ${r.status}`);
+  const buf = Buffer.from(await r.arrayBuffer());
+  const pdfParse = (await import("pdf-parse")).default;
+  const veri = await pdfParse(buf);
+  return veri.text;
+}
+
+// ── Ayrıştırma mantığı — gerçek KAP PDF metniyle test edildi ────────────
+// (Kare Portföy KYA fonu örneğiyle: 13/13 hisse doğru kod+ağırlık eşleşti,
+// bkz. devir belgesi/oturum notları — üç ayrı hata canlı testte bulunup
+// düzeltildi: yanlış satırdan hisse kodu okuma, tarih formatının "/" ile
+// sayı dizisini bozması, ve grup toplamı ile hisse satırının farklı sütun
+// sayısına sahip olması yüzünden indeks eşleştirmesinin kayması.)
+function fpTurkceOndalikCoz(s){
+  const temiz = String(s).replace(/\./g, "").replace(",", ".");
+  const n = parseFloat(temiz);
+  return isFinite(n) ? n : null;
+}
+function fpTarihleriMaskele(s){
+  return s.replace(/\d{2}\/\d{2}\/\d{2}/g, "__TARIH__");
+}
+function fpArdisikUcYuzdeBul(sayilar){
+  for(let i = sayilar.length - 3; i >= 0; i--){
+    const [a,b,c] = [sayilar[i], sayilar[i+1], sayilar[i+2]];
+    if([a,b,c].every(n => n != null && n >= 0 && n <= 20 && !Number.isInteger(n))){
+      return { grupYuzde: a };  // GRUP TOPLAMI satırlarında hep ilk değer %100 — doğrulandı
+    }
+  }
+  return null;
+}
+function fpKapPortfoyAyristir(metin){
+  const satirlar = metin.split("\n").map(s => s.trim()).filter(Boolean);
+  const veriSatirRegex = /^TL\s+(TR[A-Z0-9]{10,11})\s+(.+)$/;
+
+  let govdeBaslangic = 0;
+  for(let i = 0; i < satirlar.length; i++){
+    if(/^Hisse\s/.test(satirlar[i]) || /^HİSSE SENETLERİ/.test(satirlar[i])) govdeBaslangic = i + 1;
+  }
+
+  const veriSatirIndeksleri = [];
+  satirlar.forEach((s, i) => { if(i >= govdeBaslangic && veriSatirRegex.test(s)) veriSatirIndeksleri.push(i); });
+
+  const sonuc = [];
+  for(let k = 0; k < veriSatirIndeksleri.length; k++){
+    const i = veriSatirIndeksleri[k];
+    const m = satirlar[i].match(veriSatirRegex);
+    const isin = m[1];
+    const kalan = fpTarihleriMaskele(m[2]);
+    const sayilar = (kalan.match(/[\d.,]+/g) || []).map(fpTurkceOndalikCoz);
+
+    const oncekiVeriSatiri = k > 0 ? veriSatirIndeksleri[k-1] : govdeBaslangic - 1;
+    let blokBaslangic = oncekiVeriSatiri + 1;
+    while(blokBaslangic < i && /GRUP TOPLAMI|III-FON|HİSSE SENETLERİ|^Hisse\s/.test(satirlar[blokBaslangic])) blokBaslangic++;
+    const hisseKodu = (satirlar[blokBaslangic] || "").split(/\s+/)[0];
+    if(!/^[A-ZÇĞİÖŞÜ]{3,6}$/.test(hisseKodu)) continue;
+
+    const uc = fpArdisikUcYuzdeBul(sayilar);
+    if(!uc) continue;
+    sonuc.push({ kod: hisseKodu, isin, agirlik: uc.grupYuzde });
+  }
+  return sonuc;
+}
+
+// ── Ana fonksiyon: bir fon için portföy dağılımını güncelle veya koru ────
+async function fpFonPortfoyuGuncelle(fonKodu, teshis){
+  const kvAnahtar = KV_FON_PORTFOY_PREFIX + fonKodu;
+  let eskiKayit = null;
+  try{ eskiKayit = await redis.get(kvAnahtar); }catch{}
+
+  try{
+    const liste = await fpDisclosureListeCek(FP_ARAMA_GUN);
+    const eslesenler = liste.filter(k => fpBildirimEslesir(k, fonKodu));
+    if(eslesenler.length === 0){
+      teshis[fonKodu] = { durum: "yeni_rapor_yok", eskiKorundu: !!eskiKayit };
+      return eskiKayit;
+    }
+
+    const zamanAl = (k) => {
+      const b = k?.disclosureBasic || k?.basic || k || {};
+      const t = String(b.publishDate || "");
+      const m = t.match(/^(\d{2})\.(\d{2})\.(\d{4})/);
+      return m ? new Date(+m[3], +m[2]-1, +m[1]).getTime() : 0;
+    };
+    eslesenler.sort((a,b) => zamanAl(b) - zamanAl(a));
+    const enYeni = eslesenler[0];
+    const b = enYeni?.disclosureBasic || enYeni?.basic || enYeni || {};
+    const disclosureIndex = b.disclosureIndex;
+    const yayinTarihi = b.publishDate || null;
+
+    if(eskiKayit?.kaynakTarih === yayinTarihi){
+      teshis[fonKodu] = { durum: "degismedi", yayinTarihi };
+      return eskiKayit;
+    }
+
+    const pdfUrl = await fpPdfLinkiBul(disclosureIndex);
+    const metin = await fpPdfMetneCevir(pdfUrl);
+    const hisseler = fpKapPortfoyAyristir(metin);
+
+    if(hisseler.length === 0){
+      teshis[fonKodu] = { durum: "ayristirma_bos", yayinTarihi, pdfUrl, eskiKorundu: !!eskiKayit };
+      return eskiKayit;
+    }
+
+    const yeniKayit = {
+      fonKodu, hisseler, kaynakTarih: yayinTarihi, kaynakUrl: pdfUrl, guncellemeTs: Date.now(),
+    };
+    try{ await redis.set(kvAnahtar, yeniKayit, { ex: FP_CACHE_TTL }); }catch{}
+    teshis[fonKodu] = { durum: "guncellendi", yayinTarihi, hisseSayisi: hisseler.length };
+    return yeniKayit;
+
+  }catch(err){
+    teshis[fonKodu] = { durum: "hata", hata: err.message, eskiKorundu: !!eskiKayit };
+    return eskiKayit;
+  }
+}
+
+const KV_KAP_TUM_KEY = "kap:tum:v3";
+const KAP_TUM_TTL = 3600;
+const KAP_TUM_GUN = 15;
+const KAP_TUM_MAX = 4000;
+const KAP_HISSE_TIPLER = ["ODA", "DG", "DUY", "FR", "CA"];
+const KAP_HISSE_LIMIT = 8;
+
+const KAP_IHRAC_OLUMLU = ["IHRAC", "IZAHNAME", "TERTIP", "HALKA ARZ", "SATIS"];
+const KAP_IHRAC_OLUMSUZ = ["ITFA", "KUPON", "ODEME", "IHRAC TAVAN"];
+
+function kapIhracMi(k){
+  const metin = spkNormalizeMetin((k?.title||"") + " " + (k?.summary||""));
+  if(KAP_IHRAC_OLUMSUZ.some(x => metin.indexOf(x) >= 0)) return false;
+  return KAP_IHRAC_OLUMLU.some(x => metin.indexOf(x) >= 0);
+}
+
 async function kapTumBildirimler(){
   try{
     const onbellek = await redis.get(KV_KAP_TUM_KEY);
@@ -548,7 +724,7 @@ async function kapTumBildirimler(){
   const { ham } = await kapSukukCek(KAP_TUM_GUN, KAP_HISSE_TIPLER);
   const liste = ham
     .map(kapSadeKayit)
-    .filter(k => k.id && (k.kod || k.ilgili))   // hiçbir hisseyle ilişkisi yoksa taşımaya gerek yok
+    .filter(k => k.id && (k.kod || k.ilgili))
     .slice(0, KAP_TUM_MAX);
 
   try{ await redis.set(KV_KAP_TUM_KEY, liste, {ex: KAP_TUM_TTL}); }catch{}
@@ -556,14 +732,13 @@ async function kapTumBildirimler(){
 }
 
 function kapNormalize(k){
-  // Kayıt bazen düz, bazen {basic:{...}} şeklinde sarmalanmış geliyor.
   const b = kapTemel(k);
   const idx = b.disclosureIndex;
   return {
     id: idx || null,
     sirket: b.companyTitle || null,
     kod: b.stockCode || null,
-    ilgiliKurum: b.relatedStocks || null,   // fon kullanıcısı (SPK'da yok!)
+    ilgiliKurum: b.relatedStocks || null,
     baslik: b.title || null,
     ozet: b.summary || null,
     tarih: b.publishDate || null,
@@ -582,71 +757,18 @@ const HAFTALIK = [
   "TP.KTF17.TL","TP.KTF17.USD","TP.KTF17.EUR",
 ];
 
-// ── REZERVLER — İKİ AYRI GRUP, KARIŞTIRILMAMALI (2026-07-30 DÜZELTMESİ) ────
-//
-// bie_abreserv (TP.AB.B*) — AYLIK, "Uluslararası Rezervler ve Döviz Likiditesi
-//   Tablosu"nun özeti. ~2-3 ay gecikmeli yayımlanıyor. B6 "Toplam Rezervler"
-//   ise B3'ü (Bankalar Muhabir Mevcudu ve Efektif Kasası) de İÇERİYOR — bu
-//   ~49 milyar $ ticari bankaların muhabir bakiyesi, TCMB'nin rezervi DEĞİL.
-//   Kamuoyunun/basının "TCMB rezervi" dediği rakam bu değil.
-//
-// bie_abres2 (TP.AB.C1/C2/TOPLAM) — HAFTALIK, "Merkez Bankası Rezervleri".
-//   Her perşembe 14:30'da yayımlanıyor, ~1 hafta gecikmeli. Basının her hafta
-//   alıntıladığı rakam BUDUR.
-//
-// ⚠️ 23 TEMMUZ TEŞHİSİ YANLIŞTI: O tarihte devir belgesine "TP.AB.TOPLAM
-// geçersiz/eski kod, hiç veri döndürmüyor" diye yazılmış ve B6'ya geçilmişti.
-// Kod geçerli, veri kusursuz. Sorun, HAFTALIK C serisinin AYLIK B serileriyle
-// AYNI istekte gönderilmesiydi — EVDS'in bilinen davranışı: listede tek bir
-// uyumsuz kod olsa bile TÜM isteği reddediyor (bkz. devir belgesi 6.3).
-// Bu yüzden C grubu KENDİ AYRI çağrısında gidiyor. Asla B ile birleştirme.
-//
-// Canlı doğrulama (2026-07-30, ?grafik=1&seri=TP.AB.TOPLAM) — basınla birebir:
-//   30-01-2026: 218.157,8  ("218,2 milyar, tarihi zirve")
-//   26-06-2026: 149.204,7  ("149,2 milyar dolara indi")
-//   03-07-2026: 159.694,3  ("159,7 milyar dolar")
-//   10-07-2026: 163.302,4  ("163 milyar 302 milyon dolar")
-// Son nokta 24-07-2026 → bir haftalık gecikme.
-const REZERV = ["TP.AB.B6", "TP.AB.B4", "TP.AB.B1", "TP.AB.B2", "TP.AB.B3"];   // AYLIK (B4 = Resmi Rezerv Varlıklar, haftalık alınamazsa yedek)
-const REZERV_HAFTALIK = ["TP.AB.TOPLAM", "TP.AB.C1", "TP.AB.C2"];  // HAFTALIK
-
-// ── NET REZERV — STAND-BY BİLANÇOSU (2026-07-30, ikinci tur) ───────────────
-// bie_abstc2 "Merkez Bankası Bilançosu – Stand By (Cari)" grubu. TCMB'nin
-// 2002 Stand-By programından beri yayımladığı HAFTALIK cuma vaziyeti.
-// Analistlerin (Eğilmez, Babuşcu vb.) "net rezerv" dediği kalem BURADA hazır:
-//   TP.AB.N06 → "2A Net Uluslararası Rezervler (1+2+3)"   [BİN TL]
-//   TP.AB.N12 → "2A3 Net Vadeli (Forward) İşlemler"       [BİN TL] (swap bacağı)
-//   TP.DK.USD.A → USD alış kuru (dolara çevirmek için — analist geleneği de
-//                 TCMB alış kuruna bölmek; aynı istekte gelirse tarih hizalı)
-// Canlı doğrulama (2026-07-30):
-//   24-07-2026: N06 = 2.409.957.051 bin TL ÷ ~47,3 ≈ 50,95 milyar $ — Babuşcu
-//   tablosundaki "Net Rezerv 51,0" ile birebir. 13-03 noktası da Eğilmez'in
-//   okur örneğiyle (69 milyar $) tutuyor.
-// ⚠️ İlk teşhis "EVDS'te net rezerv yok" idi ve YANLIŞTI — analitik bilanço
-// ve rezerv gruplarına bakılmış, "Haftalık Vaziyet" kategorisi atlanmıştı.
+const REZERV = ["TP.AB.B6", "TP.AB.B4", "TP.AB.B1", "TP.AB.B2", "TP.AB.B3"];
+const REZERV_HAFTALIK = ["TP.AB.TOPLAM", "TP.AB.C1", "TP.AB.C2"];
 const REZERV_STANDBY = ["TP.AB.N06", "TP.AB.N12", "TP.DK.USD.A"];
 
-// ── URDL HAFTALIK XLS (2026-07-30, üçüncü tur) ─────────────────────────────
-// "Uluslararası Rezervler ve Döviz Likiditesi" tablosunun HAFTALIK versiyonu
-// EVDS API'sinde YOK — TCMB'nin kendi sayfası aylık tablonun EVDS'te
-// yayımlandığını açıkça yazıyor. Haftalık versiyon SABİT URL'li bir XLS
-// olarak her hafta güncelleniyor; Bloomberg/analistlerin haftalık swap ve
-// net rezerv rakamlarının kaynağı bu dosya.
-// Üç gün boyunca EVDS'te aranan veri EVDS'te hiç olmamıştı — ders: kaynak
-// yayını API'de yoksa dosya yayınına bakılmalı.
-// v8 (ayni gece): /XLS kabugu gercek dosya linki icermiyordu (icindeki tum
-// uuid linkleri normalize.css/webfont.js/favicon gibi site varliklariydi —
-// canli teshiste goruldu). Asil dosya linkleri LISTELEME sayfasinda; once o
-// deneniyor, /XLS kabugu yedek.
 const URDL_KAYNAK_SAYFALAR = [
   "https://www.tcmb.gov.tr/wps/wcm/connect/TR/TCMB+TR/Main+Menu/Istatistikler/Odemeler+Dengesi+ve+Ilgili+Istatistikler/Uluslararasi+Rezervler+ve+Doviz+Likiditesi/Veri+(Tablolar)+-+Haftalik",
   "https://www.tcmb.gov.tr/wps/wcm/connect/TR/TCMB+TR/Main+Menu/Istatistikler/Odemeler+Dengesi+ve+Ilgili+Istatistikler/Uluslararasi+Rezervler+ve+Doviz+Likiditesi/Veri+(Tablolar)+-+Haftalik/XLS",
 ];
 const URDL_XLS_URL = URDL_KAYNAK_SAYFALAR[0];
 const KV_URDL_KEY = "urdl:haftalik:v1";
-const URDL_TTL = 12 * 3600;   // dosya haftada bir değişiyor; 12 saat fazlasıyla taze
+const URDL_TTL = 12 * 3600;
 
-// Türkçe metni arama için düzleştir: küçük harf + aksan temizliği.
 function urdlNorm(t) {
   return String(t || "").toLocaleLowerCase("tr-TR")
     .replace(/ı/g, "i").replace(/ş/g, "s").replace(/ğ/g, "g")
@@ -654,8 +776,6 @@ function urdlNorm(t) {
     .replace(/\s+/g, " ").trim();
 }
 
-// Satırdaki etiketten SONRAKİ ilk sayısal hücre — IMF şablonunda ilk sayı
-// sütunu "Toplam". Parantezli negatifleri de tanır: "(13.500)".
 function urdlSatirdakiIlkSayi(hucreler) {
   let etiketGorulduMu = false;
   for (const h of hucreler) {
@@ -667,18 +787,14 @@ function urdlSatirdakiIlkSayi(hucreler) {
     const n = parseFloat(temiz);
     if (etiketGorulduMu && isFinite(n)) return m.includes("(") ? -n : n;
   }
-  // Etiket hücresi sayıdan önce hiç görülmediyse (etiket ayrı sütunda vb.)
   for (const h of hucreler) if (typeof h === "number" && isFinite(h)) return h;
   return null;
 }
 
-// XLS çalışma kitabından hedef kalemleri etikete göre çıkarır. Hücre/satır
-// KONUMUNA asla güvenilmiyor — TCMB düzeni değiştirirse etiket araması
-// dayanır, konum araması sessizce yanlış değer okurdu.
 function urdlAyristir(XLSX, wb) {
   const bulunan = {};
-  const eslesen = {};      // eşleşen satırların ham hücreleri (teşhis için)
-  const basliklar = [];    // ilk satırlar — sütun düzenini görmek için
+  const eslesen = {};
+  const basliklar = [];
   const kesif = [];
   let tarih = null;
   for (const sayfaAdi of wb.SheetNames) {
@@ -692,9 +808,6 @@ function urdlAyristir(XLSX, wb) {
         const m = (rows[i] || []).map((h) => String(h ?? "")).join(" ").match(/(\d{2})[.\/](\d{2})[.\/](\d{4})/);
         if (m) tarih = `${m[1]}-${m[2]}-${m[3]}`;
       }
-      // 2026-07-31: Eşleşen satırın TÜM hücreleri teşhise yazılıyor. Canlıda
-      // swap 17,67 çıktı ama referans 12,8 — hangi sütunun okunduğunu görmeden
-      // düzeltmek tahmin olurdu. Sütun başlıkları da (ilk 3 satır) kaydediliyor.
       const kaydet = (ad, deger) => {
         bulunan[ad] = deger;
         eslesen[ad] = { satir: i, sayfa: sayfaAdi, hucreler: rows[i].slice(0, 12) };
@@ -713,15 +826,6 @@ function urdlAyristir(XLSX, wb) {
   return { bulunan, eslesen, basliklar, kesif, tarih };
 }
 
-// TCMB WCM sayfası dosyanın kendisi değil, HTML kabuk döndürüyor. İlk
-// sürüm kabuktan tek link seçiyordu ve CANLIDA KENDİNE REFERANS YAKALADI:
-// "/…/Haftalik/XLS" ile biten navigasyon linki "xls" desenine uyduğu için
-// sayfa kendi kendini indirdi ("Ikinci istek de HTML dondu"). Artık:
-//   1) kendine/ayni-sayfaya referanslar eleniyor,
-//   2) TEK aday yerine öncelik sıralı ADAY LİSTESİ dönülüyor ve urdlOku
-//      bunları sırayla deneyip binary döneni kabul ediyor.
-// Öncelik: gerçek .xls/.xlsx uzantısı > WCM dosya deseni (MOD=AJPERES,
-// genelde /connect/<uuid>/ altında) > diğer "xls" geçenler.
 function urdlHtmldenXlsAdaylari(html, kendiUrl) {
   const ham = [];
   const re = /(?:href|src)\s*=\s*["']([^"']+)["']/gi;
@@ -735,42 +839,32 @@ function urdlHtmldenXlsAdaylari(html, kendiUrl) {
   for (const h of ham) {
     const t = tam(h);
     const tNorm = decodeURIComponent(t).toLocaleLowerCase();
-    if (tNorm === kendiNorm) continue;                    // kendine referans
-    if (tNorm.endsWith("/xls")) continue;                 // ayni tur kabuk sayfalar
-    // SITE VARLIKLARI ELENIR (canli vaka: normalize.css secilmisti) —
-    // uuid'li olsalar bile bunlar veri dosyasi degil.
+    if (tNorm === kendiNorm) continue;
+    if (tNorm.endsWith("/xls")) continue;
     if (/\.(css|js|png|jpe?g|gif|svg|ico|woff2?|ttf|eot)([?#]|$)/i.test(tNorm)) continue;
     if (/normalize|webfont|favicon/i.test(tNorm)) continue;
-    // Aday olabilmesi icin YA .xls uzantisi YA da adinda konuyla ilgili bir
-    // ipucu olmali (URDL_Gelismeleri.pdf ornegindeki adlandirma deseni).
     const dosyaIpucu = /\.xlsx?([?#]|$)/i.test(tNorm) ||
       ((/MOD=AJPERES/i.test(t)) && /urdl|rezerv|likidit|haftalik/i.test(tNorm));
     if (!dosyaIpucu) continue;
     if (!benzersiz.includes(t)) benzersiz.push(t);
   }
   const puan = (t) =>
-    /\.xlsx?([?#]|$)/i.test(t) ? 0 :                           // gerçek dosya uzantısı en önde
-    /\/connect\/[0-9a-f]{8}-[0-9a-f-]{20,}\//i.test(t) ? 1 :  // uuid'li WCM dosyası
+    /\.xlsx?([?#]|$)/i.test(t) ? 0 :
+    /\/connect\/[0-9a-f]{8}-[0-9a-f-]{20,}\//i.test(t) ? 1 :
     2;
   benzersiz.sort((x, y) => puan(x) - puan(y));
   return benzersiz.slice(0, 6);
 }
 
-// ── MİNİMAL ZIP ÇIKARICI (2026-07-30 gece, son halka) ──────────────────────
-// TCMB haftalık dosyası ZIP ARŞİVİ çıktı (URDL_YYYYAAGG.zip) ve SheetJS
-// "Unsupported ZIP file" dedi — çünkü bu XLSX değil, içinde XLS barındıran
-// gerçek bir arşiv. Ek bağımlılık yok: ZIP merkez dizini elle okunuyor,
-// DEFLATE ise Node yerleşik zlib.inflateRawSync ile açılıyor.
-// Dönüş: {xlsxKendisi:true} (dosya zaten XLSX'miş) | {icerik,ad} | null
 function zipIcindenXlsCikar(buf, zlib) {
   let eocd = -1;
-  const alt = Math.max(0, buf.length - 65557);   // EOCD + azami yorum alanı
+  const alt = Math.max(0, buf.length - 65557);
   for (let i = buf.length - 22; i >= alt; i--) {
     if (buf.readUInt32LE(i) === 0x06054b50) { eocd = i; break; }
   }
   if (eocd < 0) return null;
   const toplam = buf.readUInt16LE(eocd + 10);
-  let p = buf.readUInt32LE(eocd + 16);           // merkez dizin başlangıcı
+  let p = buf.readUInt32LE(eocd + 16);
   const girdiler = [];
   for (let k = 0; k < toplam && p + 46 <= buf.length; k++) {
     if (buf.readUInt32LE(p) !== 0x02014b50) break;
@@ -783,7 +877,6 @@ function zipIcindenXlsCikar(buf, zlib) {
     girdiler.push({ ad: buf.slice(p + 46, p + 46 + nlen).toString("utf8"), method, compSize, lho });
     p += 46 + nlen + elen + clen;
   }
-  // XLSX dosyaları da ZIP'tir — ayırt edici: [Content_Types].xml
   if (girdiler.some((g) => g.ad === "[Content_Types].xml")) return { xlsxKendisi: true };
   const hedef = girdiler.find((g) => /\.xlsx?$/i.test(g.ad)) || girdiler[0];
   if (!hedef) return null;
@@ -798,8 +891,6 @@ function zipIcindenXlsCikar(buf, zlib) {
   } catch { return null; }
 }
 
-// URDL verisini Redis-öncelikli getirir. Her adım kendi try/catch'inde:
-// XLS inmezse/ayrışmazsa ana EVDS yanıtı ETKİLENMEZ, ilgili alanlar boş kalır.
 async function urdlOku(teshis) {
   try {
     const onbellek = await redis.get(KV_URDL_KEY);
@@ -807,7 +898,6 @@ async function urdlOku(teshis) {
   } catch {}
   try {
     const XLSX = await import("xlsx");
-    // Kaynak sayfalari sirayla dene; ilk erisilebilen kabugu kullan.
     let buf = null, xlsUrl = null, kabukHatalari = [];
     for (const kaynakUrl of URDL_KAYNAK_SAYFALAR) {
       try {
@@ -822,20 +912,12 @@ async function urdlOku(teshis) {
       } catch (e) { kabukHatalari.push(`${kaynakUrl} → ${e.message}`); }
     }
     if (!buf) { teshis.urdl = { hata: "Kaynak sayfalara erisilemedi", kabukHatalari }; return null; }
-    // HTML dönerse (dosya yerine kabuk sayfa — canlıda görülen durum):
-    // içinden gerçek XLS bağlantısını çıkar ve İKİNCİ istekle dosyayı indir.
-    // ÜÇ TUR KARA LİSTEYLE UĞRAŞILDI ("HTML mi?"): once <html kacti
-    // (<!DOCTYPE), sonra CSS kacti (hic HTML imzasi yok). Dogru soru
-    // "XLS Mİ?" — beyaz liste: XLS'in iki kesin binary imzasi var:
-    //   BIFF (eski .xls): D0 CF 11 E0   |   ZIP (.xlsx): 50 4B 03 04
-    // Bunlarla baslamayan hicbir icerik dosya kabul edilmez; HTML, CSS,
-    // JSON, duz metin — hepsi tek kontrolle elenir.
     const xlsMi = (b) =>
       b.length > 8 && (
         (b[0] === 0xD0 && b[1] === 0xCF && b[2] === 0x11 && b[3] === 0xE0) ||
         (b[0] === 0x50 && b[1] === 0x4B && b[2] === 0x03 && b[3] === 0x04)
       );
-    const htmlMi = (b) => !xlsMi(b);   // eski adla uyum: "dosya degil" testi
+    const htmlMi = (b) => !xlsMi(b);
     if (htmlMi(buf)) {
       const adaylar = urdlHtmldenXlsAdaylari(buf.toString("utf8"), xlsUrl);
       if (adaylar.length === 0) {
@@ -860,11 +942,8 @@ async function urdlOku(teshis) {
         teshis.urdl = { hata: "Hicbir aday binary dondurmedi", denenen, adaylar };
         return null;
       }
-      teshis.urdlAdaylar = adaylar;   // başarılı yolda da hangi listeden seçildiği görünsün
+      teshis.urdlAdaylar = adaylar;
     }
-    // ZIP imzalıysa önce arşiv mi XLSX mi ayır: TCMB haftalık veriyi
-    // URDL_YYYYAAGG.zip arşivi olarak yayımlıyor (canlıda görüldü —
-    // "Unsupported ZIP file"). Arşivse içindeki XLS çıkarılıp okunur.
     let okunacak = buf;
     if (buf[0] === 0x50 && buf[1] === 0x4B) {
       const zlib = await import("zlib");
@@ -876,14 +955,11 @@ async function urdlOku(teshis) {
         teshis.urdl = { hata: "ZIP acilamadi", xlsUrl };
         return null;
       }
-      // xlsxKendisi ise okunacak=buf kalır, SheetJS doğrudan okur.
     }
     const wb = XLSX.read(okunacak, { type: "buffer" });
     const { bulunan, eslesen, basliklar, kesif, tarih } = urdlAyristir(XLSX, wb);
     const ozet = { tarih, resmiRezerv: bulunan.resmiRezerv ?? null, swapVadeli: bulunan.swapVadeli ?? null, netRezerv: bulunan.netRezerv ?? null };
     const kayit = { bulunan, tarih, ozet, ts: Date.now() };
-    // Hiçbir kalem bulunamadıysa keşif dökümünü teşhise koy — ayrıştırıcıyı
-    // gerçek yapıya göre düzeltmek için gereken tek şey bu çıktı.
     if (bulunan.resmiRezerv == null && bulunan.swapVadeli == null && bulunan.netRezerv == null) {
       teshis.urdl = { hata: "hicbir kalem eslesmedi", xlsUrl, sayfalar: wb.SheetNames, kesif: kesif.slice(0, 40) };
       return null;
@@ -897,13 +973,8 @@ async function urdlOku(teshis) {
   }
 }
 
-// GECICI TEST (silinecek) - GSYH frekansini bulmak icin
-const TEST_GSYH = ["TP.GSYIH30.HY.B1GQ"]; // B1=Altın, B2=Döviz
+const TEST_GSYH = ["TP.GSYIH30.HY.B1GQ"];
 
-// GÖSTERGELER (2026-07-23) — Ekonomik Aktivite + Enflasyon detayı, EVDS katalog
-// keşfiyle doğrulandı. KKO/RKGE/TGE/İşsizlik doğrudan oran/endeks puanı;
-// Sanayi/Yİ-ÜFE/Çekirdek TÜFE/Enerji/Gıda/Kira birer ENDEKS olduğu için
-// backend'de yıllık(+aylık) % değişime çevriliyor (endeksYoYHesapla ile).
 const GOSTERGE = [
   "TP.TSANAYMT2021.Y1",
   "TP.KKO2.IS.TOP",
@@ -915,35 +986,17 @@ const GOSTERGE = [
   "TP.FE25.OKTG09",
   "TP.FE25.OKTG10",
   "TP.YKKE.TR",
-  // ── ENFLASYON BEKLENTİLERİ (2026-08-01) ─────────────────────────────────
-  // TCMB anketlerinden 12 ay sonrası yıllık TÜFE beklentisi. İkisi de AYLIK,
-  // bu yüzden GOSTERGE dizisine (frequency=5) güvenle eklenebiliyor —
-  // farklı frekanslı seri karıştırmak EVDS'te tüm isteği reddettiriyor.
-  //
-  // NOT: Bunlar ENDEKS DEĞİL, doğrudan YÜZDE. endeksYoYHesapla'dan geçmemeli.
-  // Canlı doğrulama (2026-07): PKA %23,95 — TCMB'nin Temmuz PKA raporundaki
-  // "12 ay sonrası TÜFE beklentisi yüzde 23,95" ifadesiyle birebir.
-  //
-  // Aylık TÜFE nokta tahmini (takvimde "beklenti" göstermek için) EVDS'te
-  // YOK — yalnızca aylık PDF raporunda. Beş ayrı katalog araması yapıldı,
-  // BEKA grubu tamamen "(Arşiv)", BEKODTUFE de arşiv. Aranmasın.
-  "TP.ENFBEK.PKA12ENF",   // Piyasa katılımcıları, 12 ay sonrası (%)
-  "TP.ENFBEK.HBA12ENF",   // Hanehalkı, 12 ay sonrası (%)
+  "TP.ENFBEK.PKA12ENF",
+  "TP.ENFBEK.HBA12ENF",
 ];
 
-// KÂR PAYI — HAFTALIK AKIM (2026-07-23) — EVDS menü keşfiyle doğrulandı:
-// "Kredi Kâr Oranları (Akım)" = gerçek katılım bankaları haftalık akım verisi
-// (kod öneki KBK = Katılım Bankaları Kredi). Kullanıcının EVDS3 ekranındaki
-// 10 seçili seri + Excel export sütun başlıkları birebir sırayla eşleşerek
-// doğrulandı. Önceki "TP.KTF17" (HAFTALIK dizisi) katılıma özel DEĞİLDİ —
-// genel/konvansiyonel bankacılık verisiydi, hiç canlıya alınmamıştı.
 const HAFTALIK_KBK = [
-  "TP.KBK.TRY.18",       // Konut
-  "TP.KBK.TRY.17",       // Taşıt
-  "TP.KBK.TRY.KBTF10",   // İhtiyaç
-  "TP.KBK.TRY.1",        // Ticari TL
-  "TP.KBK.USD.KBTF17",   // Ticari USD
-  "TP.KBK.EUR.KBTF17",   // Ticari EUR
+  "TP.KBK.TRY.18",
+  "TP.KBK.TRY.17",
+  "TP.KBK.TRY.KBTF10",
+  "TP.KBK.TRY.1",
+  "TP.KBK.USD.KBTF17",
+  "TP.KBK.EUR.KBTF17",
 ];
 
 const AYLIK_BKR = [
@@ -971,7 +1024,6 @@ const GUNLUK = [
   "TP.BISTTLREF.KAPANIS",
 ];
 
-// Dış Ticaret & Ödemeler Dengesi (v10) — kodlar katalog keşfiyle doğrulandı.
 const DISTICARET = [
   "TP.IHRACATBEC.9999",
   "TP.ITHALATBEC.9999",
@@ -1038,13 +1090,6 @@ function tumDegerler(items, seri) {
   }).filter(Boolean);
 }
 
-// ── DIŞ TİCARET yardımcıları (v10) ─────────────────────────────────────────
-// BİRİM NORMALİZASYONU: EVDS bu serileri kaynağına göre "Bin USD" ya da
-// "Milyon USD" olarak verebiliyor; hangisi olduğu API yanıtında yazmıyor.
-// Seri bazında MEDYAN mutlak büyüklükten tespit edip her şeyi MİLYON USD'a
-// çeviriyoruz: medyan > 100.000 ise değerler Bin USD kabul edilir (aylık
-// hiçbir dış ticaret/cari kalemi 100 milyar USD'ı aşmadığından, milyon USD
-// cinsinden hiçbir aylık değer bu eşiği geçemez — güvenli ayrım noktası).
 function milyonUSDNormalize(dizi){
   if(!dizi || dizi.length===0) return dizi||[];
   const mutlak = dizi.map(n=>Math.abs(n.deger)).filter(v=>v>0).sort((a,b)=>a-b);
@@ -1053,8 +1098,6 @@ function milyonUSDNormalize(dizi){
   if(medyan > 100000) return dizi.map(n=>({tarih:n.tarih, deger:n.deger/1000}));
   return dizi;
 }
-// 12 aylık kümülatif (hareketli) toplam — i. nokta, i dahil geriye doğru 12
-// aylık pencerenin toplamıdır. İlk 11 nokta (eksik pencere) atlanır.
 function kumulatif12Ay(dizi){
   const sonuc=[];
   for(let i=11;i<dizi.length;i++){
@@ -1064,9 +1107,6 @@ function kumulatif12Ay(dizi){
   }
   return sonuc;
 }
-// İki aylık seriyi tarihe göre eşleştirip f(a,b) ile birleştirir (denge,
-// karşılama oranı gibi türetilmiş seriler için). Yalnızca iki seride de aynı
-// ay varsa nokta üretir — yayın gecikmeleri farklıysa uçtaki aylar atlanır.
 function seriBirlestir(a, b, f){
   const map={};
   for(const n of b) map[n.tarih]=n.deger;
@@ -1127,6 +1167,14 @@ function gunlukTlrefOranlari(dizi){
   }
   return oranlar;
 }
+// ── TLREF PENCERE BOYUTU (2026-08-31 düzeltildi) ────────────────────────────
+// Bkz. dosya başındaki "v21" notu. 9 → 4 gün: kullanıcı bildirimiyle
+// doğrulanan TCMB likidite rejimi değişikliğine (23 Ağustos) daha hızlı
+// yakınsamak için. Simülasyonla test edildi: yeni rejim birkaç gün sürdüğünde
+// 4 günlük pencere 9 günlükten çok daha hızlı gerçek değere yaklaşıyor; buna
+// karşılık TEK günlük veri hatalarına karşı hâlâ bir miktar koruma sağlıyor
+// (pencerenin en az yarısı aynı yönde olmadıkça medyan tek bir sapan günü
+// yansıtmaz).
 function medyanTlrefOrani(gunlukOranlar, sonIndex, pencereNokta=9){
   const baslangic = Math.max(0, sonIndex - pencereNokta + 1);
   const dilim = gunlukOranlar.slice(baslangic, sonIndex+1).map(o=>o.deger).sort((a,b)=>a-b);
@@ -1134,7 +1182,7 @@ function medyanTlrefOrani(gunlukOranlar, sonIndex, pencereNokta=9){
   const orta = Math.floor(dilim.length/2);
   return dilim.length%2 ? dilim[orta] : (dilim[orta-1]+dilim[orta])/2;
 }
-const TLREF_PENCERE_NOKTA = 9;
+const TLREF_PENCERE_NOKTA = 4;
 
 function ceyrekYoYHesapla(dizi){
   if(!dizi || dizi.length<5) return {son:null, seri:[]};
@@ -1180,9 +1228,6 @@ function tufe12AyOrtalamaHesapla(dizi){
   };
 }
 
-// Endeks tipi GÖSTERGE serilerinden (Sanayi Üretimi, Yİ-ÜFE, Çekirdek TÜFE,
-// Enerji, Gıda, Kira Endeksi) yıllık/aylık % değişim hesaplar — TÜFE'deki
-// mantığın genelleştirilmiş hali; ham EVDS tarihi kullanılıyor.
 function endeksYoYHesapla(dizi, aylikDaHesapla){
   if(!dizi || dizi.length<13) return {yillik:null, aylik:null, yillikSeri:[], aylikSeri:[]};
   const son=dizi[dizi.length-1];
@@ -1215,22 +1260,15 @@ export default async function handler(req,res){
   res.setHeader("Access-Control-Allow-Origin","*");
   if(req.method==="OPTIONS") return res.status(200).end();
 
-  // ── HIZ SINIRI ────────────────────────────────────────────────────────────
-  // Her şeyden önce çalışır; sınır aşılmışsa hiçbir dış servise gidilmez.
   if(await hizSiniriAsildiMi(req)){
     res.setHeader("Retry-After", String(HIZ_SINIRI_PENCERE));
-    res.setHeader("Cache-Control","no-store");   // 429 asla önbelleklenmesin
+    res.setHeader("Cache-Control","no-store");
     return res.status(429).json({
       hata: "Çok fazla istek gönderildi. Lütfen biraz sonra tekrar deneyin.",
       limit: `${HIZ_SINIRI_ADET}/${HIZ_SINIRI_PENCERE}sn`,
     });
   }
 
-  // ── CDN ÖNBELLEĞİ ─────────────────────────────────────────────────────────
-  // res.json sarmalanıyor: yalnızca BAŞARILI yanıtlara önbellek başlığı
-  // ekleniyor. Hata yanıtlarının CDN'de takılıp kalması, hatayı geçici
-  // olmaktan çıkarıp dakikalarca sürekli hale getirirdi.
-  // Bir şube kendi Cache-Control'ünü ayarlarsa ona dokunulmuyor.
   const _json = res.json.bind(res);
   res.json = (govde)=>{
     const kod = res.statusCode || 200;
@@ -1241,13 +1279,8 @@ export default async function handler(req,res){
     return _json(govde);
   };
 
-  // debug=1 önbelleği atlamak için var; CDN'in bunu da atlaması gerekiyor,
-  // yoksa "önbelleksiz sorgu" yine bayat yanıt döndürür.
   if(req.query.debug === "1") res.setHeader("Cache-Control","no-store");
 
-  // ── SPK KİRA SERTİFİKASI İHRAÇLARI (v11): /api/evds-proxy?spk=sukuk ──────
-  // EVDS_KEY kontrolünden ÖNCE, çünkü bu şube TCMB'ye hiç gitmiyor — SPK'nın
-  // kamuya açık servisini kullanıyor, EVDS anahtarı olmasa bile çalışmalı.
   if(req.query.spk === "sukuk"){
     const kilitAnahtariSpk = `lock:${KV_SPK_SUKUK_KEY}`;
     let kilitBizdeMiSpk = false;
@@ -1257,8 +1290,6 @@ export default async function handler(req,res){
         const onbellek = await redis.get(KV_SPK_SUKUK_KEY);
         if(onbellek) return res.status(200).json({...onbellek, cached:true});
       }catch{}
-      // Aynı anda gelen isteklerin hepsi SPK'ya gitmesin (thundering herd) —
-      // diğer şubelerdeki kilit deseninin aynısı.
       try{
         const s = await redis.set(kilitAnahtariSpk, "1", {nx:true, ex:30});
         kilitBizdeMiSpk = (s === "OK" || s === true);
@@ -1295,10 +1326,6 @@ export default async function handler(req,res){
       const buYilOzet = spkYilOzeti(buYilSatirlar);
       const sonAy = buYilOzet.sonAy;
 
-      // Teşhis: SPK'nın döndürdüğü en büyük ay ile FİİLEN SAYILAN son ay
-      // farklıysa, aradaki fark boş (toplam:0) satırlardır. Bu iki sayı
-      // birbirinden ayrıldığında ekrandaki "N aylık" etiketi ve kıyas tabanı
-      // kayar; ileride benzer bir sapma olursa buradan görülür.
       const spkGelenEnBuyukAy = (buYilSatirlar||[]).reduce((m,s)=>Math.max(m, spkSayi(s.ay)), 0);
       spkTeshis.sonAyHesabi = {
         gelenEnBuyukAy: spkGelenEnBuyukAy,
@@ -1306,9 +1333,6 @@ export default async function handler(req,res){
         bosSondakiAy: Math.max(0, spkGelenEnBuyukAy - sonAy),
       };
 
-      // İHRAÇÇI BAZINDA SPK ONAYLARI — yalnızca güncel yıl için çekiliyor.
-      // Başarısız olursa ekranın geri kalanı çalışmaya devam etsin diye
-      // hata yutuluyor (bölüm frontend'de gizlenir).
       let ihraccilar = null;
       try{
         const hamIhracci = await spkIhracciYilCek(buYil);
@@ -1318,8 +1342,6 @@ export default async function handler(req,res){
         spkTeshis.ihracci = { basarili:false, hata:e.message };
       }
 
-      // DÜRÜST KIYAS: geçen yılın YALNIZCA aynı ay aralığı toplanır.
-      // (7 aylık 2026'yı 12 aylık 2025 ile kıyaslamak yanıltıcı olurdu.)
       const gecenYilSatirlar = (ham.find(h=>h.yil===buYil-1)||{satirlar:[]}).satirlar;
       const gecenYilAyniDonem = spkYilOzeti(gecenYilSatirlar, sonAy).toplam;
       const degisimYuzde = gecenYilAyniDonem > 0
@@ -1334,11 +1356,6 @@ export default async function handler(req,res){
         pay: buYilOzet.toplam > 0 ? (buYilOzet.turToplam[t.anahtar] / buYilOzet.toplam * 100) : 0,
       })).sort((a,b)=> b.toplam - a.toplam);
 
-      // SPK, verisi henüz gelmemiş ay için de sıfırlı satır döndürüyor
-      // (2 Ağustos 2026'da "2026 / 08" satırı toplam:0 olarak geliyordu).
-      // Bu satırlar grafikte hayalet bir boş sütun çiziyor — sondaki boş
-      // ayları kırpıyoruz. sonAy'a kadar olanlar (aradaki gerçek sıfırlar
-      // dahil) aynen korunuyor.
       const aylik = (buYilSatirlar||[])
         .map(s=>({
           ay: spkSayi(s.ay),
@@ -1350,7 +1367,6 @@ export default async function handler(req,res){
         .sort((a,b)=> a.ay - b.ay)
         .filter(r => r.ay <= sonAy);
 
-      // Yıllık trend — her yılın TAM toplamı (bu yıl hariç, o kısmi).
       const yillik = ham.map(h=>{
         const o = spkYilOzeti(h.satirlar);
         return {
@@ -1358,7 +1374,7 @@ export default async function handler(req,res){
           toplam: o.toplam,
           yurtIci: o.yurtIci,
           yurtDisi: o.yurtDisi,
-          kismi: h.yil === buYil,   // frontend "2026 (7 aylık)" diye yazabilsin
+          kismi: h.yil === buYil,
           sonAy: o.sonAy,
         };
       });
@@ -1380,9 +1396,6 @@ export default async function handler(req,res){
         turler,
         aylik,
         yillik,
-        // İhraççı bazında SPK ONAYLARI — birim HAM TL (tür bazındaki milyon
-        // TL'den FARKLI!). Frontend'in yanlış birimle göstermemesi için
-        // ayrıca bildiriliyor.
         ihraccilar: ihraccilar ? {
           birim: "TL",
           aciklama: "SPK tarafından onaylanan ihraç tavanı üst sınırdır; fiilen ihraç edilen tutar bundan düşük olabilir.",
@@ -1396,7 +1409,6 @@ export default async function handler(req,res){
       return res.status(200).json(yanit);
     }catch(err){
       if(kilitBizdeMiSpk){ try{ await redis.del(kilitAnahtariSpk); }catch{} }
-      // Hata olsa bile eski önbellek varsa onu ver — ekran boş kalmasın.
       try{
         const eski = await redis.get(KV_SPK_SUKUK_KEY);
         if(eski) return res.status(200).json({...eski, cached:true, hata:err.message});
@@ -1405,12 +1417,10 @@ export default async function handler(req,res){
     }
   }
 
-  // ── KAP KİRA SERTİFİKASI BİLDİRİMLERİ (v12): /api/evds-proxy?kap=sukuk ──
-  // SPK şubesi gibi, EVDS_KEY kontrolünden ÖNCE — TCMB'ye hiç gitmiyor.
   if(req.query.kap === "sukuk"){
     const kilitKap = `lock:${KV_KAP_SUKUK_KEY}`;
     let kilitBizdeMiKap = false;
-    const hamGoster = req.query.ham === "1";   // teşhis: ham KAP kaydını göster
+    const hamGoster = req.query.ham === "1";
 
     if(req.query.debug !== "1" && !hamGoster){
       try{
@@ -1433,15 +1443,10 @@ export default async function handler(req,res){
     }
 
     try{
-      // ?gun= ile istenen pencere üst sınırla kısıtlanıyor — kullanıcı
-      // yanlışlıkla (ya da bilerek) devasa bir aralık isteyip fonksiyonu
-      // düşüremesin.
       const istenenGun = parseInt(req.query.gun,10) || KAP_GUN_ARALIK;
       const gun = Math.max(1, Math.min(istenenGun, KAP_MAX_GUN));
       const { ham, hamSayi } = await kapSukukCek(gun);
 
-      // Teşhis modu: ilk 2 ham kaydı olduğu gibi göster (alan adlarını
-      // canlı doğrulamak için — KAP arayüzü değişirse buradan anlaşılır).
       if(hamGoster){
         return res.status(200).json({
           gun,
@@ -1451,34 +1456,16 @@ export default async function handler(req,res){
         });
       }
 
-      // İki aşamalı süzme: önce sukukla ilgili olanlar, sonra bunlar
-      // arasından SADECE ihraç bildirimleri (kupon/itfa gürültüsü elenir).
-      // ?tumu=1 ile ikinci süzgeç atlanabilir (teşhis/ileride kullanım için).
       const sukukHam = ham.filter(k => kapSukukMu(kapTemel(k)));
       const tumunuGoster = req.query.tumu === "1";
       let suzulmus = (tumunuGoster ? sukukHam : sukukHam.filter(k => kapIhracMi(kapTemel(k))))
         .map(kapNormalize);
 
-      // TEKRAR TEMİZLİĞİ: Bir halka arz / ihraç için şirket aynı gün birkaç
-      // ayrı belge bildiriyor (İzahname, İhraççı Bilgi Dokümanı, SP Aracı
-      // Notu, Getiri Oranı...). Özet metinleri BİREBİR AYNI OLMUYOR ama aynı
-      // olayı anlatıyor — örn. VAKVK'nin 27.07 tarihli üç bildirimi:
-      //   "Yurt İçi Kira Sertifikası Halka Arzı İçin SPK Tarafından Onaylanan Belgeler"
-      //   "Yurt İçi Kira Sertifikası Halka Arzına İlişkin SPK Onayı"
-      //   "Yurt İçi Kira Sertifikası Halka Arzı Getiri Oranı"
-      // Bu yüzden tam metin yerine ŞİRKET + GÜN + ÖZETİN İLK 5 KELİMESİ
-      // karşılaştırılıyor. Yukarıdaki üçü de "YURT ICI KIRA SERTIFIKASI HALKA"
-      // ile başladığı için teke iniyor.
-      // Farklı ihraçlar ISIN kodu / fon kullanıcısı adı gibi ayırt edici
-      // ifadelerle başladığından yanlışlıkla birleşmiyor (örn.
-      // "TRDKTSKA2630 ISIN KODLU..." vs "TRDGLVK92627 ISIN KODLU...").
-      // Liste en yeniden eskiye sıralı olduğu için her gruptan EN YENİ kayıt
-      // korunuyor.
       const ozetAnahtari = (b)=>{
         const kelimeler = spkNormalizeMetin(b.ozet || b.baslik || "")
           .replace(/[^A-Z0-9ĞÜŞİÖÇ ]/g, " ")
           .split(/\s+/).filter(Boolean).slice(0, 5).join(" ");
-        const gun = String(b.tarih || "").slice(0, 10);   // GG.AA.YYYY
+        const gun = String(b.tarih || "").slice(0, 10);
         return `${b.sirket || ""}|${gun}|${kelimeler}`;
       };
       const gorulen = new Set();
@@ -1488,8 +1475,6 @@ export default async function handler(req,res){
         gorulen.add(anahtar);
         return true;
       });
-      // En yeniden eskiye. publishDate "GG.AA.YYYY SS:DD:ss" formatında
-      // geldiği için doğrudan string sıralaması yanlış olur — çeviriyoruz.
       const zaman = (t)=>{
         if(!t) return 0;
         const m = String(t).match(/^(\d{2})\.(\d{2})\.(\d{4})[ T]?(\d{2})?:?(\d{2})?/);
@@ -1502,8 +1487,8 @@ export default async function handler(req,res){
         kaynak: "KAP (Kamuyu Aydınlatma Platformu)",
         gunAralik: gun,
         toplamTaranan: hamSayi,
-        sukukToplam: sukukHam.length,      // kira sertifikasıyla ilgili tüm bildirimler
-        sukukSayisi: suzulmus.length,      // bunlardan yalnızca ihraçla ilgili olanlar
+        sukukToplam: sukukHam.length,
+        sukukSayisi: suzulmus.length,
         sadeceIhrac: !tumunuGoster,
         bildirimler: suzulmus.slice(0, KAP_LIMIT),
         guncelleme: new Date().toISOString(),
@@ -1518,8 +1503,6 @@ export default async function handler(req,res){
         const eski = await redis.get(KV_KAP_SUKUK_KEY);
         if(eski) return res.status(200).json({...eski, cached:true, hata:err.message});
       }catch{}
-      // Hata durumunda 200 + boş liste — frontend bölümü sessizce gizler,
-      // ekranın geri kalanı çalışmaya devam eder.
       return res.status(200).json({
         kaynak: "KAP (Kamuyu Aydınlatma Platformu)",
         bildirimler: [],
@@ -1529,9 +1512,6 @@ export default async function handler(req,res){
     }
   }
 
-  // ── HİSSE BAZLI KAP BİLDİRİMLERİ: /api/evds-proxy?kap=hisse&kod=ASELS ────
-  // Hisse detay ekranı için. Tüm liste ortak önbellekten geldiği için her
-  // hisse sorgusu KAP'a gitmiyor (bkz. kapTumBildirimler notu).
   if(req.query.kap === "hisse"){
     const kod = String(req.query.kod || "").toUpperCase().trim();
     if(!kod) return res.status(200).json({ kod:null, bildirimler:[], hata:"kod parametresi gerekli" });
@@ -1546,18 +1526,33 @@ export default async function handler(req,res){
         cached,
       });
     }catch(err){
-      // Hata durumunda 200 + boş liste — hisse detay ekranı bölümü gizler,
-      // sayfanın geri kalanı etkilenmez.
       return res.status(200).json({ kod, bildirimler:[], hata: err.message });
+    }
+  }
+
+  // ── FON PORTFÖY DAĞILIMI: /api/evds-proxy?kap=fonportfoy[&kod=THF] ──────
+  // EVDS_KEY kontrolünden ÖNCE — TCMB'ye hiç gitmiyor, sadece KAP kullanıyor.
+  // kod verilirse tek fon güncellenir; verilmezse (cron için) takip
+  // listesindeki 8 fonun tümü sırayla güncellenir.
+  if(req.query.kap === "fonportfoy"){
+    const kod = String(req.query.kod || "").toUpperCase().trim();
+    const teshis = {};
+    try{
+      if(kod){
+        const sonuc = await fpFonPortfoyuGuncelle(kod, teshis);
+        return res.status(200).json({ kaynak: "KAP Portföy Dağılım Raporu", fon: sonuc || null, _teshis: teshis });
+      }
+      const sonuclar = {};
+      for(const fk of FP_TAKIP_FONLAR){ sonuclar[fk] = await fpFonPortfoyuGuncelle(fk, teshis); }
+      return res.status(200).json({ kaynak: "KAP Portföy Dağılım Raporu", fonlar: sonuclar, _teshis: teshis });
+    }catch(err){
+      return res.status(200).json({ kaynak: "KAP Portföy Dağılım Raporu", hata: err.message, _teshis: teshis });
     }
   }
 
   const apiKey=process.env.EVDS_KEY;
   if(!apiKey) return res.status(500).json({error:"EVDS_KEY eksik"});
 
-  // ── KATALOG KESFI (yardimci): /api/evds-proxy?katalog=1[&filtre=IHALE,HAZINE]
-  // EVDS veri gruplarini ve seri kodlarini listeler (2Y/5Y tahvil ihale faiz
-  // serilerini bulmak icin eklendi). Anahtar sunucuda kalir, disari sizmez.
   if(req.query.katalog==="1"){
     try{
       const filtreParam = String(req.query.filtre||"IHALE,HAZINE,DIBS,BORCLANMA");
@@ -1719,52 +1714,24 @@ export default async function handler(req,res){
       guvenliCek("enflasyon", `${BASE}/series=${ENFLASYON.join("-")}&startDate=${onceki(820)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
       guvenliCek("politika_aofm", `${BASE}/series=${POLITIKA.join("-")}&startDate=${onceki(60)}&endDate=${tarihStr(new Date())}&type=json&frequency=1`),
       guvenliCek("rezerv", `${BASE}/series=${REZERV.join("-")}&startDate=${onceki(180)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
-      // HAFTALIK rezerv — AYRI çağrı olması ŞART (bkz. REZERV_HAFTALIK notu).
-      // 400 günlük pencere: 24 noktalık grafik serisi için haftalıkta ~6 ay
-      // yeterdi ama daha uzun bir geçmiş trend grafiğini de besliyor.
       guvenliCek("rezerv_haftalik", `${BASE}/series=${REZERV_HAFTALIK.join("-")}&startDate=${onceki(400)}&endDate=${tarihStr(new Date())}&type=json&frequency=3`),
-      // Stand-By bilançosu — net rezerv kalemleri + USD kuru, hepsi haftalık
-      // AYNI istekte (tarih hizası kendiliğinden doğru olsun diye).
       guvenliCek("rezerv_standby", `${BASE}/series=${REZERV_STANDBY.join("-")}&startDate=${onceki(400)}&endDate=${tarihStr(new Date())}&type=json&frequency=3`),
-      // Dış ticaret (v10): 12 aylık kümülatif serinin 24 noktası için ~36 ay
-      // ham aylık veri gerekir → 1150 günlük pencere (~38 ay), tek istek.
       guvenliCek("disticaret", `${BASE}/series=${DISTICARET.join("-")}&startDate=${onceki(1150)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
       guvenliCek("gosterge", `${BASE}/series=${GOSTERGE.join("-")}&startDate=${onceki(760)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
       guvenliCek("haftalik_kbk", `${BASE}/series=${HAFTALIK_KBK.join("-")}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=3`),
-      // 2026-07-30: Buradaki 13. istek ("test_gsyh_aylik") KALDIRILDI.
-      // Promise.all 13 istek yapıyor ama sol taraftaki destructuring 12
-      // değişken tanımlıyordu — sonuncusunun sonucu hiç kullanılmıyor,
-      // her önbellek ıskasında TCMB'ye boşuna gidiliyordu. 23 Temmuz'daki
-      // GSYH frekans araştırmasından kalma, kodda zaten "silinecek" notu vardı.
       guvenliCek("test_gsyh_ceyrek", `${BASE}/series=${TEST_GSYH.join("-")}&startDate=${onceki(2000)}&endDate=${tarihStr(new Date())}&type=json&frequency=6`),
     ]);
 
     const [sofr,eur3m,us2y,us5y,us10y,fedFonlama,ecbMevduat,sofr3m,sofr6m,fedUst,fedAlt]=await Promise.all([
       guvenliCekFred("fred_sofr", "SOFR"),
       guvenliCekFred("fred_euribor3m", "IR3TIB01EZM156N"),
-      // ABD Hazine tahvil faizleri (2/5/10 yıl) — FRED'in günlük "Constant
-      // Maturity" serileri, en güvenilir ve güncel kaynak (bkz. DGS2/DGS5/DGS10).
       guvenliCekFred("fred_us2y", "DGS2"),
       guvenliCekFred("fred_us5y", "DGS5"),
       guvenliCekFred("fred_us10y", "DGS10"),
-      // FED — Federal Funds Effective Rate (günlük, FOMC'nin belirlediği HEDEF
-      // BANT içinde piyasada FİİLEN GERÇEKLEŞEN gecelik faiz — bandın kendisi
-      // değil). TCMB'deki "AOFM" ile aynı mantık: gerçekleşen oran.
       guvenliCekFred("fred_fedfunds", "DFF"),
-      // ECB — Mevduat İmkanı Faizi (Deposit Facility Rate). Mart 2024'ten beri
-      // ECB'nin para politikasını yönlendirdiği ASIL politika faizi budur
-      // (Ana Refinansman Faizi değil) — bkz. ECB'nin kendi açıklaması.
       guvenliCekFred("fred_ecb", "ECBDFR"),
-      // SOFR 3M/6M — NY Fed'in resmi "SOFR Averages" serileri (90/180 günlük
-      // bileşik ortalama). NOT: CME'nin piyasada asıl kullanılan "Term SOFR"u
-      // değildir (o ileriye dönük ve lisanslı/ücretli) — bu, geriye dönük
-      // gerçekleşmiş SOFR'un ortalaması. Ücretsiz ve resmi tek alternatif budur.
       guvenliCekFred("fred_sofr3m", "SOFR90DAYAVG"),
       guvenliCekFred("fred_sofr6m", "SOFR180DAYAVG"),
-      // FED HEDEF BANT (2026-07 eklendi) — FOMC oranı TCMB gibi tek sayı değil,
-      // bir ARALIK olarak açıklıyor (örn. %3,50-%3,75). DFF bu aralığın
-      // İÇİNDE gerçekleşen fiili orandır, aralığın kendisi değil — kullanıcı
-      // karışıklığını önlemek için üst/alt bandı ayrıca gösteriyoruz.
       guvenliCekFred("fred_fed_ust", "DFEDTARU"),
       guvenliCekFred("fred_fed_alt", "DFEDTARL"),
     ]);
@@ -1805,11 +1772,6 @@ export default async function handler(req,res){
     sonuclar["TP_AB_B2_SERI"]=tumDegerler(rezervJson?.items||[], "TP.AB.B2").slice(-24);
     sonuclar["TP_AB_B3_SERI"]=tumDegerler(rezervJson?.items||[], "TP.AB.B3").slice(-24);
 
-    // ── REZERVLER: HAFTALIK ASIL, AYLIK YEDEK (2026-07-30) ────────────────
-    // Frontend artık REZERV_* anahtarlarını okumalı. Eski TP.AB.B* anahtarları
-    // geriye dönük uyumluluk için bırakıldı ama ARTIK KULLANILMAMALI:
-    // B6 "Toplam Rezervler" banka muhabir mevcudunu içerdiği için kamuoyunun
-    // konuştuğu rakamdan ~46 milyar $ yüksek çıkıyor (yaşanmış vaka).
     const rezHafItems = rezervHafJson?.items || [];
     const rezHafToplam = sonDeger(rezHafItems, "TP.AB.TOPLAM");
     const rezHafAltin  = sonDeger(rezHafItems, "TP.AB.C1");
@@ -1828,19 +1790,10 @@ export default async function handler(req,res){
     sonuclar["REZERV_DOVIZ_SERI"] = haftalikVarMi
       ? tumDegerler(rezHafItems, "TP.AB.C2").slice(-24)
       : tumDegerler(rezervJson?.items||[], "TP.AB.B2").slice(-24);
-    // Frontend bu iki alanı ekranda gösterebilsin: kullanıcı verinin haftalık
-    // mı aylık mı olduğunu ve hangi tarihe ait olduğunu görmeli. Rakamın
-    // yanında tarih olsaydı yanlış rezerv verisi üç ay gizli kalmazdı.
     sonuclar["REZERV_KAYNAK"] = haftalikVarMi ? "haftalik" : "aylik";
     sonuclar["REZERV_ACIKLAMA"] = haftalikVarMi
       ? "TCMB haftalık brüt rezervleri (her perşembe yayımlanır)"
       : "TCMB aylık rezerv tablosu — haftalık seri alınamadı";
-    // ── NET REZERV / SWAP — Stand-By bilançosundan HESAPLANIR ────────────
-    // N06 ve N12 BİN TL; USD'ye çevirmek için AYNI HAFTANIN kuru kullanılıyor
-    // (aynı istekte geldiği için tarih eşleşmesi garanti). Çıktı MİLYON $ —
-    // frontend'in fmtRezerv'i /1000 ile milyar gösteriyor.
-    // Swap Hariç Net = N06 − N12 (2A = 2A1−2A2+2A3 yapısından; 2A3 net vadeli
-    // işlemler pozitif kayıtlı olduğu için çıkarılıyor).
     {
       const sbItems = standbyJson?.items || [];
       const n06 = sonDeger(sbItems, "TP.AB.N06");
@@ -1862,23 +1815,12 @@ export default async function handler(req,res){
       };
     }
 
-    // ── URDL HAFTALIK XLS: swap ve resmi net rezerv ──────────────────────
-    // Kalemler bulunursa ekrana girer; bulunamazsa alanlar hiç oluşmaz ve
-    // frontend satırları gizler (sessizce yanlış yerine sessizce yok).
     {
       const urdl = await urdlOku(teshis);
       const b = urdl?.bulunan;
-      // ⚠️ TARİH ŞARTI (2026-07-31): Tarihi çıkarılamayan XLS verisi
-      // YAYIMLANMAZ. Bugün üç aylık yanlış rezerv rakamının fark edilmemesinin
-      // sebebi tam olarak ekranda tarih olmamasıydı. Ayrıca swap değeri
-      // referansla (Babuşcu 24.07: 12,8) doğrulanana kadar bu kapı kapalı
-      // kalıyor — teşhisteki "eslesen" alanı hangi sütunun okunduğunu gösterir.
       if (b?.swapVadeli != null && urdl?.tarih) {
         const swapMutlak = Math.abs(b.swapVadeli);
         sonuclar["URDL_SWAP"] = { deger: swapMutlak, tarih: urdl.tarih };
-        // Net rezerv önceliği: XLS'teki RESMİ rakam varsa o; yoksa Stand-By
-        // hesabımız (REZERV_NET). Resmi ile hesap arasındaki fark ~%0,2
-        // (TCMB kendi değerleme kurunu kullanıyor).
         const netKaynak = b.netRezerv != null
           ? { deger: b.netRezerv, tarih: urdl.tarih, resmi: true }
           : (sonuclar["REZERV_NET"] ? { ...sonuclar["REZERV_NET"], resmi: false } : null);
@@ -1897,10 +1839,8 @@ export default async function handler(req,res){
       kullanilan: haftalikVarMi ? "haftalik" : "aylik",
     };
 
-    // ── HAFTALIK AKIM KÂR PAYI (2026-07-23) ─────────────────────────────
     for(const s of HAFTALIK_KBK) sonuclar[s]=sonDeger(hkbkJson?.items||[],s);
 
-    // ── GÖSTERGELER (2026-07-23) ────────────────────────────────────────
     const gostItems = gostJson?.items||[];
     sonuclar["GOSTERGE_KKO"]=sonDeger(gostItems, "TP.KKO2.IS.TOP");
     sonuclar["GOSTERGE_KKO_SERI"]=tumDegerler(gostItems, "TP.KKO2.IS.TOP").slice(-24);
@@ -1944,7 +1884,6 @@ export default async function handler(req,res){
     sonuclar["GOSTERGE_GIDA_YILLIK"]=gidaYoY.yillik;
     sonuclar["GOSTERGE_GIDA_YILLIK_SERI"]=gidaYoY.yillikSeri;
 
-    // Beklenti serileri doğrudan yüzde — endeks dönüşümü uygulanmıyor.
     sonuclar["BEKLENTI_PIYASA_12AY"]=sonDeger(gostItems, "TP.ENFBEK.PKA12ENF");
     sonuclar["BEKLENTI_PIYASA_12AY_SERI"]=tumDegerler(gostItems, "TP.ENFBEK.PKA12ENF").slice(-24);
     sonuclar["BEKLENTI_HANE_12AY"]=sonDeger(gostItems, "TP.ENFBEK.HBA12ENF");
@@ -1961,20 +1900,14 @@ export default async function handler(req,res){
       gida_nokta: gidaDizi.length, kira_nokta: kiraDizi.length,
     };
 
-    // ── DIŞ TİCARET & ÖDEMELER DENGESİ (v10) ──────────────────────────────
-    // Tüm parasal değerler milyonUSDNormalize ile MİLYON USD'a normalize
-    // edilir; UI tarafı "milyon$" birimiyle Milyar $ olarak biçimlendirir.
     const dtItems = dtJson?.items||[];
     const ihrDizi  = milyonUSDNormalize(tumDegerler(dtItems, "TP.IHRACATBEC.9999"));
     const ithDizi  = milyonUSDNormalize(tumDegerler(dtItems, "TP.ITHALATBEC.9999"));
     const cariDizi = milyonUSDNormalize(tumDegerler(dtItems, "TP.ODANA6.Q01"));
     const cariAEDizi = milyonUSDNormalize(tumDegerler(dtItems, "TP.HARICCARIACIK.K10"));
-    const rekDizi  = tumDegerler(dtItems, "TP.RK.T1.Y"); // endeks, normalize edilmez
-    // Türetilmiş aylık seriler (tarih eşleştirmeli — yayın gecikmesi farkları
-    // uçtaki ayları güvenle atlar):
+    const rekDizi  = tumDegerler(dtItems, "TP.RK.T1.Y");
     const dengeDizi     = seriBirlestir(ihrDizi, ithDizi, (ih,it)=>ih-it);
     const karsilamaDizi = seriBirlestir(ihrDizi, ithDizi, (ih,it)=>it!==0?(ih/it*100):null);
-    // 12 aylık kümülatifler:
     const ihr12  = kumulatif12Ay(ihrDizi);
     const ith12  = kumulatif12Ay(ithDizi);
     const denge12= kumulatif12Ay(dengeDizi);
@@ -2058,13 +1991,10 @@ export default async function handler(req,res){
     if(tufeDizi.length>=13){
       const son=tufeDizi[tufeDizi.length-1];
       const oncekiAy=tufeDizi[tufeDizi.length-2];
-      const oncekiYil=tufeDizi[tufeDizi.length-13]; // 12 ay önce (length-1 - 12)
+      const oncekiYil=tufeDizi[tufeDizi.length-13];
       sonuclar["TUFE_YILLIK"]={deger:((son.deger-oncekiYil.deger)/oncekiYil.deger*100),tarih:tufeAcikilanmaTarihi(son.tarih)};
       sonuclar["TUFE_AYLIK"]={deger:((son.deger-oncekiAy.deger)/oncekiAy.deger*100),tarih:tufeAcikilanmaTarihi(son.tarih)};
 
-      // DÜZELTME (2026-07, v7): oY indeksi "i-13" idi (13 ay önce), doğrusu
-      // "i-12" (12 ay önce) — artık ana karttaki hesapla birebir aynı ayı,
-      // aynı yöntemle kıyaslıyor. Döngü koşulu da i>=12'ye çekildi.
       const yillikSeri=[], aylikSeri=[];
       for(let i=tufeDizi.length-1;i>=12;i--){
         const s=tufeDizi[i], oA=tufeDizi[i-1], oY=tufeDizi[i-12];
