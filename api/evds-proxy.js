@@ -656,7 +656,25 @@ async function fpFonPortfoyuGuncelle(fonKodu, teshis){
     const liste = await fpDisclosureListeCek(FP_ARAMA_GUN);
     const eslesenler = liste.filter(k => fpBildirimEslesir(k, fonKodu));
     if(eslesenler.length === 0){
-      teshis[fonKodu] = { durum: "yeni_rapor_yok", eskiKorundu: !!eskiKayit };
+      // ⚠️ TEŞHİS GENİŞLETMESİ (2026-09-02, ilk canlı testte "yeni_rapor_yok"
+      // dönünce eklendi): Boş sonucun KAP'ın hiç bildirim döndürmemesinden mi,
+      // yoksa "Portföy Dağılım Raporu" başlıklı bildirimler var ama stockCode
+      // eşleşmemesinden mi kaynaklandığını ayırt etmek için — bir önceki
+      // sürümde bu ayrımı yapacak veri yoktu, kör test gerekiyordu.
+      const ornekIlkUc = liste.slice(0, 3).map(k => {
+        const b = k?.disclosureBasic || k?.basic || k || {};
+        return { title: b.title || null, stockCode: b.stockCode || null, publishDate: b.publishDate || null };
+      });
+      const baslikEslesenSayisi = liste.filter(k => {
+        const b = k?.disclosureBasic || k?.basic || k || {};
+        return fpNormalizeMetin(String(b.title||"")+" "+String(b.summary||"")).indexOf("PORTFOY DAGILIM") >= 0;
+      }).length;
+      teshis[fonKodu] = {
+        durum: "yeni_rapor_yok", eskiKorundu: !!eskiKayit,
+        kapListeUzunluk: liste.length,
+        portfoyDagilimBasliklaSayisi: baslikEslesenSayisi,
+        ornekIlkUc,
+      };
       return eskiKayit;
     }
 
