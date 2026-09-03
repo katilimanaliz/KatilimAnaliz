@@ -4253,25 +4253,48 @@ function FonTahminDetayModal({
 
           {sekme === "dagilim" && (
             <div>
+              {(() => {
+                const hisseKalemleri = siraliKalemler.filter((k) => k.tur === "stock");
+                const hisseSayisi = hisseKalemleri.length;
+                const hisseToplamAgirlik = hisseKalemleri.reduce((a, k) => a + (k.agirlik ?? 0), 0);
+                if (hisseSayisi === 0) return null;
+                return (
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"2px 4px 10px"}}>
+                    <span style={{fontSize:13,fontWeight:700,color:C.label}}>
+                      Yerli Hisseler <span style={{color:WA(0.4),fontWeight:600}}>({hisseSayisi})</span>
+                    </span>
+                    <span style={{fontSize:13,fontWeight:700,color:WA(0.6)}}>%{hisseToplamAgirlik.toFixed(1)}</span>
+                  </div>
+                );
+              })()}
               <div style={{display:"flex",fontSize:10,fontWeight:700,color:WA(0.35),textTransform:"uppercase",padding:"0 4px 8px",borderBottom:`1px solid ${WA(0.08)}`}}>
                 <div style={{flex:"1 1 auto"}}>Varlık</div>
-                <div style={{width:60,textAlign:"right"}}>Değişim</div>
-                <div style={{width:56,textAlign:"right"}}>Ağırlık</div>
+                <div style={{width:56,textAlign:"right"}}>Değişim</div>
+                <div style={{width:62,textAlign:"right"}}>Etki</div>
+                <div style={{width:52,textAlign:"right"}}>Ağırlık</div>
               </div>
               {siraliKalemler.map((k) => {
                 const deg = hisseDegisimMap[k.kod];
                 const bilinenFiyat = typeof deg === "number";
                 const degUp = bilinenFiyat && deg >= 0;
+                // Etki = ağırlığın, hissenin günlük değişimi üzerinden fon
+                // tahminine kattığı puan (ağırlık/100 × değişim) — AI Tahmin
+                // Ağı'ndaki ve widget'taki tahmin hesabıyla AYNI formül,
+                // burada kalem bazında gösteriliyor.
+                const etki = bilinenFiyat ? ((k.agirlik ?? 0) / 100) * deg : null;
                 return (
                   <div key={k.kod} style={{display:"flex",alignItems:"center",padding:"9px 4px",borderBottom:`1px solid ${WA(0.05)}`}}>
                     <div style={{flex:"1 1 auto",minWidth:0}}>
                       <div style={{fontSize:13,fontWeight:700,color:C.label}}>{k.kod}</div>
                       <div style={{fontSize:10.5,color:WA(0.45),overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{k.ad ?? (k.tur !== "stock" ? k.tur : "")}</div>
                     </div>
-                    <div style={{width:60,textAlign:"right",fontSize:12,fontWeight:600,color: !bilinenFiyat ? WA(0.35) : degUp ? C.green : C.red}}>
+                    <div style={{width:56,textAlign:"right",fontSize:12,fontWeight:600,color: !bilinenFiyat ? WA(0.35) : degUp ? C.green : C.red}}>
                       {bilinenFiyat ? isaretliYuzde(deg, 2) : "—"}
                     </div>
-                    <div style={{width:56,textAlign:"right",fontSize:12,fontWeight:600,color:WA(0.6)}}>
+                    <div style={{width:62,textAlign:"right",fontSize:12,fontWeight:600,color: etki==null ? WA(0.35) : etki>=0 ? C.green : C.red}}>
+                      {etki==null ? "—" : isaretliYuzde(etki, 4)}
+                    </div>
+                    <div style={{width:52,textAlign:"right",fontSize:12,fontWeight:600,color:WA(0.6)}}>
                       %{(k.agirlik ?? 0).toFixed(1)}
                     </div>
                   </div>
