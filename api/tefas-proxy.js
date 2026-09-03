@@ -151,49 +151,32 @@ const FON_DETAY_CACHE_TTL_SANIYE = 900; // 15 dk
 // ayrıştırma bu gerçek şekle göre yazıldı (tahmini alan adı denemesi değil).
 const FON_HOLDINGS_CACHE_TTL_SANIYE = 86400; // 24 saat — periyodik veri, günlük değişmez
 
-async function fonHoldingsGetir(req, res) {
-  const kod = String(req.query?.kod || "").toUpperCase().trim();
-  if (!kod) return res.status(400).json({ success: false, error: "kod parametresi gerekli" });
-
+// Hem HTTP ucu (fonHoldingsGetir) hem de günlük tahmin snapshot cron'u
+// (fonTahminSnapshotCalistir) AYNI çekim+cache mantığını kullanır — kod
+// tekrarını önlemek için ortak dahili fonksiyona çıkarıldı (2026-09-04).
+// req/res'e bağımlı değildir, sadece veri döner (ya da null).
+async function holdingsGetirDahili(kod) {
   const cacheAnahtar = `fon:holdings:${kod}`;
   try {
     const onbellek = await kv.get(cacheAnahtar).catch(() => null);
     if (onbellek && Array.isArray(onbellek.kalemler) && onbellek.kalemler.length) {
-      res.setHeader("Cache-Control", "max-age=0, s-maxage=3600, stale-while-revalidate=3600");
-      return res.status(200).json(onbellek);
+      return onbellek;
     }
   } catch {}
 
   const API_KEY = process.env.FONOLOJI_KEY;
-  if (!API_KEY) return res.status(500).json({ success: false, error: "FONOLOJI_KEY tanımlı değil" });
+  if (!API_KEY) return null;
 
   try {
-    // fonFetch.js'deki cron taramasıyla AYNI paylaşılan sıraya girer — toplam
-    // istek hızı Fonoloji'nin dakikalık sınırının altında kalır.
     await siraliBekle();
     const r = await fetch(
       `https://fonoloji.com/v1/funds/${encodeURIComponent(kod)}/portfolio?include=holdings`,
       { headers: { "X-API-Key": API_KEY, "Accept": "application/json" } }
     );
-    if (!r.ok) {
-      return res.status(r.status).json({ success: false, error: `Fonoloji ${r.status}` });
-    }
+    if (!r.ok) return null;
     const d = await r.json().catch(() => null);
 
-    // Ham yanıtı incelemek için geçici debug kapısı: ?holdings=1&kod=THF&ham=1
-    if (req.query?.ham === "1") {
-      return res.status(200).json({ success: true, ham: d });
-    }
-
     // ── GERÇEK YANIT ŞEKLİ (2026-09-03, THF ile doğrulandı) ────────────────
-    // d.holdings BİR NESNE (dizi değil) — asıl kalem listesi d.holdings.items
-    // içinde. Örnek kalem:
-    //   { asset_name:"Kardemir Çelik Sanayi A.Ş.", asset_code:"KARCL",
-    //     asset_type:"stock", weight:7.49, market_value:5605500000, ... }
-    // Tarih bilgisi ayrı iki alanda: latestPeriod ("2026-08", dönem etiketi)
-    // ve latestPublishDate (epoch ms). asset_type alanı TAM İHTİYACIMIZ OLAN
-    // şey — hisse olmayan kalemleri (VIOP/nakit/sabit getiri) frontend'de
-    // "stock" dışındakileri süzerek ayıklayabiliyoruz.
     const holdingsBlok = d?.holdings ?? {};
     const hamKalemler = Array.isArray(holdingsBlok.items) ? holdingsBlok.items : [];
     const donemEtiketi = holdingsBlok.latestPeriod ?? null;
@@ -205,11 +188,11 @@ async function fonHoldingsGetir(req, res) {
         kod: String(k.asset_code ?? "").toUpperCase().trim(),
         ad: k.asset_name ?? null,
         agirlik: typeof k.weight === "number" ? k.weight : null,
-        // "stock" | diğer (bono, viop, nakit, başka fon vb.) — frontend
-        // tahmine sadece asset_type === "stock" olanları dahil etmeli.
         tur: k.asset_type ?? null,
       }))
       .filter((k) => k.kod && typeof k.agirlik === "number");
+
+    if (!kalemler.length) return null;
 
     const paket = {
       success: true,
@@ -219,21 +202,240 @@ async function fonHoldingsGetir(req, res) {
       kalemler,
       kaynak: "fonoloji",
     };
+    try { await kv.set(cacheAnahtar, paket, { ex: FON_HOLDINGS_CACHE_TTL_SANIYE }); } catch {}
+    return paket;
+  } catch {
+    return null;
+  }
+}
 
-    // Boş sonuç YAZILMAZ — geçici bir ayrıştırma hatası 24 saat kalıcı hale
-    // gelmesin (fonGecmisGetir'deki aynı ilkeyle tutarlı).
-    if (kalemler.length) {
-      try { await kv.set(cacheAnahtar, paket, { ex: FON_HOLDINGS_CACHE_TTL_SANIYE }); } catch {}
+async function fonHoldingsGetir(req, res) {
+  const kod = String(req.query?.kod || "").toUpperCase().trim();
+  if (!kod) return res.status(400).json({ success: false, error: "kod parametresi gerekli" });
+
+  // Ham yanıtı incelemek için geçici debug kapısı: ?holdings=1&kod=THF&ham=1
+  // (dahili fonksiyonu atlar, doğrudan Fonoloji'yi çağırır — cache'e yazmaz)
+  if (req.query?.ham === "1") {
+    const API_KEY = process.env.FONOLOJI_KEY;
+    if (!API_KEY) return res.status(500).json({ success: false, error: "FONOLOJI_KEY tanımlı değil" });
+    try {
+      await siraliBekle();
+      const r = await fetch(
+        `https://fonoloji.com/v1/funds/${encodeURIComponent(kod)}/portfolio?include=holdings`,
+        { headers: { "X-API-Key": API_KEY, "Accept": "application/json" } }
+      );
+      const d = await r.json().catch(() => null);
+      return res.status(200).json({ success: true, ham: d });
+    } catch (e) {
+      return res.status(500).json({ success: false, error: String(e.message || e) });
     }
+  }
 
-    res.setHeader("Cache-Control", kalemler.length
-      ? "max-age=0, s-maxage=3600, stale-while-revalidate=3600"
-      : "no-store");
-    return res.status(200).json(paket);
-  } catch (e) {
+  const paket = await holdingsGetirDahili(kod);
+  if (!paket) {
     res.setHeader("Cache-Control", "no-store");
+    return res.status(502).json({ success: false, error: "Holdings verisi alınamadı" });
+  }
+  res.setHeader("Cache-Control", "max-age=0, s-maxage=3600, stale-while-revalidate=3600");
+  return res.status(200).json(paket);
+}
+
+// ── FON TAHMİN GEÇMİŞİ (2026-09-04 eklendi) ─────────────────────────────────
+// "Tahmin Geçmişi" sekmesi için: günlük olarak bir önceki günün tahminini o
+// günün gerçek TEFAS getirisiyle kapatıp isabet hesaplayan, aynı zamanda
+// bugünün YENİ tahminini kaydeden bir snapshot mekanizması.
+//
+// ⚠️ İSABET FORMÜLÜ BİZİM TANIMIMIZ — Fintables'ın kullandığı formülü
+// örnekten tersine mühendislikle çıkarmaya ÇALIŞMADIK (birkaç örnek veriden
+// güvenilir şekilde çıkarılamayacağı görüldü — aynı yönlü tahminlerde bile
+// tutarsız isabet değerleri vardı). Basit, şeffaf, uygulama içinde de bu
+// şekilde açıklanan kendi formülümüz: tahmin ile gerçek getiri arasındaki
+// MUTLAK PUAN farkı 1,5 puanı bulunca isabet %0'a iner, fark sıfırsa %100.
+const ISABET_ESIK_PUAN = 1.5;
+function isabetHesapla(tahmin, gercek) {
+  if (typeof tahmin !== "number" || typeof gercek !== "number") return null;
+  const fark = Math.abs(tahmin - gercek);
+  return Math.max(0, Math.min(100, 100 - (fark / ISABET_ESIK_PUAN) * 100));
+}
+
+// Türkiye saatiyle (TSİ, UTC+3) bugünün tarihini "YYYY-MM-DD" döner —
+// Vercel fonksiyonları UTC'de çalışır, yerel tarihe göre snapshot almak için
+// sabit +3 ofset uygulanıyor (DST yok, TSİ sabit UTC+3).
+function bugunTarihiTR() {
+  const simdi = new Date(Date.now() + 3 * 3600 * 1000);
+  return simdi.toISOString().slice(0, 10);
+}
+
+const FON_TAHMIN_PILOT = ["THF", "DFI", "DOH", "PBR", "PHE", "PUK", "TLY", "TMV", "KHA"];
+
+// ── DİNAMİK TAKİP LİSTESİ (2026-09-04 eklendi) ──────────────────────────────
+// Sabit 9 pilot fonun ÜZERİNE, kullanıcıların Ana Sayfa'dan ekleyebildiği
+// fonlar. TEK bir global liste — bu widget kimlik doğrulaması olmayan (auth
+// sistemi yok) bir Ana Sayfa öğesi, dolayısıyla "kullanıcı bazlı" değil,
+// TÜM uygulama kullanıcılarının paylaştığı TEK backend listesi.
+//
+// ⚠️ ÜST SINIR BİLEREK DÜŞÜK (toplam 10 = 9 pilot + 1 ekstra): auth olmadan
+// herkesin ekleyebildiği bir liste, sınırsız büyürse her yeni fon kalıcı
+// olarak günlük 1 Fonoloji isteği demek — kota zamanla tükenir. Sınır
+// dolunca yeni ekleme istekleri reddedilir, mevcut fon silinmez.
+const FON_TAHMIN_TOPLAM_LIMIT = 10;
+const FON_TAHMIN_EKSTRA_KV = "fonTahmin:ekstraListe";
+
+async function fonTahminListesiOku() {
+  let ekstra = [];
+  try {
+    const kayit = await kv.get(FON_TAHMIN_EKSTRA_KV).catch(() => null);
+    if (Array.isArray(kayit)) ekstra = kayit;
+  } catch {}
+  // Dedupe + pilot listesindekileri ekstradan ayıkla (çakışma olmasın)
+  const ekstraTemiz = [...new Set(ekstra)].filter((k) => !FON_TAHMIN_PILOT.includes(k));
+  return { pilot: FON_TAHMIN_PILOT, ekstra: ekstraTemiz, liste: [...FON_TAHMIN_PILOT, ...ekstraTemiz] };
+}
+
+async function fonTahminListesiGetir(req, res) {
+  const { pilot, ekstra, liste } = await fonTahminListesiOku();
+  res.setHeader("Cache-Control", "max-age=0, s-maxage=120, stale-while-revalidate=120");
+  return res.status(200).json({ success: true, pilot, ekstra, liste, limit: FON_TAHMIN_TOPLAM_LIMIT });
+}
+
+async function fonTahminEkle(req, res) {
+  const kod = String(req.query?.kod || "").toUpperCase().trim();
+  if (!kod) return res.status(400).json({ success: false, error: "kod parametresi gerekli" });
+
+  const { ekstra, liste } = await fonTahminListesiOku();
+
+  if (liste.includes(kod)) {
+    return res.status(200).json({ success: true, zatenListede: true, liste });
+  }
+  if (liste.length >= FON_TAHMIN_TOPLAM_LIMIT) {
+    return res.status(409).json({
+      success: false,
+      error: `Liste dolu (üst sınır ${FON_TAHMIN_TOPLAM_LIMIT} fon). Yeni fon eklenemedi.`,
+      liste,
+    });
+  }
+
+  // Fon gerçekten var mı ve hisse dağılımı çekilebiliyor mu doğrula —
+  // geçersiz/rastgele kodların listeye girip her gün boşu boşuna
+  // denenmesini (ve isabet %0 kaydı biriktirmesini) önler.
+  const holdings = await holdingsGetirDahili(kod);
+  if (!holdings) {
+    return res.status(404).json({ success: false, error: "Fon bulunamadı ya da hisse dağılımı alınamadı" });
+  }
+
+  const yeniEkstra = [...ekstra, kod];
+  try { await kv.set(FON_TAHMIN_EKSTRA_KV, yeniEkstra); } catch (e) {
     return res.status(500).json({ success: false, error: String(e.message || e) });
   }
+
+  return res.status(200).json({ success: true, liste: [...FON_TAHMIN_PILOT, ...yeniEkstra] });
+}
+const FON_TAHMIN_GECMIS_MAX_KAYIT = 30;
+
+async function tahminGecmisGetir(req, res) {
+  const kod = String(req.query?.kod || "").toUpperCase().trim();
+  if (!kod) return res.status(400).json({ success: false, error: "kod parametresi gerekli" });
+  try {
+    const kayitlar = (await kv.get(`fonTahmin:gecmis:${kod}`).catch(() => null)) || [];
+    res.setHeader("Cache-Control", "max-age=0, s-maxage=300, stale-while-revalidate=300");
+    return res.status(200).json({ success: true, kod, kayitlar });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: String(e.message || e) });
+  }
+}
+
+// Canlı hisse fiyat değişimlerini kendi /api/hisse-proxy ucumuzdan HTTP ile
+// çekiyoruz — frontend'in kullandığı AYNI veri, ayrı bir kaynak/kota YOK.
+async function hisseDegisimMapGetirDahili() {
+  try {
+    const r = await fetch("https://www.katilimplus.com/api/hisse-proxy");
+    if (!r.ok) return {};
+    const d = await r.json().catch(() => null);
+    const m = {};
+    for (const h of (d?.data || [])) {
+      if (typeof h.degisim1g === "number" && h.ticker) m[h.ticker] = h.degisim1g;
+    }
+    return m;
+  } catch {
+    return {};
+  }
+}
+
+async function fonTahminSnapshotCalistir(req, res) {
+  const cronSecret = process.env.CRON_SECRET;
+  const gelenAuth = req.headers.authorization;
+  const vercelCronMu = req.headers["x-vercel-cron"] === "1";
+  if (cronSecret && !vercelCronMu && gelenAuth !== `Bearer ${cronSecret}`) {
+    return res.status(401).json({ success: false, error: "Yetkisiz" });
+  }
+
+  const bugun = bugunTarihiTR();
+  const hisseDegisimMap = await hisseDegisimMapGetirDahili();
+  // Gerçek getiri kapatma adımı için mevcut TEFAS fon listesini bir kez oku.
+  const tefasKayit = await kv.get(KV_ANAHTAR).catch(() => null);
+  const fonGercekMap = {};
+  for (const f of (tefasKayit?.data || [])) {
+    if (f?.kod && typeof f.gunluk === "number") fonGercekMap[f.kod] = f.gunluk;
+  }
+
+  const sonuclar = [];
+  const { liste: takipListesi } = await fonTahminListesiOku();
+  for (const kod of takipListesi) {
+    try {
+      const holdings = await holdingsGetirDahili(kod);
+      let tahmin = null, kapsam = 0;
+      if (holdings) {
+        let t = 0, k = 0;
+        for (const kalem of holdings.kalemler) {
+          if (kalem.tur !== "stock") continue;
+          const deg = hisseDegisimMap[kalem.kod];
+          if (typeof deg !== "number" || typeof kalem.agirlik !== "number") continue;
+          t += (kalem.agirlik / 100) * deg;
+          k += kalem.agirlik;
+        }
+        if (k > 0) { tahmin = t; kapsam = k; }
+      }
+
+      const gecmisAnahtar = `fonTahmin:gecmis:${kod}`;
+      let kayitlar = (await kv.get(gecmisAnahtar).catch(() => null)) || [];
+      if (!Array.isArray(kayitlar)) kayitlar = [];
+
+      // 1) Bir önceki kaydın gerçek getirisi HENÜZ kapatılmadıysa, bugünkü
+      // TEFAS verisiyle kapat (bir önceki kayıt DÜNKÜ tahmindi, bugün onun
+      // gerçek getirisi TEFAS'ta yayınlanmış olur).
+      const son = kayitlar[kayitlar.length - 1];
+      if (son && son.gercek == null && son.tarih !== bugun) {
+        const gercek = fonGercekMap[kod];
+        if (typeof gercek === "number") {
+          son.gercek = gercek;
+          son.isabet = isabetHesapla(son.tahmin, gercek);
+        }
+      }
+
+      // 2) Bugün için zaten bir kayıt yoksa, yeni tahmini ekle.
+      if (!son || son.tarih !== bugun) {
+        if (tahmin != null) {
+          kayitlar.push({ tarih: bugun, tahmin, gercek: null, isabet: null, kapsam });
+        }
+      } else if (tahmin != null) {
+        // Aynı gün içinde cron birden fazla kez çalışırsa (manuel test vb.)
+        // en güncel tahminle üzerine yaz — kapsam artmış olabilir.
+        son.tahmin = tahmin;
+        son.kapsam = kapsam;
+      }
+
+      if (kayitlar.length > FON_TAHMIN_GECMIS_MAX_KAYIT) {
+        kayitlar = kayitlar.slice(kayitlar.length - FON_TAHMIN_GECMIS_MAX_KAYIT);
+      }
+
+      await kv.set(gecmisAnahtar, kayitlar).catch(() => {});
+      sonuclar.push({ kod, tahmin, kapsam, kayitSayisi: kayitlar.length });
+    } catch (e) {
+      sonuclar.push({ kod, hata: String(e.message || e) });
+    }
+  }
+
+  return res.status(200).json({ success: true, tarih: bugun, sonuclar });
 }
 
 async function fonDetayGetir(req, res) {
@@ -586,6 +788,12 @@ export default async function handler(req, res) {
   if (req.query?.gecmis === "1") return fonGecmisGetir(req, res);
   if (req.query?.detay === "1") return fonDetayGetir(req, res);
   if (req.query?.holdings === "1") return fonHoldingsGetir(req, res);
+  if (req.query?.tahminGecmis === "1") return tahminGecmisGetir(req, res);
+  if (req.query?.fonTahminListesi === "1") return fonTahminListesiGetir(req, res);
+  if (req.query?.fonTahminEkle === "1") return fonTahminEkle(req, res);
+  // Ayrı sorgu parametresiyle tetiklenir (cron-job.org'dan Bearer token ile) —
+  // genel ?cron=1 dalıyla ÇAKIŞMAZ, kendi auth kontrolünü kendi yapar.
+  if (req.query?.fonTahminSnapshot === "1") return fonTahminSnapshotCalistir(req, res);
 
   const cronIstegi = req.headers["x-vercel-cron"] === "1" || req.query?.cron === "1";
   if (cronIstegi) return cronYaz(req, res);
