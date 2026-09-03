@@ -129,6 +129,29 @@ function piyasaAcikMi(): boolean {
   return dk >= 10 * 60 && dk < 18 * 60 + 20;
 }
 
+// ── FON TAHMİN SIFIRLAMA PENCERESİ — 2026-09-04 eklendi ─────────────────────
+// Gece 00:00'dan piyasa açılışına (10:00) kadar Fon Tahminleri widget'ı
+// tahmini "0,0000%" gösterir — o saatlerde elde tek veri, dünün/Cuma'nın
+// KAPANIŞ değeridir ve yeni gün için hiçbir anlam taşımaz, yanıltıcı olurdu.
+// Saat 10:00 olup canlı hisse verisi gelmeye başlayınca normal hesaplamaya
+// otomatik döner (bkz. FonTahminleriWidget'taki kullanım).
+function tahminSifirGosterimSaatiMi(): boolean {
+  const simdi = new Date();
+  const dk = simdi.getHours() * 60 + simdi.getMinutes();
+  return dk < 10 * 60;
+}
+
+// ── İŞARETLİ YÜZDE BİÇİMLENDİRME — 2026-09-04 eklendi ───────────────────────
+// Fon Tahminleri özelliğinin TÜM alt görünümlerinde (widget, modal başlığı,
+// Portföy Dağılımı, Tahmin Geçmişi, AI Tahmin Ağı) TEK bir yerden, tutarlı
+// biçimde kullanılır: pozitifte "+" öneki eklenir, negatifte HİÇBİR ŞEY
+// eklenmez — çünkü toFixed() zaten negatif sayılarda "-" işaretini kendisi
+// üretir (Math.abs KULLANILMAZ, aksi halde işaret kaybolurdu).
+function isaretliYuzde(v: number | null | undefined, ondalik: number = 4): string {
+  if (typeof v !== "number" || Number.isNaN(v)) return "—";
+  return `${v >= 0 ? "+" : ""}${v.toFixed(ondalik)}%`;
+}
+
 
 // ═══ MERKEZİ İKON EŞLEME ═══════════════════════════════════════════════════
 // Her araç/menü key'i → Lucide ikonu. iOS-minimalist, tek çizgi kalınlığı.
@@ -3829,12 +3852,25 @@ function FonTahminleriWidget({ nav, onSecim }: { nav: (sc: string) => void; onSe
   };
 
   // Canlı hisse fiyatları — diğer Ana Sayfa widget'larıyla AYNI cache anahtarı
-  // ("kea_hisseler"), gereksiz ikinci bir /api/hisse-proxy isteği atılmaz.
+  // ("kea_hisseler") paylaşılıyor, ama bu widget'ın kendi tazelik eşiği AYRI
+  // ve KISA (5 saniye) — genel CACHE_TTL (5 dk, kea_fonlar için kullanılıyor)
+  // ile karıştırılmasın diye ayrı bir kontrol fonksiyonu yazıldı.
+  const HISSE_TAZE_ESIK_MS = 5 * 1000;
+  const hisseCacheTaze = (): boolean => {
+    try {
+      const raw = sessionStorage.getItem("kea_hisseler");
+      if (!raw) return false;
+      const { data, ts } = JSON.parse(raw);
+      const dolu = Array.isArray(data) && data.length > 0;
+      return dolu && typeof ts === "number" && (Date.now() - ts) < HISSE_TAZE_ESIK_MS;
+    } catch { return false; }
+  };
+
   const [hisseler, setHisseler] = useState<any[]>(() => okuCache("kea_hisseler"));
 
   useEffect(() => {
     const cekVeGuncelle = () => {
-      if (!cacheTaze("kea_hisseler")) {
+      if (!hisseCacheTaze()) {
         fetch(`${API_BASE}/api/hisse-proxy`)
           .then(r => r.json())
           .then(d => {
@@ -3844,14 +3880,38 @@ function FonTahminleriWidget({ nav, onSecim }: { nav: (sc: string) => void; onSe
       }
     };
     cekVeGuncelle();
-    // Ana hisse ekranındaki (bistHisseTarayici) AYNI desen: hafta sonu piyasa
-    // kapalıyken 5 dakikada bir tekrar sorgu atmanın anlamı yok — fiyatlar
-    // Cuma kapanışından beri değişmiyor. Widget açıkken tahminlerin canlı
-    // kalması için hafta içi 5 dakikada bir tazeleniyor.
-    if (piyasaHaftaSonuMu()) return;
-    const interval = setInterval(cekVeGuncelle, 5 * 60 * 1000);
+    // DEĞİŞİKLİK (2026-09-04): BİST veri izleme ekranındaki AYNI desen —
+    // piyasa açıkken (hafta içi 10:00–18:20) 5 SANİYEDE bir tazeleniyor,
+    // kapalıyken hiç sorgu atılmıyor. Kontrol her tick'te tekrar yapıldığı
+    // için (piyasaAcikMi() interval içinde çağrılıyor) piyasa açılınca sayfa
+    // yenilenmeden otomatik canlı yayına geçer. Modal (AI Tahmin Ağı /
+    // Portföy Dağılımı) bu widget'ın state'ini prop olarak aldığı için,
+    // modal açıkken de aynı canlılıkla otomatik güncellenir — ayrı bir
+    // döngü kurmaya gerek yok.
+    const interval = setInterval(() => { if (piyasaAcikMi()) cekVeGuncelle(); }, 5 * 1000);
     return () => clearInterval(interval);
   }, []);
+
+  // Fon tam adları — kod altında göstermek için ("kea_fonlar" cache'i diğer
+  // Ana Sayfa widget'larıyla paylaşılıyor, ek istek yok).
+  const [fonlar, setFonlar] = useState<any[]>(() => okuCache("kea_fonlar"));
+
+  useEffect(() => {
+    if (!cacheTaze("kea_fonlar")) {
+      fetch(`${API_BASE}/api/tefas-proxy`)
+        .then(r => r.json())
+        .then(d => {
+          if (d.success && (d.data || []).length > 0) { setFonlar(d.data); yazCache("kea_fonlar", d.data); }
+        })
+        .catch(() => {});
+    }
+  }, []);
+
+  const fonAdMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const f of fonlar) if (f?.kod && f?.ad) m[f.kod] = f.ad;
+    return m;
+  }, [fonlar]);
 
   // Takip listesi — ilk render'da localStorage'daki (varsa) son bilinen
   // listeyle anında göster, arkaplanda backend'in GÜNCEL listesiyle tazele.
@@ -3971,33 +4031,36 @@ function FonTahminleriWidget({ nav, onSecim }: { nav: (sc: string) => void; onSe
 
   return (
     <div style={{ marginBottom: 14 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 8 }}>
         <span style={{ fontSize: 11, fontWeight: 700, color: (TEMA==="acik"?"#1A2430":"#A8C2DC"), textTransform: "uppercase", letterSpacing: 0.5 }}>
-          Fon Tahminleri · AI
+          Popüler Fonlar
+        </span>
+        <span style={{ fontSize: 9.5, fontWeight: 700, color: C.green, textTransform: "uppercase", letterSpacing: 0.3 }}>
+          Yapay Zeka Tahmini
         </span>
       </div>
       <div style={{ background: (TEMA==="acik"?"#F0F4F8":"#16222E"), borderRadius: 12, border: `1px solid ${WA(0.07)}`, padding: "8px 7px 4px" }}>
         {tahminler.map((t, i) => {
-          const up = t.tahmin >= 0;
+          const sifirGoster = tahminSifirGosterimSaatiMi();
+          const gosterilenTahmin = sifirGoster ? 0 : t.tahmin;
+          const up = gosterilenTahmin >= 0;
           return (
             <div
               key={t.kod}
               onClick={() => setAcikKod(t.kod)}
-              style={{ display: "flex", alignItems: "center", padding: "8px 2px", borderBottom: i === tahminler.length - 1 ? "none" : `1px solid ${WA(0.06)}`, cursor: "pointer" }}
+              style={{ display: "flex", alignItems: "center", padding: "9px 2px", borderBottom: i === tahminler.length - 1 ? "none" : `1px solid ${WA(0.06)}`, cursor: "pointer" }}
             >
               <div style={{ flex: "1 1 auto", minWidth: 0 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 700, color: C.soft }}>{t.kod}</div>
-                <div style={{ fontSize: 9.5, color: WA(0.3) }}>
-                  Ağırlık kapsamı %{t.kapsam.toFixed(0)}{t.donem ? ` · ${t.donem}` : ""}
+                <div style={{ fontSize: 14.5, fontWeight: 700, color: C.soft }}>{t.kod}</div>
+                <div style={{ fontSize: 10.5, fontWeight: 600, color: WA(0.45), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textTransform: "uppercase" }}>
+                  {fonAdMap[t.kod] ?? ""}
                 </div>
               </div>
-              <div style={{
-                display: "inline-flex", alignItems: "center", gap: 1, padding: "1.5px 5px", borderRadius: 6,
-                fontSize: 11, fontWeight: 700, color: up ? C.green : C.red,
-                background: up ? C.greenLight : "rgba(248,113,113,0.15)", whiteSpace: "nowrap",
-              }}>
-                {up ? <ArrowUp size={9} strokeWidth={3} /> : <ArrowDown size={9} strokeWidth={3} />}
-                {Math.abs(t.tahmin).toFixed(2)}%
+              <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 8 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: sifirGoster ? WA(0.4) : (up ? C.green : C.red), whiteSpace: "nowrap" }}>
+                  {sifirGoster ? "0.0000%" : isaretliYuzde(gosterilenTahmin, 4)}
+                </div>
+                <div style={{ fontSize: 9.5, color: WA(0.35), marginTop: 2, whiteSpace: "nowrap" }}>Yapay Zeka Tahmini</div>
               </div>
             </div>
           );
@@ -4044,6 +4107,7 @@ function FonTahminleriWidget({ nav, onSecim }: { nav: (sc: string) => void; onSe
       {acikKod && (
         <FonTahminDetayModal
           kod={acikKod}
+          fonAdi={fonAdMap[acikKod] ?? null}
           holdings={holdings[acikKod]}
           hisseDegisimMap={hisseDegisimMap}
           tahminVeri={acikTahminVeri}
@@ -4058,9 +4122,10 @@ function FonTahminleriWidget({ nav, onSecim }: { nav: (sc: string) => void; onSe
 // ─── FON TAHMİN DETAY MODALI — AI Tahmin Ağı / Portföy Dağılımı / Tahmin
 // Geçmişi (2026-09-04 eklendi) ────────────────────────────────────────────
 function FonTahminDetayModal({
-  kod, holdings, hisseDegisimMap, tahminVeri, onKapat, onFonDetay,
+  kod, fonAdi, holdings, hisseDegisimMap, tahminVeri, onKapat, onFonDetay,
 }: {
   kod: string;
+  fonAdi?: string | null;
   holdings: any;
   hisseDegisimMap: Record<string, number>;
   tahminVeri: { tahmin: number; kapsam: number; donem: string | null } | null | undefined;
@@ -4088,7 +4153,9 @@ function FonTahminDetayModal({
   );
 
   const tahmin = tahminVeri?.tahmin ?? null;
-  const up = (tahmin ?? 0) >= 0;
+  const sifirGoster = tahminSifirGosterimSaatiMi();
+  const gosterilenTahmin = sifirGoster ? 0 : tahmin;
+  const up = (gosterilenTahmin ?? 0) >= 0;
 
   const gecmisIsabetOrt = useMemo(() => {
     if (!gecmis || gecmis.length === 0) return null;
@@ -4097,10 +4164,12 @@ function FonTahminDetayModal({
     return degerler.reduce((a: number, b: number) => a + b, 0) / degerler.length;
   }, [gecmis]);
 
+  // TAM EKRAN (2026-09-04 değişikliği): önceki bottom-sheet yerine tüm
+  // viewport'u kaplayan opak bir ekran — arkada Ana Sayfa görünmüyor.
   return (
-    <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.7)",zIndex:600,display:"flex",alignItems:"flex-end",...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}}>
-      <div style={{background:C.card,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",maxHeight:"88vh",display:"flex",flexDirection:"column"}}>
-        {/* Başlık — tıklanınca fon detay ekranına gider */}
+    <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:C.card,zIndex:600,display:"flex",flexDirection:"column",...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}}>
+      <div style={{width:"100%",maxWidth:680,margin:"0 auto",display:"flex",flexDirection:"column",height:"100%"}}>
+        {/* Başlık — koda tıklanınca fon detay ekranına gider, altında fon adı yazar */}
         <div style={{padding:"16px 20px 12px",borderBottom:`1px solid ${WA(0.1)}`,display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexShrink:0}}>
           <div onClick={onFonDetay} style={{cursor:"pointer",flex:1,minWidth:0}}>
             <div style={{display:"flex",alignItems:"center",gap:4}}>
@@ -4108,13 +4177,13 @@ function FonTahminDetayModal({
               <span style={{fontSize:14,color:WA(0.4)}}>›</span>
             </div>
             <p style={{margin:"2px 0 0",fontSize:11,color:WA(0.55),overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-              {holdings?.dagilimDonemi ? `Dağılım dönemi: ${holdings.dagilimDonemi}` : "Fon detayına git"}
+              {fonAdi ?? "Fon detayına git"}
             </p>
           </div>
           <div style={{textAlign:"right",marginRight:8}}>
-            <div style={{fontSize:9.5,color:WA(0.4),fontWeight:700,textTransform:"uppercase",letterSpacing:0.3}}>AI Tahmini</div>
-            <div style={{fontSize:16,fontWeight:800,color: tahmin==null ? WA(0.4) : up ? C.green : C.red}}>
-              {tahmin==null ? "—" : `${up?"+":""}${tahmin.toFixed(4)}%`}
+            <div style={{fontSize:9.5,color:WA(0.4),fontWeight:700,textTransform:"uppercase",letterSpacing:0.3}}>Yapay Zeka Tahmini</div>
+            <div style={{fontSize:16,fontWeight:800,color: gosterilenTahmin==null ? WA(0.4) : sifirGoster ? WA(0.4) : up ? C.green : C.red}}>
+              {sifirGoster ? "0.0000%" : isaretliYuzde(gosterilenTahmin, 4)}
             </div>
           </div>
           <button onClick={onKapat} style={{background:WA(0.1),border:"none",width:32,height:32,borderRadius:16,fontSize:20,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>×</button>
@@ -4142,7 +4211,7 @@ function FonTahminDetayModal({
           </div>
 
           {sekme === "ag" && (
-            <FonTahminAgGorseli kalemler={siraliKalemler} hisseDegisimMap={hisseDegisimMap} tahmin={tahmin} />
+            <FonTahminAgGorseli kalemler={siraliKalemler} hisseDegisimMap={hisseDegisimMap} tahmin={gosterilenTahmin} />
           )}
 
           {sekme === "dagilim" && (
@@ -4163,7 +4232,7 @@ function FonTahminDetayModal({
                       <div style={{fontSize:10.5,color:WA(0.45),overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{k.ad ?? (k.tur !== "stock" ? k.tur : "")}</div>
                     </div>
                     <div style={{width:60,textAlign:"right",fontSize:12,fontWeight:600,color: !bilinenFiyat ? WA(0.35) : degUp ? C.green : C.red}}>
-                      {bilinenFiyat ? `${degUp?"+":""}${deg.toFixed(2)}%` : "—"}
+                      {bilinenFiyat ? isaretliYuzde(deg, 2) : "—"}
                     </div>
                     <div style={{width:56,textAlign:"right",fontSize:12,fontWeight:600,color:WA(0.6)}}>
                       %{(k.agirlik ?? 0).toFixed(1)}
@@ -4198,10 +4267,10 @@ function FonTahminDetayModal({
                       {k.tarih ? new Date(k.tarih).toLocaleDateString("tr-TR",{day:"2-digit",month:"2-digit",year:"2-digit"}) : "—"}
                     </div>
                     <div style={{width:66,textAlign:"right",fontSize:12,fontWeight:600,color: k.gercek==null?WA(0.35): k.gercek>=0?C.green:C.red}}>
-                      {k.gercek==null ? "—" : `${k.gercek>=0?"+":""}${k.gercek.toFixed(4)}%`}
+                      {isaretliYuzde(k.gercek, 4)}
                     </div>
                     <div style={{width:66,textAlign:"right",fontSize:12,fontWeight:600,color: k.tahmin==null?WA(0.35): k.tahmin>=0?C.green:C.red}}>
-                      {k.tahmin==null ? "—" : `${k.tahmin>=0?"+":""}${k.tahmin.toFixed(4)}%`}
+                      {isaretliYuzde(k.tahmin, 4)}
                     </div>
                     <div style={{width:52,textAlign:"right",fontSize:12,fontWeight:700,color: k.isabet==null?WA(0.35): k.isabet>=70?C.green: k.isabet>=35?"#F59E0B":C.red}}>
                       {k.isabet==null ? "—" : `%${k.isabet.toFixed(1)}`}
@@ -4239,8 +4308,9 @@ function FonTahminAgGorseli({ kalemler, hisseDegisimMap, tahmin }: {
   const ic = renkli.slice(0, 6);
   const dis = renkli.slice(6, 70); // performans için üst sınır — ~90 kalemli fonlarda bile makul kalır
 
-  const SIZE = 320, CX = SIZE / 2, CY = SIZE / 2;
-  const ICR = 78, DISR = 138;
+  // Tam ekran modal daha fazla yer verdiği için görsel biraz büyütüldü.
+  const SIZE = 340, CX = SIZE / 2, CY = SIZE / 2;
+  const ICR = 82, DISR = 148;
 
   const nokta = (i: number, n: number, r: number) => {
     const aci = (i / n) * 2 * Math.PI - Math.PI / 2;
@@ -4263,14 +4333,20 @@ function FonTahminAgGorseli({ kalemler, hisseDegisimMap, tahmin }: {
         <text x={CX} y={CY-4} textAnchor="middle" fontSize={17} fontWeight={800} fill={C.label}>
           {tahmin==null ? "—" : tahmin.toFixed(4)}
         </text>
-        <text x={CX} y={CY+14} textAnchor="middle" fontSize={9.5} fill={WA(0.5)}>% AI tahmini</text>
+        <text x={CX} y={CY+14} textAnchor="middle" fontSize={9.5} fill={WA(0.5)}>% Yapay zeka tahmini</text>
 
         {dis.map((k, i) => {
           const p = nokta(i, dis.length, DISR);
+          // Dış halkada da işaretli yüzde gösterilir — negatifler "-" ile,
+          // pozitifler "+" ile (isaretliYuzde ile TÜM görünümlerde tutarlı).
+          const yuzdeMetni = typeof k.deg === "number" ? isaretliYuzde(k.deg, 1) : null;
           return (
             <g key={`d-${k.kod}`}>
-              <circle cx={p.x} cy={p.y} r={11} fill={k.renk} opacity={0.85} />
-              <text x={p.x} y={p.y+3} textAnchor="middle" fontSize={7} fontWeight={700} fill="#fff">{String(k.kod).slice(0,5)}</text>
+              <circle cx={p.x} cy={p.y} r={13} fill={k.renk} opacity={0.85} />
+              <text x={p.x} y={p.y-1} textAnchor="middle" fontSize={6.5} fontWeight={700} fill="#fff">{String(k.kod).slice(0,5)}</text>
+              {yuzdeMetni && (
+                <text x={p.x} y={p.y+8} textAnchor="middle" fontSize={5.5} fontWeight={600} fill="#fff">{yuzdeMetni}</text>
+              )}
             </g>
           );
         })}
@@ -4282,7 +4358,7 @@ function FonTahminAgGorseli({ kalemler, hisseDegisimMap, tahmin }: {
               <circle cx={p.x} cy={p.y} r={30} fill={k.renk} opacity={0.9} />
               <text x={p.x} y={p.y-3} textAnchor="middle" fontSize={11} fontWeight={800} fill="#fff">{k.kod}</text>
               <text x={p.x} y={p.y+11} textAnchor="middle" fontSize={9} fontWeight={600} fill="#fff">
-                {typeof k.deg === "number" ? `${k.deg>=0?"+":""}${k.deg.toFixed(2)}%` : (k.tur !== "stock" ? `%${(k.agirlik??0).toFixed(1)}` : "—")}
+                {typeof k.deg === "number" ? isaretliYuzde(k.deg, 2) : (k.tur !== "stock" ? `%${(k.agirlik??0).toFixed(1)}` : "—")}
               </text>
             </g>
           );
