@@ -117,6 +117,18 @@ function piyasaHaftaSonuMu(): boolean {
   return gun === 0 || gun === 6;
 }
 
+// ── PİYASA AÇIK MI (SAAT BAZINDA) — 2026-09-04 eklendi ──────────────────────
+// BİST hafta içi 10:00–18:00 arası işlem görür. 5 saniyelik hızlı yenileme
+// SADECE bu aralıkta anlamlı — piyasaHaftaSonuMu yalnızca gün kontrolü yapar,
+// bu fonksiyon SAAT kontrolünü de ekler (hafta içi ama piyasa kapalıyken de
+// gereksiz sorgu atılmasın diye).
+function piyasaAcikMi(): boolean {
+  if (piyasaHaftaSonuMu()) return false;
+  const simdi = new Date();
+  const dk = simdi.getHours() * 60 + simdi.getMinutes();
+  return dk >= 10 * 60 && dk < 18 * 60 + 20;
+}
+
 
 // ═══ MERKEZİ İKON EŞLEME ═══════════════════════════════════════════════════
 // Her araç/menü key'i → Lucide ikonu. iOS-minimalist, tek çizgi kalınlığı.
@@ -3191,13 +3203,22 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri 
     };
 
     fetchHisse();
-    // Hafta sonu piyasa kapalıyken 5 dakikada bir tekrar sorgu atmanın
-    // anlamı yok — fiyatlar Cuma kapanışından beri değişmiyor. Ekranı ilk
-    // açtığında listeyi görebilmen için TEK seferlik ilk sorgu yine atılır,
-    // sadece tekrarlayan arka plan sorgusu (interval) hafta içi için saklı
-    // tutulur.
-    if (piyasaHaftaSonuMu()) return;
-    const interval = setInterval(fetchHisse, 5 * 60 * 1000); // 5 dakikada bir
+    // DEĞİŞİKLİK (2026-09-04): Piyasa açıkken (hafta içi 10:00–18:00) artık
+    // 5 SANİYEDE bir yenileniyor — kullanıcı isteği üzerine, canlı hisse
+    // ekranının gerçekten anlık hissettirmesi için. Piyasa kapalıyken
+    // (hafta sonu VEYA hafta içi mesai saatleri dışı) HİÇ sorgu atılmaz —
+    // fiyat değişmediği için 5 saniyede bir sorgulamanın bir anlamı yok ve
+    // Vercel kotasını gereksiz tüketir. Kontrol her TICK'te tekrar yapılır
+    // (piyasaAcikMi() interval içinde çağrılıyor) — böylece ekran piyasa
+    // kapalıyken açılıp kullanıcı beklerken piyasa açılırsa, sayfayı
+    // yeniden açmaya gerek kalmadan otomatik olarak 5 saniyelik yenilemeye
+    // geçer.
+    // ⚠️ NOT: Bu yalnızca BU EKRANDAKİ (bistHisseTarayici) sorgu sıklığıdır —
+    // Ana Sayfa'daki Fon Tahminleri ve Top Hareketliler widget'ları hâlâ
+    // kendi 5 dakikalık döngülerinde, bilerek dokunulmadı (60 kat daha sık
+    // sorgu, TÜM uygulama kullanıcıları için Vercel kotasını hızla tüketirdi
+    // — bkz. bu ekranın kısıtlı kapsamda tutulma gerekçesi).
+    const interval = setInterval(() => { if (piyasaAcikMi()) fetchHisse(); }, 5 * 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -3210,7 +3231,7 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri 
     const now = new Date();
     const gun = now.getDay(); // 0=Pazar, 6=Cumartesi
     const dk = now.getHours()*60 + now.getMinutes();
-    const acilis = 10*60, kapanis = 18*60; // 10:00–18:00
+    const acilis = 10*60, kapanis = 18*60+20; // 10:00–18:20
     const haftaIci = gun>=1 && gun<=5;
     const acik = haftaIci && dk>=acilis && dk<kapanis;
     let etiket = "Kapalı";
@@ -3752,6 +3773,521 @@ function KatilimEndeksiTopHareketliler({ nav, onSecim }: { nav: (sc: string) => 
           fontWeight: 600, marginTop: 10, background: "transparent", border: "none", cursor: "pointer", padding: "6px 0",
         }}>Tümünü Gör →</button>
       </div>
+    </div>
+  );
+}
+
+// ─── FON TAHMİNLERİ (AI) — 2026-09-03 eklendi ────────────────────────────────
+// Pilot: 9 popüler fon. Hesaplama TAMAMEN İSTEMCİ TARAFINDA yapılır —
+// backend (api/tefas-proxy?holdings=1) sadece Fonoloji'den KAP portföy
+// dağılım raporundan çıkarılmış hisse ağırlıklarını döner (kod/ad/agirlik/
+// tur). Canlı hisse FİYAT DEĞİŞİMİ ayrı bir kaynaktan (api/hisse-proxy,
+// KatilimEndeksiTopHareketliler'in de kullandığı "kea_hisseler" cache'i)
+// geliyor — iki veri burada eşleştirilip ağırlıklı tahmin hesaplanıyor.
+//
+// ⚠️ Holdings verisi PERİYODİK (KAP dağılım raporu tarihine bağlı) — backend
+// zaten 24 saat cache'liyor, istemci tarafında da aynı süreyle sessionStorage
+// cache'i tutuluyor (gereksiz tekrar isteği önlemek için, kea_hisseler/
+// kea_fonlar'daki desenle tutarlı).
+//
+// ⚠️ Sadece kalem.tur === "stock" olan kalemler tahmine dahil edilir — VIOP,
+// nakit, sabit getiri, başka fon gibi kalemler ATLANIR. Bu yüzden her fon
+// kartında "ağırlık kapsamı" gösteriliyor: eşleşen (stock + fiyatı bilinen)
+// kalemlerin ağırlık toplamı %100'ün altındaysa tahminin güvenilirliği de
+// düşüktür, kullanıcı bunu görmeli (16 Ağustos devir belgesi 8.1 dersiyle
+// tutarlı: "karşılaştırma tabanı her zaman yazılmalı").
+const FON_TAHMIN_PILOT_VARSAYILAN = ["THF", "DFI", "DOH", "PBR", "PHE", "PUK", "TLY", "TMV", "KHA"];
+const FON_TAHMIN_HOLDINGS_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 saat
+// Dinamik takip listesi (pilot + kullanıcı eklemeleri) — backend'deki GLOBAL
+// liste ile senkron tutulur, cihazda kalıcı localStorage'da önbelleklenir
+// (böylece bir sonraki açılışta backend yanıtı beklemeden anında gösterilir).
+const FON_TAHMIN_LISTE_LOCALSTORAGE_KEY = "fonTahminListesi";
+
+function FonTahminleriWidget({ nav, onSecim }: { nav: (sc: string) => void; onSecim?: (tur: "hisse" | "fon", sembol: string) => void }) {
+  const CACHE_TTL = 5 * 60 * 1000;
+
+  const okuCache = (key: string): any[] => {
+    try {
+      const raw = sessionStorage.getItem(key);
+      if (!raw) return [];
+      const { data } = JSON.parse(raw);
+      return Array.isArray(data) && data.length > 0 ? data : [];
+    } catch { return []; }
+  };
+  const cacheTaze = (key: string): boolean => {
+    try {
+      const raw = sessionStorage.getItem(key);
+      if (!raw) return false;
+      const { data, ts } = JSON.parse(raw);
+      const dolu = Array.isArray(data) && data.length > 0;
+      return dolu && typeof ts === "number" && (Date.now() - ts) < CACHE_TTL;
+    } catch { return false; }
+  };
+  const yazCache = (key: string, data: any[]) => {
+    if (!Array.isArray(data) || data.length === 0) return;
+    try { sessionStorage.setItem(key, JSON.stringify({ data, ts: Date.now() })); } catch {}
+  };
+
+  // Canlı hisse fiyatları — diğer Ana Sayfa widget'larıyla AYNI cache anahtarı
+  // ("kea_hisseler"), gereksiz ikinci bir /api/hisse-proxy isteği atılmaz.
+  const [hisseler, setHisseler] = useState<any[]>(() => okuCache("kea_hisseler"));
+
+  useEffect(() => {
+    const cekVeGuncelle = () => {
+      if (!cacheTaze("kea_hisseler")) {
+        fetch(`${API_BASE}/api/hisse-proxy`)
+          .then(r => r.json())
+          .then(d => {
+            if (d.success && (d.data || []).length > 0) { setHisseler(d.data); yazCache("kea_hisseler", d.data); }
+          })
+          .catch(() => {});
+      }
+    };
+    cekVeGuncelle();
+    // Ana hisse ekranındaki (bistHisseTarayici) AYNI desen: hafta sonu piyasa
+    // kapalıyken 5 dakikada bir tekrar sorgu atmanın anlamı yok — fiyatlar
+    // Cuma kapanışından beri değişmiyor. Widget açıkken tahminlerin canlı
+    // kalması için hafta içi 5 dakikada bir tazeleniyor.
+    if (piyasaHaftaSonuMu()) return;
+    const interval = setInterval(cekVeGuncelle, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Takip listesi — ilk render'da localStorage'daki (varsa) son bilinen
+  // listeyle anında göster, arkaplanda backend'in GÜNCEL listesiyle tazele.
+  const [takipListesi, setTakipListesi] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem(FON_TAHMIN_LISTE_LOCALSTORAGE_KEY);
+      if (raw) {
+        const { liste } = JSON.parse(raw);
+        if (Array.isArray(liste) && liste.length > 0) return liste;
+      }
+    } catch {}
+    return FON_TAHMIN_PILOT_VARSAYILAN;
+  });
+  const [limit, setLimit] = useState<number>(10);
+  const [ekleAcik, setEkleAcik] = useState(false);
+  const [ekleKodGiris, setEkleKodGiris] = useState("");
+  const [ekleHata, setEkleHata] = useState<string | null>(null);
+  const [ekleYukleniyor, setEkleYukleniyor] = useState(false);
+
+  const listeYaz = (liste: string[]) => {
+    setTakipListesi(liste);
+    try { localStorage.setItem(FON_TAHMIN_LISTE_LOCALSTORAGE_KEY, JSON.stringify({ liste, ts: Date.now() })); } catch {}
+  };
+
+  useEffect(() => {
+    fetch(`${API_BASE}/api/tefas-proxy?fonTahminListesi=1`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success && Array.isArray(d.liste) && d.liste.length > 0) {
+          listeYaz(d.liste);
+          if (typeof d.limit === "number") setLimit(d.limit);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const fonEkle = () => {
+    const kod = ekleKodGiris.trim().toUpperCase();
+    if (!kod) { setEkleHata("Fon kodu girin"); return; }
+    if (takipListesi.includes(kod)) { setEkleHata("Bu fon zaten listede"); return; }
+    setEkleYukleniyor(true);
+    setEkleHata(null);
+    fetch(`${API_BASE}/api/tefas-proxy?fonTahminEkle=1&kod=${encodeURIComponent(kod)}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success && Array.isArray(d.liste)) {
+          listeYaz(d.liste);
+          setEkleAcik(false);
+          setEkleKodGiris("");
+        } else {
+          setEkleHata(d.error || "Eklenemedi");
+        }
+      })
+      .catch(() => setEkleHata("Bağlantı hatası, tekrar deneyin"))
+      .finally(() => setEkleYukleniyor(false));
+  };
+
+  // Her takip listesi fonu için hisse ağırlık dağılımı — fon başına ayrı
+  // istek, fon başına ayrı 24 saatlik istemci cache'i.
+  const [holdings, setHoldings] = useState<Record<string, any>>({});
+  // Detay modalı için: hangi fonun kartına basıldı (null = modal kapalı)
+  const [acikKod, setAcikKod] = useState<string | null>(null);
+
+  useEffect(() => {
+    takipListesi.forEach((kod) => {
+      const cacheKey = `fon_holdings_${kod}`;
+      try {
+        const raw = sessionStorage.getItem(cacheKey);
+        if (raw) {
+          const { data, ts } = JSON.parse(raw);
+          if (data && typeof ts === "number" && (Date.now() - ts) < FON_TAHMIN_HOLDINGS_CACHE_TTL_MS) {
+            setHoldings((h) => ({ ...h, [kod]: data }));
+            return;
+          }
+        }
+      } catch {}
+      fetch(`${API_BASE}/api/tefas-proxy?holdings=1&kod=${kod}`)
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.success && Array.isArray(d.kalemler) && d.kalemler.length > 0) {
+            setHoldings((h) => ({ ...h, [kod]: d }));
+            try { sessionStorage.setItem(cacheKey, JSON.stringify({ data: d, ts: Date.now() })); } catch {}
+          }
+        })
+        .catch(() => {});
+    });
+  }, [takipListesi]);
+
+  const hisseDegisimMap = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const h of hisseler) if (typeof h.degisim1g === "number" && h.ticker) m[h.ticker] = h.degisim1g;
+    return m;
+  }, [hisseler]);
+
+  const tahminler = useMemo(() => {
+    const sonuc: { kod: string; tahmin: number; kapsam: number; donem: string | null }[] = [];
+    for (const kod of takipListesi) {
+      const veri = holdings[kod];
+      if (!veri || !Array.isArray(veri.kalemler)) continue;
+      let tahmin = 0, kapsam = 0;
+      for (const k of veri.kalemler) {
+        if (k.tur !== "stock") continue;
+        const deg = hisseDegisimMap[k.kod];
+        if (typeof deg !== "number" || typeof k.agirlik !== "number") continue;
+        tahmin += (k.agirlik / 100) * deg;
+        kapsam += k.agirlik;
+      }
+      if (kapsam > 0) sonuc.push({ kod, tahmin, kapsam, donem: veri.dagilimDonemi ?? null });
+    }
+    return sonuc.sort((a, b) => b.tahmin - a.tahmin);
+  }, [holdings, hisseDegisimMap, takipListesi]);
+
+  // Veri henüz gelmediyse widget'ı hiç gösterme — boş/yarım kart yok.
+  if (tahminler.length === 0) return null;
+
+  const acikTahminVeri = acikKod ? tahminler.find((t) => t.kod === acikKod) : null;
+
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: (TEMA==="acik"?"#1A2430":"#A8C2DC"), textTransform: "uppercase", letterSpacing: 0.5 }}>
+          Fon Tahminleri · AI
+        </span>
+      </div>
+      <div style={{ background: (TEMA==="acik"?"#F0F4F8":"#16222E"), borderRadius: 12, border: `1px solid ${WA(0.07)}`, padding: "8px 7px 4px" }}>
+        {tahminler.map((t, i) => {
+          const up = t.tahmin >= 0;
+          return (
+            <div
+              key={t.kod}
+              onClick={() => setAcikKod(t.kod)}
+              style={{ display: "flex", alignItems: "center", padding: "8px 2px", borderBottom: i === tahminler.length - 1 ? "none" : `1px solid ${WA(0.06)}`, cursor: "pointer" }}
+            >
+              <div style={{ flex: "1 1 auto", minWidth: 0 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: C.soft }}>{t.kod}</div>
+                <div style={{ fontSize: 9.5, color: WA(0.3) }}>
+                  Ağırlık kapsamı %{t.kapsam.toFixed(0)}{t.donem ? ` · ${t.donem}` : ""}
+                </div>
+              </div>
+              <div style={{
+                display: "inline-flex", alignItems: "center", gap: 1, padding: "1.5px 5px", borderRadius: 6,
+                fontSize: 11, fontWeight: 700, color: up ? C.green : C.red,
+                background: up ? C.greenLight : "rgba(248,113,113,0.15)", whiteSpace: "nowrap",
+              }}>
+                {up ? <ArrowUp size={9} strokeWidth={3} /> : <ArrowDown size={9} strokeWidth={3} />}
+                {Math.abs(t.tahmin).toFixed(2)}%
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Fon Ekle — üst sınıra kadar kullanıcı kendi fonunu takip listesine ekleyebilir */}
+        {takipListesi.length < limit ? (
+          ekleAcik ? (
+            <div style={{ padding: "8px 2px", borderTop: `1px solid ${WA(0.06)}` }}>
+              <div style={{ display: "flex", gap: 6 }}>
+                <input
+                  value={ekleKodGiris}
+                  onChange={(e) => { setEkleKodGiris(e.target.value.toUpperCase()); setEkleHata(null); }}
+                  placeholder="Fon kodu (örn. NNF)"
+                  style={{ flex: 1, minWidth: 0, fontSize: 12.5, padding: "7px 9px", borderRadius: 8, border: `1px solid ${WA(0.15)}`, background: (TEMA==="acik"?"#fff":"#0F1923"), color: C.label, outline: "none" }}
+                />
+                <button onClick={fonEkle} disabled={ekleYukleniyor} style={{ fontSize: 12, fontWeight: 700, color: "#fff", background: C.blue, border: "none", borderRadius: 8, padding: "0 14px", cursor: ekleYukleniyor ? "default" : "pointer", opacity: ekleYukleniyor ? 0.6 : 1 }}>
+                  {ekleYukleniyor ? "…" : "Ekle"}
+                </button>
+                <button onClick={() => { setEkleAcik(false); setEkleKodGiris(""); setEkleHata(null); }} style={{ fontSize: 12, color: WA(0.45), background: "transparent", border: "none", cursor: "pointer", padding: "0 6px" }}>Vazgeç</button>
+              </div>
+              {ekleHata && <div style={{ fontSize: 11, color: C.red, marginTop: 6 }}>{ekleHata}</div>}
+            </div>
+          ) : (
+            <button onClick={() => setEkleAcik(true)} style={{
+              display: "flex", alignItems: "center", gap: 4, width: "100%", padding: "9px 2px",
+              background: "transparent", border: "none", borderTop: `1px solid ${WA(0.06)}`,
+              fontSize: 12, fontWeight: 600, color: C.blue, cursor: "pointer",
+            }}>
+              <Plus size={13} strokeWidth={2.5} /> Fon Ekle <span style={{ color: WA(0.35), fontWeight: 500 }}>({limit - takipListesi.length} hak kaldı)</span>
+            </button>
+          )
+        ) : (
+          <div style={{ fontSize: 10, color: WA(0.3), padding: "8px 2px 2px", borderTop: `1px solid ${WA(0.06)}` }}>
+            Takip listesi dolu ({limit}/{limit})
+          </div>
+        )}
+
+        <div style={{ fontSize: 9.5, color: WA(0.3), padding: "6px 2px 2px", lineHeight: 1.4 }}>
+          Tahmin, fonun son açıklanan hisse ağırlıkları ile bu hisselerin günlük fiyat değişiminin ağırlıklı ortalamasıdır. VIOP, sabit getiri ve nakit kalemleri hesaba dahil edilmez. Yatırım tavsiyesi değildir.
+        </div>
+      </div>
+
+      {acikKod && (
+        <FonTahminDetayModal
+          kod={acikKod}
+          holdings={holdings[acikKod]}
+          hisseDegisimMap={hisseDegisimMap}
+          tahminVeri={acikTahminVeri}
+          onKapat={() => setAcikKod(null)}
+          onFonDetay={() => { const k = acikKod; setAcikKod(null); onSecim?.("fon", k); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── FON TAHMİN DETAY MODALI — AI Tahmin Ağı / Portföy Dağılımı / Tahmin
+// Geçmişi (2026-09-04 eklendi) ────────────────────────────────────────────
+function FonTahminDetayModal({
+  kod, holdings, hisseDegisimMap, tahminVeri, onKapat, onFonDetay,
+}: {
+  kod: string;
+  holdings: any;
+  hisseDegisimMap: Record<string, number>;
+  tahminVeri: { tahmin: number; kapsam: number; donem: string | null } | null | undefined;
+  onKapat: () => void;
+  onFonDetay: () => void;
+}) {
+  const [sekme, setSekme] = useState<"ag" | "dagilim" | "gecmis">("ag");
+  const [gecmis, setGecmis] = useState<any[] | null>(null);
+  const [gecmisYukleniyor, setGecmisYukleniyor] = useState(false);
+
+  useEffect(() => {
+    if (sekme !== "gecmis" || gecmis !== null) return;
+    setGecmisYukleniyor(true);
+    fetch(`${API_BASE}/api/tefas-proxy?tahminGecmis=1&kod=${kod}`)
+      .then((r) => r.json())
+      .then((d) => setGecmis(d.success ? (d.kayitlar || []) : []))
+      .catch(() => setGecmis([]))
+      .finally(() => setGecmisYukleniyor(false));
+  }, [sekme, gecmis, kod]);
+
+  const kalemler: any[] = Array.isArray(holdings?.kalemler) ? holdings.kalemler : [];
+  const siraliKalemler = useMemo(
+    () => [...kalemler].sort((a, b) => (b.agirlik ?? 0) - (a.agirlik ?? 0)),
+    [kalemler]
+  );
+
+  const tahmin = tahminVeri?.tahmin ?? null;
+  const up = (tahmin ?? 0) >= 0;
+
+  const gecmisIsabetOrt = useMemo(() => {
+    if (!gecmis || gecmis.length === 0) return null;
+    const degerler = gecmis.map((k) => k.isabet).filter((v: any) => typeof v === "number");
+    if (degerler.length === 0) return null;
+    return degerler.reduce((a: number, b: number) => a + b, 0) / degerler.length;
+  }, [gecmis]);
+
+  return (
+    <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.7)",zIndex:600,display:"flex",alignItems:"flex-end",...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}}>
+      <div style={{background:C.card,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",maxHeight:"88vh",display:"flex",flexDirection:"column"}}>
+        {/* Başlık — tıklanınca fon detay ekranına gider */}
+        <div style={{padding:"16px 20px 12px",borderBottom:`1px solid ${WA(0.1)}`,display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexShrink:0}}>
+          <div onClick={onFonDetay} style={{cursor:"pointer",flex:1,minWidth:0}}>
+            <div style={{display:"flex",alignItems:"center",gap:4}}>
+              <span style={{fontSize:16,fontWeight:800,color:C.label}}>{kod}</span>
+              <span style={{fontSize:14,color:WA(0.4)}}>›</span>
+            </div>
+            <p style={{margin:"2px 0 0",fontSize:11,color:WA(0.55),overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+              {holdings?.dagilimDonemi ? `Dağılım dönemi: ${holdings.dagilimDonemi}` : "Fon detayına git"}
+            </p>
+          </div>
+          <div style={{textAlign:"right",marginRight:8}}>
+            <div style={{fontSize:9.5,color:WA(0.4),fontWeight:700,textTransform:"uppercase",letterSpacing:0.3}}>AI Tahmini</div>
+            <div style={{fontSize:16,fontWeight:800,color: tahmin==null ? WA(0.4) : up ? C.green : C.red}}>
+              {tahmin==null ? "—" : `${up?"+":""}${tahmin.toFixed(4)}%`}
+            </div>
+          </div>
+          <button onClick={onKapat} style={{background:WA(0.1),border:"none",width:32,height:32,borderRadius:16,fontSize:20,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>×</button>
+        </div>
+
+        {/* Sekmeler */}
+        <div style={{display:"flex",borderBottom:`1px solid ${WA(0.08)}`,flexShrink:0}}>
+          {[
+            {key:"ag", label:"AI Tahmin Ağı"},
+            {key:"dagilim", label:"Portföy Dağılımı"},
+            {key:"gecmis", label:"Tahmin Geçmişi"},
+          ].map((t) => (
+            <button key={t.key} onClick={()=>setSekme(t.key as any)} style={{
+              flex:1, padding:"12px 4px", background:"transparent", border:"none", cursor:"pointer",
+              fontSize:12.5, fontWeight:sekme===t.key?700:600,
+              color: sekme===t.key ? C.blue : WA(0.45),
+              borderBottom: sekme===t.key ? `2px solid ${C.blue}` : "2px solid transparent",
+            }}>{t.label}</button>
+          ))}
+        </div>
+
+        <div style={{flex:1,overflowY:"auto",padding:"14px 16px 28px"}}>
+          <div style={{display:"flex",alignItems:"center",gap:4,fontSize:10.5,color:"#F59E0B",marginBottom:12}}>
+            <Clock size={12}/> Veriler 15 dakika gecikmelidir
+          </div>
+
+          {sekme === "ag" && (
+            <FonTahminAgGorseli kalemler={siraliKalemler} hisseDegisimMap={hisseDegisimMap} tahmin={tahmin} />
+          )}
+
+          {sekme === "dagilim" && (
+            <div>
+              <div style={{display:"flex",fontSize:10,fontWeight:700,color:WA(0.35),textTransform:"uppercase",padding:"0 4px 8px",borderBottom:`1px solid ${WA(0.08)}`}}>
+                <div style={{flex:"1 1 auto"}}>Varlık</div>
+                <div style={{width:60,textAlign:"right"}}>Değişim</div>
+                <div style={{width:56,textAlign:"right"}}>Ağırlık</div>
+              </div>
+              {siraliKalemler.map((k) => {
+                const deg = hisseDegisimMap[k.kod];
+                const bilinenFiyat = typeof deg === "number";
+                const degUp = bilinenFiyat && deg >= 0;
+                return (
+                  <div key={k.kod} style={{display:"flex",alignItems:"center",padding:"9px 4px",borderBottom:`1px solid ${WA(0.05)}`}}>
+                    <div style={{flex:"1 1 auto",minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:700,color:C.label}}>{k.kod}</div>
+                      <div style={{fontSize:10.5,color:WA(0.45),overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{k.ad ?? (k.tur !== "stock" ? k.tur : "")}</div>
+                    </div>
+                    <div style={{width:60,textAlign:"right",fontSize:12,fontWeight:600,color: !bilinenFiyat ? WA(0.35) : degUp ? C.green : C.red}}>
+                      {bilinenFiyat ? `${degUp?"+":""}${deg.toFixed(2)}%` : "—"}
+                    </div>
+                    <div style={{width:56,textAlign:"right",fontSize:12,fontWeight:600,color:WA(0.6)}}>
+                      %{(k.agirlik ?? 0).toFixed(1)}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {sekme === "gecmis" && (
+            gecmisYukleniyor ? (
+              <div style={{textAlign:"center",padding:"24px 0",fontSize:12,color:WA(0.4)}}>Yükleniyor…</div>
+            ) : !gecmis || gecmis.length === 0 ? (
+              <div style={{textAlign:"center",padding:"24px 0",fontSize:12,color:WA(0.4)}}>Henüz tahmin geçmişi birikmedi.</div>
+            ) : (
+              <div>
+                {gecmisIsabetOrt != null && (
+                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:12,fontSize:13,fontWeight:700,color:C.label}}>
+                    <Target size={14} color={C.blue}/> Son {gecmis.length} gün ortalama isabet: <span style={{color:"#F59E0B"}}>%{gecmisIsabetOrt.toFixed(1)}</span>
+                  </div>
+                )}
+                <div style={{display:"flex",fontSize:9.5,fontWeight:700,color:WA(0.35),textTransform:"uppercase",padding:"0 2px 8px",borderBottom:`1px solid ${WA(0.08)}`}}>
+                  <div style={{flex:"1 1 auto"}}>Tarih</div>
+                  <div style={{width:66,textAlign:"right"}}>Gerçek</div>
+                  <div style={{width:66,textAlign:"right"}}>Tahmin</div>
+                  <div style={{width:52,textAlign:"right"}}>İsabet</div>
+                </div>
+                {[...gecmis].reverse().map((k, i) => (
+                  <div key={k.tarih ?? i} style={{display:"flex",alignItems:"center",padding:"9px 2px",borderBottom:`1px solid ${WA(0.05)}`}}>
+                    <div style={{flex:"1 1 auto",fontSize:12.5,fontWeight:700,color:C.label}}>
+                      {k.tarih ? new Date(k.tarih).toLocaleDateString("tr-TR",{day:"2-digit",month:"2-digit",year:"2-digit"}) : "—"}
+                    </div>
+                    <div style={{width:66,textAlign:"right",fontSize:12,fontWeight:600,color: k.gercek==null?WA(0.35): k.gercek>=0?C.green:C.red}}>
+                      {k.gercek==null ? "—" : `${k.gercek>=0?"+":""}${k.gercek.toFixed(4)}%`}
+                    </div>
+                    <div style={{width:66,textAlign:"right",fontSize:12,fontWeight:600,color: k.tahmin==null?WA(0.35): k.tahmin>=0?C.green:C.red}}>
+                      {k.tahmin==null ? "—" : `${k.tahmin>=0?"+":""}${k.tahmin.toFixed(4)}%`}
+                    </div>
+                    <div style={{width:52,textAlign:"right",fontSize:12,fontWeight:700,color: k.isabet==null?WA(0.35): k.isabet>=70?C.green: k.isabet>=35?"#F59E0B":C.red}}>
+                      {k.isabet==null ? "—" : `%${k.isabet.toFixed(1)}`}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
+          )}
+
+          <div style={{fontSize:9.5,color:WA(0.3),marginTop:14,lineHeight:1.5}}>
+            Tahmin, fonun son açıklanan hisse ağırlıkları ile bu hisselerin günlük fiyat değişiminin ağırlıklı ortalamasıdır. İsabet, tahmin ile gerçekleşen getiri arasındaki mutlak puan farkına göre Katılım Plus tarafından hesaplanır (Fintables veya başka bir sağlayıcının isabet metriğiyle aynı değildir). Kesinlikle yatırım tavsiyesi değildir.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── AI TAHMİN AĞI — radyal görsel (2026-09-04 eklendi) ────────────────────
+// İç halka: en büyük ağırlıklı 6 kalem (etiketli, büyük daire). Dış halka:
+// geri kalan kalemler (küçük nokta, kısa etiket). Renk: yeşil/kırmızı =
+// hisse fiyatı bilinen kalemin günlük değişim yönü, gri = hisse-dışı kalem
+// (VIOP/nakit/sabit getiri) ya da fiyatı BİST veri izleme kaynağında
+// bulunamayan hisse.
+function FonTahminAgGorseli({ kalemler, hisseDegisimMap, tahmin }: {
+  kalemler: any[]; hisseDegisimMap: Record<string, number>; tahmin: number | null;
+}) {
+  const renkli = kalemler.map((k) => {
+    const deg = k.tur === "stock" ? hisseDegisimMap[k.kod] : undefined;
+    const renk = typeof deg !== "number" ? WA(0.25) : deg >= 0 ? C.green : C.red;
+    return { ...k, deg, renk };
+  });
+
+  const ic = renkli.slice(0, 6);
+  const dis = renkli.slice(6, 70); // performans için üst sınır — ~90 kalemli fonlarda bile makul kalır
+
+  const SIZE = 320, CX = SIZE / 2, CY = SIZE / 2;
+  const ICR = 78, DISR = 138;
+
+  const nokta = (i: number, n: number, r: number) => {
+    const aci = (i / n) * 2 * Math.PI - Math.PI / 2;
+    return { x: CX + r * Math.cos(aci), y: CY + r * Math.sin(aci) };
+  };
+
+  return (
+    <div style={{display:"flex",justifyContent:"center",padding:"8px 0 4px"}}>
+      <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
+        {dis.map((k, i) => {
+          const p = nokta(i, dis.length, DISR);
+          return <line key={`l-${k.kod}`} x1={CX} y1={CY} x2={p.x} y2={p.y} stroke={WA(0.06)} strokeWidth={1}/>;
+        })}
+        {ic.map((k, i) => {
+          const p = nokta(i, ic.length, ICR);
+          return <line key={`li-${k.kod}`} x1={CX} y1={CY} x2={p.x} y2={p.y} stroke={WA(0.08)} strokeWidth={1}/>;
+        })}
+
+        <circle cx={CX} cy={CY} r={56} fill="rgba(59,130,246,0.12)" />
+        <text x={CX} y={CY-4} textAnchor="middle" fontSize={17} fontWeight={800} fill={C.label}>
+          {tahmin==null ? "—" : tahmin.toFixed(4)}
+        </text>
+        <text x={CX} y={CY+14} textAnchor="middle" fontSize={9.5} fill={WA(0.5)}>% AI tahmini</text>
+
+        {dis.map((k, i) => {
+          const p = nokta(i, dis.length, DISR);
+          return (
+            <g key={`d-${k.kod}`}>
+              <circle cx={p.x} cy={p.y} r={11} fill={k.renk} opacity={0.85} />
+              <text x={p.x} y={p.y+3} textAnchor="middle" fontSize={7} fontWeight={700} fill="#fff">{String(k.kod).slice(0,5)}</text>
+            </g>
+          );
+        })}
+
+        {ic.map((k, i) => {
+          const p = nokta(i, ic.length, ICR);
+          return (
+            <g key={`i-${k.kod}`}>
+              <circle cx={p.x} cy={p.y} r={30} fill={k.renk} opacity={0.9} />
+              <text x={p.x} y={p.y-3} textAnchor="middle" fontSize={11} fontWeight={800} fill="#fff">{k.kod}</text>
+              <text x={p.x} y={p.y+11} textAnchor="middle" fontSize={9} fontWeight={600} fill="#fff">
+                {typeof k.deg === "number" ? `${k.deg>=0?"+":""}${k.deg.toFixed(2)}%` : (k.tur !== "stock" ? `%${(k.agirlik??0).toFixed(1)}` : "—")}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
     </div>
   );
 }
@@ -24403,6 +24939,9 @@ function App(){
 
             {/* Katılım Endeksi Top Hareketliler */}
             <KatilimEndeksiTopHareketliler nav={nav} onSecim={irHisseFonDetay}/>
+
+            {/* Fon Tahminleri (AI) — pilot 9 fon, 2026-09-03 eklendi */}
+            <FonTahminleriWidget nav={nav} onSecim={irHisseFonDetay}/>
 
             {/* Finansal Göstergeler — ana sayfa özeti (Seçenek A: ikonlu satırlar) */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:18,marginBottom:8}}>
