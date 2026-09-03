@@ -3931,6 +3931,43 @@ function FonTahminleriWidget({ nav, onSecim }: { nav: (sc: string) => void; onSe
   const [ekleHata, setEkleHata] = useState<string | null>(null);
   const [ekleYukleniyor, setEkleYukleniyor] = useState(false);
 
+  // ⚠️ TAMAMLAYICI FON ADI ÇEKİMİ (2026-09-04 eklendi): "kea_fonlar" listesi
+  // sadece KATILIM BANKACILIĞI UYUMLU fonları içeriyor (uygulamanın temel
+  // filtresi) — pilot listedeki bazı fonlar (ör. konvansiyonel serbest
+  // fonlar) bu filtreye girmediği için fonAdMap'te adları hiç bulunamıyordu
+  // (canlıda doğrulandı: PUK dışında hiçbiri eşleşmedi). Eksik kalanlar için
+  // katılım filtresine BAKMAKSIZIN herhangi bir fonu döndüren `?detay=1`
+  // ucundan tek tek tamamlanıyor, istemci tarafında kalıcı cache'leniyor
+  // (fon adı neredeyse hiç değişmez).
+  const [ekstraFonAdlari, setEkstraFonAdlari] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const eksikler = takipListesi.filter((kod) => !fonAdMap[kod] && !ekstraFonAdlari[kod]);
+    eksikler.forEach((kod) => {
+      const cacheKey = `fon_ad_${kod}`;
+      try {
+        const onbellek = sessionStorage.getItem(cacheKey);
+        if (onbellek) { setEkstraFonAdlari((m) => ({ ...m, [kod]: onbellek })); return; }
+      } catch {}
+      fetch(`${API_BASE}/api/tefas-proxy?detay=1&kod=${kod}`)
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.success && d.ad) {
+            setEkstraFonAdlari((m) => ({ ...m, [kod]: d.ad }));
+            try { sessionStorage.setItem(cacheKey, d.ad); } catch {}
+          }
+        })
+        .catch(() => {});
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [takipListesi, fonAdMap]);
+
+  const birlesikFonAdMap = useMemo(
+    () => ({ ...ekstraFonAdlari, ...fonAdMap }),
+    [ekstraFonAdlari, fonAdMap]
+  );
+
+
   const listeYaz = (liste: string[]) => {
     setTakipListesi(liste);
     try { localStorage.setItem(FON_TAHMIN_LISTE_LOCALSTORAGE_KEY, JSON.stringify({ liste, ts: Date.now() })); } catch {}
@@ -4053,7 +4090,7 @@ function FonTahminleriWidget({ nav, onSecim }: { nav: (sc: string) => void; onSe
               <div style={{ flex: "1 1 auto", minWidth: 0 }}>
                 <div style={{ fontSize: 14.5, fontWeight: 700, color: C.soft }}>{t.kod}</div>
                 <div style={{ fontSize: 10.5, fontWeight: 600, color: WA(0.45), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textTransform: "uppercase" }}>
-                  {fonAdMap[t.kod] ?? ""}
+                  {birlesikFonAdMap[t.kod] ?? ""}
                 </div>
               </div>
               <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 8 }}>
@@ -4107,7 +4144,7 @@ function FonTahminleriWidget({ nav, onSecim }: { nav: (sc: string) => void; onSe
       {acikKod && (
         <FonTahminDetayModal
           kod={acikKod}
-          fonAdi={fonAdMap[acikKod] ?? null}
+          fonAdi={birlesikFonAdMap[acikKod] ?? null}
           holdings={holdings[acikKod]}
           hisseDegisimMap={hisseDegisimMap}
           tahminVeri={acikTahminVeri}
@@ -4170,7 +4207,7 @@ function FonTahminDetayModal({
     <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:C.card,zIndex:600,display:"flex",flexDirection:"column",...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}}>
       <div style={{width:"100%",maxWidth:680,margin:"0 auto",display:"flex",flexDirection:"column",height:"100%"}}>
         {/* Başlık — koda tıklanınca fon detay ekranına gider, altında fon adı yazar */}
-        <div style={{padding:"16px 20px 12px",borderBottom:`1px solid ${WA(0.1)}`,display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexShrink:0}}>
+        <div style={{padding:"calc(16px + env(safe-area-inset-top,0px)) 20px 12px",borderBottom:`1px solid ${WA(0.1)}`,display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexShrink:0}}>
           <div onClick={onFonDetay} style={{cursor:"pointer",flex:1,minWidth:0}}>
             <div style={{display:"flex",alignItems:"center",gap:4}}>
               <span style={{fontSize:16,fontWeight:800,color:C.label}}>{kod}</span>
@@ -4205,7 +4242,7 @@ function FonTahminDetayModal({
           ))}
         </div>
 
-        <div style={{flex:1,overflowY:"auto",padding:"14px 16px 28px"}}>
+        <div style={{flex:1,overflowY:"auto",padding:"14px 16px calc(28px + env(safe-area-inset-bottom,0px))"}}>
           <div style={{display:"flex",alignItems:"center",gap:4,fontSize:10.5,color:"#F59E0B",marginBottom:12}}>
             <Clock size={12}/> Veriler 15 dakika gecikmelidir
           </div>
