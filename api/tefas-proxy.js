@@ -362,7 +362,14 @@ async function hisseDegisimMapGetirDahili() {
 }
 
 async function fonTahminSnapshotCalistir(req, res) {
-  const cronSecret = process.env.CRON_SECRET;
+  // ⚠️ Paylaşılan CRON_SECRET yerine AYRI bir gizli anahtar kullanılıyor
+  // (2026-09-04): CRON_SECRET Vercel'de "Secret" tipinde — bir kez
+  // kaydedildikten sonra değeri bir daha GÖSTERİLEMİYOR. Onu rotate etmek
+  // aynı anahtarı kullanan diğer TÜM cron-job.org görevlerini (bildirim,
+  // fiyat alarmı vb.) kırardı. Bu yeni cron için bağımsız bir anahtar
+  // (FON_TAHMIN_CRON_SECRET) tanımlanınca, değeri Uğur'un kendisi belirlediği
+  // için elinde kalır — mevcut sisteme dokunulmamış olur.
+  const cronSecret = process.env.FON_TAHMIN_CRON_SECRET;
   const gelenAuth = req.headers.authorization;
   const vercelCronMu = req.headers["x-vercel-cron"] === "1";
   if (cronSecret && !vercelCronMu && gelenAuth !== `Bearer ${cronSecret}`) {
