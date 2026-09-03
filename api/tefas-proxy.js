@@ -1,5 +1,5 @@
 // api/tefas-proxy.js
-// TEK fonksiyon, ÜÇ rol:
+// TEK fonksiyon, DÖRT rol:
 //  1) Normal kullanıcı isteği (GET, header/param yok) → KV'den okur, hızlı yanıt verir
 //  2) Vercel Cron tetiklemesi (?cron=1&parca=1|2|3) → Fonoloji'den O PARÇANIN
 //     kategorilerini çekip KV'deki mevcut veriyle BİRLEŞTİRİR (üzerine tamamen
@@ -10,6 +10,13 @@
 //     fiyat serisi çeker. AYRI BİR api/ DOSYASI AÇILMADI — Vercel Hobby plan
 //     12 Serverless Function sınırına zaten yakınız (bkz. aşağıdaki not),
 //     bu yüzden üçüncü rol de bu dosyaya eklendi.
+//  4) Tek fon hisse ağırlık dağılımı isteği (?holdings=1&kod=XXX) → Fon
+//     Tahminleri özelliği için Fonoloji'nin /funds/:code/portfolio?include=
+//     holdings ucundan KAP portföy dağılım raporundan çıkarılmış hisse kodu +
+//     ağırlık listesini çeker. Canlı hisse FİYATI burada YOK — o, uygulamanın
+//     zaten sahip olduğu BİST veri izleme kaynağından (hisse-proxy.js) alınıp
+//     frontend'de bu ağırlıklarla eşleştirilerek tahmin hesaplanıyor.
+//     AYRI BİR DOSYA AÇILMADI (aynı 12 fonksiyon sınırı gerekçesiyle).
 //
 // NEDEN PARÇALARA BÖLÜNDÜ: Fonoloji "dakikada en fazla 30 istek" sınırı
 // uyguluyor (kendi hata mesajından doğrulandı: "Dakikada 30 istek sınırı
@@ -124,6 +131,105 @@ const FON_GECMIS_CACHE_TTL_SANIYE = 600; // 10 dk — aynı fon+dönem sık soru
 // takasAraligi) — böylece FonDetay/GetiriHesaplayici hangi ekrandan açıldığına
 // bakmaksızın hep aynı alan adlarını bulur.
 const FON_DETAY_CACHE_TTL_SANIYE = 900; // 15 dk
+
+// ── Tek fon HİSSE AĞIRLIK DAĞILIMI (2026-09 eklendi — Fon Tahminleri) ──────
+// /api/tefas-proxy?holdings=1&kod=THF
+// Fonoloji'nin /funds/:code/portfolio?include=holdings ucundan KAP portföy
+// dağılım raporundan çıkarılmış hisse kodu + ağırlık listesini çeker.
+//
+// ⚠️ Holdings verisi PERİYODİK (KAP dağılım raporu tarihine bağlı, günlük
+// DEĞİL) — cache TTL bilerek uzun (24 saat). Canlı hisse FİYATI bu uçtan
+// GELMEZ — frontend, uygulamanın zaten sahip olduğu BİST veri izleme
+// kaynağıyla (hisse-proxy.js / TradingView) bu ağırlıkları eşleştirip
+// tahmini getiriyi kendisi hesaplar. Bu uç sadece ağırlık listesi + dağılım
+// tarihini döner.
+//
+// ⚠️ YANIT ŞEKLİ HENÜZ GERÇEK ÇAĞRIYLA DOĞRULANMADI: Fonoloji dokümanında
+// holdings için örnek JSON paylaşılmamış, sadece endpoint adı var. Aşağıdaki
+// ayrıştırma (nav ayrıştırmasında yapıldığı gibi) birkaç olası alan adını
+// dener, ama İLK GERÇEK YANITTA MUTLAKA doğrulanmalı ve gerekirse
+// sadeleştirilmeli — bkz. 16 Ağustos devir belgesi 8.2: "fonksiyonun ne
+// yaptığını tahmin etmek yerine kaynağını oku" dersi. Üretime almadan önce
+// bir fon için ham yanıtı (`?holdings=1&kod=THF&ham=1`) loglayıp/inceleyip
+// alan adlarını netleştir.
+const FON_HOLDINGS_CACHE_TTL_SANIYE = 86400; // 24 saat — periyodik veri, günlük değişmez
+
+async function fonHoldingsGetir(req, res) {
+  const kod = String(req.query?.kod || "").toUpperCase().trim();
+  if (!kod) return res.status(400).json({ success: false, error: "kod parametresi gerekli" });
+
+  const cacheAnahtar = `fon:holdings:${kod}`;
+  try {
+    const onbellek = await kv.get(cacheAnahtar).catch(() => null);
+    if (onbellek && Array.isArray(onbellek.kalemler) && onbellek.kalemler.length) {
+      res.setHeader("Cache-Control", "max-age=0, s-maxage=3600, stale-while-revalidate=3600");
+      return res.status(200).json(onbellek);
+    }
+  } catch {}
+
+  const API_KEY = process.env.FONOLOJI_KEY;
+  if (!API_KEY) return res.status(500).json({ success: false, error: "FONOLOJI_KEY tanımlı değil" });
+
+  try {
+    // fonFetch.js'deki cron taramasıyla AYNI paylaşılan sıraya girer — toplam
+    // istek hızı Fonoloji'nin dakikalık sınırının altında kalır.
+    await siraliBekle();
+    const r = await fetch(
+      `https://fonoloji.com/v1/funds/${encodeURIComponent(kod)}/portfolio?include=holdings`,
+      { headers: { "X-API-Key": API_KEY, "Accept": "application/json" } }
+    );
+    if (!r.ok) {
+      return res.status(r.status).json({ success: false, error: `Fonoloji ${r.status}` });
+    }
+    const d = await r.json().catch(() => null);
+
+    // Ham yanıtı incelemek için geçici debug kapısı: ?holdings=1&kod=THF&ham=1
+    if (req.query?.ham === "1") {
+      return res.status(200).json({ success: true, ham: d });
+    }
+
+    // ── Olası yollar (nav ayrıştırmasındaki savunmacı desenle aynı) ────────
+    // Gerçek yanıt görülünce bu blok sadeleştirilmeli.
+    const hamKalemler = d?.holdings?.positions ?? d?.portfolio?.holdings
+                      ?? d?.holdings ?? d?.positions ?? [];
+    const tarih = d?.portfolio?.date ?? d?.holdings?.date ?? d?.date ?? null;
+
+    const kalemler = (Array.isArray(hamKalemler) ? hamKalemler : [])
+      .map((k) => ({
+        kod: String(k.code ?? k.symbol ?? k.kod ?? "").toUpperCase().trim(),
+        ad: k.name ?? k.ad ?? null,
+        agirlik: typeof k.weight === "number" ? k.weight
+                : typeof k.percentage === "number" ? k.percentage
+                : typeof k.agirlik === "number" ? k.agirlik : null,
+        // Hisse olmayan kalemleri (VIOP, nakit, sabit getiri, başka fon vb.)
+        // frontend'de tahmine dahil etmemek için tür bilgisi de taşınıyor.
+        tur: k.type ?? k.category ?? k.tur ?? null,
+      }))
+      .filter((k) => k.kod && typeof k.agirlik === "number");
+
+    const paket = {
+      success: true,
+      kod,
+      dagilimTarihi: tarih,
+      kalemler,
+      kaynak: "fonoloji",
+    };
+
+    // Boş sonuç YAZILMAZ — geçici bir ayrıştırma hatası 24 saat kalıcı hale
+    // gelmesin (fonGecmisGetir'deki aynı ilkeyle tutarlı).
+    if (kalemler.length) {
+      try { await kv.set(cacheAnahtar, paket, { ex: FON_HOLDINGS_CACHE_TTL_SANIYE }); } catch {}
+    }
+
+    res.setHeader("Cache-Control", kalemler.length
+      ? "max-age=0, s-maxage=3600, stale-while-revalidate=3600"
+      : "no-store");
+    return res.status(200).json(paket);
+  } catch (e) {
+    res.setHeader("Cache-Control", "no-store");
+    return res.status(500).json({ success: false, error: String(e.message || e) });
+  }
+}
 
 async function fonDetayGetir(req, res) {
   const kod = String(req.query?.kod || "").toUpperCase().trim();
@@ -474,6 +580,7 @@ export default async function handler(req, res) {
 
   if (req.query?.gecmis === "1") return fonGecmisGetir(req, res);
   if (req.query?.detay === "1") return fonDetayGetir(req, res);
+  if (req.query?.holdings === "1") return fonHoldingsGetir(req, res);
 
   const cronIstegi = req.headers["x-vercel-cron"] === "1" || req.query?.cron === "1";
   if (cronIstegi) return cronYaz(req, res);
