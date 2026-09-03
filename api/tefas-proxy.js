@@ -144,14 +144,11 @@ const FON_DETAY_CACHE_TTL_SANIYE = 900; // 15 dk
 // tahmini getiriyi kendisi hesaplar. Bu uç sadece ağırlık listesi + dağılım
 // tarihini döner.
 //
-// ⚠️ YANIT ŞEKLİ HENÜZ GERÇEK ÇAĞRIYLA DOĞRULANMADI: Fonoloji dokümanında
-// holdings için örnek JSON paylaşılmamış, sadece endpoint adı var. Aşağıdaki
-// ayrıştırma (nav ayrıştırmasında yapıldığı gibi) birkaç olası alan adını
-// dener, ama İLK GERÇEK YANITTA MUTLAKA doğrulanmalı ve gerekirse
-// sadeleştirilmeli — bkz. 16 Ağustos devir belgesi 8.2: "fonksiyonun ne
-// yaptığını tahmin etmek yerine kaynağını oku" dersi. Üretime almadan önce
-// bir fon için ham yanıtı (`?holdings=1&kod=THF&ham=1`) loglayıp/inceleyip
-// alan adlarını netleştir.
+// ✅ YANIT ŞEKLİ DOĞRULANDI (2026-09-03, THF ile gerçek çağrı): d.holdings BİR
+// NESNE, asıl liste d.holdings.items içinde. Kalem alanları: asset_code,
+// asset_name, asset_type ("stock" | diğer), weight. Tarih iki ayrı alanda:
+// latestPeriod ("2026-08") ve latestPublishDate (epoch ms). Aşağıdaki
+// ayrıştırma bu gerçek şekle göre yazıldı (tahmini alan adı denemesi değil).
 const FON_HOLDINGS_CACHE_TTL_SANIYE = 86400; // 24 saat — periyodik veri, günlük değişmez
 
 async function fonHoldingsGetir(req, res) {
@@ -188,29 +185,37 @@ async function fonHoldingsGetir(req, res) {
       return res.status(200).json({ success: true, ham: d });
     }
 
-    // ── Olası yollar (nav ayrıştırmasındaki savunmacı desenle aynı) ────────
-    // Gerçek yanıt görülünce bu blok sadeleştirilmeli.
-    const hamKalemler = d?.holdings?.positions ?? d?.portfolio?.holdings
-                      ?? d?.holdings ?? d?.positions ?? [];
-    const tarih = d?.portfolio?.date ?? d?.holdings?.date ?? d?.date ?? null;
+    // ── GERÇEK YANIT ŞEKLİ (2026-09-03, THF ile doğrulandı) ────────────────
+    // d.holdings BİR NESNE (dizi değil) — asıl kalem listesi d.holdings.items
+    // içinde. Örnek kalem:
+    //   { asset_name:"Kardemir Çelik Sanayi A.Ş.", asset_code:"KARCL",
+    //     asset_type:"stock", weight:7.49, market_value:5605500000, ... }
+    // Tarih bilgisi ayrı iki alanda: latestPeriod ("2026-08", dönem etiketi)
+    // ve latestPublishDate (epoch ms). asset_type alanı TAM İHTİYACIMIZ OLAN
+    // şey — hisse olmayan kalemleri (VIOP/nakit/sabit getiri) frontend'de
+    // "stock" dışındakileri süzerek ayıklayabiliyoruz.
+    const holdingsBlok = d?.holdings ?? {};
+    const hamKalemler = Array.isArray(holdingsBlok.items) ? holdingsBlok.items : [];
+    const donemEtiketi = holdingsBlok.latestPeriod ?? null;
+    const yayinTarihiMs = typeof holdingsBlok.latestPublishDate === "number"
+      ? holdingsBlok.latestPublishDate : null;
 
-    const kalemler = (Array.isArray(hamKalemler) ? hamKalemler : [])
+    const kalemler = hamKalemler
       .map((k) => ({
-        kod: String(k.code ?? k.symbol ?? k.kod ?? "").toUpperCase().trim(),
-        ad: k.name ?? k.ad ?? null,
-        agirlik: typeof k.weight === "number" ? k.weight
-                : typeof k.percentage === "number" ? k.percentage
-                : typeof k.agirlik === "number" ? k.agirlik : null,
-        // Hisse olmayan kalemleri (VIOP, nakit, sabit getiri, başka fon vb.)
-        // frontend'de tahmine dahil etmemek için tür bilgisi de taşınıyor.
-        tur: k.type ?? k.category ?? k.tur ?? null,
+        kod: String(k.asset_code ?? "").toUpperCase().trim(),
+        ad: k.asset_name ?? null,
+        agirlik: typeof k.weight === "number" ? k.weight : null,
+        // "stock" | diğer (bono, viop, nakit, başka fon vb.) — frontend
+        // tahmine sadece asset_type === "stock" olanları dahil etmeli.
+        tur: k.asset_type ?? null,
       }))
       .filter((k) => k.kod && typeof k.agirlik === "number");
 
     const paket = {
       success: true,
       kod,
-      dagilimTarihi: tarih,
+      dagilimDonemi: donemEtiketi,
+      dagilimYayinTarihiMs: yayinTarihiMs,
       kalemler,
       kaynak: "fonoloji",
     };
