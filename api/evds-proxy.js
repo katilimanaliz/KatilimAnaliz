@@ -606,11 +606,25 @@ async function fpPdfMetneCevir(pdfUrl){
 }
 
 // ── Ayrıştırma mantığı — gerçek KAP PDF metniyle test edildi ────────────
-// (Kare Portföy KYA fonu örneğiyle: 13/13 hisse doğru kod+ağırlık eşleşti,
-// bkz. devir belgesi/oturum notları — üç ayrı hata canlı testte bulunup
-// düzeltildi: yanlış satırdan hisse kodu okuma, tarih formatının "/" ile
-// sayı dizisini bozması, ve grup toplamı ile hisse satırının farklı sütun
-// sayısına sahip olması yüzünden indeks eşleştirmesinin kayması.)
+// (Kare Portföy KYA fonu örneğiyle: 13/13 hisse doğru kod+ağırlık eşleşti.
+// SONRA THF Ağustos-2026 fonunun TAM (77 hisseli) gerçek raporuyla tekrar
+// test edilirken ÜÇ AYRI EK HATA bulunup düzeltildi:
+//   1) ISIN kodu HER ZAMAN "TL" ile aynı satırda değilmiş — uzun şirket
+//      adları ("ANADOLU EFES BİRACILIK VE MALT SANAYİİ A.Ş.") tabloyu
+//      kaydırınca ISIN kendi başına bir sonraki satıra düşüyor. Eski kod
+//      bu satırları hiç yakalamıyordu VE hisse kodu sonraki (yanlış) veri
+//      satırına kayıp AEFES'e AKBNK'ın ISIN'i/ağırlığı gibi SESSİZCE
+//      YANLIŞ bir eşleşme üretiyordu.
+//   2) Negatif satırlar (kısa pozisyon/net satış, örn. "-0,60 -0,52 -0,59")
+//      "n >= 0" kontrolüne takılıp reddediliyordu — artık mutlak değere
+//      göre kontrol ediliyor.
+//   3) Çok uzun şirket adlarında ("SELÇUK ECZA DEPOSU TİCARET VE SANAYİ
+//      A.Ş.") isim veri satırından SONRA da devam edebiliyor — "DEPOSU"
+//      gibi bir devam kelimesi yanlışlıkla sonraki kaydın hisse kodu
+//      sanılabiliyordu (format olarak 3-6 büyük harfe uyduğu için). Çözüm:
+//      aynı ISIN'e sahip kayıtlar HER ZAMAN aynı hisse koduna sahip olmalı
+//      (ISIN, hisse kodundan çok daha güvenilir bir tekil anahtar) — bu
+//      çapraz kontrolle otomatik düzeltiliyor.
 function fpTurkceOndalikCoz(s){
   const temiz = String(s).replace(/\./g, "").replace(",", ".");
   const n = parseFloat(temiz);
@@ -622,7 +636,7 @@ function fpTarihleriMaskele(s){
 function fpArdisikUcYuzdeBul(sayilar){
   for(let i = sayilar.length - 3; i >= 0; i--){
     const [a,b,c] = [sayilar[i], sayilar[i+1], sayilar[i+2]];
-    if([a,b,c].every(n => n != null && n >= 0 && n <= 20 && !Number.isInteger(n))){
+    if([a,b,c].every(n => n != null && Math.abs(n) <= 20 && !Number.isInteger(n))){
       return { grupYuzde: a };  // GRUP TOPLAMI satırlarında hep ilk değer %100 — doğrulandı
     }
   }
@@ -630,27 +644,36 @@ function fpArdisikUcYuzdeBul(sayilar){
 }
 function fpKapPortfoyAyristir(metin){
   const satirlar = metin.split("\n").map(s => s.trim()).filter(Boolean);
-  const veriSatirRegex = /^TL\s+(TR[A-Z0-9]{10,11})\s+(.+)$/;
+  const veriSatirRegex = /^TL\s+(?:(TR[A-Z0-9]{10,11})\s+)?(-?[\d.,]+.*)$/;
+  const isinTekBasinaRegex = /^(TR[A-Z0-9]{10,11})$/;
 
   let govdeBaslangic = 0;
   for(let i = 0; i < satirlar.length; i++){
     if(/^Hisse\s/.test(satirlar[i]) || /^HİSSE SENETLERİ/.test(satirlar[i])) govdeBaslangic = i + 1;
   }
 
-  const veriSatirIndeksleri = [];
-  satirlar.forEach((s, i) => { if(i >= govdeBaslangic && veriSatirRegex.test(s)) veriSatirIndeksleri.push(i); });
+  const kayitlar = [];
+  for(let i = govdeBaslangic; i < satirlar.length; i++){
+    if(/^GRUP TOPLAMI/.test(satirlar[i])) break;
+    const m = satirlar[i].match(veriSatirRegex);
+    if(!m) continue;
+    let isin = m[1] || null;
+    if(!isin && i+1 < satirlar.length && isinTekBasinaRegex.test(satirlar[i+1])){
+      isin = satirlar[i+1].match(isinTekBasinaRegex)[1];
+    }
+    if(!isin) continue;
+    kayitlar.push({ satirIndeks: i, isin, kalanMetin: m[2] });
+  }
 
   const sonuc = [];
-  for(let k = 0; k < veriSatirIndeksleri.length; k++){
-    const i = veriSatirIndeksleri[k];
-    const m = satirlar[i].match(veriSatirRegex);
-    const isin = m[1];
-    const kalan = fpTarihleriMaskele(m[2]);
-    const sayilar = (kalan.match(/[\d.,]+/g) || []).map(fpTurkceOndalikCoz);
+  for(let k = 0; k < kayitlar.length; k++){
+    const { satirIndeks: i, isin, kalanMetin } = kayitlar[k];
+    const kalan = fpTarihleriMaskele(kalanMetin);
+    const sayilar = (kalan.match(/-?[\d.,]+/g) || []).map(fpTurkceOndalikCoz);
 
-    const oncekiVeriSatiri = k > 0 ? veriSatirIndeksleri[k-1] : govdeBaslangic - 1;
+    const oncekiVeriSatiri = k > 0 ? kayitlar[k-1].satirIndeks : govdeBaslangic - 1;
     let blokBaslangic = oncekiVeriSatiri + 1;
-    while(blokBaslangic < i && /GRUP TOPLAMI|III-FON|HİSSE SENETLERİ|^Hisse\s/.test(satirlar[blokBaslangic])) blokBaslangic++;
+    while(blokBaslangic < i && /GRUP TOPLAMI|III-FON|HİSSE SENETLERİ|^Hisse\s|^TR[A-Z0-9]{10,11}$/.test(satirlar[blokBaslangic])) blokBaslangic++;
     const hisseKodu = (satirlar[blokBaslangic] || "").split(/\s+/)[0];
     if(!/^[A-ZÇĞİÖŞÜ]{3,6}$/.test(hisseKodu)) continue;
 
@@ -658,7 +681,29 @@ function fpKapPortfoyAyristir(metin){
     if(!uc) continue;
     sonuc.push({ kod: hisseKodu, isin, agirlik: uc.grupYuzde });
   }
+
+  // ISIN çapraz kontrolü: aynı ISIN'e sahip kayıtlar aynı hisse koduna
+  // sahip olmalı (bkz. yukarıdaki not #3).
+  const isinToKod = {};
+  for(const h of sonuc){ if(!isinToKod[h.isin]) isinToKod[h.isin] = h.kod; }
+  for(const h of sonuc){ if(h.kod !== isinToKod[h.isin]) h.kod = isinToKod[h.isin]; }
+
   return sonuc;
+}
+
+// Aynı hissenin farklı alım tarihlerindeki satırlarını (fpKapPortfoyAyristir
+// HAM/satır bazında döner — bkz. yukarıdaki THF örneği: TERA iki ayrı satır
+// olarak 6,89% ve 1,93% ağırlıkla geçiyordu) tek bir kayda toplar. Bu adım
+// olmadan kullanıcıya "77 hisse" yerine "~120 satır (bazıları tekrarlı)"
+// gösterilirdi — AI Tahmini hesabı matematiksel olarak etkilenmez (toplama
+// zaten komütatif) ama Portföy Dağılımı ekranı kafa karıştırıcı olurdu.
+function fpHisseleriTopla(hamSatirlar){
+  const topla = {};
+  for(const h of hamSatirlar){
+    if(!topla[h.kod]) topla[h.kod] = { kod: h.kod, isin: h.isin, agirlik: 0 };
+    topla[h.kod].agirlik += h.agirlik;
+  }
+  return Object.values(topla).sort((a,b) => b.agirlik - a.agirlik);
 }
 
 // ── Ana fonksiyon: bir fon için portföy dağılımını güncelle veya koru ────
@@ -712,7 +757,8 @@ async function fpFonPortfoyuGuncelle(fonKodu, teshis){
 
     const pdfUrl = await fpPdfLinkiBul(disclosureIndex);
     const metin = await fpPdfMetneCevir(pdfUrl);
-    const hisseler = fpKapPortfoyAyristir(metin);
+    const hamSatirlar = fpKapPortfoyAyristir(metin);
+    const hisseler = fpHisseleriTopla(hamSatirlar);
 
     if(hisseler.length === 0){
       teshis[fonKodu] = { durum: "ayristirma_bos", yayinTarihi, pdfUrl, eskiKorundu: !!eskiKayit };
