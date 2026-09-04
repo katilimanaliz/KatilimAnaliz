@@ -3139,7 +3139,7 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri 
   // kapatabilir — buton ve filtre mantığı DEĞİŞMEDİ, sadece başlangıç durumu.
   // Diğer filtreler (siraBy, endeksFiltre) de kalıcı değil; bu da onlarla
   // TUTARLI — ekran her açıldığında varsayılana döner.
-  const [sadeceKatilim, setSadeceKatilim] = useState(true);
+  const [sadeceKatilim, setSadeceKatilim] = useState(false);
   const [siraBy, setSiraBy]             = useState<"degisim1g"|"degisim1h"|"degisim1a"|"degisim1y"|"fk"|"pddd"|"roe"|"temetu"|"hacim">("degisim1g");
   const [siraDir, setSiraDir]           = useState<1|-1>(-1); // Değişim için azalan başlasın
   const [secilen, setSecilen]           = useState<any>(null);
@@ -3959,9 +3959,30 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
   //     Bu, zaten seyrek olan bir kullanıcı eylemi — arka plan taraması değil.
   const [fonAdKategoriMap, setFonAdKategoriMap] = useState<Record<string, { ad: string; kategori: string }>>({});
 
+  // ── PİLOT FONLAR İÇİN SABİT İSİM YEDEĞİ (2026-09-04) ────────────────────
+  // 9 pilot fonun adı, Fonoloji'nin KENDİ verisinden (fonoloji.com/fon/<kod>)
+  // teyit edilip buraya sabitlendi — kullanıcı Fonoloji kota/429 sıkışıklığı
+  // yaşadığında bile isimler ANINDA görünür, ağ isteğine gerek kalmaz.
+  // Aşağıdaki useEffect bu haritada olan kodlar için hiç istek ATMIYOR —
+  // hem kullanıcı deneyimi hem kota tasarrufu. Kullanıcının "Fon Ekle" ile
+  // eklediği EKSTRA fonlar bu haritada yoksa normal akışa (adKategori ucu)
+  // düşmeye devam eder.
+  const FON_TAHMIN_ISIM_YEDEK: Record<string, string> = {
+    DFI: "Atlas Portföy Serbest Fon",
+    TMV: "Tera Portföy Algoritmik Stratejiler Serbest Fon",
+    TLY: "Tera Portföy Birinci Serbest Fon",
+    KHA: "Pardus Portföy İkinci Hisse Senedi (TL) Fonu (Hisse Senedi Yoğun Fon)",
+    THF: "Tera Portföy Hisse Senedi (TL) Fonu (Hisse Senedi Yoğun Fon)",
+    DOH: "Tera Portföy Dördüncü Hisse Senedi Serbest (TL) Fon (Hisse Senedi Yoğun Fon)",
+    PUK: "Pusula Portföy Katılım Hisse Senedi (TL) Fonu (Hisse Senedi Yoğun Fon)",
+    PHE: "Pusula Portföy Hisse Senedi Fonu (Hisse Senedi Yoğun Fon)",
+    PBR: "Pusula Portföy Birinci Değişken Fon",
+  };
+
   useEffect(() => {
     takipListesi.forEach((kod) => {
       if (fonAdKategoriMap[kod]) return;
+      if (FON_TAHMIN_ISIM_YEDEK[kod]) return; // sabit yedekte var — ağa hiç gitme
       // İstemci tarafı önbellek KASITLI OLARAK yok: Fonoloji kotasını zaten
       // backend'deki 180 günlük KV önbelleği çözüyor (bir kez öğrenilen ad,
       // TÜM cihazlar için Fonoloji'ye gitmeden dönüyor) — cihaz bazlı bir
@@ -3980,10 +4001,14 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
 
   const birlesikFonAdMap = useMemo(() => {
     const m: Record<string, string> = { ...fonAdMap };
+    for (const kod of Object.keys(FON_TAHMIN_ISIM_YEDEK)) {
+      if (!m[kod]) m[kod] = FON_TAHMIN_ISIM_YEDEK[kod];
+    }
     for (const kod of Object.keys(fonAdKategoriMap)) {
       if (!m[kod] && fonAdKategoriMap[kod]?.ad) m[kod] = fonAdKategoriMap[kod].ad;
     }
     return m;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fonAdMap, fonAdKategoriMap]);
 
   // Fon Detay ekranını açmak için TAM veri — sadece tıklandığı anda çekilir
@@ -3991,15 +4016,25 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
   const [fonDetayAcikYukleniyor, setFonDetayAcikYukleniyor] = useState(false);
   const fonDetayAcVeGit = async (kod: string) => {
     setFonDetayAcikYukleniyor(true);
+    // İstemci tarafı zaman aşımı: sunucu (kota sıkışıklığı / paylaşılan hız
+    // sıralayıcısı yüzünden) normalden uzun sürerse, fetch'in kendi varsayılan
+    // zaman aşımına (dakikalarca sürebilir) kadar beklemek yerine 10 sn'de
+    // pes edip eski akışa düşülür — "Açılıyor..." ekranda asılı kalmasın diye.
+    const controller = new AbortController();
+    const zamanAsimi = setTimeout(() => controller.abort(), 10000);
     try {
-      const r = await fetch(`${API_BASE}/api/tefas-proxy?detay=1&kod=${kod}`);
+      const r = await fetch(`${API_BASE}/api/tefas-proxy?detay=1&kod=${kod}`, { signal: controller.signal });
       const d = await r.json();
+      clearTimeout(zamanAsimi);
       setFonDetayAcikYukleniyor(false);
       if (d.success && onFonDetayAc) { setAcikKod(null); onFonDetayAc(d); return; }
-    } catch {}
+    } catch {
+      clearTimeout(zamanAsimi);
+    }
     setFonDetayAcikYukleniyor(false);
     setAcikKod(null);
-    // Tam veri alınamazsa eski yola (katılım-filtreli Getiri İzleme aramasına) düş.
+    // Tam veri alınamazsa (hata veya zaman aşımı) eski yola (katılım-filtreli
+    // Getiri İzleme aramasına) düş.
     onSecim?.("fon", kod);
   };
 
@@ -4097,6 +4132,30 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
     return sonuc.sort((a, b) => b.tahmin - a.tahmin);
   }, [holdings, hisseDegisimMap, takipListesi]);
 
+  // ── FLAŞ EFEKTİ (2026-09-04) — BİST ekranındaki aynı desen ─────────────────
+  // Tahmin değeri her güncellendiğinde (5 sn'lik canlı döngüde), değişimin
+  // yönüne göre satırda kısa bir renkli flaş gösteriliyor — kullanıcı sayının
+  // "canlı" olduğunu, sadece statik bir renkten değil, gerçekten değiştiğini
+  // hissetsin diye. BistHisseTarayici'deki oncekiFiyatRef/flashMap deseninin
+  // birebir aynısı.
+  const oncekiTahminRef = useRef<Record<string, number>>({});
+  const [tahminFlashMap, setTahminFlashMap] = useState<Record<string, "up" | "down">>({});
+  useEffect(() => {
+    const yeniFlash: Record<string, "up" | "down"> = {};
+    for (const t of tahminler) {
+      const onceki = oncekiTahminRef.current[t.kod];
+      if (onceki != null && t.tahmin !== onceki) {
+        yeniFlash[t.kod] = t.tahmin > onceki ? "up" : "down";
+      }
+      oncekiTahminRef.current[t.kod] = t.tahmin;
+    }
+    if (Object.keys(yeniFlash).length > 0) {
+      setTahminFlashMap(yeniFlash);
+      const zamanlayici = setTimeout(() => setTahminFlashMap({}), 900);
+      return () => clearTimeout(zamanlayici);
+    }
+  }, [tahminler]);
+
   // Veri henüz gelmediyse widget'ı hiç gösterme — boş/yarım kart yok.
   if (tahminler.length === 0) return null;
 
@@ -4111,6 +4170,9 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
         <span style={{ fontSize: 9.5, fontWeight: 700, color: C.green, textTransform: "uppercase", letterSpacing: 0.3 }}>
           Yapay Zeka Tahmini
         </span>
+        <span style={{ fontSize: 9, fontWeight: 600, color: WA(0.35), textTransform: "none", letterSpacing: 0 }}>
+          · Veri 15 dk gecikmeli
+        </span>
       </div>
       <div style={{ background: (TEMA==="acik"?"#F0F4F8":"#16222E"), borderRadius: 12, border: `1px solid ${WA(0.07)}`, padding: "8px 7px 4px" }}>
         {tahminler.map((t, i) => {
@@ -4121,7 +4183,13 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
             <div
               key={t.kod}
               onClick={() => setAcikKod(t.kod)}
-              style={{ display: "flex", alignItems: "center", padding: "9px 2px", borderBottom: i === tahminler.length - 1 ? "none" : `1px solid ${WA(0.06)}`, cursor: "pointer" }}
+              style={{
+                display: "flex", alignItems: "center", padding: "9px 2px",
+                borderBottom: i === tahminler.length - 1 ? "none" : `1px solid ${WA(0.06)}`,
+                cursor: "pointer",
+                background: tahminFlashMap[t.kod] === "up" ? "rgba(46,204,113,0.14)" : tahminFlashMap[t.kod] === "down" ? "rgba(231,76,60,0.14)" : "transparent",
+                transition: "background 0.6s ease-out",
+              }}
             >
               <div style={{ flex: "1 1 auto", minWidth: 0 }}>
                 <div style={{ fontSize: 14.5, fontWeight: 700, color: C.soft }}>{t.kod}</div>
