@@ -3979,6 +3979,29 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
     PBR: "Pusula Portföy Birinci Değişken Fon",
   };
 
+  // ── FON YÖNETİM ŞİRKETİ LOGOLARI (2026-09-04) ───────────────────────────
+  // Resmi şirket sitelerinden alınan gerçek logo URL'leri — dosya
+  // indirilmiyor, doğrudan kaynağa bağlanılıyor (hotlink). Sadece 9 pilot
+  // fonun yönetim şirketleri kapsanıyor (Atlas, Tera, Pardus, Pusula).
+  // Görsel yüklenemezse (site logosunu değiştirir/kaldırırsa) onError ile
+  // sessizce gizleniyor — kırık resim ikonu görünmesin diye.
+  const FON_SIRKET_LOGO: Record<string, string> = {
+    Atlas: "https://www.atlasportfoy.com/media/img/atlas-portfoy-logo.png",
+    Tera: "https://www.teraportfoy.com/img/logo.svg",
+    Pardus: "https://pardusportfoy.com/wp-content/uploads/2026/02/PARDUS-PORTFOY-LOGO-fav.png",
+    Pusula: "https://www.pusulaportfoy.com.tr/images/logo.svg",
+  };
+  const FON_KOD_SIRKET: Record<string, string> = {
+    DFI: "Atlas",
+    TMV: "Tera", THF: "Tera", DOH: "Tera", TLY: "Tera",
+    KHA: "Pardus",
+    PUK: "Pusula", PHE: "Pusula", PBR: "Pusula",
+  };
+  const fonLogoUrl = (kod: string): string | null => {
+    const sirket = FON_KOD_SIRKET[kod];
+    return sirket ? FON_SIRKET_LOGO[sirket] : null;
+  };
+
   useEffect(() => {
     takipListesi.forEach((kod) => {
       if (fonAdKategoriMap[kod]) return;
@@ -4191,6 +4214,14 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
                 transition: "background 0.6s ease-out",
               }}
             >
+              {fonLogoUrl(t.kod) && (
+                <img
+                  src={fonLogoUrl(t.kod)!}
+                  alt=""
+                  style={{ width: 28, height: 28, borderRadius: 7, objectFit: "contain", background: "#fff", padding: 3, marginRight: 8, flexShrink: 0, border: `1px solid ${WA(0.08)}` }}
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                />
+              )}
               <div style={{ flex: "1 1 auto", minWidth: 0 }}>
                 <div style={{ fontSize: 14.5, fontWeight: 700, color: C.soft }}>{t.kod}</div>
                 <div style={{ fontSize: 10.5, fontWeight: 600, color: WA(0.45), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textTransform: "uppercase" }}>
