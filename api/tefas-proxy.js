@@ -95,7 +95,7 @@
 export const config = { maxDuration: 280 };
 
 import { Redis } from "@upstash/redis";
-import { fonVerisiCek, tumFonlarVerisiCek, ŞÜPHELİ_EŞİK, siraliBekle, mapFon, sonTakasGunuAralik, VAKIF_KODLARI } from "./_lib/fonFetch.js";
+import { fonVerisiCek, ŞÜPHELİ_EŞİK, siraliBekle, mapFon, sonTakasGunuAralik, VAKIF_KODLARI } from "./_lib/fonFetch.js";
 import { kilitliCalistir } from "./_lib/kilitliOnbellek.js";
 
 // Vercel'in enjekte ettiği env var adı entegrasyon şekline göre değişebiliyor,
@@ -445,6 +445,59 @@ async function fonTahminSnapshotCalistir(req, res) {
   return res.status(200).json({ success: true, tarih: bugun, sonuclar });
 }
 
+// ── FON AD/KATEGORİ — HAFİF, UZUN ÖMÜRLÜ UÇ (2026-09-04 eklendi) ────────────
+// Fon Tahminleri widget'ının kod altında fon adını göstermek için sürekli
+// (arka planda, kullanıcı hiçbir şeye tıklamadan) `?detay=1`'i çağırması,
+// o ucun paylaşılan 15 dakikalık KV önbelleğini (Portföyüm'ün CANLI fiyat
+// ihtiyacı için ayarlanmış) 9 fon için sürekli tetikleyip günde ~864 istek/
+// aylık ~26.000'e kadar çıkabiliyordu (aylık kota 15.000).
+//
+// Fon adı/kategorisi PRATİKTE HİÇ DEĞİŞMEZ — bu yüzden AYRI, çok daha uzun
+// ömürlü (24 saat) bir KV anahtarında tutuluyor. `?detay=1`'in paylaşılan
+// önbelleğine DOKUNULMUYOR (Portföyüm'ün tazelik ihtiyacı bozulmasın).
+// Fon adı/kategorisi pratikte hiç değişmiyor — 180 gün (yaklaşık 6 ay) gibi
+// çok uzun bir süre tutuluyor. Tamamen süresiz (ex olmadan) de olabilirdi,
+// ama ileride veri şekli değişirse kendiliğinden bir gün tazelensin diye
+// yine de bir üst sınır bırakıldı.
+const FON_ADKATEGORI_CACHE_TTL_SANIYE = 180 * 24 * 60 * 60; // 180 gün
+
+async function fonAdKategoriGetir(req, res) {
+  const kod = String(req.query?.kod || "").toUpperCase().trim();
+  if (!kod) return res.status(400).json({ success: false, error: "kod parametresi gerekli" });
+
+  const cacheAnahtar = `fon:adkategori:${kod}`;
+  try {
+    const onbellek = await kv.get(cacheAnahtar).catch(() => null);
+    if (onbellek) {
+      res.setHeader("Cache-Control", "max-age=0, s-maxage=3600, stale-while-revalidate=3600");
+      return res.status(200).json(onbellek);
+    }
+  } catch {}
+
+  const API_KEY = process.env.FONOLOJI_KEY;
+  if (!API_KEY) return res.status(500).json({ success: false, error: "FONOLOJI_KEY tanımlı değil" });
+
+  try {
+    await siraliBekle();
+    const r = await fetch(`https://fonoloji.com/v1/funds/${encodeURIComponent(kod)}`, {
+      headers: { "X-API-Key": API_KEY, "Accept": "application/json" },
+    });
+    if (!r.ok) return res.status(r.status).json({ success: false, error: `Fonoloji ${r.status}` });
+    const d = await r.json().catch(() => null);
+    const ham = d?.fund ?? d;
+    if (!ham || !ham.code) return res.status(404).json({ success: false, error: "Fon bulunamadı" });
+
+    const paket = { success: true, kod: ham.code, ad: ham.name || "", kategori: ham.category || ham.fund_type || "" };
+    try { await kv.set(cacheAnahtar, paket, { ex: FON_ADKATEGORI_CACHE_TTL_SANIYE }); } catch {}
+
+    res.setHeader("Cache-Control", "max-age=0, s-maxage=3600, stale-while-revalidate=3600");
+    return res.status(200).json(paket);
+  } catch (e) {
+    res.setHeader("Cache-Control", "no-store");
+    return res.status(500).json({ success: false, error: String(e.message || e) });
+  }
+}
+
 async function fonDetayGetir(req, res) {
   const kod = String(req.query?.kod || "").toUpperCase().trim();
   if (!kod) return res.status(400).json({ success: false, error: "kod parametresi gerekli" });
@@ -789,36 +842,16 @@ async function herkesOku(req, res) {
   }
 }
 
-// ── TÜM FONLAR — KEŞİF TEST UCU (2026-09-04, GEÇİCİ) ────────────────────────
-// KV'ye YAZMAZ, sadece Fonoloji'nin büyük-limit tek istek deseninin tüm
-// evren için işe yarayıp yaramadığını gösterir. "Tümü" özelliği bu sonuca
-// göre şekillenecek; sonuç doğrulanınca bu uç ya kalıcı bir cron'a dönüşecek
-// ya da (kırpılma varsa) farklı bir yaklaşım konuşulacak.
-async function tumFonlarTestEt(req, res) {
-  const limit = req.query?.limit ? parseInt(req.query.limit, 10) : 5000;
-  try {
-    const sonuc = await tumFonlarVerisiCek(limit);
-    const { data, ...teshis } = sonuc;
-    return res.status(200).json({
-      ...teshis,
-      ornekIlk5: (data || []).slice(0, 5).map((f) => ({ kod: f.kod, ad: f.ad, kategori: f.kategori })),
-      ornekSon5: (data || []).slice(-5).map((f) => ({ kod: f.kod, ad: f.ad, kategori: f.kategori })),
-    });
-  } catch (e) {
-    return res.status(500).json({ success: false, error: String(e.message || e) });
-  }
-}
-
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
 
   if (req.query?.gecmis === "1") return fonGecmisGetir(req, res);
   if (req.query?.detay === "1") return fonDetayGetir(req, res);
+  if (req.query?.adKategori === "1") return fonAdKategoriGetir(req, res);
   if (req.query?.holdings === "1") return fonHoldingsGetir(req, res);
   if (req.query?.tahminGecmis === "1") return tahminGecmisGetir(req, res);
   if (req.query?.fonTahminListesi === "1") return fonTahminListesiGetir(req, res);
   if (req.query?.fonTahminEkle === "1") return fonTahminEkle(req, res);
-  if (req.query?.tumFonlarTest === "1") return tumFonlarTestEt(req, res);
   // Ayrı sorgu parametresiyle tetiklenir (cron-job.org'dan Bearer token ile) —
   // genel ?cron=1 dalıyla ÇAKIŞMAZ, kendi auth kontrolünü kendi yapar.
   if (req.query?.fonTahminSnapshot === "1") return fonTahminSnapshotCalistir(req, res);

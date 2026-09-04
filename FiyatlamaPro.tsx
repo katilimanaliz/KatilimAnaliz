@@ -3826,7 +3826,7 @@ const FON_TAHMIN_HOLDINGS_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 saat
 // (böylece bir sonraki açılışta backend yanıtı beklemeden anında gösterilir).
 const FON_TAHMIN_LISTE_LOCALSTORAGE_KEY = "fonTahminListesi";
 
-function FonTahminleriWidget({ nav, onSecim }: { nav: (sc: string) => void; onSecim?: (tur: "hisse" | "fon", sembol: string) => void }) {
+function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string) => void; onSecim?: (tur: "hisse" | "fon", sembol: string) => void; onFonDetayAc?: (fon: any) => void }) {
   const CACHE_TTL = 5 * 60 * 1000;
 
   const okuCache = (key: string): any[] => {
@@ -3935,37 +3935,73 @@ function FonTahminleriWidget({ nav, onSecim }: { nav: (sc: string) => void; onSe
   // sadece KATILIM BANKACILIĞI UYUMLU fonları içeriyor (uygulamanın temel
   // filtresi) — pilot listedeki bazı fonlar (ör. konvansiyonel serbest
   // fonlar) bu filtreye girmediği için fonAdMap'te adları hiç bulunamıyordu
-  // (canlıda doğrulandı: PUK dışında hiçbiri eşleşmedi). Eksik kalanlar için
-  // katılım filtresine BAKMAKSIZIN herhangi bir fonu döndüren `?detay=1`
-  // ucundan tek tek tamamlanıyor, istemci tarafında kalıcı cache'leniyor
-  // (fon adı neredeyse hiç değişmez).
-  const [ekstraFonAdlari, setEkstraFonAdlari] = useState<Record<string, string>>({});
+  // (canlıda doğrulandı: PUK dışında hiçbiri eşleşmedi).
+  //
+  // ⚠️ AYNI SORUN FON DETAY AÇILIŞINDA DA VAR (2026-09-04 ikinci bulgu):
+  // "Fon detayına git" tıklaması irHisseFonDetay → Yatırım Fonları Getiri
+  // İzleme ekranına gidip fonu ORADAKİ (yine katılım filtreli) `fonlar`
+  // listesinde arıyordu — pilot fonların çoğu orada da yok, ekran "Yükleniyor…"
+  // durumunda takılı kalıyordu (kullanıcı GKH ile karşılaştırıp bildirdi).
+  //
+  // ⚠️ İLK ÇÖZÜM KOTA AÇISINDAN YANLIŞTI (2026-09-04 üçüncü düzeltme): arka
+  // planda TÜM 9 fon için sürekli `?detay=1` (tam detay, canlı fiyat dahil)
+  // çekmek, o ucun PAYLAŞILAN 15 dakikalık sunucu önbelleğini (Portföyüm'ün
+  // CANLI fiyat ihtiyacı için ayarlanmış) tetikleyip günde ~864 isteğe (aylık
+  // ~26.000, kota 15.000) çıkabiliyordu — istemci tarafı önbellek süresini
+  // uzatmak bunu ÇÖZMÜYORDU çünkü darboğaz sunucu tarafındaydı.
+  //
+  // DOĞRU ÇÖZÜM — İKİ AYRI İHTİYAÇ, İKİ AYRI UÇ:
+  //  1) Widget listesinde SADECE İSİM göstermek için → `?adKategori=1`,
+  //     24 SAATLİK AYRI bir sunucu önbelleğinde (Portföyüm'ün 15 dk'lık
+  //     önbelleğine hiç dokunmuyor). Arka planda, sessizce, 9 fon için.
+  //  2) Fon Detay ekranını GERÇEKTEN açmak için (kullanıcı koda tıkladığında)
+  //     → `?detay=1` (canlı fiyat dahil TAM veri), SADECE O AN, tek seferlik.
+  //     Bu, zaten seyrek olan bir kullanıcı eylemi — arka plan taraması değil.
+  const [fonAdKategoriMap, setFonAdKategoriMap] = useState<Record<string, { ad: string; kategori: string }>>({});
 
   useEffect(() => {
-    const eksikler = takipListesi.filter((kod) => !fonAdMap[kod] && !ekstraFonAdlari[kod]);
-    eksikler.forEach((kod) => {
-      const cacheKey = `fon_ad_${kod}`;
-      try {
-        const onbellek = sessionStorage.getItem(cacheKey);
-        if (onbellek) { setEkstraFonAdlari((m) => ({ ...m, [kod]: onbellek })); return; }
-      } catch {}
-      fetch(`${API_BASE}/api/tefas-proxy?detay=1&kod=${kod}`)
+    takipListesi.forEach((kod) => {
+      if (fonAdKategoriMap[kod]) return;
+      // İstemci tarafı önbellek KASITLI OLARAK yok: Fonoloji kotasını zaten
+      // backend'deki 180 günlük KV önbelleği çözüyor (bir kez öğrenilen ad,
+      // TÜM cihazlar için Fonoloji'ye gitmeden dönüyor) — cihaz bazlı bir
+      // katman eklemek kotayı etkilemez, sadece gereksiz karmaşıklık katardı.
+      fetch(`${API_BASE}/api/tefas-proxy?adKategori=1&kod=${kod}`)
         .then((r) => r.json())
         .then((d) => {
-          if (d.success && d.ad) {
-            setEkstraFonAdlari((m) => ({ ...m, [kod]: d.ad }));
-            try { sessionStorage.setItem(cacheKey, d.ad); } catch {}
+          if (d.success) {
+            setFonAdKategoriMap((m) => ({ ...m, [kod]: { ad: d.ad || "", kategori: d.kategori || "" } }));
           }
         })
         .catch(() => {});
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [takipListesi, fonAdMap]);
+  }, [takipListesi]);
 
-  const birlesikFonAdMap = useMemo(
-    () => ({ ...ekstraFonAdlari, ...fonAdMap }),
-    [ekstraFonAdlari, fonAdMap]
-  );
+  const birlesikFonAdMap = useMemo(() => {
+    const m: Record<string, string> = { ...fonAdMap };
+    for (const kod of Object.keys(fonAdKategoriMap)) {
+      if (!m[kod] && fonAdKategoriMap[kod]?.ad) m[kod] = fonAdKategoriMap[kod].ad;
+    }
+    return m;
+  }, [fonAdMap, fonAdKategoriMap]);
+
+  // Fon Detay ekranını açmak için TAM veri — sadece tıklandığı anda çekilir
+  // (bkz. yukarıdaki not), bu yüzden küçük bir yüklenme durumu tutuluyor.
+  const [fonDetayAcikYukleniyor, setFonDetayAcikYukleniyor] = useState(false);
+  const fonDetayAcVeGit = async (kod: string) => {
+    setFonDetayAcikYukleniyor(true);
+    try {
+      const r = await fetch(`${API_BASE}/api/tefas-proxy?detay=1&kod=${kod}`);
+      const d = await r.json();
+      setFonDetayAcikYukleniyor(false);
+      if (d.success && onFonDetayAc) { setAcikKod(null); onFonDetayAc(d); return; }
+    } catch {}
+    setFonDetayAcikYukleniyor(false);
+    setAcikKod(null);
+    // Tam veri alınamazsa eski yola (katılım-filtreli Getiri İzleme aramasına) düş.
+    onSecim?.("fon", kod);
+  };
 
 
   const listeYaz = (liste: string[]) => {
@@ -4149,7 +4185,8 @@ function FonTahminleriWidget({ nav, onSecim }: { nav: (sc: string) => void; onSe
           hisseDegisimMap={hisseDegisimMap}
           tahminVeri={acikTahminVeri}
           onKapat={() => setAcikKod(null)}
-          onFonDetay={() => { const k = acikKod; setAcikKod(null); onSecim?.("fon", k); }}
+          onFonDetay={() => { if (acikKod) fonDetayAcVeGit(acikKod); }}
+          fonDetayYukleniyor={fonDetayAcikYukleniyor}
         />
       )}
     </div>
@@ -4159,7 +4196,7 @@ function FonTahminleriWidget({ nav, onSecim }: { nav: (sc: string) => void; onSe
 // ─── FON TAHMİN DETAY MODALI — AI Tahmin Ağı / Portföy Dağılımı / Tahmin
 // Geçmişi (2026-09-04 eklendi) ────────────────────────────────────────────
 function FonTahminDetayModal({
-  kod, fonAdi, holdings, hisseDegisimMap, tahminVeri, onKapat, onFonDetay,
+  kod, fonAdi, holdings, hisseDegisimMap, tahminVeri, onKapat, onFonDetay, fonDetayYukleniyor,
 }: {
   kod: string;
   fonAdi?: string | null;
@@ -4168,6 +4205,7 @@ function FonTahminDetayModal({
   tahminVeri: { tahmin: number; kapsam: number; donem: string | null } | null | undefined;
   onKapat: () => void;
   onFonDetay: () => void;
+  fonDetayYukleniyor?: boolean;
 }) {
   const [sekme, setSekme] = useState<"ag" | "dagilim" | "gecmis">("ag");
   const [gecmis, setGecmis] = useState<any[] | null>(null);
@@ -4208,10 +4246,12 @@ function FonTahminDetayModal({
       <div style={{width:"100%",maxWidth:680,margin:"0 auto",display:"flex",flexDirection:"column",height:"100%"}}>
         {/* Başlık — koda tıklanınca fon detay ekranına gider, altında fon adı yazar */}
         <div style={{padding:"calc(16px + env(safe-area-inset-top,0px)) 20px 12px",borderBottom:`1px solid ${WA(0.1)}`,display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexShrink:0}}>
-          <div onClick={onFonDetay} style={{cursor:"pointer",flex:1,minWidth:0}}>
+          <div onClick={fonDetayYukleniyor ? undefined : onFonDetay} style={{cursor:fonDetayYukleniyor?"default":"pointer",flex:1,minWidth:0,opacity:fonDetayYukleniyor?0.6:1}}>
             <div style={{display:"flex",alignItems:"center",gap:4}}>
               <span style={{fontSize:16,fontWeight:800,color:C.label}}>{kod}</span>
-              <span style={{fontSize:14,color:WA(0.4)}}>›</span>
+              {fonDetayYukleniyor
+                ? <span style={{fontSize:11,color:WA(0.4)}}>Açılıyor…</span>
+                : <span style={{fontSize:14,color:WA(0.4)}}>›</span>}
             </div>
             <p style={{margin:"2px 0 0",fontSize:11,color:WA(0.55),overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
               {fonAdi ?? "Fon detayına git"}
@@ -25077,7 +25117,7 @@ function App(){
             <KatilimEndeksiTopHareketliler nav={nav} onSecim={irHisseFonDetay}/>
 
             {/* Fon Tahminleri (AI) — pilot 9 fon, 2026-09-03 eklendi */}
-            <FonTahminleriWidget nav={nav} onSecim={irHisseFonDetay}/>
+            <FonTahminleriWidget nav={nav} onSecim={irHisseFonDetay} onFonDetayAc={(fon:any)=>{setPendingFonDetay(fon); nav("fonDetay","home");}}/>
 
             {/* Finansal Göstergeler — ana sayfa özeti (Seçenek A: ikonlu satırlar) */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:18,marginBottom:8}}>
