@@ -4412,7 +4412,7 @@ function FonTahminDetayModal({
                 <div style={{width:62,textAlign:"right"}}>Etki</div>
                 <div style={{width:52,textAlign:"right"}}>Ağırlık</div>
               </div>
-              {siraliKalemler.map((k) => {
+              {siraliKalemler.filter((k) => k.tur === "stock").map((k) => {
                 const deg = hisseDegisimMap[k.kod];
                 const bilinenFiyat = typeof deg === "number";
                 const degUp = bilinenFiyat && deg >= 0;
@@ -4425,7 +4425,7 @@ function FonTahminDetayModal({
                   <div key={k.kod} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 4px",borderBottom:`1px solid ${WA(0.05)}`}}>
                     <div style={{flex:"1 1 auto",minWidth:0}}>
                       <div style={{fontSize:13,fontWeight:700,color:C.label}}>{k.kod}</div>
-                      <div style={{fontSize:10.5,color:WA(0.45),overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{k.ad ?? (k.tur !== "stock" ? k.tur : "")}</div>
+                      <div style={{fontSize:10.5,color:WA(0.45),overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{k.ad ?? ""}</div>
                     </div>
                     <div style={{width:56,textAlign:"right",fontSize:12,fontWeight:600,color: !bilinenFiyat ? WA(0.35) : degUp ? C.green : C.red}}>
                       {bilinenFiyat ? isaretliYuzde(deg, 2) : "—"}
@@ -4439,6 +4439,49 @@ function FonTahminDetayModal({
                   </div>
                 );
               })}
+
+              {/* ── HİSSE DIŞI KALEMLER (2026-09-04) ─────────────────────────
+                  VIOP/nakit/sabit getiri gibi kalemler artık hisselerle aynı
+                  düz listede KARIŞIK değil, ayrı bir grup başlığı altında.
+                  Aynı kod için olası kısa/uzun pozisyon ikilemesi (ör. VIOP'ta
+                  ayrı bir "-%2" kısa satırı) BURADA TEK SATIRA NETLENİYOR —
+                  kullanıcı isteği: detaylı kısa/uzun pozisyon kırılımı DEĞİL,
+                  sade bir toplam ağırlık gösterilsin. */}
+              {(() => {
+                const digerHam = siraliKalemler.filter((k) => k.tur !== "stock");
+                if (digerHam.length === 0) return null;
+                const netlenmis = {};
+                for (const k of digerHam) {
+                  const anahtar = k.kod || k.tur;
+                  if (!netlenmis[anahtar]) netlenmis[anahtar] = { kod: k.kod, ad: k.ad, tur: k.tur, agirlik: 0 };
+                  netlenmis[anahtar].agirlik += (k.agirlik ?? 0);
+                }
+                const digerKalemleri = Object.values(netlenmis).sort((a, b) => b.agirlik - a.agirlik);
+                const digerToplamAgirlik = digerKalemleri.reduce((a, k) => a + k.agirlik, 0);
+                return (
+                  <>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"18px 4px 10px"}}>
+                      <span style={{fontSize:13,fontWeight:700,color:C.label}}>
+                        Diğer Kalemler <span style={{color:WA(0.4),fontWeight:600}}>({digerKalemleri.length})</span>
+                      </span>
+                      <span style={{fontSize:13,fontWeight:700,color:WA(0.6)}}>%{digerToplamAgirlik.toFixed(1)}</span>
+                    </div>
+                    {digerKalemleri.map((k) => (
+                      <div key={k.kod || k.tur} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 4px",borderBottom:`1px solid ${WA(0.05)}`}}>
+                        <div style={{flex:"1 1 auto",minWidth:0}}>
+                          <div style={{fontSize:13,fontWeight:700,color:C.label}}>{k.kod || k.tur}</div>
+                          <div style={{fontSize:10.5,color:WA(0.45),overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{k.ad ?? k.tur ?? ""}</div>
+                        </div>
+                        <div style={{width:56,textAlign:"right",fontSize:12,fontWeight:600,color:WA(0.35)}}>—</div>
+                        <div style={{width:62,textAlign:"right",fontSize:12,fontWeight:600,color:WA(0.35)}}>—</div>
+                        <div style={{width:52,textAlign:"right",fontSize:12,fontWeight:600,color:WA(0.6)}}>
+                          %{k.agirlik.toFixed(1)}
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                );
+              })()}
             </div>
           )}
 
