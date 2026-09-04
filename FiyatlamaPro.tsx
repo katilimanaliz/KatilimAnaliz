@@ -4419,7 +4419,9 @@ function FonTahminDetayModal({
                 // Etki = ağırlığın, hissenin günlük değişimi üzerinden fon
                 // tahminine kattığı puan (ağırlık/100 × değişim) — AI Tahmin
                 // Ağı'ndaki ve widget'taki tahmin hesabıyla AYNI formül,
-                // burada kalem bazında gösteriliyor.
+                // burada kalem bazında gösteriliyor. Ağırlık HAM (Fonoloji'den
+                // geldiği gibi) — büyütülmüyor, aşağıdaki VIOP satırı farkı
+                // kapatıyor.
                 const etki = bilinenFiyat ? ((k.agirlik ?? 0) / 100) * deg : null;
                 return (
                   <div key={k.kod} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 4px",borderBottom:`1px solid ${WA(0.05)}`}}>
@@ -4440,45 +4442,36 @@ function FonTahminDetayModal({
                 );
               })}
 
-              {/* ── HİSSE DIŞI KALEMLER (2026-09-04) ─────────────────────────
-                  VIOP/nakit/sabit getiri gibi kalemler artık hisselerle aynı
-                  düz listede KARIŞIK değil, ayrı bir grup başlığı altında.
-                  Aynı kod için olası kısa/uzun pozisyon ikilemesi (ör. VIOP'ta
-                  ayrı bir "-%2" kısa satırı) BURADA TEK SATIRA NETLENİYOR —
-                  kullanıcı isteği: detaylı kısa/uzun pozisyon kırılımı DEĞİL,
-                  sade bir toplam ağırlık gösterilsin. */}
+              {/* ── VIOP / DİĞER (2026-09-04) ─────────────────────────────────
+                  Fonoloji'nin verisinde VIOP/türev kalemlerinin TAMAMI
+                  ağırlık=0 geliyor (kaynak tarafında bilinen bir ayrıştırma
+                  hatası) — bu yüzden 34 anlamsız "%0.0" satırı göstermek
+                  yerine, hisselerin KAPSAMADIĞI kalan pay (100 − hisse
+                  toplamı) TEK bir "VIOP" satırında toplu gösteriliyor. Hisse
+                  ağırlıkları HİÇ değiştirilmiyor (şişirilmiyor) — sadece
+                  eksik kısım adlandırılıp tamamlanıyor. */}
               {(() => {
-                const digerHam = siraliKalemler.filter((k) => k.tur !== "stock");
-                if (digerHam.length === 0) return null;
-                const netlenmis = {};
-                for (const k of digerHam) {
-                  const anahtar = k.kod || k.tur;
-                  if (!netlenmis[anahtar]) netlenmis[anahtar] = { kod: k.kod, ad: k.ad, tur: k.tur, agirlik: 0 };
-                  netlenmis[anahtar].agirlik += (k.agirlik ?? 0);
-                }
-                const digerKalemleri = Object.values(netlenmis).sort((a, b) => b.agirlik - a.agirlik);
-                const digerToplamAgirlik = digerKalemleri.reduce((a, k) => a + k.agirlik, 0);
+                const hisseKalemleri = siraliKalemler.filter((k) => k.tur === "stock");
+                const hisseToplamAgirlik = hisseKalemleri.reduce((a, k) => a + (k.agirlik ?? 0), 0);
+                const viopAgirlik = Math.max(0, 100 - hisseToplamAgirlik);
+                if (viopAgirlik < 0.05) return null; // yuvarlama gürültüsü — göstermeye değmez
                 return (
                   <>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"18px 4px 10px"}}>
-                      <span style={{fontSize:13,fontWeight:700,color:C.label}}>
-                        Diğer Kalemler <span style={{color:WA(0.4),fontWeight:600}}>({digerKalemleri.length})</span>
-                      </span>
-                      <span style={{fontSize:13,fontWeight:700,color:WA(0.6)}}>%{digerToplamAgirlik.toFixed(1)}</span>
+                      <span style={{fontSize:13,fontWeight:700,color:C.label}}>Diğer Kalemler</span>
+                      <span style={{fontSize:13,fontWeight:700,color:WA(0.6)}}>%{viopAgirlik.toFixed(1)}</span>
                     </div>
-                    {digerKalemleri.map((k) => (
-                      <div key={k.kod || k.tur} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 4px",borderBottom:`1px solid ${WA(0.05)}`}}>
-                        <div style={{flex:"1 1 auto",minWidth:0}}>
-                          <div style={{fontSize:13,fontWeight:700,color:C.label}}>{k.kod || k.tur}</div>
-                          <div style={{fontSize:10.5,color:WA(0.45),overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{k.ad ?? k.tur ?? ""}</div>
-                        </div>
-                        <div style={{width:56,textAlign:"right",fontSize:12,fontWeight:600,color:WA(0.35)}}>—</div>
-                        <div style={{width:62,textAlign:"right",fontSize:12,fontWeight:600,color:WA(0.35)}}>—</div>
-                        <div style={{width:52,textAlign:"right",fontSize:12,fontWeight:600,color:WA(0.6)}}>
-                          %{k.agirlik.toFixed(1)}
-                        </div>
+                    <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 4px",borderBottom:`1px solid ${WA(0.05)}`}}>
+                      <div style={{flex:"1 1 auto",minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:700,color:C.label}}>VIOP</div>
+                        <div style={{fontSize:10.5,color:WA(0.45)}}>Vadeli işlemler / nakit / diğer</div>
                       </div>
-                    ))}
+                      <div style={{width:56,textAlign:"right",fontSize:12,fontWeight:600,color:WA(0.35)}}>—</div>
+                      <div style={{width:62,textAlign:"right",fontSize:12,fontWeight:600,color:WA(0.35)}}>—</div>
+                      <div style={{width:52,textAlign:"right",fontSize:12,fontWeight:600,color:WA(0.6)}}>
+                        %{viopAgirlik.toFixed(1)}
+                      </div>
+                    </div>
                   </>
                 );
               })()}
