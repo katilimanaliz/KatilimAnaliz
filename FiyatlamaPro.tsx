@@ -4495,74 +4495,110 @@ function FonTahminDetayModal({
 // hisse fiyatı bilinen kalemin günlük değişim yönü, gri = hisse-dışı kalem
 // (VIOP/nakit/sabit getiri) ya da fiyatı BİST veri izleme kaynağında
 // bulunamayan hisse.
+// ─── FON PORTFÖY TREEMAP — 2026-09-04, radyal ağ görselinin yerine ────────────
+// Eski tasarım (halka/ağ) başka bir uygulamanınkiyle çok benziyordu; kullanıcı
+// tercihiyle treemap'e geçildi: kutu BÜYÜKLÜĞÜ = portföy ağırlığı, RENK = gün
+// içi yön (yeşil/kırmızı). Tek bakışta hem "hangi hisse en büyük" hem "hangisi
+// olumlu/olumsuz" görülüyor — radyal görselde ikisi ayrı katmanlardaydı.
+//
+// Basit "slice-and-dice" (squarify benzeri) yerleşim VİRTÜEL 1000×560 birimlik
+// bir uzayda hesaplanıp yüzdeye çevriliyor — böylece konteynerin gerçek piksel
+// genişliğini ölçmeye (ref/layout effect) gerek kalmadan responsive çalışıyor.
+function fonTreemapYerlesim(
+  kalemler: { agirlik: number }[], x: number, y: number, w: number, h: number
+): { x: number; y: number; w: number; h: number }[] {
+  if (kalemler.length === 0) return [];
+  if (kalemler.length === 1) return [{ x, y, w, h }];
+  const toplam = kalemler.reduce((s, k) => s + (k.agirlik || 0), 0) || 1;
+  let birikmis = 0, kesim = 1;
+  for (let i = 0; i < kalemler.length; i++) {
+    birikmis += kalemler[i].agirlik || 0;
+    if (birikmis >= toplam / 2) { kesim = Math.max(1, i + 1); break; }
+  }
+  const a = kalemler.slice(0, kesim), b = kalemler.slice(kesim);
+  const aToplam = a.reduce((s, k) => s + (k.agirlik || 0), 0);
+  const oran = toplam > 0 ? aToplam / toplam : 0.5;
+  if (w >= h) {
+    const aw = w * oran;
+    return [...fonTreemapYerlesim(a, x, y, aw, h), ...fonTreemapYerlesim(b, x + aw, y, w - aw, h)];
+  } else {
+    const ah = h * oran;
+    return [...fonTreemapYerlesim(a, x, y, w, ah), ...fonTreemapYerlesim(b, x, y + ah, w, h - ah)];
+  }
+}
+
 function FonTahminAgGorseli({ kalemler, hisseDegisimMap, tahmin }: {
   kalemler: any[]; hisseDegisimMap: Record<string, number>; tahmin: number | null;
 }) {
-  const renkli = kalemler.map((k) => {
-    const deg = k.tur === "stock" ? hisseDegisimMap[k.kod] : undefined;
-    const renk = typeof deg !== "number" ? WA(0.25) : deg >= 0 ? C.green : C.red;
-    return { ...k, deg, renk };
-  });
+  const renkli = kalemler
+    .map((k) => {
+      const deg = k.tur === "stock" ? hisseDegisimMap[k.kod] : undefined;
+      const pozitif = typeof deg === "number" ? deg >= 0 : null;
+      const agirlik = typeof k.agirlik === "number" && k.agirlik > 0 ? k.agirlik : 0.1; // 0 ağırlık kutuyu yok eder
+      return { ...k, deg, pozitif, agirlik };
+    })
+    // Çok kalabalık fonlarda (77+ hisse) en küçük dilimler okunaksız kutucuklara
+    // dönüşür — en büyük ~30 kalemle sınırlanıyor, radyal görseldeki 70 sınırının
+    // treemap karşılığı (treemap'te küçük kutular tıklanamayacak kadar ufalıyor).
+    .sort((a, b) => b.agirlik - a.agirlik)
+    .slice(0, 30);
 
-  const ic = renkli.slice(0, 6);
-  const dis = renkli.slice(6, 70); // performans için üst sınır — ~90 kalemli fonlarda bile makul kalır
-
-  // Tam ekran modal daha fazla yer verdiği için görsel biraz büyütüldü.
-  const SIZE = 340, CX = SIZE / 2, CY = SIZE / 2;
-  const ICR = 82, DISR = 148;
-
-  const nokta = (i: number, n: number, r: number) => {
-    const aci = (i / n) * 2 * Math.PI - Math.PI / 2;
-    return { x: CX + r * Math.cos(aci), y: CY + r * Math.sin(aci) };
-  };
+  const VW = 1000, VH = 560, GAP = 4;
+  const kutular = fonTreemapYerlesim(renkli, 0, 0, VW, VH);
 
   return (
-    <div style={{display:"flex",justifyContent:"center",padding:"8px 0 4px"}}>
-      <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
-        {dis.map((k, i) => {
-          const p = nokta(i, dis.length, DISR);
-          return <line key={`l-${k.kod}`} x1={CX} y1={CY} x2={p.x} y2={p.y} stroke={WA(0.06)} strokeWidth={1}/>;
-        })}
-        {ic.map((k, i) => {
-          const p = nokta(i, ic.length, ICR);
-          return <line key={`li-${k.kod}`} x1={CX} y1={CY} x2={p.x} y2={p.y} stroke={WA(0.08)} strokeWidth={1}/>;
-        })}
-
-        <circle cx={CX} cy={CY} r={56} fill="rgba(59,130,246,0.12)" />
-        <text x={CX} y={CY-4} textAnchor="middle" fontSize={17} fontWeight={800} fill={C.label}>
-          {tahmin==null ? "—" : tahmin.toFixed(4)}
-        </text>
-        <text x={CX} y={CY+14} textAnchor="middle" fontSize={9.5} fill={WA(0.5)}>% Yapay zeka tahmini</text>
-
-        {dis.map((k, i) => {
-          const p = nokta(i, dis.length, DISR);
-          // Dış halkada da işaretli yüzde gösterilir — negatifler "-" ile,
-          // pozitifler "+" ile (isaretliYuzde ile TÜM görünümlerde tutarlı).
-          const yuzdeMetni = typeof k.deg === "number" ? isaretliYuzde(k.deg, 1) : null;
+    <div style={{ padding: "8px 0 4px" }}>
+      <div style={{ textAlign: "center", marginBottom: 10 }}>
+        <span style={{ fontSize: 20, fontWeight: 800, color: C.label }}>
+          {tahmin == null ? "—" : isaretliYuzde(tahmin, 4)}
+        </span>
+        <div style={{ fontSize: 10, color: WA(0.5), marginTop: 2 }}>% Yapay zeka tahmini</div>
+      </div>
+      <div style={{ position: "relative", width: "100%", paddingBottom: `${(VH / VW) * 100}%`, borderRadius: 10, overflow: "hidden" }}>
+        {renkli.map((k, i) => {
+          const box = kutular[i];
+          if (!box) return null;
+          const renk = k.pozitif == null ? WA(0.22) : k.pozitif ? C.green : C.red;
+          const cokKucuk = box.w < 60 || box.h < 40; // metni sığdırmayan kutularda yalnızca kod
+          const yuzdeMetni = typeof k.deg === "number"
+            ? isaretliYuzde(k.deg, 2)
+            : (k.tur !== "stock" ? `%${(k.agirlik ?? 0).toFixed(1)}` : null);
           return (
-            <g key={`d-${k.kod}`}>
-              <circle cx={p.x} cy={p.y} r={13} fill={k.renk} opacity={0.85} />
-              <text x={p.x} y={p.y-1} textAnchor="middle" fontSize={6.5} fontWeight={700} fill="#fff">{String(k.kod).slice(0,5)}</text>
-              {yuzdeMetni && (
-                <text x={p.x} y={p.y+8} textAnchor="middle" fontSize={5.5} fontWeight={600} fill="#fff">{yuzdeMetni}</text>
-              )}
-            </g>
+            <div
+              key={k.kod}
+              style={{
+                position: "absolute",
+                left: `${(box.x / VW) * 100}%`, top: `${(box.y / VH) * 100}%`,
+                width: `${(box.w / VW) * 100}%`, height: `${(box.h / VH) * 100}%`,
+                padding: 1,
+              }}
+            >
+              <div style={{
+                width: "100%", height: "100%", background: renk, borderRadius: 3,
+                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                overflow: "hidden", boxSizing: "border-box",
+              }}>
+                <span style={{ fontSize: cokKucuk ? 9 : 12, fontWeight: 700, color: "#fff", whiteSpace: "nowrap" }}>
+                  {k.kod}
+                </span>
+                {!cokKucuk && yuzdeMetni && (
+                  <span style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.9)", marginTop: 1 }}>
+                    {yuzdeMetni}
+                  </span>
+                )}
+              </div>
+            </div>
           );
         })}
-
-        {ic.map((k, i) => {
-          const p = nokta(i, ic.length, ICR);
-          return (
-            <g key={`i-${k.kod}`}>
-              <circle cx={p.x} cy={p.y} r={30} fill={k.renk} opacity={0.9} />
-              <text x={p.x} y={p.y-3} textAnchor="middle" fontSize={11} fontWeight={800} fill="#fff">{k.kod}</text>
-              <text x={p.x} y={p.y+11} textAnchor="middle" fontSize={9} fontWeight={600} fill="#fff">
-                {typeof k.deg === "number" ? isaretliYuzde(k.deg, 2) : (k.tur !== "stock" ? `%${(k.agirlik??0).toFixed(1)}` : "—")}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
+      </div>
+      <div style={{ display: "flex", gap: 14, marginTop: 10, fontSize: 10.5, color: WA(0.5) }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <span style={{ width: 9, height: 9, borderRadius: 2, background: C.green }} /> Değer artışı
+        </span>
+        <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <span style={{ width: 9, height: 9, borderRadius: 2, background: C.red }} /> Değer düşüşü
+        </span>
+      </div>
     </div>
   );
 }
