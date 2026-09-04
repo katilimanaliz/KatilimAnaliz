@@ -95,7 +95,7 @@
 export const config = { maxDuration: 280 };
 
 import { Redis } from "@upstash/redis";
-import { fonVerisiCek, ŞÜPHELİ_EŞİK, siraliBekle, mapFon, sonTakasGunuAralik, VAKIF_KODLARI } from "./_lib/fonFetch.js";
+import { fonVerisiCek, tumFonlarVerisiCek, ŞÜPHELİ_EŞİK, siraliBekle, mapFon, sonTakasGunuAralik, VAKIF_KODLARI } from "./_lib/fonFetch.js";
 import { kilitliCalistir } from "./_lib/kilitliOnbellek.js";
 
 // Vercel'in enjekte ettiği env var adı entegrasyon şekline göre değişebiliyor,
@@ -789,6 +789,26 @@ async function herkesOku(req, res) {
   }
 }
 
+// ── TÜM FONLAR — KEŞİF TEST UCU (2026-09-04, GEÇİCİ) ────────────────────────
+// KV'ye YAZMAZ, sadece Fonoloji'nin büyük-limit tek istek deseninin tüm
+// evren için işe yarayıp yaramadığını gösterir. "Tümü" özelliği bu sonuca
+// göre şekillenecek; sonuç doğrulanınca bu uç ya kalıcı bir cron'a dönüşecek
+// ya da (kırpılma varsa) farklı bir yaklaşım konuşulacak.
+async function tumFonlarTestEt(req, res) {
+  const limit = req.query?.limit ? parseInt(req.query.limit, 10) : 5000;
+  try {
+    const sonuc = await tumFonlarVerisiCek(limit);
+    const { data, ...teshis } = sonuc;
+    return res.status(200).json({
+      ...teshis,
+      ornekIlk5: (data || []).slice(0, 5).map((f) => ({ kod: f.kod, ad: f.ad, kategori: f.kategori })),
+      ornekSon5: (data || []).slice(-5).map((f) => ({ kod: f.kod, ad: f.ad, kategori: f.kategori })),
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: String(e.message || e) });
+  }
+}
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
 
@@ -798,6 +818,7 @@ export default async function handler(req, res) {
   if (req.query?.tahminGecmis === "1") return tahminGecmisGetir(req, res);
   if (req.query?.fonTahminListesi === "1") return fonTahminListesiGetir(req, res);
   if (req.query?.fonTahminEkle === "1") return fonTahminEkle(req, res);
+  if (req.query?.tumFonlarTest === "1") return tumFonlarTestEt(req, res);
   // Ayrı sorgu parametresiyle tetiklenir (cron-job.org'dan Bearer token ile) —
   // genel ?cron=1 dalıyla ÇAKIŞMAZ, kendi auth kontrolünü kendi yapar.
   if (req.query?.fonTahminSnapshot === "1") return fonTahminSnapshotCalistir(req, res);

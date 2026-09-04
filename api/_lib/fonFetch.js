@@ -51,6 +51,21 @@
 // tekil /funds/:code çağırıyor, o fonlar için current_price kesin gelir.
 // Liste taramasından gelenlerde alan yoksa `fiyat` null kalır, frontend
 // bunu zaten "—" göstererek nazikçe karşılıyor.
+//
+// DEĞİŞİKLİK (2026-09-04) — "TÜM FONLAR" KEŞİF ÇEKİMİ EKLENDİ:
+// Yatırım Fonları Getiri İzleme ekranına "Tümü" filtresi eklenmek isteniyor
+// (şu an sadece ?katilim=1 ile gelen katılım fonları gösteriliyor). Eski
+// çok-fazlı tam-tarama mimarisi (yukarıdaki notlar) KESİN OLARAK ÇALIŞMIYOR
+// — sayfalama kırık olduğu için TEKRAR KURULMADI.
+//
+// Bunun yerine katılım taramasında işe yarayan desen denendi: sayfalamaya
+// HİÇ gerek kalmayacak kadar büyük bir `limit` ile TEK istek atmak (434
+// katılım fonu limit=500 ile tek seferde geliyor — 2. sayfaya hiç gidilmiyor,
+// dolayısıyla kırık sayfalama devreye girmiyor). `tumFonlarVerisiCek()` bunu
+// TÜM evren için dener (limit=5000). ⚠️ BU FONKSİYON HENÜZ CANLI TEST
+// EDİLMEDİ — evrenin gerçekten tek sayfaya sığıp sığmadığı (kırpılma var mı,
+// `_meta.capped`) bilinmiyor. KV'ye YAZMIYOR, sadece teşhis döndürüyor;
+// sonuç doğrulanmadan tefas-proxy.js'te kalıcı bir uca/cron'a BAĞLANMADI.
 
 import { Redis } from "@upstash/redis";
 
@@ -519,4 +534,59 @@ async function fonVerisiCek(parcaNo = null) {
   };
 }
 
-export { fonVerisiCek, ŞÜPHELİ_EŞİK, PARCALAR, siraliBekle, mapFon, sonTakasGunuAralik, VAKIF_KODLARI };
+// ═══════════════════════════════════════════════════════════════════════════
+// TÜM FONLAR — KEŞİF ÇEKİMİ (2026-09-04 eklendi, HENÜZ CANLI TEST EDİLMEDİ)
+// ═══════════════════════════════════════════════════════════════════════════
+// "Yatırım Fonları Getiri İzleme" ekranına "Tümü" filtresi eklenmek isteniyor.
+// Eski çok-fazlı tam-tarama mimarisi (dosya başındaki notlar) KESİN OLARAK
+// ÇALIŞMIYOR — sayfalama kırık. Bunun yerine katılım taramasında işe yarayan
+// desen deneniyor: sayfalamaya HİÇ gerek kalmayacak kadar büyük bir `limit`
+// ile TEK istek. Bu fonksiyon KV'ye YAZMAZ, sadece teşhis döndürür — canlı
+// sonuç görülüp değerlendirilmeden kalıcı bir cron'a/uca BAĞLANMAMALI.
+//
+// ⚠️ FİYATSIZ TAMAMLAMA BİLEREK YOK: binlerce fon için tekil tamamlama kota
+// açısından çok pahalı olurdu. İlk keşifte bazı fonların `fiyat`ı null
+// kalabilir — bu, mimarinin işe yarayıp yaramadığını görmeyi engellemez.
+async function tumFonlarVerisiCek(limit = 5000) {
+  const API_KEY = process.env.FONOLOJI_KEY;
+  if (!API_KEY) throw new Error("FONOLOJI_KEY tanımlı değil");
+  const headers = { "X-API-Key": API_KEY, "Accept": "application/json" };
+  const takasAraligi = sonTakasGunuAralik();
+
+  const url = `https://fonoloji.com/v1/funds?limit=${limit}`;
+  const { res, hata } = await fetchTeshisli(url, { headers }, 2, 40000);
+
+  if (!res) {
+    return { basarili: false, hata, kayitSayisi: 0, kirpildi: null, data: [] };
+  }
+
+  const govde = await res.json().catch(() => null);
+  const kayitlar = govde?.items ?? govde?.funds ?? govde?.data ?? (Array.isArray(govde) ? govde : []);
+  const kirpildi = !!(govde?._meta?.capped);
+  const toplamMeta = govde?._meta?.total ?? govde?.total ?? null;
+
+  const tumFonlar = [];
+  const gorulenKodlar = new Set();
+  for (const f of kayitlar) {
+    const kod = f?.code;
+    if (!kod || gorulenKodlar.has(kod)) continue;
+    gorulenKodlar.add(kod);
+    tumFonlar.push(mapFon(f, VAKIF_KODLARI.includes(kod), takasAraligi));
+  }
+
+  return {
+    basarili: true,
+    hata: null,
+    istenenLimit: limit,
+    hamAdet: kayitlar.length,
+    benzersizAdet: tumFonlar.length,
+    kirpildi,
+    toplamMeta, // Fonoloji gerçek evren büyüklüğünü _meta.total gibi bir alanda bildiriyorsa buraya düşer
+    kotaMaliyeti: res.headers.get("x-ratelimit-cost"),
+    kalanAylik: res.headers.get("x-ratelimit-remaining-monthly"),
+    kalanGunluk: res.headers.get("x-ratelimit-remaining-daily"),
+    data: tumFonlar,
+  };
+}
+
+export { fonVerisiCek, tumFonlarVerisiCek, ŞÜPHELİ_EŞİK, PARCALAR, siraliBekle, mapFon, sonTakasGunuAralik, VAKIF_KODLARI };
