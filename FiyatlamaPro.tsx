@@ -4267,7 +4267,7 @@ function FonTahminDetayModal({
                   </div>
                 );
               })()}
-              <div style={{display:"flex",fontSize:10,fontWeight:700,color:WA(0.35),textTransform:"uppercase",padding:"0 4px 8px",borderBottom:`1px solid ${WA(0.08)}`}}>
+              <div style={{display:"flex",gap:8,fontSize:10,fontWeight:700,color:WA(0.35),textTransform:"uppercase",padding:"0 4px 8px",borderBottom:`1px solid ${WA(0.08)}`}}>
                 <div style={{flex:"1 1 auto"}}>Varlık</div>
                 <div style={{width:56,textAlign:"right"}}>Değişim</div>
                 <div style={{width:62,textAlign:"right"}}>Etki</div>
@@ -4283,7 +4283,7 @@ function FonTahminDetayModal({
                 // burada kalem bazında gösteriliyor.
                 const etki = bilinenFiyat ? ((k.agirlik ?? 0) / 100) * deg : null;
                 return (
-                  <div key={k.kod} style={{display:"flex",alignItems:"center",padding:"9px 4px",borderBottom:`1px solid ${WA(0.05)}`}}>
+                  <div key={k.kod} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 4px",borderBottom:`1px solid ${WA(0.05)}`}}>
                     <div style={{flex:"1 1 auto",minWidth:0}}>
                       <div style={{fontSize:13,fontWeight:700,color:C.label}}>{k.kod}</div>
                       <div style={{fontSize:10.5,color:WA(0.45),overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{k.ad ?? (k.tur !== "stock" ? k.tur : "")}</div>
