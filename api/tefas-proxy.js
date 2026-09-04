@@ -155,6 +155,48 @@ const FON_HOLDINGS_CACHE_TTL_SANIYE = 86400; // 24 saat — periyodik veri, gün
 // (fonTahminSnapshotCalistir) AYNI çekim+cache mantığını kullanır — kod
 // tekrarını önlemek için ortak dahili fonksiyona çıkarıldı (2026-09-04).
 // req/res'e bağımlı değildir, sadece veri döner (ya da null).
+// ── ALT FON GÜNLÜK GETİRİSİ (2026-09-04 eklendi) ────────────────────────────
+// Bazı fonlar (ör. DFI) portföylerinin büyük bir kısmını BAŞKA FONLARA
+// yatırıyor (tur: "fund" — ör. DFI'nin %31'i ABG/PSE/BAC/GCD/KVR/PFS'de).
+// Bu alt fonlar için canlı hisse fiyatı gibi bir şey YOK — TEFAS/Fonoloji
+// NAV'ı günde BİR kez (önceki günün kapanışıyla) yayımlıyor. Kullanıcı kararı:
+// bu kalemler için "—" göstermek yerine, alt fonun KENDİ SON AÇIKLANAN GÜNLÜK
+// GETİRİSİNİ (return_1d) kullanarak tahmine dahil edelim — TLREF/repo oranı
+// gibi bir vekil DEĞİL, fonun gerçek dünkü getirisi.
+// TTL 24 saat: zaten günde bir güncellenen bir veri, daha sık sorgulamaya
+// gerek yok. Aynı alt fon birden çok üst fonda geçebilir (ör. PSE) — anahtar
+// alt fon koduna göre olduğu için tekrar sorgu atılmaz, cache paylaşılır.
+const ALT_FON_GETIRI_CACHE_TTL_SANIYE = 86400; // 24 saat
+
+async function altFonGunlukGetiriGetir(kod) {
+  const cacheAnahtar = `fon:gunluk-getiri:${kod}`;
+  try {
+    const onbellek = await kv.get(cacheAnahtar).catch(() => null);
+    if (onbellek && typeof onbellek.getiri === "number") return onbellek.getiri;
+  } catch {}
+
+  const API_KEY = process.env.FONOLOJI_KEY;
+  if (!API_KEY) return null;
+
+  try {
+    await siraliBekle();
+    const r = await fetch(
+      `https://fonoloji.com/v1/funds/${encodeURIComponent(kod)}`,
+      { headers: { "X-API-Key": API_KEY, "Accept": "application/json" } }
+    );
+    if (!r.ok) return null;
+    const d = await r.json().catch(() => null);
+    const ham = d?.fund ?? d;
+    const getiriHam = ham?.return_1d;
+    if (typeof getiriHam !== "number") return null;
+    const getiri = parseFloat((getiriHam * 100).toFixed(4));
+    try { await kv.set(cacheAnahtar, { getiri, ts: Date.now() }, { ex: ALT_FON_GETIRI_CACHE_TTL_SANIYE }); } catch {}
+    return getiri;
+  } catch {
+    return null;
+  }
+}
+
 async function holdingsGetirDahili(kod) {
   const cacheAnahtar = `fon:holdings:${kod}`;
   try {
@@ -193,6 +235,17 @@ async function holdingsGetirDahili(kod) {
       .filter((k) => k.kod && typeof k.agirlik === "number");
 
     if (!kalemler.length) return null;
+
+    // Alt fon kalemleri (tur:"fund") için önceki günün getirisini ekle —
+    // bkz. yukarıdaki altFonGunlukGetiriGetir notu. Paralel çekiliyor ama
+    // siraliBekle() zaten aralarında paylaşılan hız sırasına sokuyor.
+    const altFonKalemleri = kalemler.filter((k) => k.tur === "fund");
+    if (altFonKalemleri.length) {
+      const sonuclar = await Promise.all(
+        altFonKalemleri.map((k) => altFonGunlukGetiriGetir(k.kod))
+      );
+      altFonKalemleri.forEach((k, i) => { k.oncekiGunGetiri = sonuclar[i]; });
+    }
 
     const paket = {
       success: true,
@@ -376,10 +429,29 @@ async function fonTahminSnapshotCalistir(req, res) {
     return res.status(401).json({ success: false, error: "Yetkisiz" });
   }
 
+  // ── İKİ AŞAMALI ÇALIŞMA MODU (2026-09-04 eklendi) ─────────────────────────
+  // Önceden bu fonksiyon TEK bir günlük çağrıda (akşam 18:25) hem dünkü
+  // tahminin gerçek getirisini kapatıyor hem bugünün yeni tahminini
+  // kaydediyordu. Sorun: TEFAS gerçek getiriyi ERTESİ GÜN sabah ~09:00-10:00
+  // yayınlıyor — ama kullanıcı bunu akşama kadar (18:25'e kadar) ekranda
+  // GÖREMİYORDU, gereksiz bir gecikme. Artık iki ayrı moda bölündü:
+  //   ?mod=kaydet       → SADECE bugünün tahminini ekler (gerçek getiriye
+  //                        dokunmaz). Piyasa kapanışından sonra (~18:20)
+  //                        çağrılmalı.
+  //   ?mod=gerceklestir → SADECE açık (gercek:null) bekleyen bir önceki kaydı,
+  //                        artık TEFAS'ta yayınlanmış olan gerçek getiriyle
+  //                        kapatır (yeni tahmin EKLEMEZ). Sabah ~09:30-10:00
+  //                        çağrılmalı — TEFAS'ın yayın saatinden hemen sonra.
+  //   (mod verilmezse)  → ESKİ DAVRANIŞ (ikisi birden) — geriye dönük uyumluluk
+  //                        ve elle/manuel test için korunuyor.
+  const mod = req.query?.mod === "kaydet" || req.query?.mod === "gerceklestir" ? req.query.mod : null;
+  const kaydetMi = mod == null || mod === "kaydet";
+  const gerceklestirMi = mod == null || mod === "gerceklestir";
+
   const bugun = bugunTarihiTR();
-  const hisseDegisimMap = await hisseDegisimMapGetirDahili();
+  const hisseDegisimMap = kaydetMi ? await hisseDegisimMapGetirDahili() : {};
   // Gerçek getiri kapatma adımı için mevcut TEFAS fon listesini bir kez oku.
-  const tefasKayit = await kv.get(KV_ANAHTAR).catch(() => null);
+  const tefasKayit = gerceklestirMi ? await kv.get(KV_ANAHTAR).catch(() => null) : null;
   const fonGercekMap = {};
   for (const f of (tefasKayit?.data || [])) {
     if (f?.kod && typeof f.gunluk === "number") fonGercekMap[f.kod] = f.gunluk;
@@ -389,18 +461,27 @@ async function fonTahminSnapshotCalistir(req, res) {
   const { liste: takipListesi } = await fonTahminListesiOku();
   for (const kod of takipListesi) {
     try {
-      const holdings = await holdingsGetirDahili(kod);
       let tahmin = null, kapsam = 0;
-      if (holdings) {
-        let t = 0, k = 0;
-        for (const kalem of holdings.kalemler) {
-          if (kalem.tur !== "stock") continue;
-          const deg = hisseDegisimMap[kalem.kod];
-          if (typeof deg !== "number" || typeof kalem.agirlik !== "number") continue;
-          t += (kalem.agirlik / 100) * deg;
-          k += kalem.agirlik;
+      if (kaydetMi) {
+        const holdings = await holdingsGetirDahili(kod);
+        if (holdings) {
+          let t = 0, k = 0;
+          for (const kalem of holdings.kalemler) {
+            if (kalem.tur === "stock") {
+              const deg = hisseDegisimMap[kalem.kod];
+              if (typeof deg !== "number" || typeof kalem.agirlik !== "number") continue;
+              t += (kalem.agirlik / 100) * deg;
+              k += kalem.agirlik;
+            } else if (kalem.tur === "fund" && typeof kalem.oncekiGunGetiri === "number") {
+              // Alt fon — canlı fiyat yok, önceki gün açıklanan getiriyle dahil
+              // ediliyor (bkz. altFonGunlukGetiriGetir notu).
+              if (typeof kalem.agirlik !== "number") continue;
+              t += (kalem.agirlik / 100) * kalem.oncekiGunGetiri;
+              k += kalem.agirlik;
+            }
+          }
+          if (k > 0) { tahmin = t; kapsam = k; }
         }
-        if (k > 0) { tahmin = t; kapsam = k; }
       }
 
       const gecmisAnahtar = `fonTahmin:gecmis:${kod}`;
@@ -409,26 +490,31 @@ async function fonTahminSnapshotCalistir(req, res) {
 
       // 1) Bir önceki kaydın gerçek getirisi HENÜZ kapatılmadıysa, bugünkü
       // TEFAS verisiyle kapat (bir önceki kayıt DÜNKÜ tahmindi, bugün onun
-      // gerçek getirisi TEFAS'ta yayınlanmış olur).
-      const son = kayitlar[kayitlar.length - 1];
-      if (son && son.gercek == null && son.tarih !== bugun) {
-        const gercek = fonGercekMap[kod];
-        if (typeof gercek === "number") {
-          son.gercek = gercek;
-          son.isabet = isabetHesapla(son.tahmin, gercek);
+      // gerçek getirisi TEFAS'ta yayınlanmış olur). SADECE gerceklestirMi.
+      if (gerceklestirMi) {
+        const son = kayitlar[kayitlar.length - 1];
+        if (son && son.gercek == null && son.tarih !== bugun) {
+          const gercek = fonGercekMap[kod];
+          if (typeof gercek === "number") {
+            son.gercek = gercek;
+            son.isabet = isabetHesapla(son.tahmin, gercek);
+          }
         }
       }
 
-      // 2) Bugün için zaten bir kayıt yoksa, yeni tahmini ekle.
-      if (!son || son.tarih !== bugun) {
-        if (tahmin != null) {
-          kayitlar.push({ tarih: bugun, tahmin, gercek: null, isabet: null, kapsam });
+      // 2) Bugün için zaten bir kayıt yoksa, yeni tahmini ekle. SADECE kaydetMi.
+      if (kaydetMi) {
+        const son2 = kayitlar[kayitlar.length - 1];
+        if (!son2 || son2.tarih !== bugun) {
+          if (tahmin != null) {
+            kayitlar.push({ tarih: bugun, tahmin, gercek: null, isabet: null, kapsam });
+          }
+        } else if (tahmin != null) {
+          // Aynı gün içinde cron birden fazla kez çalışırsa (manuel test vb.)
+          // en güncel tahminle üzerine yaz — kapsam artmış olabilir.
+          son2.tahmin = tahmin;
+          son2.kapsam = kapsam;
         }
-      } else if (tahmin != null) {
-        // Aynı gün içinde cron birden fazla kez çalışırsa (manuel test vb.)
-        // en güncel tahminle üzerine yaz — kapsam artmış olabilir.
-        son.tahmin = tahmin;
-        son.kapsam = kapsam;
       }
 
       if (kayitlar.length > FON_TAHMIN_GECMIS_MAX_KAYIT) {

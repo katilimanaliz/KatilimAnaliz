@@ -4144,11 +4144,18 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
       if (!veri || !Array.isArray(veri.kalemler)) continue;
       let tahmin = 0, kapsam = 0;
       for (const k of veri.kalemler) {
-        if (k.tur !== "stock") continue;
-        const deg = hisseDegisimMap[k.kod];
-        if (typeof deg !== "number" || typeof k.agirlik !== "number") continue;
-        tahmin += (k.agirlik / 100) * deg;
-        kapsam += k.agirlik;
+        if (k.tur === "stock") {
+          const deg = hisseDegisimMap[k.kod];
+          if (typeof deg !== "number" || typeof k.agirlik !== "number") continue;
+          tahmin += (k.agirlik / 100) * deg;
+          kapsam += k.agirlik;
+        } else if (k.tur === "fund" && typeof k.oncekiGunGetiri === "number") {
+          // Alt fon (fon-içinde-fon) — canlı fiyat yok, kendi son açıklanan
+          // günlük getirisiyle (bir önceki gün TEFAS kapanışı) dahil ediliyor.
+          if (typeof k.agirlik !== "number") continue;
+          tahmin += (k.agirlik / 100) * k.oncekiGunGetiri;
+          kapsam += k.agirlik;
+        }
       }
       if (kapsam > 0) sonuc.push({ kod, tahmin, kapsam, donem: veri.dagilimDonemi ?? null });
     }
@@ -4442,18 +4449,64 @@ function FonTahminDetayModal({
                 );
               })}
 
+              {/* ── ALT FONLAR (2026-09-04) ────────────────────────────────────
+                  Bazı fonlar portföylerinin bir kısmını başka fonlara yatırıyor
+                  (ör. DFI'nin %31'i ABG/PSE/BAC/GCD/KVR/PFS'de). Bunların canlı
+                  fiyatı yok — backend, alt fonun KENDİ son açıklanan günlük
+                  getirisini (oncekiGunGetiri, TEFAS'ın bir gün önceki kapanışı)
+                  ekliyor. Bu yüzden Değişim/Etki burada "—" değil, gerçek
+                  (ama bir gün gecikmeli) bir değer gösterir. */}
+              {(() => {
+                const altFonKalemleri = siraliKalemler.filter((k) => k.tur === "fund");
+                if (altFonKalemleri.length === 0) return null;
+                const altFonToplamAgirlik = altFonKalemleri.reduce((a, k) => a + (k.agirlik ?? 0), 0);
+                return (
+                  <>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"18px 4px 10px"}}>
+                      <span style={{fontSize:13,fontWeight:700,color:C.label}}>
+                        Alt Fonlar <span style={{color:WA(0.4),fontWeight:600}}>({altFonKalemleri.length})</span>
+                      </span>
+                      <span style={{fontSize:13,fontWeight:700,color:WA(0.6)}}>%{altFonToplamAgirlik.toFixed(1)}</span>
+                    </div>
+                    {altFonKalemleri.map((k) => {
+                      const deg = k.oncekiGunGetiri;
+                      const bilinenGetiri = typeof deg === "number";
+                      const degUp = bilinenGetiri && deg >= 0;
+                      const etki = bilinenGetiri ? ((k.agirlik ?? 0) / 100) * deg : null;
+                      return (
+                        <div key={k.kod} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 4px",borderBottom:`1px solid ${WA(0.05)}`}}>
+                          <div style={{flex:"1 1 auto",minWidth:0}}>
+                            <div style={{fontSize:13,fontWeight:700,color:C.label}}>{k.kod}</div>
+                            <div style={{fontSize:10.5,color:WA(0.45),overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{k.ad ?? ""} {bilinenGetiri ? "· dünkü getiri" : ""}</div>
+                          </div>
+                          <div style={{width:56,textAlign:"right",fontSize:12,fontWeight:600,color: !bilinenGetiri ? WA(0.35) : degUp ? C.green : C.red}}>
+                            {bilinenGetiri ? isaretliYuzde(deg, 2) : "—"}
+                          </div>
+                          <div style={{width:62,textAlign:"right",fontSize:12,fontWeight:600,color: etki==null ? WA(0.35) : etki>=0 ? C.green : C.red}}>
+                            {etki==null ? "—" : isaretliYuzde(etki, 4)}
+                          </div>
+                          <div style={{width:52,textAlign:"right",fontSize:12,fontWeight:600,color:WA(0.6)}}>
+                            %{(k.agirlik ?? 0).toFixed(1)}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </>
+                );
+              })()}
+
               {/* ── VIOP / DİĞER (2026-09-04) ─────────────────────────────────
                   Fonoloji'nin verisinde VIOP/türev kalemlerinin TAMAMI
                   ağırlık=0 geliyor (kaynak tarafında bilinen bir ayrıştırma
                   hatası) — bu yüzden 34 anlamsız "%0.0" satırı göstermek
-                  yerine, hisselerin KAPSAMADIĞI kalan pay (100 − hisse
-                  toplamı) TEK bir "VIOP" satırında toplu gösteriliyor. Hisse
-                  ağırlıkları HİÇ değiştirilmiyor (şişirilmiyor) — sadece
-                  eksik kısım adlandırılıp tamamlanıyor. */}
+                  yerine, hisse + alt fon dışında KAPSANMAYAN pay (100 − hisse
+                  − alt fon toplamı) TEK bir "VIOP" satırında toplu gösteriliyor.
+                  Hisse/alt fon ağırlıkları HİÇ değiştirilmiyor (şişirilmiyor) —
+                  sadece eksik kısım adlandırılıp tamamlanıyor. */}
               {(() => {
-                const hisseKalemleri = siraliKalemler.filter((k) => k.tur === "stock");
-                const hisseToplamAgirlik = hisseKalemleri.reduce((a, k) => a + (k.agirlik ?? 0), 0);
-                const viopAgirlik = Math.max(0, 100 - hisseToplamAgirlik);
+                const hisseToplamAgirlik = siraliKalemler.filter((k) => k.tur === "stock").reduce((a, k) => a + (k.agirlik ?? 0), 0);
+                const altFonToplamAgirlik = siraliKalemler.filter((k) => k.tur === "fund").reduce((a, k) => a + (k.agirlik ?? 0), 0);
+                const viopAgirlik = Math.max(0, 100 - hisseToplamAgirlik - altFonToplamAgirlik);
                 if (viopAgirlik < 0.05) return null; // yuvarlama gürültüsü — göstermeye değmez
                 return (
                   <>
@@ -4568,7 +4621,11 @@ function FonTahminAgGorseli({ kalemler, hisseDegisimMap, tahmin }: {
 }) {
   const renkli = kalemler
     .map((k) => {
-      const deg = k.tur === "stock" ? hisseDegisimMap[k.kod] : undefined;
+      // Hisseler: canlı BİST değişimi. Alt fonlar (tur:"fund"): kendi son
+      // açıklanan günlük getirisi (bkz. backend'deki oncekiGunGetiri notu).
+      const deg = k.tur === "stock" ? hisseDegisimMap[k.kod]
+        : k.tur === "fund" && typeof k.oncekiGunGetiri === "number" ? k.oncekiGunGetiri
+        : undefined;
       const pozitif = typeof deg === "number" ? deg >= 0 : null;
       const agirlik = typeof k.agirlik === "number" && k.agirlik > 0 ? k.agirlik : 0.1; // 0 ağırlık kutuyu yok eder
       return { ...k, deg, pozitif, agirlik };
