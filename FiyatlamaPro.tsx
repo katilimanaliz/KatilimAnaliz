@@ -4559,10 +4559,27 @@ function FonTahminAgGorseli({ kalemler, hisseDegisimMap, tahmin }: {
           const box = kutular[i];
           if (!box) return null;
           const renk = k.pozitif == null ? WA(0.22) : k.pozitif ? C.green : C.red;
-          const cokKucuk = box.w < 60 || box.h < 40; // metni sığdırmayan kutularda yalnızca kod
+          // Kutu boyutuna göre kademeli metin gösterimi — VW=1000 sanal birim
+          // gerçek konteynerde (~380px) yaklaşık 0.38 ölçekle karşılık geliyor.
+          // Küçük kutularda taşan/üst üste binen yazı yerine kademeli olarak
+          // metin küçültülüyor, çok küçükse tamamen gizleniyor (sadece renk).
+          const OLCEK = 0.38;
+          const gW = box.w * OLCEK, gH = box.h * OLCEK;
+          const gosterKod = gW >= 20 && gH >= 13;
+          const gosterYuzde = gW >= 40 && gH >= 30;
+          // Ağırlık (portföydeki pay) satırı — kullanıcı isteği üzerine
+          // eklendi. Hisse kalemlerinde 3. satır olarak (kod + değişim +
+          // ağırlık); nakit/VIOP gibi hisse-dışı kalemlerde zaten tek
+          // yüzde satırı ağırlığı gösteriyor, mükerrer olmasın diye
+          // orada 3. satır YOK. Daha büyük kutu şartı — 3 satır sığmalı.
+          const gosterAgirlik = k.tur === "stock" && gW >= 55 && gH >= 46;
+          const kodSize = Math.max(6.5, Math.min(12, gW / 5.5));
+          const yuzdeSize = Math.max(6, kodSize - 2);
+          const agirlikSize = Math.max(5.5, yuzdeSize - 1);
           const yuzdeMetni = typeof k.deg === "number"
             ? isaretliYuzde(k.deg, 2)
             : (k.tur !== "stock" ? `%${(k.agirlik ?? 0).toFixed(1)}` : null);
+          const agirlikMetni = `%${(k.agirlik ?? 0).toFixed(1)} ağırlık`;
           return (
             <div
               key={k.kod}
@@ -4576,14 +4593,21 @@ function FonTahminAgGorseli({ kalemler, hisseDegisimMap, tahmin }: {
               <div style={{
                 width: "100%", height: "100%", background: renk, borderRadius: 3,
                 display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                overflow: "hidden", boxSizing: "border-box",
+                overflow: "hidden", boxSizing: "border-box", padding: "0 2px",
               }}>
-                <span style={{ fontSize: cokKucuk ? 9 : 12, fontWeight: 700, color: "#fff", whiteSpace: "nowrap" }}>
-                  {k.kod}
-                </span>
-                {!cokKucuk && yuzdeMetni && (
-                  <span style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.9)", marginTop: 1 }}>
+                {gosterKod && (
+                  <span style={{ fontSize: kodSize, fontWeight: 700, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>
+                    {k.kod}
+                  </span>
+                )}
+                {gosterYuzde && yuzdeMetni && (
+                  <span style={{ fontSize: yuzdeSize, fontWeight: 600, color: "rgba(255,255,255,0.9)", marginTop: 1, whiteSpace: "nowrap" }}>
                     {yuzdeMetni}
+                  </span>
+                )}
+                {gosterAgirlik && (
+                  <span style={{ fontSize: agirlikSize, fontWeight: 500, color: "rgba(255,255,255,0.75)", marginTop: 0.5, whiteSpace: "nowrap" }}>
+                    {agirlikMetni}
                   </span>
                 )}
               </div>
