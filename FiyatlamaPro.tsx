@@ -3989,7 +3989,7 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
     Atlas: "https://www.atlasportfoy.com/media/img/atlas-portfoy-logo.png",
     Tera: "https://www.teraportfoy.com/img/logo.svg",
     Pardus: "https://pardusportfoy.com/wp-content/uploads/2026/02/PARDUS-PORTFOY-LOGO-fav.png",
-    Pusula: "https://www.pusulaportfoy.com.tr/images/logo.svg",
+    Pusula: "https://www.google.com/s2/favicons?domain=pusulaportfoy.com.tr&sz=128",
   };
   const FON_KOD_SIRKET: Record<string, string> = {
     DFI: "Atlas",
