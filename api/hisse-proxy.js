@@ -50,7 +50,7 @@ const HISSE_FIYAT_TTL = 3 * 3600;
 // Getiri sekmesindeki 6 Ay/YTD kutuları boş). Kullanıcının önerisi doğru:
 // bu alanlar (sektör, beta, F/K gibi temel göstergeler) günlük hızla
 // DEĞİŞMEZ — her istekte canlı TradingView çağrısı yapmak yerine, GÜNDE
-// BİR-İKİ KEZ Redis'e yazılıp buradan okunabilir. Aynen katılimUyelikGetir()
+// BİR-İKİ KEZ Redis'e yazılıp buradan okunabilir. Aynen katilimUyelikGetir()
 // deseninin (Redis → canlı istek → yedek, 24 saatlik TTL) burada da
 // uygulanması — TEK FARK: veri kod→obje haritası, tek bir dizi değil.
 const KV_HISSE_EK_VERI_KEY = "hisse:ek-veri:v1";
@@ -626,9 +626,18 @@ export default async function handler(req, res) {
       }
     }
 
+    // DEĞİŞİKLİK (2026-09-04): s-maxage=600 (10 dk) ile istemcinin 5 saniyelik
+    // yenileme döngüsü çelişiyordu — istemci her 5 sn'de bir soruyordu ama
+    // Vercel CDN'i aynı yanıtı 10 dakika boyunca önbellekte tutuyordu, bu
+    // yüzden ekran 15-20+ dk boyunca güncellenmiyormuş gibi görünüyordu.
+    // Bu, KULLANICI BAZLI değil PAYLAŞILAN bir CDN önbelleği — süreyi 5 sn'ye
+    // indirmek Midas'a saniyede binlerce istek göndermek DEMEK DEĞİL, sadece
+    // kaynağın en fazla 5 sn'de bir çağrılmasını garanti ediyor (tüm
+    // kullanıcılar/istekler aynı önbellekten okuyor). İstemcinin yenileme
+    // sıklığıyla eşleşsin diye piyasa açıkken 5 sn'ye çekildi.
     const tazelenmeli = veriTazelenirMi();
-    const onbellekSn = tazelenmeli ? 600 : 3600;
-    res.setHeader("Cache-Control", `s-maxage=${onbellekSn}, stale-while-revalidate=120`);
+    const onbellekSn = tazelenmeli ? 5 : 3600;
+    res.setHeader("Cache-Control", `s-maxage=${onbellekSn}, stale-while-revalidate=10`);
 
     try {
       const fiyatHaritasi = {};
