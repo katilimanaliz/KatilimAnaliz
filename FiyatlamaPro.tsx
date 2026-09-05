@@ -3831,7 +3831,15 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
 
   const okuCache = (key: string): any[] => {
     try {
-      const raw = sessionStorage.getItem(key);
+      // DEĞİŞİKLİK (2026-09-05): sessionStorage → localStorage. Önceden
+      // sessionStorage kullanılıyordu — uygulama TAMAMEN kapatılıp yeniden
+      // açıldığında (özellikle hafta sonu, kullanıcı arada uygulamayı
+      // kapatınca) bu önbellek SIFIRLANIYORDU. Piyasa kapalıyken yeni istek
+      // atmama kuralı eklenince (bkz. aşağıdaki bugunHaftaIci notu), sıfırlanan
+      // önbellekle widget hiç veri bulamayıp TAMAMEN KAYBOLDU. localStorage
+      // uygulama kapansa da kalıcı kaldığı için bu sorunu çözüyor — Cuma'nın
+      // son verisi hafta sonu boyunca ekranda kalmaya devam eder.
+      const raw = localStorage.getItem(key);
       if (!raw) return [];
       const { data } = JSON.parse(raw);
       return Array.isArray(data) && data.length > 0 ? data : [];
@@ -3839,7 +3847,7 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
   };
   const cacheTaze = (key: string): boolean => {
     try {
-      const raw = sessionStorage.getItem(key);
+      const raw = localStorage.getItem(key);
       if (!raw) return false;
       const { data, ts } = JSON.parse(raw);
       const dolu = Array.isArray(data) && data.length > 0;
@@ -3848,7 +3856,7 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
   };
   const yazCache = (key: string, data: any[]) => {
     if (!Array.isArray(data) || data.length === 0) return;
-    try { sessionStorage.setItem(key, JSON.stringify({ data, ts: Date.now() })); } catch {}
+    try { localStorage.setItem(key, JSON.stringify({ data, ts: Date.now() })); } catch {}
   };
 
   // Canlı hisse fiyatları — diğer Ana Sayfa widget'larıyla AYNI cache anahtarı
@@ -3858,7 +3866,7 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
   const HISSE_TAZE_ESIK_MS = 5 * 1000;
   const hisseCacheTaze = (): boolean => {
     try {
-      const raw = sessionStorage.getItem("kea_hisseler");
+      const raw = localStorage.getItem("kea_hisseler");
       if (!raw) return false;
       const { data, ts } = JSON.parse(raw);
       const dolu = Array.isArray(data) && data.length > 0;
@@ -3867,6 +3875,17 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
   };
 
   const [hisseler, setHisseler] = useState<any[]>(() => okuCache("kea_hisseler"));
+  // Verinin ne zaman alındığını göstermek için (özellikle hafta sonu/piyasa
+  // kapalıyken "bu donuk bir veri" farkındalığı sağlasın diye) — localStorage'daki
+  // ts ile başlatılıyor, her başarılı çekimde güncelleniyor.
+  const [veriZamani, setVeriZamani] = useState<number | null>(() => {
+    try {
+      const raw = localStorage.getItem("kea_hisseler");
+      if (!raw) return null;
+      const { ts } = JSON.parse(raw);
+      return typeof ts === "number" ? ts : null;
+    } catch { return null; }
+  });
 
   useEffect(() => {
     const cekVeGuncelle = () => {
@@ -3874,7 +3893,7 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
         fetch(`${API_BASE}/api/hisse-proxy`)
           .then(r => r.json())
           .then(d => {
-            if (d.success && (d.data || []).length > 0) { setHisseler(d.data); yazCache("kea_hisseler", d.data); }
+            if (d.success && (d.data || []).length > 0) { setHisseler(d.data); yazCache("kea_hisseler", d.data); setVeriZamani(Date.now()); }
           })
           .catch(() => {});
       }
@@ -4108,40 +4127,39 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
   const [acikKod, setAcikKod] = useState<string | null>(null);
 
   useEffect(() => {
-    // DEĞİŞİKLİK (2026-09-04 akşam): Bu çekim ÖNCEDEN piyasa saatine hiç
-    // bakmıyordu — sadece sessionStorage önbelleğine bakıp süresi dolmuşsa
-    // KOŞULSUZ ağa gidiyordu. Sonuç: hafta sonu uygulama kapatılıp yeniden
-    // açıldığında (sessionStorage sıfırlanınca) yeni bir holdings isteği
-    // atılıyor, backend'in kendi 24 saatlik önbelleği de o sırada
-    // yenilenmişse FARKLI ağırlıklarla FARKLI bir tahmin çıkıyordu — kullanıcı
-    // hafta sonu "TLY %0,4897 → %0,5835" gibi değişen değerler gördü. Artık
-    // hafta içi/hafta sonu ayrımı yapılıyor: mevcut geçerli önbellek HER
-    // ZAMAN okunur (ağa gitmez, zararsız) ama YENİ AĞ İSTEĞİ sadece hafta
-    // içi (pazartesi-cuma) atılır — hafta sonu önbellek yoksa/bayatsa bile
-    // o fon için ekran Pazartesi'ye kadar sessizce beklemeyi tercih eder.
+    // DEĞİŞİKLİK (2026-09-05): sessionStorage → localStorage (uygulama
+    // kapanınca sıfırlanmasın diye) + hafta sonu TTL kuralı gevşetildi.
+    // Önceki sürüm hafta sonu önbellek "bayatsa" (TTL dolmuşsa) o fonu hiç
+    // göstermiyordu — bu da widget'ın TAMAMEN kaybolmasına yol açtı (kullanıcı
+    // bildirdi). Artık hafta sonu TTL'ye bakılmadan mevcut önbellek (ne kadar
+    // eski olursa olsun) kullanılır — hiç veri yoktan iyi. Sadece hafta içi
+    // TTL süresi dolmuş önbellek "bayat" sayılıp yeniden çekiliyor.
     const bugunHaftaIci = () => {
       const gun = new Date().getDay();
       return gun >= 1 && gun <= 5;
     };
+    const haftaIci = bugunHaftaIci();
     takipListesi.forEach((kod) => {
       const cacheKey = `fon_holdings_${kod}`;
       try {
-        const raw = sessionStorage.getItem(cacheKey);
+        const raw = localStorage.getItem(cacheKey);
         if (raw) {
           const { data, ts } = JSON.parse(raw);
-          if (data && typeof ts === "number" && (Date.now() - ts) < FON_TAHMIN_HOLDINGS_CACHE_TTL_MS) {
+          const taze = typeof ts === "number" && (Date.now() - ts) < FON_TAHMIN_HOLDINGS_CACHE_TTL_MS;
+          if (data && (taze || !haftaIci)) {
             setHoldings((h) => ({ ...h, [kod]: data }));
-            return;
+            if (taze) return; // hafta içi taze önbellek yeterli, ağa gitme
+            if (!haftaIci) return; // hafta sonu bayat da olsa yeterli, ağa gitme
           }
         }
       } catch {}
-      if (!bugunHaftaIci()) return; // hafta sonu: önbellek yoksa/bayatsa bile YENİ istek atma
+      if (!haftaIci) return; // hafta sonu: önbellek hiç yoksa bile YENİ istek atma
       fetch(`${API_BASE}/api/tefas-proxy?holdings=1&kod=${kod}`)
         .then((r) => r.json())
         .then((d) => {
           if (d.success && Array.isArray(d.kalemler) && d.kalemler.length > 0) {
             setHoldings((h) => ({ ...h, [kod]: d }));
-            try { sessionStorage.setItem(cacheKey, JSON.stringify({ data: d, ts: Date.now() })); } catch {}
+            try { localStorage.setItem(cacheKey, JSON.stringify({ data: d, ts: Date.now() })); } catch {}
           }
         })
         .catch(() => {});
@@ -4210,7 +4228,7 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
 
   return (
     <div style={{ marginBottom: 14 }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 8 }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
         <span style={{ fontSize: 11, fontWeight: 700, color: (TEMA==="acik"?"#1A2430":"#A8C2DC"), textTransform: "uppercase", letterSpacing: 0.5 }}>
           Popüler Fonlar
         </span>
@@ -4220,6 +4238,22 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
         <span style={{ fontSize: 9, fontWeight: 600, color: WA(0.35), textTransform: "none", letterSpacing: 0 }}>
           · Veri 15 dk gecikmeli
         </span>
+        {veriZamani && (() => {
+          // Hafta sonu/piyasa kapalıyken veri donuk kalıyor (bkz. yukarıdaki
+          // hafta sonu notları) — kullanıcı bunun ne zamana ait olduğunu
+          // görebilsin diye son güncelleme zamanı gösteriliyor. Bugünse
+          // sadece saat, değilse gün+ay+saat.
+          const d = new Date(veriZamani);
+          const simdi = new Date();
+          const bugunMu = d.toDateString() === simdi.toDateString();
+          const saat = `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+          const metin = bugunMu ? `Son veri ${saat}` : `Son veri ${String(d.getDate()).padStart(2,"0")}.${String(d.getMonth()+1).padStart(2,"0")} ${saat}`;
+          return (
+            <span style={{ fontSize: 9, fontWeight: 600, color: WA(0.35), textTransform: "none", letterSpacing: 0 }}>
+              · {metin}
+            </span>
+          );
+        })()}
       </div>
       <div style={{ background: (TEMA==="acik"?"#F0F4F8":"#16222E"), borderRadius: 12, border: `1px solid ${WA(0.07)}`, padding: "8px 7px 4px" }}>
         {tahminler.map((t, i) => {
@@ -4379,6 +4413,20 @@ function FonTahminDetayModal({
             <p style={{margin:"2px 0 0",fontSize:11,color:WA(0.55),overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
               {fonAdi ?? "Fon detayına git"}
             </p>
+            {/* Katılıma uygunluk rozeti (2026-09-05) — kural basit: fon
+                adında "KATILIM" geçiyorsa uygun, geçmiyorsa değil. Türkçe
+                büyük harfe çevirirken İ/ı sorununu önlemek için toLocaleUpperCase("tr-TR"). */}
+            {fonAdi && (
+              fonAdi.toLocaleUpperCase("tr-TR").includes("KATILIM") ? (
+                <span style={{display:"inline-block",marginTop:4,fontSize:9.5,fontWeight:700,color:C.green,background:"rgba(46,204,113,0.12)",borderRadius:5,padding:"2px 6px"}}>
+                  ✓ Katılıma Uygun
+                </span>
+              ) : (
+                <span style={{display:"inline-block",marginTop:4,fontSize:9.5,fontWeight:700,color:WA(0.5),background:WA(0.06),borderRadius:5,padding:"2px 6px"}}>
+                  Katılıma Uygun Değil
+                </span>
+              )
+            )}
           </div>
           <div style={{textAlign:"right",marginRight:8}}>
             <div style={{fontSize:9.5,color:WA(0.4),fontWeight:700,textTransform:"uppercase",letterSpacing:0.3}}>Yapay Zeka Tahmini</div>
@@ -10902,7 +10950,7 @@ function HaftalikPiyasaOzeti(){
       fetch(`${API_BASE}/api/hisse-proxy`).then(r=>r.ok?r.json():null).then(d=>{
         if(d?.success&&(d.data||[]).length>0){
           setHisseler(d.data);
-          try{sessionStorage.setItem("kea_hisseler",JSON.stringify({data:d.data,ts:Date.now()}));}catch{}
+          try{localStorage.setItem("kea_hisseler",JSON.stringify({data:d.data,ts:Date.now()}));}catch{}
         }
       }).catch(()=>{});
     }
