@@ -4387,9 +4387,15 @@ function FonTahminDetayModal({
   onFonDetay: () => void;
   fonDetayYukleniyor?: boolean;
 }) {
-  const [sekme, setSekme] = useState<"ag" | "dagilim" | "gecmis">("ag");
+  const [sekme, setSekme] = useState<"ag" | "dagilim" | "getiri" | "bilgi" | "gecmis">("ag");
   const [gecmis, setGecmis] = useState<any[] | null>(null);
   const [gecmisYukleniyor, setGecmisYukleniyor] = useState(false);
+  // Getiri/Bilgi sekmeleri için tam fon detayı (mapFon() çıktısı) — sunucuda
+  // zaten 15 dk'lık Redis önbelleği var (fon:detay:${kod}), bu yüzden ek
+  // Fonoloji kotası maliyeti YOK. Sadece bu iki sekmeden biri ilk kez
+  // açıldığında (lazy) çekiliyor.
+  const [fonDetayTam, setFonDetayTam] = useState<any | null>(null);
+  const [fonDetayTamYukleniyor, setFonDetayTamYukleniyor] = useState(false);
 
   useEffect(() => {
     if (sekme !== "gecmis" || gecmis !== null) return;
@@ -4400,6 +4406,16 @@ function FonTahminDetayModal({
       .catch(() => setGecmis([]))
       .finally(() => setGecmisYukleniyor(false));
   }, [sekme, gecmis, kod]);
+
+  useEffect(() => {
+    if ((sekme !== "getiri" && sekme !== "bilgi") || fonDetayTam !== null || fonDetayTamYukleniyor) return;
+    setFonDetayTamYukleniyor(true);
+    fetch(`${API_BASE}/api/tefas-proxy?detay=1&kod=${kod}`)
+      .then((r) => r.json())
+      .then((d) => setFonDetayTam(d.success ? d : {}))
+      .catch(() => setFonDetayTam({}))
+      .finally(() => setFonDetayTamYukleniyor(false));
+  }, [sekme, fonDetayTam, fonDetayTamYukleniyor, kod]);
 
   const kalemler: any[] = Array.isArray(holdings?.kalemler) ? holdings.kalemler : [];
   const siraliKalemler = useMemo(
@@ -4460,16 +4476,18 @@ function FonTahminDetayModal({
           <button onClick={onKapat} style={{background:WA(0.1),border:"none",width:32,height:32,borderRadius:16,fontSize:20,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>×</button>
         </div>
 
-        {/* Sekmeler */}
-        <div style={{display:"flex",borderBottom:`1px solid ${WA(0.08)}`,flexShrink:0}}>
+        {/* Sekmeler — 5 sekme sığmayabileceği için yatay kaydırmalı */}
+        <div style={{display:"flex",overflowX:"auto",borderBottom:`1px solid ${WA(0.08)}`,flexShrink:0}}>
           {[
             {key:"ag", label:"AI Tahmin Ağı"},
             {key:"dagilim", label:"Portföy Dağılımı"},
+            {key:"getiri", label:"Getiri"},
+            {key:"bilgi", label:"Bilgi"},
             {key:"gecmis", label:"Tahmin Geçmişi"},
           ].map((t) => (
             <button key={t.key} onClick={()=>setSekme(t.key as any)} style={{
-              flex:1, padding:"12px 4px", background:"transparent", border:"none", cursor:"pointer",
-              fontSize:12.5, fontWeight:sekme===t.key?700:600,
+              flex:"0 0 auto", padding:"12px 14px", background:"transparent", border:"none", cursor:"pointer",
+              fontSize:12.5, fontWeight:sekme===t.key?700:600, whiteSpace:"nowrap",
               color: sekme===t.key ? C.blue : WA(0.45),
               borderBottom: sekme===t.key ? `2px solid ${C.blue}` : "2px solid transparent",
             }}>{t.label}</button>
@@ -4618,6 +4636,119 @@ function FonTahminDetayModal({
               })()}
             </div>
           )}
+
+          {(sekme === "getiri" || sekme === "bilgi") && fonDetayTamYukleniyor && (
+            <div style={{textAlign:"center",padding:"24px 0",fontSize:12,color:WA(0.4)}}>Yükleniyor…</div>
+          )}
+
+          {sekme === "getiri" && !fonDetayTamYukleniyor && (() => {
+            const f = fonDetayTam || {};
+            const satirlar: { etiket: string; deger: number | null }[] = [
+              { etiket: "1 Hafta", deger: f.haftalik ?? null },
+              { etiket: "1 Ay", deger: f.aylik ?? null },
+              { etiket: "3 Ay", deger: f.uc_aylik ?? null },
+              { etiket: "6 Ay", deger: f.altiAylik ?? null },
+              { etiket: "Yılbaşından beri", deger: f.ytd ?? null },
+              { etiket: "1 Yıl", deger: f.yillik ?? null },
+            ];
+            return (
+              <div>
+                <div style={{fontSize:11,fontWeight:700,color:WA(0.4),textTransform:"uppercase",marginBottom:8}}>Getiri Bilgileri</div>
+                {satirlar.map((s) => (
+                  <div key={s.etiket} style={{display:"flex",justifyContent:"space-between",padding:"9px 0",borderBottom:`1px solid ${WA(0.05)}`}}>
+                    <span style={{fontSize:13,color:C.label}}>{s.etiket}</span>
+                    <span style={{fontSize:13,fontWeight:700,color: s.deger==null ? WA(0.35) : s.deger>=0 ? C.green : C.red}}>
+                      {s.deger==null ? "—" : isaretliYuzde(s.deger, 2)}
+                    </span>
+                  </div>
+                ))}
+                {typeof f.reelYillik === "number" && (
+                  <div style={{marginTop:14,background:(TEMA==="acik"?"#F0F4F8":"#16222E"),borderRadius:10,padding:"10px 12px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <span style={{fontSize:12,color:WA(0.55)}}>Reel yıllık getiri (enflasyon arındırılmış)</span>
+                    <span style={{fontSize:13,fontWeight:700,color: f.reelYillik>=0 ? C.green : C.red}}>{isaretliYuzde(f.reelYillik, 1)}</span>
+                  </div>
+                )}
+                {!fonDetayTam?.success && (
+                  <div style={{textAlign:"center",padding:"20px 0",fontSize:12,color:WA(0.4)}}>Getiri bilgisi alınamadı.</div>
+                )}
+              </div>
+            );
+          })()}
+
+          {sekme === "bilgi" && !fonDetayTamYukleniyor && (() => {
+            const f = fonDetayTam || {};
+            if (!f.success) {
+              return <div style={{textAlign:"center",padding:"20px 0",fontSize:12,color:WA(0.4)}}>Fon bilgisi alınamadı.</div>;
+            }
+            const kartlar: { etiket: string; deger: string }[] = [
+              { etiket: "Fon Büyüklüğü", deger: typeof f.portfoy === "number" ? `${(f.portfoy/1e9).toLocaleString("tr-TR",{maximumFractionDigits:1})} Mr ₺` : "—" },
+              { etiket: "Yatırımcı Sayısı", deger: typeof f.yatirimci === "number" ? f.yatirimci.toLocaleString("tr-TR") : "—" },
+              { etiket: "Risk Skoru", deger: typeof f.riskSkoru === "number" ? `${f.riskSkoru} / 7` : "—" },
+              { etiket: "Sharpe (90g)", deger: typeof f.sharpe90 === "number" ? f.sharpe90.toFixed(2) : "—" },
+            ];
+            const dagilimSatirlari: { etiket: string; deger: number | null }[] = [
+              { etiket: "Hisse Senedi", deger: f.dagilim?.hisse ?? null },
+              { etiket: "Devlet Tahvili", deger: f.dagilim?.devletTahvili ?? null },
+              { etiket: "Özel Sektör Tahvili", deger: f.dagilim?.ozelTahvil ?? null },
+              { etiket: "Eurobond", deger: f.dagilim?.eurobond ?? null },
+              { etiket: "Hazine Bonosu", deger: f.dagilim?.hazineBonosu ?? null },
+              { etiket: "Altın", deger: f.dagilim?.altin ?? null },
+              { etiket: "Nakit", deger: f.dagilim?.nakit ?? null },
+              { etiket: "Diğer", deger: f.dagilim?.diger ?? null },
+            ].filter((s) => typeof s.deger === "number" && s.deger > 0);
+            return (
+              <div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
+                  {kartlar.map((k) => (
+                    <div key={k.etiket} style={{background:(TEMA==="acik"?"#F0F4F8":"#16222E"),borderRadius:10,padding:10}}>
+                      <div style={{fontSize:10,color:WA(0.45)}}>{k.etiket}</div>
+                      <div style={{fontSize:15,fontWeight:700,color:C.label}}>{k.deger}</div>
+                    </div>
+                  ))}
+                </div>
+                {dagilimSatirlari.length > 0 && (
+                  <>
+                    <div style={{fontSize:11,fontWeight:700,color:WA(0.4),textTransform:"uppercase",marginBottom:8}}>Varlık Dağılımı</div>
+                    {dagilimSatirlari.map((s) => (
+                      <div key={s.etiket} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:`1px solid ${WA(0.05)}`}}>
+                        <span style={{fontSize:13,color:C.label}}>{s.etiket}</span>
+                        <span style={{fontSize:13,fontWeight:700,color:C.label}}>%{(s.deger as number).toFixed(1)}</span>
+                      </div>
+                    ))}
+                    <div style={{height:14}} />
+                  </>
+                )}
+                <div style={{fontSize:11,fontWeight:700,color:WA(0.4),textTransform:"uppercase",marginBottom:8}}>Genel Bilgiler</div>
+                {f.isin && (
+                  <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:`1px solid ${WA(0.05)}`}}>
+                    <span style={{fontSize:13,color:C.label}}>ISIN</span>
+                    <span style={{fontSize:12,color:WA(0.55)}}>{f.isin}</span>
+                  </div>
+                )}
+                {f.kategori && (
+                  <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:`1px solid ${WA(0.05)}`}}>
+                    <span style={{fontSize:13,color:C.label}}>Kategori</span>
+                    <span style={{fontSize:12,color:WA(0.55)}}>{f.kategori}</span>
+                  </div>
+                )}
+                {f.yonetici && (
+                  <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:`1px solid ${WA(0.05)}`}}>
+                    <span style={{fontSize:13,color:C.label}}>Kurucu</span>
+                    <span style={{fontSize:12,color:WA(0.55)}}>{f.yonetici}</span>
+                  </div>
+                )}
+                {typeof f.akis?.ay === "number" && (
+                  <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0"}}>
+                    <span style={{fontSize:13,color:C.label}}>Aylık Fon Akışı</span>
+                    <span style={{fontSize:13,fontWeight:700,color: f.akis.ay>=0 ? C.green : C.red}}>{isaretliYuzde(f.akis.ay*100,1)}</span>
+                  </div>
+                )}
+                {f.kapUrl && (
+                  <a href={f.kapUrl} target="_blank" rel="noreferrer" style={{display:"block",marginTop:14,fontSize:12,color:C.blue,textAlign:"center"}}>KAP'ta Görüntüle ↗</a>
+                )}
+              </div>
+            );
+          })()}
 
           {sekme === "gecmis" && (
             gecmisYukleniyor ? (
