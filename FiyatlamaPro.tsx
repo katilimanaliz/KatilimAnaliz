@@ -129,16 +129,16 @@ function piyasaAcikMi(): boolean {
   return dk >= 10 * 60 && dk < 18 * 60 + 20;
 }
 
-// ── FON TAHMİN SIFIRLAMA PENCERESİ — 2026-09-04 eklendi ─────────────────────
-// Gece 00:00'dan piyasa açılışına (10:00) kadar Fon Tahminleri widget'ı
-// tahmini "0,0000%" gösterir — o saatlerde elde tek veri, dünün/Cuma'nın
-// KAPANIŞ değeridir ve yeni gün için hiçbir anlam taşımaz, yanıltıcı olurdu.
-// Saat 10:00 olup canlı hisse verisi gelmeye başlayınca normal hesaplamaya
-// otomatik döner (bkz. FonTahminleriWidget'taki kullanım).
+// ── FON TAHMİN SIFIRLAMA PENCERESİ — 2026-09-04 eklendi, 2026-09-05 genişletildi ─
+// Piyasa KAPALIYKEN (gece, hafta sonu, mesai dışı) Fon Tahminleri widget'ı
+// tahmini "0,0000%" gösterir — o saatlerde elde tek veri dünün/Cuma'nın KAPANIŞ
+// değeridir ve yeni an için hiçbir anlam taşımaz, yanıltıcı olurdu.
+// ÖNCEDEN: sadece 00:00-10:00 arası (gün içi pencere). Kullanıcı bildirdi:
+// bunun yerine piyasa AÇIK OLMADIĞI HER AN (Cuma 18:20 kapanışından Pazartesi
+// 10:00 açılışına kadar hafta sonu dahil) sıfır gösterilmeli — piyasaAcikMi()
+// ile birebir TERS mantık, tek bir yerden yönetiliyor.
 function tahminSifirGosterimSaatiMi(): boolean {
-  const simdi = new Date();
-  const dk = simdi.getHours() * 60 + simdi.getMinutes();
-  return dk < 10 * 60;
+  return !piyasaAcikMi();
 }
 
 // ── İŞARETLİ YÜZDE BİÇİMLENDİRME — 2026-09-04 eklendi ───────────────────────
@@ -4153,7 +4153,7 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
           }
         }
       } catch {}
-      if (!haftaIci) return; // hafta sonu: önbellek hiç yoksa bile YENİ istek atma
+      if (!haftaIci) return; // hafta sonu: önbellek zaten VARSA (yukarıda kullanılıp return edildi) yeni istek atma
       fetch(`${API_BASE}/api/tefas-proxy?holdings=1&kod=${kod}`)
         .then((r) => r.json())
         .then((d) => {
@@ -4173,26 +4173,39 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
   }, [hisseler]);
 
   const tahminler = useMemo(() => {
+    // DEĞİŞİKLİK (2026-09-05): Piyasa KAPALIYKEN (hafta sonu/gece) artık
+    // kapsam=0 olsa (holdings verisi hiç gelmemiş/bayat olsa) BİLE fon
+    // listeden ÇIKARILMIYOR — aksi halde widget'ın TAMAMI kaybolabiliyordu
+    // (kullanıcı bildirdi). O saatlerde zaten ekranda "0,0000%" gösterilecek
+    // (bkz. tahminSifirGosterimSaatiMi → !piyasaAcikMi()), o yüzden kapsam
+    // eksik olsa da fonu listede tutmanın bir sakıncası yok. Piyasa AÇIKKEN
+    // ise eski (doğru) davranış korunuyor: kapsam=0 olan fon (veri henüz
+    // gelmemiş) listeden hâlâ gizleniyor — yanlışlıkla "%0 değişim" (sanki
+    // gerçekten hareketsizmiş gibi) gösterilmesin diye.
+    const piyasaKapali = tahminSifirGosterimSaatiMi();
     const sonuc: { kod: string; tahmin: number; kapsam: number; donem: string | null }[] = [];
     for (const kod of takipListesi) {
       const veri = holdings[kod];
-      if (!veri || !Array.isArray(veri.kalemler)) continue;
       let tahmin = 0, kapsam = 0;
-      for (const k of veri.kalemler) {
-        if (k.tur === "stock") {
-          const deg = hisseDegisimMap[k.kod];
-          if (typeof deg !== "number" || typeof k.agirlik !== "number") continue;
-          tahmin += (k.agirlik / 100) * deg;
-          kapsam += k.agirlik;
-        } else if (k.tur === "fund" && typeof k.oncekiGunGetiri === "number") {
-          // Alt fon (fon-içinde-fon) — canlı fiyat yok, kendi son açıklanan
-          // günlük getirisiyle (bir önceki gün TEFAS kapanışı) dahil ediliyor.
-          if (typeof k.agirlik !== "number") continue;
-          tahmin += (k.agirlik / 100) * k.oncekiGunGetiri;
-          kapsam += k.agirlik;
+      if (veri && Array.isArray(veri.kalemler)) {
+        for (const k of veri.kalemler) {
+          if (k.tur === "stock") {
+            const deg = hisseDegisimMap[k.kod];
+            if (typeof deg !== "number" || typeof k.agirlik !== "number") continue;
+            tahmin += (k.agirlik / 100) * deg;
+            kapsam += k.agirlik;
+          } else if (k.tur === "fund" && typeof k.oncekiGunGetiri === "number") {
+            // Alt fon (fon-içinde-fon) — canlı fiyat yok, kendi son açıklanan
+            // günlük getirisiyle (bir önceki gün TEFAS kapanışı) dahil ediliyor.
+            if (typeof k.agirlik !== "number") continue;
+            tahmin += (k.agirlik / 100) * k.oncekiGunGetiri;
+            kapsam += k.agirlik;
+          }
         }
       }
-      if (kapsam > 0) sonuc.push({ kod, tahmin, kapsam, donem: veri.dagilimDonemi ?? null });
+      if (kapsam > 0 || piyasaKapali) {
+        sonuc.push({ kod, tahmin, kapsam, donem: veri?.dagilimDonemi ?? null });
+      }
     }
     return sonuc.sort((a, b) => b.tahmin - a.tahmin);
   }, [holdings, hisseDegisimMap, takipListesi]);
