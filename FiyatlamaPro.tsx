@@ -3879,15 +3879,16 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
           .catch(() => {});
       }
     };
-    cekVeGuncelle();
-    // DEĞİŞİKLİK (2026-09-04): BİST veri izleme ekranındaki AYNI desen —
-    // piyasa açıkken (hafta içi 10:00–18:20) 5 SANİYEDE bir tazeleniyor,
-    // kapalıyken hiç sorgu atılmıyor. Kontrol her tick'te tekrar yapıldığı
-    // için (piyasaAcikMi() interval içinde çağrılıyor) piyasa açılınca sayfa
-    // yenilenmeden otomatik canlı yayına geçer. Modal (AI Tahmin Ağı /
-    // Portföy Dağılımı) bu widget'ın state'ini prop olarak aldığı için,
-    // modal açıkken de aynı canlılıkla otomatik güncellenir — ayrı bir
-    // döngü kurmaya gerek yok.
+    // DEĞİŞİKLİK (2026-09-04 akşam): İlk çağrı da artık piyasaAcikMi() ile
+    // KİLİTLİ. Önceden mount anındaki ilk çağrı KOŞULSUZDU (sadece interval
+    // kontrollüydü) — bu yüzden hafta sonu bile uygulama her açıldığında
+    // (sessionStorage sıfırlanmışsa) yeni bir ağ isteği atılıyordu. Kullanıcı
+    // bildirdi: hafta sonu farklı bir tahmin değeri görülüyordu çünkü bu
+    // "tek seferlik" çağrı piyasa kapalıyken bile geçiyordu. Artık piyasa
+    // kapalıyken hiçbir yeni istek atılmıyor — ekran son bilinen (session/
+    // backend önbelleğindeki) veriyi göstermeye devam ediyor, Pazartesi
+    // piyasa açılana kadar hiç değişmiyor.
+    if (piyasaAcikMi()) cekVeGuncelle();
     const interval = setInterval(() => { if (piyasaAcikMi()) cekVeGuncelle(); }, 5 * 1000);
     return () => clearInterval(interval);
   }, []);
@@ -4107,6 +4108,21 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
   const [acikKod, setAcikKod] = useState<string | null>(null);
 
   useEffect(() => {
+    // DEĞİŞİKLİK (2026-09-04 akşam): Bu çekim ÖNCEDEN piyasa saatine hiç
+    // bakmıyordu — sadece sessionStorage önbelleğine bakıp süresi dolmuşsa
+    // KOŞULSUZ ağa gidiyordu. Sonuç: hafta sonu uygulama kapatılıp yeniden
+    // açıldığında (sessionStorage sıfırlanınca) yeni bir holdings isteği
+    // atılıyor, backend'in kendi 24 saatlik önbelleği de o sırada
+    // yenilenmişse FARKLI ağırlıklarla FARKLI bir tahmin çıkıyordu — kullanıcı
+    // hafta sonu "TLY %0,4897 → %0,5835" gibi değişen değerler gördü. Artık
+    // hafta içi/hafta sonu ayrımı yapılıyor: mevcut geçerli önbellek HER
+    // ZAMAN okunur (ağa gitmez, zararsız) ama YENİ AĞ İSTEĞİ sadece hafta
+    // içi (pazartesi-cuma) atılır — hafta sonu önbellek yoksa/bayatsa bile
+    // o fon için ekran Pazartesi'ye kadar sessizce beklemeyi tercih eder.
+    const bugunHaftaIci = () => {
+      const gun = new Date().getDay();
+      return gun >= 1 && gun <= 5;
+    };
     takipListesi.forEach((kod) => {
       const cacheKey = `fon_holdings_${kod}`;
       try {
@@ -4119,6 +4135,7 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
           }
         }
       } catch {}
+      if (!bugunHaftaIci()) return; // hafta sonu: önbellek yoksa/bayatsa bile YENİ istek atma
       fetch(`${API_BASE}/api/tefas-proxy?holdings=1&kod=${kod}`)
         .then((r) => r.json())
         .then((d) => {
