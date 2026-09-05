@@ -1145,6 +1145,13 @@ function GetiriHesaplayici({ fon, settings, onKapat }) {
   // Vade bazlı bireysel stopaj tablosu (deposit/mevduat mantığı) bu fonlar
   // için hiç uygulanmaz — tüzel istisnasıyla AYNI önceliktedir.
   const hisseSenediYogun = (fon.kategori || "").toLocaleUpperCase("tr-TR").includes("HİSSE SENEDİ");
+  // DEĞİŞİKLİK (2026-09-05): Tüzel yatırımcı için PARA PİYASASI fonlarında
+  // stopaj artık %0 DEĞİL, %10 — mevzuat değişikliği (kullanıcı bildirdi,
+  // "daha önce sıfırdı"). Diğer fon türlerinde (hisse senedi yoğun hariç)
+  // tüzel istisnası aynen korunuyor — sadece PARA PİYASASI kategorisi için
+  // ayrı bir oran uygulanıyor.
+  const paraPiyasasi = (fon.kategori || "").toLocaleUpperCase("tr-TR").includes("PARA PİYASASI");
+  const TUZEL_PARA_PIYASASI_STOPAJ = 10;
 
   const [tutarStr, setTutarStr] = useState("");
   const [vade,     setVade]     = useState(String(takasAraligi));
@@ -1158,18 +1165,20 @@ function GetiriHesaplayici({ fon, settings, onKapat }) {
     if(T<=0||V<=0||R<=0) return null;
     const r = R/100;
     const brutGetiri = V===1 ? T*r : T*(Math.pow(1+r,V)-1);
-    const sOran  = (tuzel || hisseSenediYogun) ? 0 : stopajOranSec(V, settings);
+    const sOran = hisseSenediYogun ? 0
+      : tuzel ? (paraPiyasasi ? TUZEL_PARA_PIYASASI_STOPAJ : 0)
+      : stopajOranSec(V, settings);
     const stopajTL   = brutGetiri*(sOran/100);
     const netGetiri  = brutGetiri-stopajTL;
     const netTutar   = T+netGetiri;
     const brutYillik = (Math.pow(1+r,365)-1)*100;
     const netYillik  = brutYillik*(1-sOran/100);
     return {T,V,R,brutGetiri,sOran,stopajTL,netGetiri,netTutar,brutYillik,netYillik};
-  },[tutarStr,vade,oran,tuzel,settings,hisseSenediYogun]);
+  },[tutarStr,vade,oran,tuzel,settings,hisseSenediYogun,paraPiyasasi]);
 
   const vadeBracket = sonuc
-    ? (tuzel ? "Tüzel — Stopaj Yok"
-      : hisseSenediYogun ? "Hisse Senedi Yoğun Fon — Stopaj Yok"
+    ? (hisseSenediYogun ? "Hisse Senedi Yoğun Fon — Stopaj Yok"
+      : tuzel ? (paraPiyasasi ? `Tüzel — Para Piyasası Fonu — %${TUZEL_PARA_PIYASASI_STOPAJ} Stopaj` : "Tüzel — Stopaj Yok")
       : `Bireysel — %${sonuc.sOran.toFixed(1)} Stopaj (${sonuc.V}g)`)
     : "";
 
@@ -1233,13 +1242,13 @@ function GetiriHesaplayici({ fon, settings, onKapat }) {
               <div style={{...hs.kVal,color:FC.green}}>+{fmt(sonuc.brutGetiri)} ₺</div>
               <div style={hs.kAlt}>%{fmt(sonuc.brutYillik)} yıllık</div>
             </div>
-            <div style={{...hs.kart,opacity:(tuzel||hisseSenediYogun)?0.45:1}}>
+            <div style={{...hs.kart,opacity:(sonuc.sOran===0)?0.45:1}}>
               <div style={hs.kLbl}>{TR("Stopaj Kesintisi")}</div>
               <div style={{...hs.kVal,color:FC.red}}>
-                {(tuzel||hisseSenediYogun)?"—":`-${fmt(sonuc.stopajTL)} ₺`}
+                {sonuc.sOran===0?"—":`-${fmt(sonuc.stopajTL)} ₺`}
               </div>
               <div style={hs.kAlt}>
-                {tuzel?"Tüzel müşteri":hisseSenediYogun?"Hisse senedi yoğun fon":`%${sonuc.sOran.toFixed(1)} oran`}
+                {hisseSenediYogun?"Hisse senedi yoğun fon":tuzel?(paraPiyasasi?`Tüzel · Para Piyasası · %${TUZEL_PARA_PIYASASI_STOPAJ}`:"Tüzel müşteri"):`%${sonuc.sOran.toFixed(1)} oran`}
               </div>
             </div>
             <div style={{...hs.kart,background:FC.greenL,border:`1.5px solid ${FC.green}22`}}>
@@ -4403,6 +4412,13 @@ function FonTahminDetayModal({
   // açıldığında (lazy) çekiliyor.
   const [fonDetayTam, setFonDetayTam] = useState<any | null>(null);
   const [fonDetayTamYukleniyor, setFonDetayTamYukleniyor] = useState(false);
+  // Günlük getiri takvimi (2026-09-05) — Getiri sekmesindeki ısı haritası.
+  // Ayrı bir kaynağa gerek yok: "Getiri İzleme" grafiğinin de kullandığı
+  // ?gecmis=1&kod=X&donem=1y ucu zaten 1 yıllık GÜNLÜK fiyat noktalarını
+  // veriyor (noktalar: [{tarih, fiyat}]) — ardışık iki günün fiyat oranından
+  // günlük getiri buradan (istemci tarafında) hesaplanıyor.
+  const [fonGecmisNoktalar, setFonGecmisNoktalar] = useState<any[] | null>(null);
+  const [fonGecmisNoktalarYukleniyor, setFonGecmisNoktalarYukleniyor] = useState(false);
 
   useEffect(() => {
     if (sekme !== "gecmis" || gecmis !== null) return;
@@ -4423,6 +4439,16 @@ function FonTahminDetayModal({
       .catch(() => setFonDetayTam({}))
       .finally(() => setFonDetayTamYukleniyor(false));
   }, [sekme, fonDetayTam, fonDetayTamYukleniyor, kod]);
+
+  useEffect(() => {
+    if (sekme !== "getiri" || fonGecmisNoktalar !== null || fonGecmisNoktalarYukleniyor) return;
+    setFonGecmisNoktalarYukleniyor(true);
+    fetch(`${API_BASE}/api/tefas-proxy?gecmis=1&kod=${kod}&donem=1y`)
+      .then((r) => r.json())
+      .then((d) => setFonGecmisNoktalar(d.success ? (d.noktalar || []) : []))
+      .catch(() => setFonGecmisNoktalar([]))
+      .finally(() => setFonGecmisNoktalarYukleniyor(false));
+  }, [sekme, fonGecmisNoktalar, fonGecmisNoktalarYukleniyor, kod]);
 
   const kalemler: any[] = Array.isArray(holdings?.kalemler) ? holdings.kalemler : [];
   const siraliKalemler = useMemo(
@@ -4678,6 +4704,98 @@ function FonTahminDetayModal({
                 {!fonDetayTam?.success && (
                   <div style={{textAlign:"center",padding:"20px 0",fontSize:12,color:WA(0.4)}}>Getiri bilgisi alınamadı.</div>
                 )}
+
+                {/* ── GÜNLÜK GETİRİ TAKVİMİ (2026-09-05) ────────────────────
+                    Ay×gün ısı haritası — kaynak: fonGecmisNoktalar (1 yıllık
+                    günlük fiyat noktaları, ayrı bir kaynağa gerek yok). */}
+                <div style={{marginTop:20,fontSize:11,fontWeight:700,color:WA(0.4),textTransform:"uppercase",marginBottom:8}}>Günlük Getiri Takvimi</div>
+                {fonGecmisNoktalarYukleniyor && (
+                  <div style={{textAlign:"center",padding:"16px 0",fontSize:12,color:WA(0.4)}}>Yükleniyor…</div>
+                )}
+                {!fonGecmisNoktalarYukleniyor && (() => {
+                  const noktalar = fonGecmisNoktalar || [];
+                  if (noktalar.length < 2) {
+                    return <div style={{textAlign:"center",padding:"16px 0",fontSize:12,color:WA(0.4)}}>Takvim için yeterli geçmiş veri yok.</div>;
+                  }
+                  // Günlük getiri: ardışık iki günün fiyat oranı.
+                  const gunlukGetiriler: { tarih: string; getiri: number }[] = [];
+                  for (let i = 1; i < noktalar.length; i++) {
+                    const onceki = noktalar[i-1]?.fiyat, simdi = noktalar[i]?.fiyat;
+                    if (typeof onceki !== "number" || typeof simdi !== "number" || onceki === 0) continue;
+                    gunlukGetiriler.push({ tarih: noktalar[i].tarih, getiri: ((simdi/onceki)-1)*100 });
+                  }
+                  // Aya göre grupla: "YYYY-MM" -> { gun -> getiri }
+                  const aylikHarita: Record<string, Record<number, number>> = {};
+                  for (const g of gunlukGetiriler) {
+                    const ay = String(g.tarih).slice(0,7);
+                    const gun = parseInt(String(g.tarih).slice(8,10), 10);
+                    if (!ay || !gun) continue;
+                    if (!aylikHarita[ay]) aylikHarita[ay] = {};
+                    aylikHarita[ay][gun] = g.getiri;
+                  }
+                  const aySiralari = Object.keys(aylikHarita).sort().reverse(); // en yeni ay üstte
+                  const AY_KISA = ["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"];
+                  const yogunlukRengi = (d: number, pozitif: boolean) => {
+                    const yogunluk = Math.min(Math.abs(d)/4, 1);
+                    return pozitif
+                      ? `rgba(46,204,113,${0.15+yogunluk*0.55})`
+                      : `rgba(231,76,60,${0.15+yogunluk*0.55})`;
+                  };
+                  return (
+                    <div style={{overflowX:"auto"}} className="piyasa-scroll">
+                      <table style={{borderCollapse:"collapse",fontSize:9.5,width:"100%",minWidth:620}}>
+                        <thead>
+                          <tr>
+                            <th style={{textAlign:"left",padding:"3px 5px",color:WA(0.4),fontWeight:600}}>Ay</th>
+                            {Array.from({length:31},(_,i)=>(
+                              <th key={i} style={{padding:"3px 2px",color:WA(0.4),fontWeight:600,textAlign:"center"}}>{i+1}</th>
+                            ))}
+                            <th style={{textAlign:"right",padding:"3px 5px",color:WA(0.4),fontWeight:600}}>Toplam</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {aySiralari.map((ayKod) => {
+                            const gunler = aylikHarita[ayKod];
+                            const [yil, ayNo] = ayKod.split("-");
+                            const ayEtiket = `${AY_KISA[parseInt(ayNo,10)-1]} ${yil}`;
+                            // Aylık toplam: bileşik getiri (günlük yüzdelerin çarpımı)
+                            const degerler = Object.values(gunler);
+                            const bilesikToplam = degerler.length
+                              ? (degerler.reduce((carpim, d) => carpim * (1 + d/100), 1) - 1) * 100
+                              : 0;
+                            return (
+                              <tr key={ayKod}>
+                                <td style={{padding:"3px 5px",whiteSpace:"nowrap",color:C.label}}>{ayEtiket}</td>
+                                {Array.from({length:31},(_,i)=>{
+                                  const gun = i+1;
+                                  const d = gunler[gun];
+                                  if (typeof d !== "number") {
+                                    return <td key={gun} style={{textAlign:"center",padding:"2px 1px",color:WA(0.25)}}>—</td>;
+                                  }
+                                  const pozitif = d >= 0;
+                                  return (
+                                    <td key={gun} style={{textAlign:"center",padding:"2px 1px"}}>
+                                      <span style={{display:"inline-block",minWidth:22,padding:"1px 2px",borderRadius:4,background:yogunlukRengi(d,pozitif),color: pozitif?"#0a6b4c":"#8a2f2f",fontWeight:600}}>
+                                        {d>0?"+":""}{d.toFixed(1)}
+                                      </span>
+                                    </td>
+                                  );
+                                })}
+                                <td style={{textAlign:"right",padding:"3px 5px",fontWeight:700,color: bilesikToplam>=0 ? C.green : C.red}}>
+                                  {bilesikToplam>=0?"+":""}{bilesikToplam.toFixed(2)}%
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                      <div style={{display:"flex",gap:14,marginTop:10,fontSize:10.5,color:WA(0.5)}}>
+                        <span style={{display:"flex",alignItems:"center",gap:4}}><span style={{width:9,height:9,borderRadius:2,background:C.green}} /> Pozitif getiri</span>
+                        <span style={{display:"flex",alignItems:"center",gap:4}}><span style={{width:9,height:9,borderRadius:2,background:C.red}} /> Negatif getiri</span>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             );
           })()}
@@ -4816,7 +4934,7 @@ function FonTahminDetayModal({
           )}
 
           <div style={{fontSize:9.5,color:WA(0.3),marginTop:14,lineHeight:1.5}}>
-            Tahmin, fonun son açıklanan hisse ağırlıkları ile bu hisselerin günlük fiyat değişiminin ağırlıklı ortalamasıdır. İsabet, tahmin ile gerçekleşen getiri arasındaki mutlak puan farkına göre Katılım Plus tarafından hesaplanır (Fintables veya başka bir sağlayıcının isabet metriğiyle aynı değildir). Kesinlikle yatırım tavsiyesi değildir.
+            Tahmin, fonun son açıklanan hisse ağırlıkları ile bu hisselerin günlük fiyat değişiminin ağırlıklı ortalamasıdır. İsabet, tahmin ile gerçekleşen getiri arasındaki mutlak puan farkına göre Katılım Plus tarafından hesaplanır (başka sağlayıcıların isabet metriğiyle aynı değildir). Kesinlikle yatırım tavsiyesi değildir.
           </div>
         </div>
       </div>
