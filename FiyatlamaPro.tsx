@@ -4153,7 +4153,17 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
           }
         }
       } catch {}
-      if (!haftaIci) return; // hafta sonu: önbellek zaten VARSA (yukarıda kullanılıp return edildi) yeni istek atma
+      // DEĞİŞİKLİK (2026-09-05 akşam): Hafta sonu kuralı yeniden ayarlandı —
+      // ağırlıkların (portföy DAĞILIMI) DEĞİŞMESİ istenmiyor (kullanıcı bunu
+      // reddetti), ama önbellek GERÇEKTEN HİÇ YOKSA (bu cihazda localStorage'a
+      // geçişten sonra hiç veri birikmemişse) Portföy Dağılımı/AI Tahmin Ağı
+      // sekmeleri TAMAMEN BOŞ kalıyordu — bu ayrı ve istenmeyen bir durumdu.
+      // Yukarıdaki blok önbellek VARSA (bayat da olsa) hafta sonu ZATEN
+      // return ediyor — buraya sadece önbellek HİÇ YOKSA düşülüyor, bu
+      // durumda hafta sonu bile BİR KEZ çekim yapılır (sadece ilk dolum
+      // amacıyla; bir sonraki hafta sonu artık önbellek dolu olacağı için
+      // bu dal bir daha tetiklenmez). Tahmin YÜZDESİ (üstteki %0,00) bundan
+      // etkilenmiyor — o ayrı bir mekanizmayla (piyasaKapali) zaten sabit.
       fetch(`${API_BASE}/api/tefas-proxy?holdings=1&kod=${kod}`)
         .then((r) => r.json())
         .then((d) => {
