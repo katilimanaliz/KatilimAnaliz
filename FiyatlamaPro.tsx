@@ -4229,6 +4229,13 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
   const oncekiTahminRef = useRef<Record<string, number>>({});
   const [tahminFlashMap, setTahminFlashMap] = useState<Record<string, "up" | "down">>({});
   useEffect(() => {
+    // DEĞİŞİKLİK (2026-09-05): Piyasa KAPALIYKEN (0,0000% gösterildiği
+    // dönemde) flaş efekti KAPATILDI. Ekranda "0,0000%" sabit görünse de,
+    // arka plandaki HAM tahmin sayısı (holdings/fiyat verisi yüklenirken)
+    // hâlâ değişebiliyordu — bu da kullanıcıya "veri geldi" izlenimi veren
+    // yanlış bir flaş olarak görünüyordu, oysa ekranda hiçbir şey
+    // değişmiyordu. Piyasa açıkken eski davranış aynen korunuyor.
+    if (tahminSifirGosterimSaatiMi()) return;
     const yeniFlash: Record<string, "up" | "down"> = {};
     for (const t of tahminler) {
       const onceki = oncekiTahminRef.current[t.kod];
@@ -4476,8 +4483,8 @@ function FonTahminDetayModal({
           <button onClick={onKapat} style={{background:WA(0.1),border:"none",width:32,height:32,borderRadius:16,fontSize:20,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>×</button>
         </div>
 
-        {/* Sekmeler — 5 sekme sığmayabileceği için yatay kaydırmalı */}
-        <div style={{display:"flex",overflowX:"auto",borderBottom:`1px solid ${WA(0.08)}`,flexShrink:0}}>
+        {/* Sekmeler — 5 sekme sığmayabileceği için yatay kaydırmalı, scrollbar gizli (piyasa-scroll) */}
+        <div className="piyasa-scroll" style={{display:"flex",overflowX:"auto",borderBottom:`1px solid ${WA(0.08)}`,flexShrink:0}}>
           {[
             {key:"ag", label:"AI Tahmin Ağı"},
             {key:"dagilim", label:"Portföy Dağılımı"},
