@@ -130,7 +130,7 @@ const FON_GECMIS_CACHE_TTL_SANIYE = 600; // 10 dk — aynı fon+dönem sık soru
 // kategori/yatirimci/portfoy/fiyat/gunluk/gunlukNorm/haftalik/aylik/yillik/
 // takasAraligi) — böylece FonDetay/GetiriHesaplayici hangi ekrandan açıldığına
 // bakmaksızın hep aynı alan adlarını bulur.
-const FON_DETAY_CACHE_TTL_SANIYE = 900; // 15 dk
+const FON_DETAY_CACHE_TTL_SANIYE = 86400; // 24 saat — fon NAV'ı/yatırımcı sayısı günde bir kez değişiyor (2026-09-05'te 15 dk'dan yükseltildi, gereksiz Fonoloji sorgusu)
 
 // ── Tek fon HİSSE AĞIRLIK DAĞILIMI (2026-09 eklendi — Fon Tahminleri) ──────
 // /api/tefas-proxy?holdings=1&kod=THF
@@ -592,7 +592,7 @@ async function fonDetayGetir(req, res) {
   try {
     const onbellek = await kv.get(cacheAnahtar).catch(() => null);
     if (onbellek) {
-      res.setHeader("Cache-Control", "max-age=0, s-maxage=300, stale-while-revalidate=300");
+      res.setHeader("Cache-Control", "max-age=0, s-maxage=3600, stale-while-revalidate=3600");
       return res.status(200).json(onbellek);
     }
   } catch {}
@@ -612,7 +612,41 @@ async function fonDetayGetir(req, res) {
 
     const takasAraligi = sonTakasGunuAralik();
     const fon = mapFon(ham, VAKIF_KODLARI.includes(ham.code), takasAraligi);
-    const paket = { success: true, ...fon };
+
+    // ── GÜNLÜK FON/YATIRIMCI GİRİŞ-ÇIKIŞI (2026-09-05 eklendi) ─────────────
+    // Fonoloji'nin fund detayında (return_1d gibi) günlük giriş/çıkış rakamı
+    // YOK — ama /timeseries?include=nav ucu her gün için total_value (fon
+    // büyüklüğü) ve investor_count (yatırımcı sayısı) veriyor (bu deseni
+    // fonGecmisGetir zaten canlı doğrulamış: d.nav.points, alanlar date/
+    // price/investor_count/total_value). Son iki günün farkını alarak kendi
+    // snapshot mekanizmamızı kurmaya GEREK KALMADAN günlük değişimi elde
+    // ediyoruz. ⚠️ Son nokta genelde total_value/investor_count null gelir
+    // (bugün henüz TEFAS'a işlenmemiş) — bu yüzden SADECE ikisi de dolu olan
+    // ardışık son iki noktaya bakılıyor.
+    let gunlukFonAkisiTL = null, gunlukYatirimciDegisimi = null, gunlukAkisTarihi = null;
+    try {
+      await siraliBekle();
+      const rNav = await fetch(
+        `https://fonoloji.com/v1/funds/${encodeURIComponent(kod)}/timeseries?include=nav&period=1m`,
+        { headers: { "X-API-Key": API_KEY, "Accept": "application/json" } }
+      );
+      if (rNav.ok) {
+        const dNav = await rNav.json().catch(() => null);
+        const hamNoktalar = dNav?.nav?.points ?? dNav?.timeseries?.nav?.points
+                         ?? (Array.isArray(dNav?.nav) ? dNav.nav : null) ?? dNav?.points ?? [];
+        const doluNoktalar = (Array.isArray(hamNoktalar) ? hamNoktalar : [])
+          .filter((p) => typeof p?.total_value === "number" && typeof p?.investor_count === "number");
+        if (doluNoktalar.length >= 2) {
+          const son = doluNoktalar[doluNoktalar.length - 1];
+          const onceki = doluNoktalar[doluNoktalar.length - 2];
+          gunlukFonAkisiTL = son.total_value - onceki.total_value;
+          gunlukYatirimciDegisimi = son.investor_count - onceki.investor_count;
+          gunlukAkisTarihi = son.date ?? null;
+        }
+      }
+    } catch {}
+
+    const paket = { success: true, ...fon, gunlukFonAkisiTL, gunlukYatirimciDegisimi, gunlukAkisTarihi };
     try { await kv.set(cacheAnahtar, paket, { ex: FON_DETAY_CACHE_TTL_SANIYE }); } catch {}
 
     // ⚠️ 2026-08-06 DÜZELTİLDİ: Burada "noktalar.length" kontrolü vardı ama bu
@@ -623,7 +657,7 @@ async function fonDetayGetir(req, res) {
     // anında patlıyor ve sadece bu dal tetiklendiğinde görünüyor.
     // Bu uçta karşılığı: fon nesnesi gerçekten doldu mu?
     res.setHeader("Cache-Control", fon?.kod
-      ? "max-age=0, s-maxage=300, stale-while-revalidate=300"
+      ? "max-age=0, s-maxage=3600, stale-while-revalidate=3600"
       : "no-store");
     return res.status(200).json(paket);
   } catch (e) {

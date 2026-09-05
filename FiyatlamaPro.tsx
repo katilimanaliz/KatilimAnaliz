@@ -4738,9 +4738,29 @@ function FonTahminDetayModal({
                   </div>
                 )}
                 {typeof f.akis?.ay === "number" && (
-                  <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:`1px solid ${WA(0.05)}`}}>
                     <span style={{fontSize:13,color:C.label}}>Aylık Fon Akışı</span>
                     <span style={{fontSize:13,fontWeight:700,color: f.akis.ay>=0 ? C.green : C.red}}>{isaretliYuzde(f.akis.ay*100,1)}</span>
+                  </div>
+                )}
+                {/* Günlük fon/yatırımcı giriş-çıkışı (2026-09-05) — son iki
+                    günün total_value/investor_count farkı. Sunucu bunu
+                    hesaplayamazsa (ör. Fonoloji ardışık iki dolu nokta
+                    vermezse) alanlar null gelir, satırlar hiç gösterilmez. */}
+                {typeof f.gunlukFonAkisiTL === "number" && (
+                  <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:`1px solid ${WA(0.05)}`}}>
+                    <span style={{fontSize:13,color:C.label}}>Günlük Fon Giriş/Çıkış</span>
+                    <span style={{fontSize:13,fontWeight:700,color: f.gunlukFonAkisiTL>=0 ? C.green : C.red}}>
+                      {f.gunlukFonAkisiTL>=0 ? "+" : "−"}{(Math.abs(f.gunlukFonAkisiTL)/1e6).toLocaleString("tr-TR",{maximumFractionDigits:1})} Mn ₺
+                    </span>
+                  </div>
+                )}
+                {typeof f.gunlukYatirimciDegisimi === "number" && (
+                  <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:`1px solid ${WA(0.05)}`}}>
+                    <span style={{fontSize:13,color:C.label}}>Günlük Yatırımcı Giriş/Çıkış</span>
+                    <span style={{fontSize:13,fontWeight:700,color: f.gunlukYatirimciDegisimi>=0 ? C.green : C.red}}>
+                      {f.gunlukYatirimciDegisimi>=0 ? "+" : ""}{f.gunlukYatirimciDegisimi.toLocaleString("tr-TR")}
+                    </span>
                   </div>
                 )}
                 {f.kapUrl && (
