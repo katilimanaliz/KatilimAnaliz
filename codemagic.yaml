@@ -11,8 +11,8 @@ workflows:
         XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
         BUNDLE_ID: "com.katilimplus.app"
-        MARKETING_VERSION: "1.7"
-        BUILD_NUMBER: 35
+        MARKETING_VERSION: "1.8"
+        BUILD_NUMBER: 36
       xcode: latest
       node: 22
 
