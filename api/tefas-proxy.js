@@ -1035,7 +1035,16 @@ function tefasFonNormallestir(f) {
 // Fonoloji'nin katılım listesiyle KARŞILAŞTIRMA/BİRLEŞTİRME yapmaz — sadece
 // ham TEFAS listesini döner, çağıran taraf (cron) KV'ye yazar.
 // `baslangicSayfa`: 0-indexli, devam imlecinden okunur — 0 ise baştan başlar.
-async function tefasTumFonlariCek(baslangicSayfa = 0) {
+// `bilinenKodlar`: ÖNCEKİ çalıştırmalarda zaten toplanmış fon kodları (Set).
+// KRİTİK (canlı test, 6 Eylül): sayfa ~200'den sonra TEFAS aynı fonları
+// TEKRAR TEKRAR döndürmeye başladı — 4 ayrı çalıştırmada toplam 2500 kayıt
+// çekildi ama hepsi zaten bilinen 2041 koddan biriydi, toplam hiç artmadı.
+// `gorulenKodlar` eskiden SADECE bu tek çalıştırma içinde tutulduğu için bu
+// döngüyü asla fark edemiyordu. Artık önceden bilinen kodlar da parametre
+// olarak veriliyor — art arda birkaç sayfa hiç YENİ kod getirmezse (hepsi
+// zaten bilinen fonlarsa), evrenin gerçekten tükendiği ve TEFAS'ın basit
+// biçimde tekrar döngüsüne girdiği sonucuna varılıp tur TAMAMLANDI sayılıyor.
+async function tefasTumFonlariCek(baslangicSayfa = 0, bilinenKodlar = new Set()) {
   const bugun = new Date();
   const besGunOnce = new Date(bugun); besGunOnce.setDate(bugun.getDate() - 5);
   const yyyymmdd = (d) => `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}`;
@@ -1060,6 +1069,9 @@ async function tefasTumFonlariCek(baslangicSayfa = 0) {
   // kullanılıyor; kısa liste kontrolü sadece bu alanlar hiç gelmezse yedek.
   let toplamSayfaBilgisi = null;
   let toplamSayiBilgisi = null;
+  // Art arda "hiç yeni kod yok" sayılan sayfa sayacı — eşiğe ulaşınca dur.
+  const ARDIK_YENI_KOD_YOK_ESIGI = 3;
+  let ardikYeniKodYokSayaci = 0;
 
   for (sayfa = baslangicSayfa; sayfa < TEFAS_MAX_SAYFA; sayfa++) {
     if (Date.now() - taramaBaslangicMs > SURE_BUTCESI_MS) {
@@ -1117,21 +1129,31 @@ async function tefasTumFonlariCek(baslangicSayfa = 0) {
     if (typeof govdeYaniti?.toplamSayi === "number") toplamSayiBilgisi = govdeYaniti.toplamSayi;
 
     const liste = Array.isArray(govdeYaniti?.resultList) ? govdeYaniti.resultList : [];
+    let buSayfadaYeniKod = 0;
     for (const f of liste) {
       const kod = f?.fonKodu;
-      if (!kod || gorulenKodlar.has(kod)) continue;
+      if (!kod || gorulenKodlar.has(kod) || bilinenKodlar.has(kod)) continue;
       gorulenKodlar.add(kod);
       tumFonlar.push(tefasFonNormallestir(f));
+      buSayfadaYeniKod++;
     }
+    ardikYeniKodYokSayaci = (buSayfadaYeniKod === 0) ? ardikYeniKodYokSayaci + 1 : 0;
 
-    // Bitiş kontrolü: TEFAS'ın kendi bildirdiği toplam sayfa sayısı varsa ONA
-    // güveniliyor (1-indexli olduğu varsayımıyla: sayfa 0-indexli, toplamSayfa
-    // ile karşılaştırmak için +1). Bu bilgi hiç gelmezse (alan adı farklıysa
-    // vb.) eski "kısa liste" sezgisi yedek olarak kullanılıyor.
+    // Bitiş kontrolü 1: TEFAS'ın kendi bildirdiği toplam sayfa sayısı varsa
+    // ONA güveniliyor (1-indexli olduğu varsayımıyla: sayfa 0-indexli,
+    // toplamSayfa ile karşılaştırmak için +1).
     const sonSayfaMi = (toplamSayfaBilgisi != null)
       ? (sayfa + 1 >= toplamSayfaBilgisi)
       : (liste.length < TEFAS_SAYFA_BOYUTU);
     if (sonSayfaMi) { tamamlandiMi = true; sayfa++; break; }
+    // Bitiş kontrolü 2 (asıl güvenilir yedek — canlı testte gerekli çıktı):
+    // toplamSayfa hiç gelmiyor/işe yaramıyorsa, art arda birkaç sayfa hiç
+    // YENİ fon getirmiyorsa TEFAS muhtemelen zaten görülmüş fonları tekrar
+    // döndürüyordur — evren tükenmiştir.
+    if (ardikYeniKodYokSayaci >= ARDIK_YENI_KOD_YOK_ESIGI) {
+      hata = `${ARDIK_YENI_KOD_YOK_ESIGI} sayfadır yeni fon gelmiyor — evren tükenmiş sayıldı`;
+      tamamlandiMi = true; sayfa++; break;
+    }
     // Boş liste ama toplamSayfa bilgisi yoksa/henüz aşılmadıysa — muhtemelen
     // gerçekten bitmiştir, sonsuz döngüye düşmemek için de sonlandır.
     if (liste.length === 0) { tamamlandiMi = true; sayfa++; break; }
@@ -1171,8 +1193,9 @@ async function tefasTumCronYaz(req, res) {
       /* ttlSaniye */ 270,
       async () => {
         const baslangicSayfa = (await kv.get(TEFAS_TUM_IMLEC_KV).catch(() => null)) || 0;
-        const taze = await tefasTumFonlariCek(baslangicSayfa);
         const eski = await kv.get(TEFAS_TUM_KV_ANAHTAR).catch(() => null);
+        const bilinenKodlar = new Set((eski?.data || []).map((f) => f.kod).filter(Boolean));
+        const taze = await tefasTumFonlariCek(baslangicSayfa, bilinenKodlar);
 
         // Kısmi/başarısız tarama eski veriyi SİLMEZ — fonFetch.js'deki aynı
         // "eksik veri koruması" prensibi burada da uygulanıyor. İmleçten
