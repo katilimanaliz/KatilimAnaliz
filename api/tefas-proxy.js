@@ -990,12 +990,22 @@ const TEFAS_SAYFA_BOYUTU = 25;
 // 200 sayfa (5000 fon) tavanı, beklenmedik bir büyüme olursa sonsuz döngüye
 // girilmesin diye.
 const TEFAS_MAX_SAYFA = 200;
-// İstekler arası bilinçli gecikme — TEFAS resmi bir hız sınırı yayınlamıyor,
-// ama bir devlet API'sine art arda onlarca isteği hiç beklemeden göndermek
-// ihtiyatsız olur. Fonoloji'nin ayrı hız sınırlayıcısıyla PAYLAŞILMIYOR (farklı
-// host, farklı kota rejimi).
-const TEFAS_ISTEK_ARASI_MS = 400;
+// İstekler arası bilinçli gecikme — 6 Eylül'deki canlı testte TEFAS 6.
+// sayfadan sonra 429 (çok istek) döndürdü; demek ki resmi bir hız sınırı VAR.
+// 400ms yetersiz çıktı, 1500ms'e çıkarıldı.
+const TEFAS_ISTEK_ARASI_MS = 1500;
+// 429 geldiğinde art arda deneme sayısı ve aralarındaki artan bekleme —
+// TEFAS'ın sınırı muhtemelen kısa bir pencerede sıfırlanıyor, birkaç saniye
+// beklemek genelde yeterli oluyor.
+const TEFAS_429_DENEME = 4;
+const TEFAS_429_BASLANGIC_BEKLEME_MS = 4000;
 const TEFAS_TUM_BAYATLIK_SINIRI_SAAT = 20;
+// Devam imleci — bir çalıştırma 429/süre bütçesi yüzünden yarım kalırsa, bir
+// SONRAKİ cron çağrısı 1. sayfadan değil KALDIĞI SAYFADAN devam eder. Aksi
+// halde her çalıştırma aynı erken sayfada 429 yiyip asla ilerleyemez.
+// Tam tur tamamlanınca (tamamlandiMi=true) imleç sıfırlanır — ertesi günkü
+// taze tur yine baştan başlar.
+const TEFAS_TUM_IMLEC_KV = "tefas:tum-fonlar-diger:imlec";
 
 function tefasGovdeOlustur(fonTipi, basSira, bitSira, basTarih, bitTarih) {
   return {
@@ -1023,7 +1033,8 @@ function tefasFonNormallestir(f) {
 // TEFAS'ın resmi API'sinden fonTipi="YAT" ile TÜM sayfaları sırayla çeker.
 // Fonoloji'nin katılım listesiyle KARŞILAŞTIRMA/BİRLEŞTİRME yapmaz — sadece
 // ham TEFAS listesini döner, çağıran taraf (cron) KV'ye yazar.
-async function tefasTumFonlariCek() {
+// `baslangicSayfa`: 0-indexli, devam imlecinden okunur — 0 ise baştan başlar.
+async function tefasTumFonlariCek(baslangicSayfa = 0) {
   const bugun = new Date();
   const besGunOnce = new Date(bugun); besGunOnce.setDate(bugun.getDate() - 5);
   const yyyymmdd = (d) => `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}`;
@@ -1035,11 +1046,11 @@ async function tefasTumFonlariCek() {
 
   const tumFonlar = [];
   const gorulenKodlar = new Set();
-  let sayfa = 0;
+  let sayfa = baslangicSayfa;
   let hata = null;
   let tamamlandiMi = false;
 
-  for (sayfa = 0; sayfa < TEFAS_MAX_SAYFA; sayfa++) {
+  for (sayfa = baslangicSayfa; sayfa < TEFAS_MAX_SAYFA; sayfa++) {
     if (Date.now() - taramaBaslangicMs > SURE_BUTCESI_MS) {
       hata = "Süre bütçesi doldu — kısmi sonuçla durduruldu";
       break;
@@ -1048,30 +1059,49 @@ async function tefasTumFonlariCek() {
     const bitSira = basSira + TEFAS_SAYFA_BOYUTU - 1;
     const govde = tefasGovdeOlustur("YAT", basSira, bitSira, basTarih, bitTarih);
 
+    // ── 429 İÇİN GERİ-BASMALI YENİDEN DENEME ────────────────────────────────
+    // 6 Eylül canlı testinde 6. sayfadan sonra TEFAS 429 döndürdü. Tek seferde
+    // vazgeçmek yerine artan bekleme ile birkaç kez deneniyor; hepsi başarısız
+    // olursa bu sayfada durup imleç BU SAYFADA bırakılıyor (bir sonraki cron
+    // çağrısı buradan devam eder).
     let govdeYaniti = null;
-    try {
-      const controller = new AbortController();
-      const zamanlayici = setTimeout(() => controller.abort(), 15000);
-      const r = await fetch(TEFAS_RESMI_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
-          "Referer": "https://www.tefas.gov.tr/",
-          "Origin": "https://www.tefas.gov.tr",
-        },
-        body: JSON.stringify(govde),
-        signal: controller.signal,
-      }).finally(() => clearTimeout(zamanlayici));
-      if (!r.ok) { hata = `HTTP ${r.status} (sayfa ${sayfa + 1})`; break; }
-      govdeYaniti = await r.json().catch(() => null);
-    } catch (e) {
-      hata = `${e.name === "AbortError" ? "Zaman aşımı" : String(e.message || e)} (sayfa ${sayfa + 1})`;
-      break;
+    let sayfaHatasi = null;
+    for (let deneme = 0; deneme < TEFAS_429_DENEME; deneme++) {
+      if (deneme > 0) {
+        const bekleme = TEFAS_429_BASLANGIC_BEKLEME_MS * Math.pow(2, deneme - 1);
+        await new Promise((r) => setTimeout(r, bekleme));
+      }
+      try {
+        const controller = new AbortController();
+        const zamanlayici = setTimeout(() => controller.abort(), 15000);
+        const r = await fetch(TEFAS_RESMI_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+            "Referer": "https://www.tefas.gov.tr/",
+            "Origin": "https://www.tefas.gov.tr",
+          },
+          body: JSON.stringify(govde),
+          signal: controller.signal,
+        }).finally(() => clearTimeout(zamanlayici));
+        if (r.status === 429) {
+          sayfaHatasi = `HTTP 429 (sayfa ${sayfa + 1}, deneme ${deneme + 1}/${TEFAS_429_DENEME})`;
+          continue; // bir sonraki denemeye geç
+        }
+        if (!r.ok) { sayfaHatasi = `HTTP ${r.status} (sayfa ${sayfa + 1})`; govdeYaniti = null; break; }
+        govdeYaniti = await r.json().catch(() => null);
+        sayfaHatasi = null;
+        break; // başarılı
+      } catch (e) {
+        sayfaHatasi = `${e.name === "AbortError" ? "Zaman aşımı" : String(e.message || e)} (sayfa ${sayfa + 1})`;
+      }
     }
 
+    if (!govdeYaniti) { hata = sayfaHatasi || `Bilinmeyen hata (sayfa ${sayfa + 1})`; break; }
     if (govdeYaniti?.errorMessage) { hata = `TEFAS: ${govdeYaniti.errorMessage} (sayfa ${sayfa + 1})`; break; }
+
     const liste = Array.isArray(govdeYaniti?.resultList) ? govdeYaniti.resultList : [];
     for (const f of liste) {
       const kod = f?.fonKodu;
@@ -1080,13 +1110,18 @@ async function tefasTumFonlariCek() {
       tumFonlar.push(tefasFonNormallestir(f));
     }
 
-    if (liste.length < TEFAS_SAYFA_BOYUTU) { tamamlandiMi = true; break; } // son sayfa
+    if (liste.length < TEFAS_SAYFA_BOYUTU) { tamamlandiMi = true; sayfa++; break; } // son sayfa
     await new Promise((r) => setTimeout(r, TEFAS_ISTEK_ARASI_MS));
   }
 
+  // Devam imleci: tam tur bittiyse sıfırla, yarım kaldıysa kaldığı sayfayı kaydet.
+  const sonrakiSayfa = tamamlandiMi ? 0 : sayfa;
+
   return {
     data: tumFonlar,
-    sayfaSayisi: sayfa + (tamamlandiMi ? 1 : 0),
+    sayfaSayisi: sayfa - baslangicSayfa,
+    baslangicSayfa,
+    sonrakiSayfa,
     tamamlandiMi,
     hata,
   };
@@ -1109,14 +1144,20 @@ async function tefasTumCronYaz(req, res) {
       TEFAS_TUM_KILIT_ANAHTARI,
       /* ttlSaniye */ 270,
       async () => {
-        const taze = await tefasTumFonlariCek();
+        const baslangicSayfa = (await kv.get(TEFAS_TUM_IMLEC_KV).catch(() => null)) || 0;
+        const taze = await tefasTumFonlariCek(baslangicSayfa);
         const eski = await kv.get(TEFAS_TUM_KV_ANAHTAR).catch(() => null);
 
         // Kısmi/başarısız tarama eski veriyi SİLMEZ — fonFetch.js'deki aynı
-        // "eksik veri koruması" prensibi burada da uygulanıyor.
+        // "eksik veri koruması" prensibi burada da uygulanıyor. İmleçten
+        // devam eden bir tarama zaten SADECE yeni sayfaları getirir, bu
+        // yüzden her zaman eskiyle BİRLEŞTİRİLİR (tam bir baştan-sona tur
+        // tamamlanana kadar sonucun tamamı asla tek seferde gelmez).
         let sonucData;
         if (taze.data.length === 0 && eski?.data?.length) {
           sonucData = eski.data;
+        } else if (baslangicSayfa > 0 && eski?.data?.length) {
+          sonucData = birlestir(eski.data, taze.data);
         } else if (!taze.tamamlandiMi && eski?.data?.length) {
           sonucData = birlestir(eski.data, taze.data);
         } else {
@@ -1132,9 +1173,14 @@ async function tefasTumCronYaz(req, res) {
           data: sonucData,
         };
         await kv.set(TEFAS_TUM_KV_ANAHTAR, kaydedilecek);
+        // İmleci güncelle: tam tur bittiyse 0'a sıfırla, yarım kaldıysa
+        // kaldığı sayfayı kaydet (bir sonraki cron çağrısı oradan devam eder).
+        await kv.set(TEFAS_TUM_IMLEC_KV, taze.sonrakiSayfa).catch(() => {});
         return {
+          baslangicSayfa,
           buCekimSayfaSayisi: taze.sayfaSayisi,
           buCekimFonSayisi: taze.data.length,
+          sonrakiCagriBaslangicSayfa: taze.sonrakiSayfa,
           toplamSayim: sonucData.length,
           tamamlandiMi: taze.tamamlandiMi,
           hata: taze.hata,
