@@ -985,14 +985,20 @@ export default async function handler(req, res) {
   if (req.query?.teshis === "tefas") {
     const denemeler = [];
     const bugun = new Date();
+    const bes_gun_once = new Date(bugun); bes_gun_once.setDate(bugun.getDate() - 5);
     const yyyymmdd = (d) => `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}`;
+    // DÜZELTME (ilk deneme sonucu): tek günlük aralık (bugün=bugün) TEFAS
+    // tarafında "Index 0 out of bounds" hatası verdi — muhtemelen o tek gün
+    // (Pazar, borsa kapalı) için veri yok. Tarayıcıda doğrulanan istek geniş
+    // bir aralık kullanıyordu (basTarih 1 Eylül → bitTarih 6 Eylül), aynısı
+    // burada da uygulanıyor.
     const govdeOlustur = (fonTipi) => ({
       fonTipi,
       fonKodu: null,
       aramaMetni: null,
       basSira: 1,
       bitSira: 25,
-      basTarih: yyyymmdd(bugun),
+      basTarih: yyyymmdd(bes_gun_once),
       bitTarih: yyyymmdd(bugun),
       dil: "TR",
       fonGrubu: null,
