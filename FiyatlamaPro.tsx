@@ -4848,7 +4848,7 @@ function FonTahminDetayModal({
                                   const pozitif = d >= 0;
                                   return (
                                     <td key={gun} style={{textAlign:"center",padding:"2px 1px"}}>
-                                      <span style={{display:"inline-block",minWidth:22,padding:"1px 2px",borderRadius:4,background:yogunlukRengi(d,pozitif),color: pozitif?"#0a6b4c":"#8a2f2f",fontWeight:600}}>
+                                      <span style={{display:"inline-block",minWidth:22,padding:"1px 2px",borderRadius:4,background:yogunlukRengi(d,pozitif),color: pozitif?C.green:C.red,fontWeight:700}}>
                                         {d>0?"+":""}{d.toFixed(1)}
                                       </span>
                                     </td>
