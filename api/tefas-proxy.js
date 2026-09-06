@@ -151,6 +151,150 @@ const FON_DETAY_CACHE_TTL_SANIYE = 86400; // 24 saat — fon NAV'ı/yatırımcı
 // ayrıştırma bu gerçek şekle göre yazıldı (tahmini alan adı denemesi değil).
 const FON_HOLDINGS_CACHE_TTL_SANIYE = 86400; // 24 saat — periyodik veri, günlük değişmez
 
+// ── HİSSE AĞIRLIĞI — FİYAT KAYMASI DÜZELTMESİ (2026-09-06 eklendi) ──────────
+// SORUN: Fonoloji'nin hisse ağırlıkları KAP'ın AYLIK portföy bildiriminden
+// geliyor — bir ay boyunca fon hiç alım-satım yapmasa bile, hisse fiyatları
+// her gün değiştiği için GERÇEK ağırlıklar (hisse adedi × güncel fiyat /
+// toplam portföy) bildirim anındakinden sürekli kayar. FVT.com.tr'nin aynı
+// fon için bizden FARKLI (ve daha güncel görünen) ağırlık göstermesi bu
+// kaymayı doğruladı (bkz. THF/TERA karşılaştırması, 2026-09-06).
+// ÇÖZÜM: KAP bildirim döneminin (dagilimDonemi, örn. "2026-08") SON GÜNÜNE
+// ait hisse fiyatını (hisse-gecmis.js üzerinden Yahoo Finance) bugünkü
+// fiyatla oranlayıp, SADECE hisse kalemleri arasındaki dağılımı yeniden
+// ölçeklendiriyoruz. Hisse kaleminin TOPLAM payı (fon içindeki toplam hisse
+// yüzdesi) SABİT tutuluyor — sadece hangi hissenin bu toplam içindeki payı
+// büyüyüp küçüldüğü güncelleniyor. Bu, GERÇEK alım-satımı YAKALAMAZ (bkz.
+// KAP eşik bildirimleri araştırması — o veri kullanılamaz bulundu), sadece
+// mevcut hisse adetlerinin bugünkü piyasa değerine göre ağırlık kaymasını
+// düzeltir.
+// ⚠️ GÜVENLİK KURALI: Geçmiş fiyat yeterli sayıda hissede bulunamazsa (ağ
+// hatası, sembol eşleşmemesi vb.) ham ağırlıklara DOKUNULMUYOR — kısmi/
+// güvenilmez bir düzeltmeyle sessizce yanlış veri üretmektense, eski
+// (bilinen ama bayat) ağırlıkları korumak tercih ediliyor.
+const HISSE_TARIHSEL_FIYAT_TTL_SANIYE = 60 * 24 * 3600; // 60 gün — geçmiş bir tarihin kapanışı asla değişmez
+const HISSE_TARIHSEL_FIYAT_BULUNAMADI_TTL_SANIYE = 24 * 3600; // bulunamama durumu kısa süre cache'lenir (tekrar denensin diye)
+// Kapsam oranı eşiği: hisse ağırlığının en az bu kadarı için hem geçmiş hem
+// güncel fiyat bulunabilmiş olmalı, aksi halde düzeltme tümden iptal edilir.
+const FIYAT_KAYMASI_MIN_KAPSAM_ORANI = 0.7;
+
+function ddmmyyyy(d) {
+  return `${String(d.getDate()).padStart(2,"0")}-${String(d.getMonth()+1).padStart(2,"0")}-${d.getFullYear()}`;
+}
+
+// "2026-08" gibi bir dönem etiketinden, o ayın SON GÜNÜNÜ "YYYY-MM-DD" olarak
+// döner. Format tanınmazsa null (çağıran taraf düzeltmeyi atlar).
+function donemSonGunuISO(donemEtiketi) {
+  const eslesme = /^(\d{4})-(\d{2})$/.exec(String(donemEtiketi || ""));
+  if (!eslesme) return null;
+  const yil = parseInt(eslesme[1], 10);
+  const ay = parseInt(eslesme[2], 10); // 1-12
+  const sonGun = new Date(yil, ay, 0); // ay'ın 0. günü = bir önceki ayın son günü = hedef ayın son günü
+  return sonGun.toISOString().slice(0, 10);
+}
+
+async function hisseTarihselFiyatGetir(kod, hedefTarihISO) {
+  const cacheAnahtar = `hisse:tarihsel-fiyat:${kod}:${hedefTarihISO}`;
+  try {
+    const onbellek = await kv.get(cacheAnahtar).catch(() => null);
+    if (onbellek && onbellek.bulunamadi !== true) return onbellek.fiyat;
+    if (onbellek && onbellek.bulunamadi === true) return null; // yakın zamanda denendi, bulunamadı
+  } catch {}
+
+  try {
+    const hedef = new Date(hedefTarihISO + "T00:00:00");
+    const basTarih = new Date(hedef); basTarih.setDate(basTarih.getDate() - 10);
+    const bitTarih = new Date(hedef); bitTarih.setDate(bitTarih.getDate() + 5);
+    const url = `https://www.katilimplus.com/api/hisse-gecmis?ticker=${encodeURIComponent(kod)}` +
+      `&baslangic=${ddmmyyyy(basTarih)}&bitis=${ddmmyyyy(bitTarih)}`;
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d = await r.json().catch(() => null);
+    const noktalar = Array.isArray(d?.data) ? d.data : [];
+
+    // Hedef tarihe eşit ya da ondan ÖNCEKİ en yakın noktayı tercih et (ay
+    // sonu bir hafta sonu/tatile denk gelmiş olabilir). Hiç yoksa, hedeften
+    // SONRAKİ en yakın noktayı kullan (küçük bir ileri kayma kabul edilir).
+    let secilen = null;
+    for (const n of noktalar) {
+      if (n.tarih <= hedefTarihISO) secilen = n; // noktalar tarihe göre artan sırada varsayılıyor
+    }
+    if (!secilen && noktalar.length) secilen = noktalar[0];
+
+    if (secilen && typeof secilen.kapanis === "number" && secilen.kapanis > 0) {
+      try { await kv.set(cacheAnahtar, { fiyat: secilen.kapanis }, { ex: HISSE_TARIHSEL_FIYAT_TTL_SANIYE }); } catch {}
+      return secilen.kapanis;
+    }
+    try { await kv.set(cacheAnahtar, { bulunamadi: true }, { ex: HISSE_TARIHSEL_FIYAT_BULUNAMADI_TTL_SANIYE }); } catch {}
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function hisseGuncelFiyatMapGetirDahili() {
+  try {
+    const r = await fetch("https://www.katilimplus.com/api/hisse-proxy");
+    if (!r.ok) return {};
+    const d = await r.json().catch(() => null);
+    const m = {};
+    for (const h of (d?.data || [])) {
+      if (typeof h.fiyat === "number" && h.fiyat > 0 && h.ticker) m[h.ticker] = h.fiyat;
+    }
+    return m;
+  } catch {
+    return {};
+  }
+}
+
+// kalemler dizisindeki "stock" türü kalemlerin ağırlığını, KAP bildirim
+// tarihinden bugüne fiyat kaymasına göre yeniden ölçeklendirir. stock DIŞI
+// kalemlere (fund, derivative vb.) dokunulmaz. Hisse kalemlerinin TOPLAM
+// ağırlığı korunur — sadece aralarındaki dağılım güncellenir.
+async function agirlikFiyatKaymasiIleGuncelle(kalemler, donemEtiketi) {
+  const hedefTarihISO = donemSonGunuISO(donemEtiketi);
+  if (!hedefTarihISO) return { basarili: false, hata: "Dönem formatı tanınmadı" };
+
+  const hisseKalemleri = kalemler.filter((k) => k.tur === "stock");
+  if (!hisseKalemleri.length) return { basarili: false, hata: "Hisse kalemi yok" };
+
+  const guncelFiyatMap = await hisseGuncelFiyatMapGetirDahili();
+  if (!Object.keys(guncelFiyatMap).length) return { basarili: false, hata: "Güncel fiyat listesi alınamadı" };
+
+  const oranlar = {};
+  let kapsananAgirlik = 0;
+  const toplamHisseAgirlik = hisseKalemleri.reduce((a, k) => a + (k.agirlik ?? 0), 0);
+
+  for (const k of hisseKalemleri) {
+    const guncelFiyat = guncelFiyatMap[k.kod];
+    if (typeof guncelFiyat !== "number") continue;
+    const bazFiyat = await hisseTarihselFiyatGetir(k.kod, hedefTarihISO);
+    if (typeof bazFiyat !== "number" || bazFiyat <= 0) continue;
+    oranlar[k.kod] = guncelFiyat / bazFiyat;
+    kapsananAgirlik += (k.agirlik ?? 0);
+    await new Promise((r) => setTimeout(r, 150)); // Yahoo'ya nazik davran
+  }
+
+  const kapsamOrani = toplamHisseAgirlik > 0 ? kapsananAgirlik / toplamHisseAgirlik : 0;
+  if (kapsamOrani < FIYAT_KAYMASI_MIN_KAPSAM_ORANI) {
+    return { basarili: false, hata: `Yetersiz kapsam (%${(kapsamOrani*100).toFixed(0)}, en az %${FIYAT_KAYMASI_MIN_KAPSAM_ORANI*100} gerekli)` };
+  }
+
+  let yeniToplam = 0;
+  for (const k of hisseKalemleri) {
+    const oran = oranlar[k.kod];
+    k._yeniHam = oran != null ? (k.agirlik ?? 0) * oran : (k.agirlik ?? 0);
+    yeniToplam += k._yeniHam;
+  }
+  const olcek = yeniToplam > 0 ? toplamHisseAgirlik / yeniToplam : 1;
+  for (const k of hisseKalemleri) {
+    k.agirlikHam = k.agirlik; // şeffaflık için orijinal (KAP bildirimindeki) ağırlık korunuyor
+    k.agirlik = parseFloat((k._yeniHam * olcek).toFixed(2));
+    delete k._yeniHam;
+  }
+
+  return { basarili: true, hedefTarihISO, kapsamOrani };
+}
+
 // Hem HTTP ucu (fonHoldingsGetir) hem de günlük tahmin snapshot cron'u
 // (fonTahminSnapshotCalistir) AYNI çekim+cache mantığını kullanır — kod
 // tekrarını önlemek için ortak dahili fonksiyona çıkarıldı (2026-09-04).
@@ -247,6 +391,17 @@ async function holdingsGetirDahili(kod) {
       altFonKalemleri.forEach((k, i) => { k.oncekiGunGetiri = sonuclar[i]; });
     }
 
+    // ── FİYAT KAYMASI DÜZELTMESİ (2026-09-06) ────────────────────────────
+    // Yukarıdaki notta açıklanan mantıkla hisse ağırlıklarını güncel
+    // fiyatlara göre yeniden ölçeklendirmeyi DENE — başarısız olursa (yetersiz
+    // veri kapsamı, ağ hatası vb.) ham ağırlıklar OLDUĞU GİBİ kalır.
+    let fiyatKaymasi = { basarili: false, hata: "Denenmedi" };
+    try {
+      fiyatKaymasi = await agirlikFiyatKaymasiIleGuncelle(kalemler, donemEtiketi);
+    } catch (e) {
+      fiyatKaymasi = { basarili: false, hata: String(e?.message || e) };
+    }
+
     const paket = {
       success: true,
       kod,
@@ -254,6 +409,7 @@ async function holdingsGetirDahili(kod) {
       dagilimYayinTarihiMs: yayinTarihiMs,
       kalemler,
       kaynak: "fonoloji",
+      agirlikGuncellemesi: fiyatKaymasi,
     };
     try { await kv.set(cacheAnahtar, paket, { ex: FON_HOLDINGS_CACHE_TTL_SANIYE }); } catch {}
     return paket;
