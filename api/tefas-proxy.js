@@ -962,6 +962,223 @@ async function herkesOku(req, res) {
   }
 }
 
+// ── TEFAS RESMİ API — KATILIM DIŞI "TÜM FONLAR" (2026-09-06 eklendi) ────────
+// 6 Eylül'de tarayıcı DevTools ile TEFAS'ın kendi (2026'da yenilenmiş) resmi
+// API'si canlı doğrulandı: POST tefas.gov.tr/api/funds/fonGnlBlgSiraliGetir,
+// fonTipi:"YAT" ile TÜM standart yatırım fonlarını (katılım dahil TÜM evren)
+// 25'erli sayfalarla (basSira/bitSira) döndürüyor. Vercel'in sunucu IP'si
+// ENGELLENMİYOR (canlı teşhis: httpDurum 200, sonucAdedi 25).
+//
+// KAPSAM AYRIMI (kullanıcı kararı, 2026-09-06): Katılım fonları Fonoloji'den
+// gelmeye DEVAM EDİYOR (zengin ek veri: getiri dönemleri, risk skoru, holdings
+// vb. — TEFAS'ın bu ucu bunları vermiyor, sadece fiyat/kişi sayısı/portföy
+// büyüklüğü var). Bu yeni kaynak SADECE katılım dışı/geri kalan fonlar için
+// kullanılıyor — iki kaynak ayrı KV anahtarlarında tutuluyor, birbirine
+// KARIŞTIRILMIYOR. Sınıflandırma (hangi fon katılım uygun) yine SADECE
+// Fonoloji'nin ?katilim=1 süzgecinden geçenlerle sınırlı; bu yeni kaynaktaki
+// fonlara isim bazlı tahminle rozet TAKILMIYOR (yanlış sınıflandırma riski).
+//
+// TARİH ARALIĞI NEDEN GENİŞ: canlı teşhiste tek günlük aralık (bugün=bugün)
+// "Index 0 out of bounds" hatası verdi — muhtemelen o gün (hafta sonu/tatil)
+// için veri yoktu. Son 5 gün → bugün aralığı tarayıcıda doğrulandı, aynısı
+// kullanılıyor.
+const TEFAS_RESMI_URL = "https://www.tefas.gov.tr/api/funds/fonGnlBlgSiraliGetir";
+const TEFAS_TUM_KV_ANAHTAR = "tefas:tum-fonlar-diger";
+const TEFAS_TUM_KILIT_ANAHTARI = `lock:${TEFAS_TUM_KV_ANAHTAR}`;
+const TEFAS_SAYFA_BOYUTU = 25;
+// Güvenlik tavanı: gerçek evren muhtemelen ~3000-3500 fon (~120-140 sayfa).
+// 200 sayfa (5000 fon) tavanı, beklenmedik bir büyüme olursa sonsuz döngüye
+// girilmesin diye.
+const TEFAS_MAX_SAYFA = 200;
+// İstekler arası bilinçli gecikme — TEFAS resmi bir hız sınırı yayınlamıyor,
+// ama bir devlet API'sine art arda onlarca isteği hiç beklemeden göndermek
+// ihtiyatsız olur. Fonoloji'nin ayrı hız sınırlayıcısıyla PAYLAŞILMIYOR (farklı
+// host, farklı kota rejimi).
+const TEFAS_ISTEK_ARASI_MS = 400;
+const TEFAS_TUM_BAYATLIK_SINIRI_SAAT = 20;
+
+function tefasGovdeOlustur(fonTipi, basSira, bitSira, basTarih, bitTarih) {
+  return {
+    fonTipi, fonKodu: null, aramaMetni: null,
+    basSira, bitSira, basTarih, bitTarih,
+    dil: "TR", fonGrubu: null, fonTurAciklama: null,
+    fonTurKod: null, kurucuKod: null, sfonTurKod: null,
+  };
+}
+
+function tefasFonNormallestir(f) {
+  return {
+    kod: f.fonKodu || "",
+    ad: f.fonUnvan || "",
+    tarih: f.tarih || null,
+    fiyat: (typeof f.fiyat === "number") ? f.fiyat : null,
+    borsaBultenFiyat: (typeof f.borsaBultenFiyat === "number") ? f.borsaBultenFiyat : null,
+    tedavuldekiPaySayisi: (typeof f.tedPaySayisi === "number") ? f.tedPaySayisi : null,
+    kisiSayisi: (typeof f.kisiSayisi === "number") ? f.kisiSayisi : null,
+    portfoyBuyuklukTL: (typeof f.portfoyBuyukluk === "number") ? f.portfoyBuyukluk : null,
+    kaynak: "tefas-resmi",
+  };
+}
+
+// TEFAS'ın resmi API'sinden fonTipi="YAT" ile TÜM sayfaları sırayla çeker.
+// Fonoloji'nin katılım listesiyle KARŞILAŞTIRMA/BİRLEŞTİRME yapmaz — sadece
+// ham TEFAS listesini döner, çağıran taraf (cron) KV'ye yazar.
+async function tefasTumFonlariCek() {
+  const bugun = new Date();
+  const besGunOnce = new Date(bugun); besGunOnce.setDate(bugun.getDate() - 5);
+  const yyyymmdd = (d) => `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}`;
+  const basTarih = yyyymmdd(besGunOnce);
+  const bitTarih = yyyymmdd(bugun);
+
+  const taramaBaslangicMs = Date.now();
+  const SURE_BUTCESI_MS = 230000; // maxDuration 280sn; güvenli pay bırakılıyor
+
+  const tumFonlar = [];
+  const gorulenKodlar = new Set();
+  let sayfa = 0;
+  let hata = null;
+  let tamamlandiMi = false;
+
+  for (sayfa = 0; sayfa < TEFAS_MAX_SAYFA; sayfa++) {
+    if (Date.now() - taramaBaslangicMs > SURE_BUTCESI_MS) {
+      hata = "Süre bütçesi doldu — kısmi sonuçla durduruldu";
+      break;
+    }
+    const basSira = sayfa * TEFAS_SAYFA_BOYUTU + 1;
+    const bitSira = basSira + TEFAS_SAYFA_BOYUTU - 1;
+    const govde = tefasGovdeOlustur("YAT", basSira, bitSira, basTarih, bitTarih);
+
+    let govdeYaniti = null;
+    try {
+      const controller = new AbortController();
+      const zamanlayici = setTimeout(() => controller.abort(), 15000);
+      const r = await fetch(TEFAS_RESMI_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+          "Referer": "https://www.tefas.gov.tr/",
+          "Origin": "https://www.tefas.gov.tr",
+        },
+        body: JSON.stringify(govde),
+        signal: controller.signal,
+      }).finally(() => clearTimeout(zamanlayici));
+      if (!r.ok) { hata = `HTTP ${r.status} (sayfa ${sayfa + 1})`; break; }
+      govdeYaniti = await r.json().catch(() => null);
+    } catch (e) {
+      hata = `${e.name === "AbortError" ? "Zaman aşımı" : String(e.message || e)} (sayfa ${sayfa + 1})`;
+      break;
+    }
+
+    if (govdeYaniti?.errorMessage) { hata = `TEFAS: ${govdeYaniti.errorMessage} (sayfa ${sayfa + 1})`; break; }
+    const liste = Array.isArray(govdeYaniti?.resultList) ? govdeYaniti.resultList : [];
+    for (const f of liste) {
+      const kod = f?.fonKodu;
+      if (!kod || gorulenKodlar.has(kod)) continue;
+      gorulenKodlar.add(kod);
+      tumFonlar.push(tefasFonNormallestir(f));
+    }
+
+    if (liste.length < TEFAS_SAYFA_BOYUTU) { tamamlandiMi = true; break; } // son sayfa
+    await new Promise((r) => setTimeout(r, TEFAS_ISTEK_ARASI_MS));
+  }
+
+  return {
+    data: tumFonlar,
+    sayfaSayisi: sayfa + (tamamlandiMi ? 1 : 0),
+    tamamlandiMi,
+    hata,
+  };
+}
+
+async function tefasTumCronYaz(req, res) {
+  // Ayrı, özel bir gizli anahtar — mevcut CRON_SECRET/FON_TAHMIN_CRON_SECRET'e
+  // dokunulmuyor (aynı desende: bkz. fonTahminSnapshotCalistir'deki gerekçe).
+  const cronSecret = process.env.TEFAS_TUM_CRON_SECRET;
+  const gelenAuth = req.headers.authorization;
+  const vercelCronMu = req.headers["x-vercel-cron"] === "1";
+  if (cronSecret && !vercelCronMu && gelenAuth !== `Bearer ${cronSecret}`) {
+    return res.status(401).json({ success: false, error: "Yetkisiz" });
+  }
+
+  let basarili, sonuc;
+  try {
+    ({ basarili, sonuc } = await kilitliCalistir(
+      kv,
+      TEFAS_TUM_KILIT_ANAHTARI,
+      /* ttlSaniye */ 270,
+      async () => {
+        const taze = await tefasTumFonlariCek();
+        const eski = await kv.get(TEFAS_TUM_KV_ANAHTAR).catch(() => null);
+
+        // Kısmi/başarısız tarama eski veriyi SİLMEZ — fonFetch.js'deki aynı
+        // "eksik veri koruması" prensibi burada da uygulanıyor.
+        let sonucData;
+        if (taze.data.length === 0 && eski?.data?.length) {
+          sonucData = eski.data;
+        } else if (!taze.tamamlandiMi && eski?.data?.length) {
+          sonucData = birlestir(eski.data, taze.data);
+        } else {
+          sonucData = taze.data;
+        }
+
+        const kaydedilecek = {
+          success: true,
+          count: sonucData.length,
+          guncelleme: new Date().toISOString(),
+          tamamlandiMi: taze.tamamlandiMi,
+          sonHata: taze.hata,
+          data: sonucData,
+        };
+        await kv.set(TEFAS_TUM_KV_ANAHTAR, kaydedilecek);
+        return {
+          buCekimSayfaSayisi: taze.sayfaSayisi,
+          buCekimFonSayisi: taze.data.length,
+          toplamSayim: sonucData.length,
+          tamamlandiMi: taze.tamamlandiMi,
+          hata: taze.hata,
+        };
+      },
+      { denemeSayisi: 1 }
+    ));
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+
+  if (!basarili) {
+    return res.status(409).json({ success: false, error: "Başka bir tarama sürüyor, bu çağrı atlandı." });
+  }
+  return res.status(200).json({ success: true, mod: "tefas-tum-cron", ...sonuc });
+}
+
+async function tefasTumOku(req, res) {
+  try {
+    const kayit = await kv.get(TEFAS_TUM_KV_ANAHTAR).catch(() => null);
+    if (!kayit) {
+      res.setHeader("Cache-Control", "max-age=0, s-maxage=30, stale-while-revalidate=30");
+      return res.status(200).json({
+        success: false,
+        error: "Veri henüz mevcut değil. ?tefasTumCron=1 en az bir kez çalıştırılmalı.",
+        count: 0, data: [],
+      });
+    }
+    const bayatMi = (Date.now() - new Date(kayit.guncelleme).getTime()) > TEFAS_TUM_BAYATLIK_SINIRI_SAAT * 3600 * 1000;
+    res.setHeader("Cache-Control", "max-age=0, s-maxage=300, stale-while-revalidate=600");
+    return res.status(200).json({
+      success: true,
+      count: kayit.count,
+      guncelleme: kayit.guncelleme,
+      kaynakBayat: bayatMi,
+      tamamlandiMi: kayit.tamamlandiMi,
+      sonHata: kayit.sonHata || null,
+      data: kayit.data,
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, error: error.message, count: 0, data: [] });
+  }
+}
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
 
@@ -1052,6 +1269,11 @@ export default async function handler(req, res) {
   // Ayrı sorgu parametresiyle tetiklenir (cron-job.org'dan Bearer token ile) —
   // genel ?cron=1 dalıyla ÇAKIŞMAZ, kendi auth kontrolünü kendi yapar.
   if (req.query?.fonTahminSnapshot === "1") return fonTahminSnapshotCalistir(req, res);
+  // TEFAS resmi API'sinden katılım dışı "tüm fonlar" — ayrı kaynak, ayrı KV
+  // anahtarı, ayrı cron secret. Katılım fonlarının cron akışıyla (aşağıdaki
+  // genel ?cron=1 dalı) hiç kesişmiyor.
+  if (req.query?.tefasTumCron === "1") return tefasTumCronYaz(req, res);
+  if (req.query?.tumFonlar === "1") return tefasTumOku(req, res);
 
   const cronIstegi = req.headers["x-vercel-cron"] === "1" || req.query?.cron === "1";
   if (cronIstegi) return cronYaz(req, res);
