@@ -445,8 +445,25 @@ async function fonTahminSnapshotCalistir(req, res) {
   //   (mod verilmezse)  → ESKİ DAVRANIŞ (ikisi birden) — geriye dönük uyumluluk
   //                        ve elle/manuel test için korunuyor.
   const mod = req.query?.mod === "kaydet" || req.query?.mod === "gerceklestir" ? req.query.mod : null;
-  const kaydetMi = mod == null || mod === "kaydet";
+  let kaydetMi = mod == null || mod === "kaydet";
   const gerceklestirMi = mod == null || mod === "gerceklestir";
+
+  // ── HAFTA SONU KORUMASI (2026-09-06 eklendi) ────────────────────────────
+  // BULGU: Hafta sonu (piyasa kapalıyken) hisse fiyatları hiç değişmediği
+  // için AI tahmini de değişmiyor — cron-job.org görevi hafta sonu da
+  // tetiklendiğinde (zamanlama hafta içiyle sınırlı değildi) Cumartesi ve
+  // Pazar için AYNI tahmin değeriyle İKİ AYRI, anlamsız kayıt oluşuyordu
+  // (gerçek getiri de hiç gelmediği için ikisi de sonsuza dek "—" kalıyor).
+  // cron-job.org zamanlaması hafta içiyle sınırlandırılacak (dış düzeltme),
+  // ama burada da BACKEND kendi kendini koruyor — elle/yanlışlıkla hafta
+  // sonu tetiklenirse bile "kaydet" adımı SESSİZCE atlanıyor. `gerceklestir`
+  // adımına dokunulmuyor (hafta sonu zaten fonGercekMap boş gelir, zararsız
+  // no-op olur; Pazartesi sabahı Cuma'nın kaydını normal şekilde kapatabilir).
+  const trGunu = new Date(Date.now() + 3 * 3600 * 1000).getUTCDay(); // 0=Pazar, 6=Cumartesi (TSİ)
+  const haftaSonuMu = trGunu === 0 || trGunu === 6;
+  if (haftaSonuMu && kaydetMi) {
+    kaydetMi = false;
+  }
 
   const bugun = bugunTarihiTR();
   const hisseDegisimMap = kaydetMi ? await hisseDegisimMapGetirDahili() : {};
@@ -528,7 +545,7 @@ async function fonTahminSnapshotCalistir(req, res) {
     }
   }
 
-  return res.status(200).json({ success: true, tarih: bugun, sonuclar });
+  return res.status(200).json({ success: true, tarih: bugun, haftaSonuAtlandiMi: haftaSonuMu, sonuclar });
 }
 
 // ── FON AD/KATEGORİ — HAFİF, UZUN ÖMÜRLÜ UÇ (2026-09-04 eklendi) ────────────
