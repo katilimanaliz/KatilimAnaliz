@@ -1319,6 +1319,8 @@ export default async function handler(req, res) {
   // eder. Sorun çözülünce bu blok kaldırılabilir.
   if (req.query?.teshisSecret === "1") {
     const s = process.env.TEFAS_TUM_CRON_SECRET;
+    const gelenAuth = req.headers.authorization || null;
+    const beklenen = s ? `Bearer ${s}` : null;
     return res.status(200).json({
       tanimliMi: !!s,
       uzunluk: s ? s.length : 0,
@@ -1326,6 +1328,16 @@ export default async function handler(req, res) {
       sonKarakter: s ? s[s.length - 1] : null,
       basindaBoslukVarMi: s ? s !== s.trimStart() : null,
       sonundaBoslukVarMi: s ? s !== s.trimEnd() : null,
+      // ── EK TEŞHİS: gelen Authorization header'ı ile beklenenin
+      // karşılaştırması — hiçbir gerçek değer ifşa edilmiyor, sadece
+      // uzunluklar ve eşleşme durumu.
+      gelenAuthVarMi: !!gelenAuth,
+      gelenAuthUzunluk: gelenAuth ? gelenAuth.length : 0,
+      beklenenUzunluk: beklenen ? beklenen.length : 0,
+      tamEslesiyorMu: gelenAuth != null && beklenen != null ? gelenAuth === beklenen : null,
+      gelenAuthIlkKarakter: gelenAuth ? gelenAuth[0] : null,
+      gelenAuthSonKarakter: gelenAuth ? gelenAuth[gelenAuth.length - 1] : null,
+      gelenAuthBearerIlePrefixMi: gelenAuth ? gelenAuth.startsWith("Bearer ") : null,
     });
   }
 
