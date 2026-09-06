@@ -1175,6 +1175,19 @@ async function tefasTumFonlariCek(baslangicSayfa = 0, bilinenKodlar = new Set())
   };
 }
 
+// Kalıcı, KULLANICIYA SUNULAN veri (TEFAS_TUM_KV_ANAHTAR) SADECE tam bir tur
+// (baştan sona, tamamlandiMi=true) bittiğinde TOPTAN güncellenir. Bu ayrı
+// anahtar ise DEVAM EDEN turun (henüz bitmemiş) ara ilerlemesini tutar —
+// ikisi birbirine KARIŞTIRILMAZ.
+//
+// ⚠️ NEDEN AYRI (canlı test, 6 Eylül): İlk sürümde bilinenKodlar kalıcı
+// veriden (dünkü tam listeden) besleniyordu — bu da HER YENİ günün taraması
+// daha 3. sayfada "zaten hepsi biliniyor" deyip DURUYORDU, dünkü fiyatlar
+// asla tazelenmiyordu. Artık "yeni fon yok" tespiti SADECE bu turda şimdiye
+// kadar görülenlerle karşılaştırılıyor — tur sıfırdan (sayfa 0) başladığında
+// bu küme de sıfırlanıyor, dolayısıyla her gün gerçekten baştan taranıyor.
+const TEFAS_TUM_ILERLEME_KV = "tefas:tum-fonlar-diger:ilerleme";
+
 async function tefasTumCronYaz(req, res) {
   // Ayrı, özel bir gizli anahtar — mevcut CRON_SECRET/FON_TAHMIN_CRON_SECRET'e
   // dokunulmuyor (aynı desende: bkz. fonTahminSnapshotCalistir'deki gerekçe).
@@ -1193,44 +1206,51 @@ async function tefasTumCronYaz(req, res) {
       /* ttlSaniye */ 270,
       async () => {
         const baslangicSayfa = (await kv.get(TEFAS_TUM_IMLEC_KV).catch(() => null)) || 0;
-        const eski = await kv.get(TEFAS_TUM_KV_ANAHTAR).catch(() => null);
-        const bilinenKodlar = new Set((eski?.data || []).map((f) => f.kod).filter(Boolean));
-        const taze = await tefasTumFonlariCek(baslangicSayfa, bilinenKodlar);
 
-        // Kısmi/başarısız tarama eski veriyi SİLMEZ — fonFetch.js'deki aynı
-        // "eksik veri koruması" prensibi burada da uygulanıyor. İmleçten
-        // devam eden bir tarama zaten SADECE yeni sayfaları getirir, bu
-        // yüzden her zaman eskiyle BİRLEŞTİRİLİR (tam bir baştan-sona tur
-        // tamamlanana kadar sonucun tamamı asla tek seferde gelmez).
-        let sonucData;
-        if (taze.data.length === 0 && eski?.data?.length) {
-          sonucData = eski.data;
-        } else if (baslangicSayfa > 0 && eski?.data?.length) {
-          sonucData = birlestir(eski.data, taze.data);
-        } else if (!taze.tamamlandiMi && eski?.data?.length) {
-          sonucData = birlestir(eski.data, taze.data);
+        // Tur sıfırdan başlıyorsa (baslangicSayfa===0), bu YENİ bir günlük
+        // tur demektir — ilerleme birikimi de SIFIRLANIR (dünkü tam listeyle
+        // karışmasın). Devam eden bir turda (baslangicSayfa>0) önceki
+        // çağrılarda BU TUR içinde biriktirilenler okunur.
+        const ilerlemeOncesi = baslangicSayfa > 0
+          ? (await kv.get(TEFAS_TUM_ILERLEME_KV).catch(() => null))?.data || []
+          : [];
+        const bilinenKodlar = new Set(ilerlemeOncesi.map((f) => f.kod).filter(Boolean));
+
+        const taze = await tefasTumFonlariCek(baslangicSayfa, bilinenKodlar);
+        const ilerlemeSonrasi = birlestir(ilerlemeOncesi, taze.data);
+
+        if (taze.tamamlandiMi) {
+          // Tam tur tamamlandı — KULLANICIYA SUNULAN kalıcı veri TOPTAN bu
+          // turun sonucuyla değiştirilir (dünkü veri değil, bugünkü tam veri).
+          const kaydedilecek = {
+            success: true,
+            count: ilerlemeSonrasi.length,
+            guncelleme: new Date().toISOString(),
+            tamamlandiMi: true,
+            sonHata: taze.hata,
+            data: ilerlemeSonrasi,
+          };
+          await kv.set(TEFAS_TUM_KV_ANAHTAR, kaydedilecek);
+          await kv.del(TEFAS_TUM_ILERLEME_KV).catch(() => {});
         } else {
-          sonucData = taze.data;
+          // Tur yarım — kullanıcıya sunulan kalıcı veriye DOKUNULMUYOR (son
+          // tamamlanmış tam liste görünmeye devam eder), sadece bu turun ara
+          // ilerlemesi ayrı anahtara kaydediliyor.
+          await kv.set(TEFAS_TUM_ILERLEME_KV, { data: ilerlemeSonrasi }).catch(() => {});
         }
 
-        const kaydedilecek = {
-          success: true,
-          count: sonucData.length,
-          guncelleme: new Date().toISOString(),
-          tamamlandiMi: taze.tamamlandiMi,
-          sonHata: taze.hata,
-          data: sonucData,
-        };
-        await kv.set(TEFAS_TUM_KV_ANAHTAR, kaydedilecek);
         // İmleci güncelle: tam tur bittiyse 0'a sıfırla, yarım kaldıysa
         // kaldığı sayfayı kaydet (bir sonraki cron çağrısı oradan devam eder).
         await kv.set(TEFAS_TUM_IMLEC_KV, taze.sonrakiSayfa).catch(() => {});
+
+        const kalici = await kv.get(TEFAS_TUM_KV_ANAHTAR).catch(() => null);
         return {
           baslangicSayfa,
           buCekimSayfaSayisi: taze.sayfaSayisi,
           buCekimFonSayisi: taze.data.length,
           sonrakiCagriBaslangicSayfa: taze.sonrakiSayfa,
-          toplamSayim: sonucData.length,
+          buTurIlerlemeSayimi: ilerlemeSonrasi.length,
+          kaliciVeriSayimi: kalici?.count ?? null,
           tamamlandiMi: taze.tamamlandiMi,
           hata: taze.hata,
         };
