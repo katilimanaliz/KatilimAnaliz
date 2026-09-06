@@ -1314,32 +1314,6 @@ export default async function handler(req, res) {
   // fonTipi "BYF" (Borsa Yatırım Fonu) tarayıcıda denenmişti — "YAT" (adi
   // yatırım fonu, asıl büyük evren) ile de deneniyor; ikisi de dönerse hangi
   // fonTipi değerlerinin var olduğu daha net anlaşılır.
-  // ── GEÇİCİ TEŞHİS (2026-09-06): TEFAS_TUM_CRON_SECRET env variable'ının
-  // gerçekten doğru okunup okunmadığını, DEĞERİNİ HİÇ İFŞA ETMEDEN kontrol
-  // eder. Sorun çözülünce bu blok kaldırılabilir.
-  if (req.query?.teshisSecret === "1") {
-    const s = process.env.TEFAS_TUM_CRON_SECRET;
-    const gelenAuth = req.headers.authorization || null;
-    const beklenen = s ? `Bearer ${s}` : null;
-    return res.status(200).json({
-      tanimliMi: !!s,
-      uzunluk: s ? s.length : 0,
-      ilkKarakter: s ? s[0] : null,
-      sonKarakter: s ? s[s.length - 1] : null,
-      basindaBoslukVarMi: s ? s !== s.trimStart() : null,
-      sonundaBoslukVarMi: s ? s !== s.trimEnd() : null,
-      // ── EK TEŞHİS: gelen Authorization header'ı ile beklenenin
-      // karşılaştırması — hiçbir gerçek değer ifşa edilmiyor, sadece
-      // uzunluklar ve eşleşme durumu.
-      gelenAuthVarMi: !!gelenAuth,
-      gelenAuthUzunluk: gelenAuth ? gelenAuth.length : 0,
-      beklenenUzunluk: beklenen ? beklenen.length : 0,
-      tamEslesiyorMu: gelenAuth != null && beklenen != null ? gelenAuth === beklenen : null,
-      gelenAuthIlkKarakter: gelenAuth ? gelenAuth[0] : null,
-      gelenAuthSonKarakter: gelenAuth ? gelenAuth[gelenAuth.length - 1] : null,
-      gelenAuthBearerIlePrefixMi: gelenAuth ? gelenAuth.startsWith("Bearer ") : null,
-    });
-  }
 
   if (req.query?.teshis === "tefas") {
     const denemeler = [];
