@@ -397,6 +397,41 @@ async function tahminGecmisGetir(req, res) {
   }
 }
 
+// ── FON TAHMİNİ GEÇMİŞİ TEMİZLEME (2026-09-06 eklendi) ──────────────────────
+// Hafta sonu koruması eklenmeden ÖNCE Cumartesi/Pazar günleri de sessizce
+// tahmin kaydı biriktiriliyordu (gerçek getiri hiç yayınlanmadığı için
+// sonsuza dek "—" kalan, anlamsız mükerrer kayıtlar). Bu uç, verilen
+// tarih(ler)e ait kaydı TÜM takip edilen fonlardan (pilot + ekstra) siler.
+// Genel amaçlı bırakıldı — ileride benzer bir veri kalitesi sorunu çıkarsa
+// tekrar kullanılabilir. Yıkıcı bir işlem olduğu için aynı FON_TAHMIN_
+// CRON_SECRET ile korunuyor (cron uçlarıyla aynı desen).
+async function fonTahminGecmisTemizle(req, res) {
+  const cronSecret = process.env.FON_TAHMIN_CRON_SECRET;
+  const gelenAuth = req.headers.authorization;
+  if (cronSecret && gelenAuth !== `Bearer ${cronSecret}`) {
+    return res.status(401).json({ success: false, error: "Yetkisiz" });
+  }
+  const tarihler = String(req.query?.tarihler || "").split(",").map((s) => s.trim()).filter(Boolean);
+  if (!tarihler.length) {
+    return res.status(400).json({ success: false, error: "tarihler parametresi gerekli (virgülle ayrılmış YYYY-MM-DD)" });
+  }
+
+  const { liste } = await fonTahminListesiOku();
+  const sonuclar = [];
+  for (const kod of liste) {
+    const anahtar = `fonTahmin:gecmis:${kod}`;
+    const kayitlar = (await kv.get(anahtar).catch(() => null)) || [];
+    if (!Array.isArray(kayitlar) || !kayitlar.length) { sonuclar.push({ kod, silinen: 0 }); continue; }
+    const oncekiUzunluk = kayitlar.length;
+    const yeni = kayitlar.filter((k) => !tarihler.includes(k.tarih));
+    if (yeni.length !== oncekiUzunluk) {
+      await kv.set(anahtar, yeni).catch(() => {});
+    }
+    sonuclar.push({ kod, silinen: oncekiUzunluk - yeni.length, kalan: yeni.length });
+  }
+  return res.status(200).json({ success: true, tarihler, sonuclar });
+}
+
 // Canlı hisse fiyat değişimlerini kendi /api/hisse-proxy ucumuzdan HTTP ile
 // çekiyoruz — frontend'in kullandığı AYNI veri, ayrı bir kaynak/kota YOK.
 async function hisseDegisimMapGetirDahili() {
@@ -1397,6 +1432,7 @@ export default async function handler(req, res) {
   if (req.query?.adKategori === "1") return fonAdKategoriGetir(req, res);
   if (req.query?.holdings === "1") return fonHoldingsGetir(req, res);
   if (req.query?.tahminGecmis === "1") return tahminGecmisGetir(req, res);
+  if (req.query?.fonTahminGecmisTemizle === "1") return fonTahminGecmisTemizle(req, res);
   if (req.query?.fonTahminListesi === "1") return fonTahminListesiGetir(req, res);
   if (req.query?.fonTahminEkle === "1") return fonTahminEkle(req, res);
   // Ayrı sorgu parametresiyle tetiklenir (cron-job.org'dan Bearer token ile) —
