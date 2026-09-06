@@ -1573,6 +1573,88 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
   });
   const [hata,        setHata]        = useState(null);
 
+  // ── TÜM FONLAR (katılım dışı) — 2026-09-06 eklendi ──────────────────────
+  // Katılım fonları (yukarıdaki `fonlar`) hâlâ Fonoloji'den geliyor —
+  // zengin veri (getiri dönemleri, kategori, risk skoru vb.) sağladığı için
+  // buna dokunulmadı. Bu ekstra kaynak TEFAS'ın kendi resmi API'sinden
+  // (api/tefas-proxy?tumFonlar=1) katılım dışı geri kalan fonları getirir.
+  // ⚠️ TEFAS resmi kaynağı SADECE fiyat/kişi sayısı/portföy büyüklüğü verir —
+  // getiri yüzdeleri, kategori, yönetici YOKTUR. Bu fonlar için karta "—"
+  // düşecek alanlar bilerek boş bırakılıyor (uydurma veri koyulmuyor).
+  // Ayrıca bu fonlara asla 🟢 Katılım Uygun rozeti TAKILMIYOR — sınıflandırma
+  // sadece Fonoloji'nin ?katilim=1 süzgecinden geçenlerle sınırlı.
+  const [kaynakFiltre,   setKaynakFiltre]   = useState<"katilim"|"tumu">("katilim");
+  const [digerFonlar,    setDigerFonlar]    = useState<any[]>(() => {
+    try {
+      const raw = sessionStorage.getItem("kea_diger_fonlar");
+      if (!raw) return [];
+      const { data } = JSON.parse(raw);
+      return Array.isArray(data) ? data : [];
+    } catch { return []; }
+  });
+  const [digerYukleniyor, setDigerYukleniyor] = useState(false);
+  const [digerHata,       setDigerHata]       = useState<string|null>(null);
+
+  // "Tüm Fonlar" ilk kez seçildiğinde (ya da cache 30 dk'dan bayatsa) çeker —
+  // varsayılan görünüm hâlâ sadece katılım fonları olduğu için bu istek
+  // HERKESE gitmiyor, sadece filtreyi değiştiren kullanıcıya.
+  useEffect(() => {
+    if (kaynakFiltre !== "tumu") return;
+    let cacheTaze = false;
+    try {
+      const raw = sessionStorage.getItem("kea_diger_fonlar");
+      if (raw) {
+        const { data, ts } = JSON.parse(raw);
+        cacheTaze = Array.isArray(data) && data.length > 0 &&
+          typeof ts === "number" && (Date.now() - ts) < 30 * 60 * 1000;
+      }
+    } catch {}
+    if (cacheTaze) return; // taze cache varsa tekrar çekme
+
+    let iptal = false;
+    (async () => {
+      setDigerYukleniyor(true); setDigerHata(null);
+      try {
+        const r = await fetch(`${API_BASE}/api/tefas-proxy?tumFonlar=1`);
+        const json = await r.json();
+        if (!json.success) throw new Error(json.error || "Veri alınamadı");
+        if (iptal) return;
+        const veriyle = Array.isArray(json.data) ? json.data : [];
+        setDigerFonlar(veriyle);
+        try { sessionStorage.setItem("kea_diger_fonlar", JSON.stringify({ data: veriyle, ts: Date.now() })); } catch {}
+      } catch (e:any) {
+        if (!iptal) setDigerHata(e.message || "Tüm fonlar listesi alınamadı");
+      } finally {
+        if (!iptal) setDigerYukleniyor(false);
+      }
+    })();
+    return () => { iptal = true; };
+  }, [kaynakFiltre]);
+
+  // TEFAS resmi API'sinden gelen ham kaydı, ekranın geri kalanının beklediği
+  // fon şekline dönüştürür. Eksik alanlar (getiri, kategori, yönetici) null/
+  // boş bırakılıyor — TAHMİN EDİLMİYOR.
+  const digerFonNormallestir = useCallback((f:any) => ({
+    kod: f.kod, ad: f.ad || "", yonetici: "", kategori: "",
+    oncelik: 2, katilimUygun: false,
+    fiyat: f.fiyat ?? null, fiyatTarihi: f.tarih ?? null, islemDurumu: null,
+    gunluk: null, haftalik: null, aylik: null, uc_aylik: null, ytd: null, yillik: null,
+    portfoy: f.portfoyBuyuklukTL ?? 0, yatirimci: f.kisiSayisi ?? 0,
+    kaynak: "tefas-resmi",
+  }), []);
+
+  // Gösterilecek asıl evren: "Tümü" seçiliyse katılım + diğer BİRLEŞTİRİLİR
+  // (kod bazında, katılım verisi öncelikli — daha zengin olduğu için aynı
+  // kod ikisinde de varsa katılım kaydı kazanır). "Katılım" seçiliyse eskisi
+  // gibi SADECE `fonlar` kullanılır — varsayılan davranış DEĞİŞMEDİ.
+  const gosterilecekFonlar = useMemo(() => {
+    if (kaynakFiltre !== "tumu") return fonlar;
+    const map = new Map<string, any>();
+    for (const f of digerFonlar) { if (f?.kod) map.set(f.kod, digerFonNormallestir(f)); }
+    for (const f of fonlar) { if (f?.kod) map.set(f.kod, f); } // katılım kazanır
+    return [...map.values()];
+  }, [kaynakFiltre, fonlar, digerFonlar, digerFonNormallestir]);
+
   // ── Canlı veri çek ────────────────────────────────────────────────────────
   useEffect(()=>{
     // Cache 5 dakikadan taze VE doluysa (ör. Ana Sayfa'daki widget'tan gelmiş olabilir)
@@ -1658,7 +1740,7 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
     return fon[period === "gunluk" ? "gunluk" : period];
   };
 
-  const maxVal = useMemo(()=>Math.max(...fonlar.map(f=>Math.abs(fonDeger(f,aktifPeriod)??0)),1),[fonlar,aktifPeriod]);
+  const maxVal = useMemo(()=>Math.max(...gosterilecekFonlar.map(f=>Math.abs(fonDeger(f,aktifPeriod)??0)),1),[gosterilecekFonlar,aktifPeriod]);
 
   const siralanmis = useMemo(()=>{
     // D=azalan(büyükten küçüğe), D yok=artan
@@ -1666,12 +1748,12 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
     const key = sirala?.replace("D","") as string;
     const keyMap: Record<string,string> = {gunluk:"gunluk",haftalik:"haftalik",aylik:"aylik",uc_aylik:"uc_aylik",ytd:"ytd",yillik:"yillik",portfoy:"portfoy",yatirimci:"yatirimci"};
     const field = keyMap[key] || "yillik";
-    return [...(fonlar)].sort((a,b)=>{
+    return [...(gosterilecekFonlar)].sort((a,b)=>{
       const av = fonDeger(a,field) ?? (azalan?-Infinity:Infinity);
       const bv = fonDeger(b,field) ?? (azalan?-Infinity:Infinity);
       return azalan ? bv-av : av-bv;
     });
-  },[fonlar, sirala]);
+  },[gosterilecekFonlar, sirala]);
 
   const filtreli = useMemo(()=>{
     const q=arama.toUpperCase().trim();
@@ -1700,10 +1782,10 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
   },[filtreli,aktifPeriod]);
 
   const enIyi = useMemo(()=>
-    [...fonlar]
+    [...gosterilecekFonlar]
       .filter(f=>filtreYon==="Tümü"||f.yonetici===filtreYon)
       .sort((a,b)=>(fonDeger(b,aktifPeriod)??-Infinity)-(fonDeger(a,aktifPeriod)??-Infinity))[0]
-  ,[fonlar,aktifPeriod,filtreYon]);
+  ,[gosterilecekFonlar,aktifPeriod,filtreYon]);
 
   const periodLabel=PERIODS.find(p=>p.key===aktifPeriod)?.label;
 
@@ -1733,8 +1815,38 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
             value={arama} onChange={e=>setArama(e.target.value)}/>
           {arama&&<button style={{background:"none",border:"none",color:FC.sub,cursor:"pointer",fontSize:12}} onClick={()=>setArama("")}>✕</button>}
         </div>
-        <div style={{marginTop:4,fontSize:10,color:FC.sub,textAlign:"right"}}>{filtreli.length} / {fonlar.length} fon · Sıralama: {periodLabel}</div>
+        <div style={{marginTop:4,fontSize:10,color:FC.sub,textAlign:"right"}}>{filtreli.length} / {gosterilecekFonlar.length} fon · Sıralama: {periodLabel}</div>
       </div>
+
+      {/* Kaynak filtresi — Katılım Uygun / Tüm Fonlar (2026-09-06 eklendi) */}
+      <div style={{display:"flex",gap:6,padding:"8px 12px 0",flexShrink:0}}>
+        {[
+          {key:"katilim", label:"🟢 Sadece Katılım Uygun"},
+          {key:"tumu",    label:"🌐 Tüm Fonlar"},
+        ].map(k=>{
+          const aktif = kaynakFiltre===k.key;
+          return (
+            <button key={k.key} onClick={()=>setKaynakFiltre(k.key as "katilim"|"tumu")} style={{
+              flex:1,padding:"7px 10px",borderRadius:8,cursor:"pointer",
+              fontFamily:"inherit",fontSize:11.5,fontWeight:aktif?800:600,
+              background:aktif?FC.green:FC.card,
+              color:aktif?"#fff":FC.sub,
+              border:`1px solid ${aktif?FC.green:FC.border}`,
+            }}>{k.label}</button>
+          );
+        })}
+      </div>
+      {kaynakFiltre==="tumu" && digerYukleniyor && (
+        <div style={{padding:"4px 12px 0",fontSize:10,color:FC.sub}}>Tüm fonlar listesi yükleniyor…</div>
+      )}
+      {kaynakFiltre==="tumu" && digerHata && (
+        <div style={{padding:"4px 12px 0",fontSize:10,color:FC.red}}>⚠️ {digerHata}</div>
+      )}
+      {kaynakFiltre==="tumu" && !digerYukleniyor && !digerHata && (
+        <div style={{padding:"4px 12px 0",fontSize:9.5,color:FC.sub,lineHeight:1.4}}>
+          🟢 rozetli fonlar katılım finans ilkelerine uygunluğu doğrulanmış fonlardır (kaynak: Fonoloji). Diğer fonlar TEFAS'ın resmi verisinden gelir; getiri/kategori bilgisi bu kaynakta yer almaz.
+        </div>
+      )}
 
       {/* Fon türü filtre chips */}
       <div style={{display:"flex",gap:5,padding:"8px 12px",overflowX:"auto",borderBottom:`1px solid ${FC.border}`,flexShrink:0}}>
@@ -1832,6 +1944,10 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
               const barW=Math.round((Math.abs(g??0)/maxVal)*100);
               const sel=secilenFon?.kod===fon.kod;
               const vakif=fon.oncelik===1;
+              // Sadece "Tümü" görünümünde anlamlı — "Sadece Katılım Uygun"
+              // görünümünde zaten listedeki HER fon katılım uygun olduğu
+              // için rozet tekrar tekrar göstermek gürültü olurdu.
+              const katilimRozetiGoster = kaynakFiltre==="tumu" && fon.kaynak!=="tefas-resmi";
               return (
                 <div key={fon.kod}>
                   {/* Fon satırı */}
@@ -1844,6 +1960,9 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
                       <span style={{fontSize:12,fontWeight:800,color:vakif?FC.green:FC.blue}}>
                         {fon.kod}{vakif&&<span style={{fontSize:8,color:FC.green,opacity:0.8}}>★</span>}
                       </span>
+                      {katilimRozetiGoster && (
+                        <span title="Katılım Uygun" style={{fontSize:8,color:FC.green,fontWeight:700,lineHeight:1}}>🟢</span>
+                      )}
                       {/* TEFAS'ta işlem görmeyen fonlar listede de belli olsun.
                           ⚠️ KODUN ALTINDA, AYRI SATIRDA (2026-08-06):
                           İlk sürümde "⚠ İŞLEM YOK" metniydi — 38 px'lik sütuna
@@ -1951,7 +2070,7 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
 
       {/* Alt bilgi */}
       <div style={s.footer}>
-        <span style={{color:FC.sub2}}>{filtreli.length} / {fonlar.length} fon</span>
+        <span style={{color:FC.sub2}}>{filtreli.length} / {gosterilecekFonlar.length} fon</span>
         <span style={{color:FC.sub2,fontSize:10}}>🕗 Hafta içi 11:00-18:00 arasında kademeli güncellenir · Fonoloji · TEFAS</span>
 
       {/* Getiri Hesaplayıcı — Bottom Sheet Modal */}
