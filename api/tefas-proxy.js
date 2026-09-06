@@ -986,10 +986,11 @@ const TEFAS_RESMI_URL = "https://www.tefas.gov.tr/api/funds/fonGnlBlgSiraliGetir
 const TEFAS_TUM_KV_ANAHTAR = "tefas:tum-fonlar-diger";
 const TEFAS_TUM_KILIT_ANAHTARI = `lock:${TEFAS_TUM_KV_ANAHTAR}`;
 const TEFAS_SAYFA_BOYUTU = 25;
-// Güvenlik tavanı: gerçek evren muhtemelen ~3000-3500 fon (~120-140 sayfa).
-// 200 sayfa (5000 fon) tavanı, beklenmedik bir büyüme olursa sonsuz döngüye
-// girilmesin diye.
-const TEFAS_MAX_SAYFA = 200;
+// Güvenlik tavanı: gerçek evren ~200 sayfada (5000 fon) bitmediği canlı
+// testte görüldü (2041 fon toplanmışken hâlâ bitmemişti) — tavan 500 sayfaya
+// (12.500 fon) çıkarıldı. Asıl bitiş artık TEFAS'ın kendi toplamSayfa
+// alanına göre belirleniyor (bkz. tefasTumFonlariCek), bu sadece son çare.
+const TEFAS_MAX_SAYFA = 500;
 // İstekler arası bilinçli gecikme — 6 Eylül'deki canlı testte TEFAS 6.
 // sayfadan sonra 429 (çok istek) döndürdü; demek ki resmi bir hız sınırı VAR.
 // 400ms yetersiz çıktı, 1500ms'e çıkarıldı.
@@ -1049,6 +1050,16 @@ async function tefasTumFonlariCek(baslangicSayfa = 0) {
   let sayfa = baslangicSayfa;
   let hata = null;
   let tamamlandiMi = false;
+  // ⚠️ DÜZELTME (canlı test, 6 Eylül): "resultList.length < 25 ise son sayfa"
+  // varsayımı YANLIŞ çıktı — TEFAS sayfa 198-199'da bile tam 25 kayıt (ya da
+  // en azından TEFAS_SAYFA_BOYUTU'na yakın) döndürmeye devam etti, döngü hiç
+  // "son sayfa" tespit edemeden güvenlik tavanına (200) çarpıp SONSUZA KADAR
+  // orada tıkalı kaldı (imleç hep 200'de sabitlendi). TEFAS'ın hata yanıtında
+  // görülen `toplamSayi`/`toplamSayfa` alanları BAŞARILI yanıtlarda da
+  // geliyor olmalı — bunlar öğrenilir öğrenilmez GERÇEK bitiş noktası olarak
+  // kullanılıyor; kısa liste kontrolü sadece bu alanlar hiç gelmezse yedek.
+  let toplamSayfaBilgisi = null;
+  let toplamSayiBilgisi = null;
 
   for (sayfa = baslangicSayfa; sayfa < TEFAS_MAX_SAYFA; sayfa++) {
     if (Date.now() - taramaBaslangicMs > SURE_BUTCESI_MS) {
@@ -1102,6 +1113,9 @@ async function tefasTumFonlariCek(baslangicSayfa = 0) {
     if (!govdeYaniti) { hata = sayfaHatasi || `Bilinmeyen hata (sayfa ${sayfa + 1})`; break; }
     if (govdeYaniti?.errorMessage) { hata = `TEFAS: ${govdeYaniti.errorMessage} (sayfa ${sayfa + 1})`; break; }
 
+    if (typeof govdeYaniti?.toplamSayfa === "number") toplamSayfaBilgisi = govdeYaniti.toplamSayfa;
+    if (typeof govdeYaniti?.toplamSayi === "number") toplamSayiBilgisi = govdeYaniti.toplamSayi;
+
     const liste = Array.isArray(govdeYaniti?.resultList) ? govdeYaniti.resultList : [];
     for (const f of liste) {
       const kod = f?.fonKodu;
@@ -1110,7 +1124,17 @@ async function tefasTumFonlariCek(baslangicSayfa = 0) {
       tumFonlar.push(tefasFonNormallestir(f));
     }
 
-    if (liste.length < TEFAS_SAYFA_BOYUTU) { tamamlandiMi = true; sayfa++; break; } // son sayfa
+    // Bitiş kontrolü: TEFAS'ın kendi bildirdiği toplam sayfa sayısı varsa ONA
+    // güveniliyor (1-indexli olduğu varsayımıyla: sayfa 0-indexli, toplamSayfa
+    // ile karşılaştırmak için +1). Bu bilgi hiç gelmezse (alan adı farklıysa
+    // vb.) eski "kısa liste" sezgisi yedek olarak kullanılıyor.
+    const sonSayfaMi = (toplamSayfaBilgisi != null)
+      ? (sayfa + 1 >= toplamSayfaBilgisi)
+      : (liste.length < TEFAS_SAYFA_BOYUTU);
+    if (sonSayfaMi) { tamamlandiMi = true; sayfa++; break; }
+    // Boş liste ama toplamSayfa bilgisi yoksa/henüz aşılmadıysa — muhtemelen
+    // gerçekten bitmiştir, sonsuz döngüye düşmemek için de sonlandır.
+    if (liste.length === 0) { tamamlandiMi = true; sayfa++; break; }
     await new Promise((r) => setTimeout(r, TEFAS_ISTEK_ARASI_MS));
   }
 
@@ -1120,6 +1144,8 @@ async function tefasTumFonlariCek(baslangicSayfa = 0) {
   return {
     data: tumFonlar,
     sayfaSayisi: sayfa - baslangicSayfa,
+    toplamSayfaBilgisi,
+    toplamSayiBilgisi,
     baslangicSayfa,
     sonrakiSayfa,
     tamamlandiMi,
