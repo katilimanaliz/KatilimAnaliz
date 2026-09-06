@@ -4667,7 +4667,7 @@ function FonTahminDetayModal({
                     <span style={{fontSize:13,fontWeight:700,color:C.label}}>
                       Yerli Hisseler <span style={{color:WA(0.4),fontWeight:600}}>({hisseSayisi})</span>
                     </span>
-                    <span style={{fontSize:13,fontWeight:700,color:WA(0.6)}}>%{hisseToplamAgirlik.toFixed(1)}</span>
+                    <span style={{fontSize:13,fontWeight:700,color:WA(0.6)}}>%{hisseToplamAgirlik.toFixed(2)}</span>
                   </div>
                 );
               })()}
@@ -4701,7 +4701,7 @@ function FonTahminDetayModal({
                       {etki==null ? "—" : isaretliYuzde(etki, 4)}
                     </div>
                     <div style={{width:52,textAlign:"right",fontSize:12,fontWeight:600,color:WA(0.6)}}>
-                      %{(k.agirlik ?? 0).toFixed(1)}
+                      %{(k.agirlik ?? 0).toFixed(2)}
                     </div>
                   </div>
                 );
@@ -4724,7 +4724,7 @@ function FonTahminDetayModal({
                       <span style={{fontSize:13,fontWeight:700,color:C.label}}>
                         Alt Fonlar <span style={{color:WA(0.4),fontWeight:600}}>({altFonKalemleri.length})</span>
                       </span>
-                      <span style={{fontSize:13,fontWeight:700,color:WA(0.6)}}>%{altFonToplamAgirlik.toFixed(1)}</span>
+                      <span style={{fontSize:13,fontWeight:700,color:WA(0.6)}}>%{altFonToplamAgirlik.toFixed(2)}</span>
                     </div>
                     {altFonKalemleri.map((k) => {
                       const deg = k.oncekiGunGetiri;
@@ -4744,7 +4744,7 @@ function FonTahminDetayModal({
                             {etki==null ? "—" : isaretliYuzde(etki, 4)}
                           </div>
                           <div style={{width:52,textAlign:"right",fontSize:12,fontWeight:600,color:WA(0.6)}}>
-                            %{(k.agirlik ?? 0).toFixed(1)}
+                            %{(k.agirlik ?? 0).toFixed(2)}
                           </div>
                         </div>
                       );
@@ -4770,7 +4770,7 @@ function FonTahminDetayModal({
                   <>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"18px 4px 10px"}}>
                       <span style={{fontSize:13,fontWeight:700,color:C.label}}>Diğer Kalemler</span>
-                      <span style={{fontSize:13,fontWeight:700,color:WA(0.6)}}>%{viopAgirlik.toFixed(1)}</span>
+                      <span style={{fontSize:13,fontWeight:700,color:WA(0.6)}}>%{viopAgirlik.toFixed(2)}</span>
                     </div>
                     <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 4px",borderBottom:`1px solid ${WA(0.05)}`}}>
                       <div style={{flex:"1 1 auto",minWidth:0}}>
@@ -4780,7 +4780,7 @@ function FonTahminDetayModal({
                       <div style={{width:56,textAlign:"right",fontSize:12,fontWeight:600,color:WA(0.35)}}>—</div>
                       <div style={{width:62,textAlign:"right",fontSize:12,fontWeight:600,color:WA(0.35)}}>—</div>
                       <div style={{width:52,textAlign:"right",fontSize:12,fontWeight:600,color:WA(0.6)}}>
-                        %{viopAgirlik.toFixed(1)}
+                        %{viopAgirlik.toFixed(2)}
                       </div>
                     </div>
                   </>
