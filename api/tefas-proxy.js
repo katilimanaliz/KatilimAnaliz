@@ -965,6 +965,47 @@ async function herkesOku(req, res) {
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
 
+  // ── TEFAS TEŞHİS (2026-09-05, GEÇİCİ) ────────────────────────────────────
+  // "Tüm Fonlar" için TEFAS'ın kendi resmi (2026'da yenilenmiş) API'sini
+  // (tefas.gov.tr/api/funds/...) kullanabilir miyiz diye tek seferlik canlı
+  // deneme. Vercel'in veri merkezi IP'si TEFAS'ın WAF'ı tarafından
+  // engelleniyor mu — bunu VARSAYMAK yerine gerçekten görmek için. Ham HTTP
+  // durumu + ilk 500 karakter dönüyor, hiçbir şeyi işlemiyor/önbelleklemiyor.
+  // Sonuç olumluysa kalıcı bir uca dönüştürülecek, olumsuzsa bu blok silinecek.
+  if (req.query?.teshis === "tefas") {
+    const denemeler = [];
+    const denenecekler = [
+      { ad: "fonGnlBlgSiraliGetir", url: "https://www.tefas.gov.tr/api/funds/fonGnlBlgSiraliGetir", method: "POST", govde: {} },
+      { ad: "fonGnlBlgSiraliGetir-tarihli", url: "https://www.tefas.gov.tr/api/funds/fonGnlBlgSiraliGetir",
+        method: "POST", govde: { fonturkod: "YAT", tarih: new Date().toISOString().slice(0,10).split("-").reverse().join(".") } },
+    ];
+    for (const d of denenecekler) {
+      try {
+        const controller = new AbortController();
+        const zamanlayici = setTimeout(() => controller.abort(), 10000);
+        const r = await fetch(d.url, {
+          method: d.method,
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+          },
+          body: JSON.stringify(d.govde),
+          signal: controller.signal,
+        }).finally(() => clearTimeout(zamanlayici));
+        const metin = await r.text();
+        denemeler.push({
+          ad: d.ad, httpDurum: r.status, contentType: r.headers.get("content-type"),
+          ilk500Karakter: metin.slice(0, 500), uzunluk: metin.length,
+        });
+      } catch (e) {
+        denemeler.push({ ad: d.ad, hata: String(e?.message || e) });
+      }
+    }
+    res.setHeader("Cache-Control", "no-store");
+    return res.status(200).json({ teshis: "tefas", denemeler });
+  }
+
   if (req.query?.gecmis === "1") return fonGecmisGetir(req, res);
   if (req.query?.detay === "1") return fonDetayGetir(req, res);
   if (req.query?.adKategori === "1") return fonAdKategoriGetir(req, res);
