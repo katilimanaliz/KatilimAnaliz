@@ -4228,25 +4228,10 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
   }, []);
 
   const fonEkle = () => {
-    const kod = ekleKodGiris.trim().toUpperCase();
-    if (!kod) { setEkleHata("Fon kodu girin"); return; }
-    if (takipListesi.includes(kod)) { setEkleHata("Bu fon zaten listede"); return; }
-    setEkleYukleniyor(true);
-    setEkleHata(null);
-    fetch(`${API_BASE}/api/tefas-proxy?fonTahminEkle=1&kod=${encodeURIComponent(kod)}`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.success && Array.isArray(d.liste)) {
-          listeYaz(d.liste);
-          setEkleAcik(false);
-          setEkleKodGiris("");
-        } else {
-          setEkleHata(d.error || "Eklenemedi");
-        }
-      })
-      .catch(() => setEkleHata("Bağlantı hatası, tekrar deneyin"))
-      .finally(() => setEkleYukleniyor(false));
+    // 2026-09-06: Fon Ekle özelliği kaldırıldı — fonksiyon gövdesi boş bırakıldı,
+    // henüz kaldırılmamış bir referans olursa (olmamalı) sessizce hiçbir şey yapmaz.
   };
+
 
   // Her takip listesi fonu için hisse ağırlık dağılımı — fon başına ayrı
   // istek, fon başına ayrı 24 saatlik istemci cache'i.
@@ -4454,38 +4439,7 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
           );
         })}
 
-        {/* Fon Ekle — üst sınıra kadar kullanıcı kendi fonunu takip listesine ekleyebilir */}
-        {takipListesi.length < limit ? (
-          ekleAcik ? (
-            <div style={{ padding: "8px 2px", borderTop: `1px solid ${WA(0.06)}` }}>
-              <div style={{ display: "flex", gap: 6 }}>
-                <input
-                  value={ekleKodGiris}
-                  onChange={(e) => { setEkleKodGiris(e.target.value.toUpperCase()); setEkleHata(null); }}
-                  placeholder="Fon kodu (örn. NNF)"
-                  style={{ flex: 1, minWidth: 0, fontSize: 12.5, padding: "7px 9px", borderRadius: 8, border: `1px solid ${WA(0.15)}`, background: (TEMA==="acik"?"#fff":"#0F1923"), color: C.label, outline: "none" }}
-                />
-                <button onClick={fonEkle} disabled={ekleYukleniyor} style={{ fontSize: 12, fontWeight: 700, color: "#fff", background: C.blue, border: "none", borderRadius: 8, padding: "0 14px", cursor: ekleYukleniyor ? "default" : "pointer", opacity: ekleYukleniyor ? 0.6 : 1 }}>
-                  {ekleYukleniyor ? "…" : "Ekle"}
-                </button>
-                <button onClick={() => { setEkleAcik(false); setEkleKodGiris(""); setEkleHata(null); }} style={{ fontSize: 12, color: WA(0.45), background: "transparent", border: "none", cursor: "pointer", padding: "0 6px" }}>Vazgeç</button>
-              </div>
-              {ekleHata && <div style={{ fontSize: 11, color: C.red, marginTop: 6 }}>{ekleHata}</div>}
-            </div>
-          ) : (
-            <button onClick={() => setEkleAcik(true)} style={{
-              display: "flex", alignItems: "center", gap: 4, width: "100%", padding: "9px 2px",
-              background: "transparent", border: "none", borderTop: `1px solid ${WA(0.06)}`,
-              fontSize: 12, fontWeight: 600, color: C.blue, cursor: "pointer",
-            }}>
-              <Plus size={13} strokeWidth={2.5} /> Fon Ekle <span style={{ color: WA(0.35), fontWeight: 500 }}>({limit - takipListesi.length} hak kaldı)</span>
-            </button>
-          )
-        ) : (
-          <div style={{ fontSize: 10, color: WA(0.3), padding: "8px 2px 2px", borderTop: `1px solid ${WA(0.06)}` }}>
-            Takip listesi dolu ({limit}/{limit})
-          </div>
-        )}
+        {/* Fon Ekle özelliği 2026-09-06'da kaldırıldı — kullanıcı isteği. */}
 
         <div style={{ fontSize: 9.5, color: WA(0.3), padding: "6px 2px 2px", lineHeight: 1.4 }}>
           Tahmin, fonun son açıklanan hisse ağırlıkları ile bu hisselerin günlük fiyat değişiminin ağırlıklı ortalamasıdır. VIOP, sabit getiri ve nakit kalemleri hesaba dahil edilmez. Yatırım tavsiyesi değildir.
