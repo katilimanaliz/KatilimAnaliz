@@ -965,49 +965,68 @@ async function herkesOku(req, res) {
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
 
-  // ── TEFAS TEŞHİS (2026-09-05, GEÇİCİ) ────────────────────────────────────
-  // "Tüm Fonlar" için TEFAS'ın kendi resmi (2026'da yenilenmiş) API'sini
-  // (tefas.gov.tr/api/funds/...) kullanabilir miyiz diye tek seferlik canlı
-  // deneme. Vercel'in veri merkezi IP'si TEFAS'ın WAF'ı tarafından
-  // engelleniyor mu — bunu VARSAYMAK yerine gerçekten görmek için. Ham HTTP
-  // durumu + ilk 500 karakter dönüyor, hiçbir şeyi işlemiyor/önbelleklemiyor.
-  // Sonuç olumluysa kalıcı bir uca dönüştürülecek, olumsuzsa bu blok silinecek.
+  // ── TEFAS TEŞHİS (2026-09-06, GÜNCELLENDİ) ───────────────────────────────
+  // 5 Eylül'deki ilk deneme YANLIŞ parametre adları kullanıyordu (fontip,
+  // bastarih küçük harf, tarih formatı DD.MM.YYYY) — hiçbiri site tarafından
+  // tanınmadığı için hepsi başarısız olmuştu. 6 Eylül'de tarayıcı DevTools
+  // Network sekmesinden GERÇEK istek yakalandı:
+  //   POST https://www.tefas.gov.tr/api/funds/fonGnlBlgSiraliGetir
+  //   Body: { fonTipi, fonKodu, aramaMetni, basSira, bitSira, basTarih,
+  //           bitTarih (YYYYMMDD!), dil, fonGrubu, fonTurAciklama,
+  //           fonTurKod, kurucuKod, sfonTurKod }
+  // Tarayıcıdan 200 OK + gerçek fon listesi döndü (fonKodu/fonUnvan/tarih/
+  // fiyat/tedPaySayisi/kisiSayisi/portfoyBuyukluk/borsaBultenFiyat/rn).
+  // BİLİNMEYEN: Bu, tarayıcı isteğiydi — Vercel'in sunucu IP'sinden AYNI
+  // isteğin geçip geçmeyeceği (WAF/bot koruması) HENÜZ DOĞRULANMADI. Bu blok
+  // tam olarak yakalanan isteği taklit edip sonucu görmek için var.
+  // fonTipi "BYF" (Borsa Yatırım Fonu) tarayıcıda denenmişti — "YAT" (adi
+  // yatırım fonu, asıl büyük evren) ile de deneniyor; ikisi de dönerse hangi
+  // fonTipi değerlerinin var olduğu daha net anlaşılır.
   if (req.query?.teshis === "tefas") {
     const denemeler = [];
     const bugun = new Date();
-    const dun = new Date(bugun); dun.setDate(dun.getDate() - 1);
-    const gg = (d) => `${String(d.getDate()).padStart(2,"0")}.${String(d.getMonth()+1).padStart(2,"0")}.${d.getFullYear()}`;
-    const iso = (d) => d.toISOString().slice(0,10);
+    const yyyymmdd = (d) => `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}`;
+    const govdeOlustur = (fonTipi) => ({
+      fonTipi,
+      fonKodu: null,
+      aramaMetni: null,
+      basSira: 1,
+      bitSira: 25,
+      basTarih: yyyymmdd(bugun),
+      bitTarih: yyyymmdd(bugun),
+      dil: "TR",
+      fonGrubu: null,
+      fonTurAciklama: null,
+      fonTurKod: null,
+      kurucuKod: null,
+      sfonTurKod: null,
+    });
     const denenecekler = [
-      { ad: "fontip-DD.MM.YYYY-bugun", url: "https://www.tefas.gov.tr/api/funds/fonGnlBlgSiraliGetir",
-        method: "POST", govde: { fontip: "YAT", bastarih: gg(bugun), bittarih: gg(bugun) } },
-      { ad: "fontip-ISO-dun", url: "https://www.tefas.gov.tr/api/funds/fonGnlBlgSiraliGetir",
-        method: "POST", govde: { fontip: "YAT", tarih: iso(dun) } },
-      { ad: "fonturkod-DD.MM.YYYY-dun", url: "https://www.tefas.gov.tr/api/funds/fonGnlBlgSiraliGetir",
-        method: "POST", govde: { fonturkod: "YAT", tarih: gg(dun) } },
-      { ad: "kind-date-ISO-dun (ingilizce)", url: "https://www.tefas.gov.tr/api/funds/fonGnlBlgSiraliGetir",
-        method: "POST", govde: { kind: "YAT", date: iso(dun) } },
-      { ad: "fontip-bastarih-bittarih-ISO-dun", url: "https://www.tefas.gov.tr/api/funds/fonGnlBlgSiraliGetir",
-        method: "POST", govde: { fontip: "YAT", bastarih: iso(dun), bittarih: iso(dun) } },
+      { ad: "fonTipi=YAT (adi yatırım fonu — asıl hedef)", govde: govdeOlustur("YAT") },
+      { ad: "fonTipi=BYF (tarayıcıda doğrulanan)", govde: govdeOlustur("BYF") },
     ];
     for (const d of denenecekler) {
       try {
         const controller = new AbortController();
-        const zamanlayici = setTimeout(() => controller.abort(), 10000);
-        const r = await fetch(d.url, {
-          method: d.method,
+        const zamanlayici = setTimeout(() => controller.abort(), 15000);
+        const r = await fetch("https://www.tefas.gov.tr/api/funds/fonGnlBlgSiraliGetir", {
+          method: "POST",
           headers: {
             "Content-Type": "application/json",
             "Accept": "application/json",
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+            "Referer": "https://www.tefas.gov.tr/",
+            "Origin": "https://www.tefas.gov.tr",
           },
           body: JSON.stringify(d.govde),
           signal: controller.signal,
         }).finally(() => clearTimeout(zamanlayici));
         const metin = await r.text();
+        let sonucAdedi = null;
+        try { sonucAdedi = JSON.parse(metin)?.resultList?.length ?? null; } catch {}
         denemeler.push({
           ad: d.ad, gonderilenGovde: d.govde, httpDurum: r.status, contentType: r.headers.get("content-type"),
-          ilk700Karakter: metin.slice(0, 700), uzunluk: metin.length,
+          sonucAdedi, ilk1000Karakter: metin.slice(0, 1000), uzunluk: metin.length,
         });
       } catch (e) {
         denemeler.push({ ad: d.ad, hata: String(e?.message || e) });
