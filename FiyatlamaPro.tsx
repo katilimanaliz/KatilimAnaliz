@@ -24533,23 +24533,63 @@ function App(){
   // ulaşmıyordu, kapat/aç döngüleri bu yüzden hiçbir şey değiştirmiyordu.
   // sync() indirir, nextBundleId dönerse reload() yeni bundle'ı HEMEN
   // devreye alır (kullanıcı elle kapat/aç yapmasa bile).
+  //
+  // GÜNCELLEME (2026-09-06) — UYGULAMA AÇIKKEN GELEN GÜNCELLEME ARTIK
+  // ZORLA UYGULANMIYOR: Önceki davranışta sync() her tetiklendiğinde
+  // (sadece açılışta) bulunan güncelleme hemen reload() ile devreye
+  // giriyordu — açılış anı için bu güvenli (kullanıcı henüz bir şeyle
+  // uğraşmıyor). Ama uygulama saatlerce açık kalırsa bu kontrol BİR DAHA
+  // hiç çalışmıyordu, kullanıcı güncellemeden habersiz kalıyordu. Şimdi:
+  //   • Açılışta (ilk mount): eskisi gibi SESSİZCE kontrol edip bulunursa
+  //     hemen uygular — kullanıcı henüz ekranla etkileşime girmedi.
+  //   • Uygulama arka plandan öne her geldiğinde (visibilitychange): TEKRAR
+  //     kontrol eder, ama bulunursa ZORLA reload YAPMAZ — bunun yerine bir
+  //     banner gösterip "Yeniden Başlat" seçimini kullanıcıya bırakır.
+  //     Böylece bir form doldururken/hesaplama yaparken ekran aniden
+  //     sıfırlanmaz.
+  const [guncellemeHazir, setGuncellemeHazir] = useState<any>(null);
   useEffect(()=>{
     const gercekIsNative = (window as any).Capacitor?.isNativePlatform?.() ?? false;
     if(!gercekIsNative) return;
-    (async () => {
+
+    let iptal = false;
+    const acilisMs = Date.now();
+
+    const kontrolEt = async (otomatikUygula: boolean) => {
       try {
         const mod = await import("@capawesome/capacitor-live-update");
         await mod.LiveUpdate.ready();
         const sonuc: any = await mod.LiveUpdate.sync();
-        console.log("LiveUpdate.sync() sonucu:", sonuc);
-        if (sonuc?.nextBundleId) {
-          console.log("Yeni bundle bulundu, uygulanıyor:", sonuc.nextBundleId);
+        console.log("LiveUpdate.sync() sonucu:", sonuc, "otomatikUygula:", otomatikUygula);
+        if (iptal || !sonuc?.nextBundleId) return;
+        if (otomatikUygula) {
+          console.log("Yeni bundle bulundu (açılış), uygulanıyor:", sonuc.nextBundleId);
           await mod.LiveUpdate.reload();
+        } else {
+          console.log("Yeni bundle bulundu (uygulama açıkken):", sonuc.nextBundleId);
+          setGuncellemeHazir(sonuc);
         }
       } catch (e) {
         console.error("LiveUpdate hatası:", e);
       }
-    })();
+    };
+
+    kontrolEt(true); // açılış — sessiz + otomatik uygula (mevcut davranış)
+
+    // Uygulama arka plandan öne gelince tekrar kontrol et. Mount sırasında
+    // bazı WebView'lerde "visible" hemen bir kez daha ateşlenebiliyor —
+    // ilk 5 saniyeyi yok sayarak açılış kontrolüyle çakışmasını engelliyoruz.
+    const gorunurlukDegisti = () => {
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() - acilisMs < 5000) return;
+      kontrolEt(false);
+    };
+    document.addEventListener("visibilitychange", gorunurlukDegisti);
+
+    return () => {
+      iptal = true;
+      document.removeEventListener("visibilitychange", gorunurlukDegisti);
+    };
   },[]);
 
   // ── Push Notifications (bildirim servisi) kaydı ──
@@ -25255,6 +25295,27 @@ function App(){
         .spark-in { animation: sparkIn 360ms ease-out; }
         @keyframes sparkIn { from { opacity:0; } to { opacity:1; } }
       `}</style>
+      {/* ── LIVE UPDATE BANNER (2026-09-06 eklendi) ──────────────────────
+          Uygulama açıkken yeni bir sürüm bulunduğunda gösterilir. Otomatik
+          yenilemiyor — kullanıcı "Yeniden Başlat"a basmadan reload olmaz,
+          böylece bir işlemin ortasında ekran aniden sıfırlanmaz. */}
+      {guncellemeHazir && (
+        <div style={{position:"fixed",top:0,left:0,right:0,zIndex:9999,
+          background:"#1B9E7A",color:"#fff",padding:"9px 14px",
+          display:"flex",alignItems:"center",justifyContent:"center",gap:10,
+          fontSize:12,fontWeight:700,boxShadow:"0 2px 10px rgba(0,0,0,0.3)"}}>
+          <span>🔄 Yeni güncelleme var</span>
+          <button onClick={async ()=>{
+            try {
+              const mod = await import("@capawesome/capacitor-live-update");
+              await mod.LiveUpdate.reload();
+            } catch (e) { console.error("LiveUpdate reload hatası:", e); }
+          }} style={{background:"#fff",color:"#1B9E7A",border:"none",borderRadius:6,
+            padding:"5px 12px",fontWeight:800,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>
+            Yeniden Başlat
+          </button>
+        </div>
+      )}
       {/* ── MASAÜSTÜ YAN MENÜ (sadece geniş ekran web) ── */}
       {genisEkran&&(
         <div style={{position:"fixed",top:0,left:0,bottom:0,width:SIDEBAR_W,zIndex:80,
