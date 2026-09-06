@@ -974,10 +974,21 @@ export default async function handler(req, res) {
   // Sonuç olumluysa kalıcı bir uca dönüştürülecek, olumsuzsa bu blok silinecek.
   if (req.query?.teshis === "tefas") {
     const denemeler = [];
+    const bugun = new Date();
+    const dun = new Date(bugun); dun.setDate(dun.getDate() - 1);
+    const gg = (d) => `${String(d.getDate()).padStart(2,"0")}.${String(d.getMonth()+1).padStart(2,"0")}.${d.getFullYear()}`;
+    const iso = (d) => d.toISOString().slice(0,10);
     const denenecekler = [
-      { ad: "fonGnlBlgSiraliGetir", url: "https://www.tefas.gov.tr/api/funds/fonGnlBlgSiraliGetir", method: "POST", govde: {} },
-      { ad: "fonGnlBlgSiraliGetir-tarihli", url: "https://www.tefas.gov.tr/api/funds/fonGnlBlgSiraliGetir",
-        method: "POST", govde: { fonturkod: "YAT", tarih: new Date().toISOString().slice(0,10).split("-").reverse().join(".") } },
+      { ad: "fontip-DD.MM.YYYY-bugun", url: "https://www.tefas.gov.tr/api/funds/fonGnlBlgSiraliGetir",
+        method: "POST", govde: { fontip: "YAT", bastarih: gg(bugun), bittarih: gg(bugun) } },
+      { ad: "fontip-ISO-dun", url: "https://www.tefas.gov.tr/api/funds/fonGnlBlgSiraliGetir",
+        method: "POST", govde: { fontip: "YAT", tarih: iso(dun) } },
+      { ad: "fonturkod-DD.MM.YYYY-dun", url: "https://www.tefas.gov.tr/api/funds/fonGnlBlgSiraliGetir",
+        method: "POST", govde: { fonturkod: "YAT", tarih: gg(dun) } },
+      { ad: "kind-date-ISO-dun (ingilizce)", url: "https://www.tefas.gov.tr/api/funds/fonGnlBlgSiraliGetir",
+        method: "POST", govde: { kind: "YAT", date: iso(dun) } },
+      { ad: "fontip-bastarih-bittarih-ISO-dun", url: "https://www.tefas.gov.tr/api/funds/fonGnlBlgSiraliGetir",
+        method: "POST", govde: { fontip: "YAT", bastarih: iso(dun), bittarih: iso(dun) } },
     ];
     for (const d of denenecekler) {
       try {
@@ -995,8 +1006,8 @@ export default async function handler(req, res) {
         }).finally(() => clearTimeout(zamanlayici));
         const metin = await r.text();
         denemeler.push({
-          ad: d.ad, httpDurum: r.status, contentType: r.headers.get("content-type"),
-          ilk500Karakter: metin.slice(0, 500), uzunluk: metin.length,
+          ad: d.ad, gonderilenGovde: d.govde, httpDurum: r.status, contentType: r.headers.get("content-type"),
+          ilk700Karakter: metin.slice(0, 700), uzunluk: metin.length,
         });
       } catch (e) {
         denemeler.push({ ad: d.ad, hata: String(e?.message || e) });
