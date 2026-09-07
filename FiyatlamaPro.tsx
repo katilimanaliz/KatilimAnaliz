@@ -129,16 +129,24 @@ function piyasaAcikMi(): boolean {
   return dk >= 10 * 60 && dk < 18 * 60 + 20;
 }
 
-// ── FON TAHMİN SIFIRLAMA PENCERESİ — 2026-09-04 eklendi, 2026-09-05 genişletildi ─
-// Piyasa KAPALIYKEN (gece, hafta sonu, mesai dışı) Fon Tahminleri widget'ı
-// tahmini "0,0000%" gösterir — o saatlerde elde tek veri dünün/Cuma'nın KAPANIŞ
-// değeridir ve yeni an için hiçbir anlam taşımaz, yanıltıcı olurdu.
-// ÖNCEDEN: sadece 00:00-10:00 arası (gün içi pencere). Kullanıcı bildirdi:
-// bunun yerine piyasa AÇIK OLMADIĞI HER AN (Cuma 18:20 kapanışından Pazartesi
-// 10:00 açılışına kadar hafta sonu dahil) sıfır gösterilmeli — piyasaAcikMi()
-// ile birebir TERS mantık, tek bir yerden yönetiliyor.
+// ── FON TAHMİN SIFIRLAMA PENCERESİ — 2026-09-04 eklendi, 2026-09-07 GÜNCELLENDİ ─
+// GEÇMİŞ (2026-09-05): piyasaAcikMi() ile birebir TERS mantık kullanılıyordu —
+// piyasa kapanır kapanmaz (18:20) tahmin hemen "0,0000%"e dönüyordu.
+// KULLANICI KARARI DEĞİŞTİ (2026-09-07): gün içinde hesaplanan son tahmin,
+// piyasa kapansa bile gece yarısına (00:00) KADAR ekranda kalmaya devam
+// etsin — sadece gece yarısından piyasa açılışına (00:00-10:00) kadar sıfır
+// gösterilsin. HAFTA SONU İSTİSNASI: Cuma'nın son tahmini Cuma gece yarısına
+// kadar durur, ama Cumartesi 00:00'dan Pazartesi 10:00 açılışına kadar
+// TÜM hafta sonu boyunca sıfır kalır (haftaiçi gibi günlük 00:00-10:00
+// pencerelerine bölünmez — Cumartesi/Pazar günü zaten piyasa hiç açılmıyor,
+// "10:00 sonrası son değer" kuralı o günler için anlamsız/yanıltıcı olurdu).
+// Artık piyasaAcikMi()'den TAMAMEN BAĞIMSIZ, kendi gün+saat mantığını taşıyor.
 function tahminSifirGosterimSaatiMi(): boolean {
-  return !piyasaAcikMi();
+  const simdi = new Date();
+  const gun = simdi.getDay(); // 0=Pazar, 6=Cumartesi
+  if (gun === 0 || gun === 6) return true; // hafta sonu tamamen sıfır
+  const dk = simdi.getHours() * 60 + simdi.getMinutes();
+  return dk < 10 * 60; // hafta içi sadece 00:00–10:00 arası sıfır
 }
 
 // ── İŞARETLİ YÜZDE BİÇİMLENDİRME — 2026-09-04 eklendi ───────────────────────
@@ -1841,11 +1849,6 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
       )}
       {kaynakFiltre==="tumu" && digerHata && (
         <div style={{padding:"4px 12px 0",fontSize:10,color:FC.red}}>⚠️ {digerHata}</div>
-      )}
-      {kaynakFiltre==="tumu" && !digerYukleniyor && !digerHata && (
-        <div style={{padding:"4px 12px 0",fontSize:9.5,color:FC.sub,lineHeight:1.4}}>
-          🟢 rozetli fonlar katılım finans ilkelerine uygunluğu doğrulanmış fonlardır (kaynak: Fonoloji). Diğer fonlar TEFAS'ın resmi verisinden gelir; getiri/kategori bilgisi bu kaynakta yer almaz.
-        </div>
       )}
 
       {/* Fon türü filtre chips */}
@@ -3948,7 +3951,7 @@ function KatilimEndeksiTopHareketliler({ nav, onSecim }: { nav: (sc: string) => 
 // düşüktür, kullanıcı bunu görmeli (16 Ağustos devir belgesi 8.1 dersiyle
 // tutarlı: "karşılaştırma tabanı her zaman yazılmalı").
 const FON_TAHMIN_PILOT_VARSAYILAN = ["THF", "DFI", "DOH", "PBR", "PHE", "PUK", "TLY", "TMV", "KHA"];
-const FON_TAHMIN_HOLDINGS_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 saat
+const FON_TAHMIN_HOLDINGS_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 saat (2026-09-07: önce 24'ten 12'ye, sonra 12'den 6'ya düşürüldü — sunucudaki manuel/otomatik veri değişiklikleri cihazlara daha hızlı yansısın diye, bkz. THF portföy dağılımı tutarsızlığı olayı)
 // Dinamik takip listesi (pilot + kullanıcı eklemeleri) — backend'deki GLOBAL
 // liste ile senkron tutulur, cihazda kalıcı localStorage'da önbelleklenir
 // (böylece bir sonraki açılışta backend yanıtı beklemeden anında gösterilir).
@@ -4276,7 +4279,7 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
       // durumda hafta sonu bile BİR KEZ çekim yapılır (sadece ilk dolum
       // amacıyla; bir sonraki hafta sonu artık önbellek dolu olacağı için
       // bu dal bir daha tetiklenmez). Tahmin YÜZDESİ (üstteki %0,00) bundan
-      // etkilenmiyor — o ayrı bir mekanizmayla (piyasaKapali) zaten sabit.
+      // etkilenmiyor — o ayrı bir mekanizmayla (sifirGosterimPenceresindeMi) zaten sabit.
       fetch(`${API_BASE}/api/tefas-proxy?holdings=1&kod=${kod}`)
         .then((r) => r.json())
         .then((d) => {
@@ -4296,16 +4299,18 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
   }, [hisseler]);
 
   const tahminler = useMemo(() => {
-    // DEĞİŞİKLİK (2026-09-05): Piyasa KAPALIYKEN (hafta sonu/gece) artık
-    // kapsam=0 olsa (holdings verisi hiç gelmemiş/bayat olsa) BİLE fon
-    // listeden ÇIKARILMIYOR — aksi halde widget'ın TAMAMI kaybolabiliyordu
-    // (kullanıcı bildirdi). O saatlerde zaten ekranda "0,0000%" gösterilecek
-    // (bkz. tahminSifirGosterimSaatiMi → !piyasaAcikMi()), o yüzden kapsam
-    // eksik olsa da fonu listede tutmanın bir sakıncası yok. Piyasa AÇIKKEN
-    // ise eski (doğru) davranış korunuyor: kapsam=0 olan fon (veri henüz
-    // gelmemiş) listeden hâlâ gizleniyor — yanlışlıkla "%0 değişim" (sanki
-    // gerçekten hareketsizmiş gibi) gösterilmesin diye.
-    const piyasaKapali = tahminSifirGosterimSaatiMi();
+    // DEĞİŞİKLİK (2026-09-05, 2026-09-07'de güncellendi): Sıfır gösterim
+    // penceresindeyken (bkz. tahminSifirGosterimSaatiMi — artık 00:00-10:00
+    // hafta içi + tüm hafta sonu, piyasaAcikMi()'den BAĞIMSIZ) fon, kapsam=0
+    // olsa (holdings verisi hiç gelmemiş/bayat olsa) BİLE listeden
+    // ÇIKARILMIYOR — aksi halde widget'ın TAMAMI kaybolabiliyordu (kullanıcı
+    // bildirdi). O pencerede zaten ekranda "0,0000%" gösterileceği için
+    // kapsam eksik olsa da fonu listede tutmanın bir sakıncası yok. Bu
+    // pencere DIŞINDA (piyasa açıkken VEYA gün içinde piyasa kapandıktan
+    // sonra gece yarısına kadar) eski (doğru) davranış korunuyor: kapsam=0
+    // olan fon (veri henüz gelmemiş) listeden hâlâ gizleniyor — yanlışlıkla
+    // "%0 değişim" (sanki gerçekten hareketsizmiş gibi) gösterilmesin diye.
+    const sifirGosterimPenceresindeMi = tahminSifirGosterimSaatiMi();
     const sonuc: { kod: string; tahmin: number; kapsam: number; donem: string | null }[] = [];
     for (const kod of takipListesi) {
       const veri = holdings[kod];
@@ -4326,7 +4331,7 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
           }
         }
       }
-      if (kapsam > 0 || piyasaKapali) {
+      if (kapsam > 0 || sifirGosterimPenceresindeMi) {
         sonuc.push({ kod, tahmin, kapsam, donem: veri?.dagilimDonemi ?? null });
       }
     }
@@ -5036,36 +5041,30 @@ function FonTahminDetayModal({
 // hisse fiyatı bilinen kalemin günlük değişim yönü, gri = hisse-dışı kalem
 // (VIOP/nakit/sabit getiri) ya da fiyatı BİST veri izleme kaynağında
 // bulunamayan hisse.
-// ─── FON PORTFÖY TREEMAP — 2026-09-04, radyal ağ görselinin yerine ────────────
-// Eski tasarım (halka/ağ) başka bir uygulamanınkiyle çok benziyordu; kullanıcı
-// tercihiyle treemap'e geçildi: kutu BÜYÜKLÜĞÜ = portföy ağırlığı, RENK = gün
-// içi yön (yeşil/kırmızı). Tek bakışta hem "hangi hisse en büyük" hem "hangisi
-// olumlu/olumsuz" görülüyor — radyal görselde ikisi ayrı katmanlardaydı.
+// ─── FON PORTFÖY RADYAL GÖRSEL — 2026-09-07, treemap'in yerine ────────────────
+// 4 Eylül'de bir radyal/ağ tasarımından treemap'e geçilmişti ("başka bir
+// uygulamanınkiyle çok benziyordu" gerekçesiyle). 7 Eylül'de kullanıcı kendi
+// Tera Portföy kurumsal görseline (dairesel, merkezden dışa çubuklar, uç
+// noktalarda kod+yüzde etiketi) dayanarak tekrar radyale dönülmesini istedi —
+// bu kez RENK KODLAMASI eklendi (orijinal Tera görseli tek renkliydi): çubuk
+// UZUNLUĞU = portföy ağırlığı, RENK = gün içi yön (yeşil/kırmızı), MERKEZ =
+// genel yapay zeka tahmini (kendisi de işarete göre renkli).
 //
-// Basit "slice-and-dice" (squarify benzeri) yerleşim VİRTÜEL 1000×560 birimlik
-// bir uzayda hesaplanıp yüzdeye çevriliyor — böylece konteynerin gerçek piksel
-// genişliğini ölçmeye (ref/layout effect) gerek kalmadan responsive çalışıyor.
-function fonTreemapYerlesim(
-  kalemler: { agirlik: number }[], x: number, y: number, w: number, h: number
-): { x: number; y: number; w: number; h: number }[] {
-  if (kalemler.length === 0) return [];
-  if (kalemler.length === 1) return [{ x, y, w, h }];
-  const toplam = kalemler.reduce((s, k) => s + (k.agirlik || 0), 0) || 1;
-  let birikmis = 0, kesim = 1;
-  for (let i = 0; i < kalemler.length; i++) {
-    birikmis += kalemler[i].agirlik || 0;
-    if (birikmis >= toplam / 2) { kesim = Math.max(1, i + 1); break; }
-  }
-  const a = kalemler.slice(0, kesim), b = kalemler.slice(kesim);
-  const aToplam = a.reduce((s, k) => s + (k.agirlik || 0), 0);
-  const oran = toplam > 0 ? aToplam / toplam : 0.5;
-  if (w >= h) {
-    const aw = w * oran;
-    return [...fonTreemapYerlesim(a, x, y, aw, h), ...fonTreemapYerlesim(b, x + aw, y, w - aw, h)];
-  } else {
-    const ah = h * oran;
-    return [...fonTreemapYerlesim(a, x, y, w, ah), ...fonTreemapYerlesim(b, x, y + ah, w, h - ah)];
-  }
+// Sabit halka yarıçapı: etiketler (kod+yüzde), çubuğun kendi ucunda DEĞİL,
+// hepsi AYNI sabit dış yarıçapta duruyor — böylece kısa/uzun çubuklar
+// karışmadan referans görseldeki gibi düzenli bir dış halka oluşuyor.
+function polarNoktasi(cx: number, cy: number, r: number, aciDerece: number): [number, number] {
+  const rad = ((aciDerece - 90) * Math.PI) / 180;
+  return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
+}
+
+function radyalDilimYolu(cx: number, cy: number, icR: number, disR: number, baslangicAci: number, bitisAci: number): string {
+  const [ix1, iy1] = polarNoktasi(cx, cy, icR, baslangicAci);
+  const [ox1, oy1] = polarNoktasi(cx, cy, disR, baslangicAci);
+  const [ox2, oy2] = polarNoktasi(cx, cy, disR, bitisAci);
+  const [ix2, iy2] = polarNoktasi(cx, cy, icR, bitisAci);
+  const genisAci = bitisAci - baslangicAci > 180 ? 1 : 0;
+  return `M ${ix1} ${iy1} L ${ox1} ${oy1} A ${disR} ${disR} 0 ${genisAci} 1 ${ox2} ${oy2} L ${ix2} ${iy2} A ${icR} ${icR} 0 ${genisAci} 0 ${ix1} ${iy1} Z`;
 }
 
 function FonTahminAgGorseli({ kalemler, hisseDegisimMap, tahmin }: {
@@ -5079,88 +5078,67 @@ function FonTahminAgGorseli({ kalemler, hisseDegisimMap, tahmin }: {
         : k.tur === "fund" && typeof k.oncekiGunGetiri === "number" ? k.oncekiGunGetiri
         : undefined;
       const pozitif = typeof deg === "number" ? deg >= 0 : null;
-      const agirlik = typeof k.agirlik === "number" && k.agirlik > 0 ? k.agirlik : 0.1; // 0 ağırlık kutuyu yok eder
+      const agirlik = typeof k.agirlik === "number" && k.agirlik > 0 ? k.agirlik : 0.05; // 0 ağırlık dilimi yok etmesin
       return { ...k, deg, pozitif, agirlik };
     })
-    // Çok kalabalık fonlarda (77+ hisse) en küçük dilimler okunaksız kutucuklara
-    // dönüşür — en büyük ~30 kalemle sınırlanıyor, radyal görseldeki 70 sınırının
-    // treemap karşılığı (treemap'te küçük kutular tıklanamayacak kadar ufalıyor).
+    // Referans görseldeki gibi düzenli bir daire için 20 kalemle sınırlanıyor —
+    // 77+ hisseli fonlarda en küçük dilimler zaten okunaksız olurdu.
     .sort((a, b) => b.agirlik - a.agirlik)
-    .slice(0, 30);
+    .slice(0, 20);
 
-  const VW = 1000, VH = 560, GAP = 4;
-  const kutular = fonTreemapYerlesim(renkli, 0, 0, VW, VH);
+  const VB = 400; // SVG viewBox kare boyutu
+  const CX = VB / 2, CY = VB / 2;
+  const IC_R = 62; // merkez daire yarıçapı (dilimlerin başladığı iç sınır)
+  const DIS_R_MAX = 148; // en büyük ağırlıklı dilimin ulaşacağı dış yarıçap
+  const ETIKET_R = DIS_R_MAX + 26; // TÜM etiketler bu sabit yarıçapta (referans görseldeki düzenli dış halka)
+  const BOSLUK_DERECE = 2.5; // dilimler arası ince boşluk
+  const n = renkli.length;
+  const dilimAcisi = n > 0 ? 360 / n : 0;
+  const maxAgirlik = Math.max(...renkli.map((k) => k.agirlik), 0.05);
+
+  const tahminRenk = tahmin == null ? WA(0.4) : tahmin >= 0 ? C.green : C.red;
 
   return (
     <div style={{ padding: "8px 0 4px" }}>
-      <div style={{ textAlign: "center", marginBottom: 10 }}>
-        <span style={{ fontSize: 20, fontWeight: 800, color: C.label }}>
-          {tahmin == null ? "—" : isaretliYuzde(tahmin, 4)}
-        </span>
-        <div style={{ fontSize: 10, color: WA(0.5), marginTop: 2 }}>% Yapay zeka tahmini</div>
+      <div style={{ position: "relative", width: "100%", maxWidth: 400, margin: "0 auto" }}>
+        <svg viewBox={`0 0 ${VB} ${VB}`} style={{ width: "100%", height: "auto", display: "block" }}>
+          {renkli.map((k, i) => {
+            const baslangicAci = i * dilimAcisi + BOSLUK_DERECE / 2;
+            const bitisAci = (i + 1) * dilimAcisi - BOSLUK_DERECE / 2;
+            const disR = IC_R + (k.agirlik / maxAgirlik) * (DIS_R_MAX - IC_R);
+            const renk = k.pozitif == null ? WA(0.22) : k.pozitif ? C.green : C.red;
+            const yol = radyalDilimYolu(CX, CY, IC_R, disR, baslangicAci, bitisAci);
+            const ortaAci = (baslangicAci + bitisAci) / 2;
+            const [lx, ly] = polarNoktasi(CX, CY, ETIKET_R, ortaAci);
+            // 20 kalemle sınırlı olduğu için (min 18° dilim) her zaman kod +
+            // yüzde birlikte gösterilebiliyor — treemap'teki kademeli gizleme
+            // burada gerekmiyor.
+            const yuzdeMetni = typeof k.deg === "number"
+              ? isaretliYuzde(k.deg, 2)
+              : (k.tur !== "stock" ? `%${(k.agirlik ?? 0).toFixed(1)}` : "—");
+            return (
+              <g key={k.kod}>
+                <path d={yol} fill={renk} />
+                <text x={lx} y={ly - 3} textAnchor="middle" fontSize={10.5} fontWeight={700} fill={C.label}>
+                  {k.kod}
+                </text>
+                <text x={lx} y={ly + 9} textAnchor="middle" fontSize={9} fontWeight={600}
+                  fill={k.pozitif == null ? WA(0.4) : k.pozitif ? C.green : C.red}>
+                  {yuzdeMetni}
+                </text>
+              </g>
+            );
+          })}
+          <circle cx={CX} cy={CY} r={IC_R} fill={C.card} stroke={WA(0.12)} strokeWidth={1} />
+          <text x={CX} y={CY - 4} textAnchor="middle" fontSize={19} fontWeight={800} fill={tahminRenk}>
+            {tahmin == null ? "—" : isaretliYuzde(tahmin, 4)}
+          </text>
+          <text x={CX} y={CY + 14} textAnchor="middle" fontSize={9.5} fill={WA(0.5)}>
+            % Yapay zeka tahmini
+          </text>
+        </svg>
       </div>
-      <div style={{ position: "relative", width: "100%", paddingBottom: `${(VH / VW) * 100}%`, borderRadius: 10, overflow: "hidden" }}>
-        {renkli.map((k, i) => {
-          const box = kutular[i];
-          if (!box) return null;
-          const renk = k.pozitif == null ? WA(0.22) : k.pozitif ? C.green : C.red;
-          // Kutu boyutuna göre kademeli metin gösterimi — VW=1000 sanal birim
-          // gerçek konteynerde (~380px) yaklaşık 0.38 ölçekle karşılık geliyor.
-          // Küçük kutularda taşan/üst üste binen yazı yerine kademeli olarak
-          // metin küçültülüyor, çok küçükse tamamen gizleniyor (sadece renk).
-          const OLCEK = 0.38;
-          const gW = box.w * OLCEK, gH = box.h * OLCEK;
-          const gosterKod = gW >= 20 && gH >= 13;
-          const gosterYuzde = gW >= 40 && gH >= 30;
-          // Ağırlık (portföydeki pay) satırı — kullanıcı isteği üzerine
-          // eklendi. Hisse kalemlerinde 3. satır olarak (kod + değişim +
-          // ağırlık); nakit/VIOP gibi hisse-dışı kalemlerde zaten tek
-          // yüzde satırı ağırlığı gösteriyor, mükerrer olmasın diye
-          // orada 3. satır YOK. Daha büyük kutu şartı — 3 satır sığmalı.
-          const gosterAgirlik = k.tur === "stock" && gW >= 55 && gH >= 46;
-          const kodSize = Math.max(6.5, Math.min(12, gW / 5.5));
-          const yuzdeSize = Math.max(6, kodSize - 2);
-          const agirlikSize = Math.max(5.5, yuzdeSize - 1);
-          const yuzdeMetni = typeof k.deg === "number"
-            ? isaretliYuzde(k.deg, 2)
-            : (k.tur !== "stock" ? `%${(k.agirlik ?? 0).toFixed(1)}` : null);
-          const agirlikMetni = `%${(k.agirlik ?? 0).toFixed(1)} ağırlık`;
-          return (
-            <div
-              key={k.kod}
-              style={{
-                position: "absolute",
-                left: `${(box.x / VW) * 100}%`, top: `${(box.y / VH) * 100}%`,
-                width: `${(box.w / VW) * 100}%`, height: `${(box.h / VH) * 100}%`,
-                padding: 1,
-              }}
-            >
-              <div style={{
-                width: "100%", height: "100%", background: renk, borderRadius: 3,
-                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                overflow: "hidden", boxSizing: "border-box", padding: "0 2px",
-              }}>
-                {gosterKod && (
-                  <span style={{ fontSize: kodSize, fontWeight: 700, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>
-                    {k.kod}
-                  </span>
-                )}
-                {gosterYuzde && yuzdeMetni && (
-                  <span style={{ fontSize: yuzdeSize, fontWeight: 600, color: "rgba(255,255,255,0.9)", marginTop: 1, whiteSpace: "nowrap" }}>
-                    {yuzdeMetni}
-                  </span>
-                )}
-                {gosterAgirlik && (
-                  <span style={{ fontSize: agirlikSize, fontWeight: 500, color: "rgba(255,255,255,0.75)", marginTop: 0.5, whiteSpace: "nowrap" }}>
-                    {agirlikMetni}
-                  </span>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      <div style={{ display: "flex", gap: 14, marginTop: 10, fontSize: 10.5, color: WA(0.5) }}>
+      <div style={{ display: "flex", gap: 14, marginTop: 10, justifyContent: "center", fontSize: 10.5, color: WA(0.5) }}>
         <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
           <span style={{ width: 9, height: 9, borderRadius: 2, background: C.green }} /> Değer artışı
         </span>
