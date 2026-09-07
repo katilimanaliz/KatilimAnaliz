@@ -1583,7 +1583,7 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
   // düşecek alanlar bilerek boş bırakılıyor (uydurma veri koyulmuyor).
   // Ayrıca bu fonlara asla 🟢 Katılım Uygun rozeti TAKILMIYOR — sınıflandırma
   // sadece Fonoloji'nin ?katilim=1 süzgecinden geçenlerle sınırlı.
-  const [kaynakFiltre,   setKaynakFiltre]   = useState<"katilim"|"tumu">("katilim");
+  const [kaynakFiltre,   setKaynakFiltre]   = useState<"katilim"|"tumu">("tumu");
   const [digerFonlar,    setDigerFonlar]    = useState<any[]>(() => {
     try {
       const raw = sessionStorage.getItem("kea_diger_fonlar");
