@@ -4477,6 +4477,21 @@ function FonTahminDetayModal({
   fonDetayYukleniyor?: boolean;
 }) {
   const [sekme, setSekme] = useState<"ag" | "dagilim" | "getiri" | "bilgi" | "gecmis">("ag");
+  // ── GENİŞ EKRAN DESTEĞİ (2026-09-07 eklendi) ──────────────────────────
+  // ÖNCEDEN: kapsayıcı sabit maxWidth:680 kullanıyordu — bu bileşen ana
+  // uygulamadan genisEkran prop'u ALMIYOR, bu yüzden masaüstünde (geniş
+  // monitör) ekranın çoğu boş kalıp içerik ortada dar bir sütuna
+  // sıkışıyordu (kullanıcı ekran görüntüsüyle bildirdi). FonGetiriIzleme'de
+  // zaten var olan "kendi başına pencere genişliğine bak" deseniyle aynısı
+  // uygulanıyor (1024px eşiği ana uygulamayla birebir aynı).
+  const [genisEkran, setGenisEkran] = useState(
+    () => typeof window !== "undefined" && window.innerWidth >= 1024
+  );
+  useEffect(() => {
+    const guncelle = () => setGenisEkran(window.innerWidth >= 1024);
+    window.addEventListener("resize", guncelle);
+    return () => window.removeEventListener("resize", guncelle);
+  }, []);
   const [gecmis, setGecmis] = useState<any[] | null>(null);
   const [gecmisYukleniyor, setGecmisYukleniyor] = useState(false);
   // Getiri/Bilgi sekmeleri için tam fon detayı (mapFon() çıktısı) — sunucuda
@@ -4545,7 +4560,7 @@ function FonTahminDetayModal({
   // viewport'u kaplayan opak bir ekran — arkada Ana Sayfa görünmüyor.
   return (
     <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:C.card,zIndex:600,display:"flex",flexDirection:"column",...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}}>
-      <div style={{width:"100%",maxWidth:680,margin:"0 auto",display:"flex",flexDirection:"column",height:"100%"}}>
+      <div style={{width:"100%",maxWidth:genisEkran?"none":680,margin:"0 auto",display:"flex",flexDirection:"column",height:"100%"}}>
         {/* Başlık — koda tıklanınca fon detay ekranına gider, altında fon adı yazar */}
         <div style={{padding:"calc(16px + env(safe-area-inset-top,0px)) 20px 12px",borderBottom:`1px solid ${WA(0.1)}`,display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexShrink:0}}>
           <div onClick={fonDetayYukleniyor ? undefined : onFonDetay} style={{cursor:fonDetayYukleniyor?"default":"pointer",flex:1,minWidth:0,opacity:fonDetayYukleniyor?0.6:1}}>
