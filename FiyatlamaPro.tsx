@@ -25249,25 +25249,50 @@ function App(){
         .spark-in { animation: sparkIn 360ms ease-out; }
         @keyframes sparkIn { from { opacity:0; } to { opacity:1; } }
       `}</style>
-      {/* ── LIVE UPDATE BANNER (2026-09-06 eklendi) ──────────────────────
+      {/* ── LIVE UPDATE BANNER (2026-09-06 eklendi, 2026-09-07 yeniden tasarlandı)
           Uygulama açıkken yeni bir sürüm bulunduğunda gösterilir. Otomatik
           yenilemiyor — kullanıcı "Yeniden Başlat"a basmadan reload olmaz,
-          böylece bir işlemin ortasında ekran aniden sıfırlanmaz. */}
+          böylece bir işlemin ortasında ekran aniden sıfırlanmaz.
+          ⚠️ DÜZELTME: İlk sürüm ekranın EN ÜSTÜNDE sabit bir çubuktu — iOS'ta
+          Dynamic Island / durum çubuğuyla çakışıp okunmaz oluyordu (kullanıcı
+          bildirdi). Artık diğer modallerle (bkz. C.card + rgba(0,0,0,0.6)
+          arka plan deseni) TUTARLI, ekran ORTASINDA bir kart. Sabit yeşil
+          (#1B9E7A) yerine tema duyarlı C.card/C.label/C.blue kullanılıyor —
+          koyu/açık tema hangisi olursa olsun doğru kontrast sağlanıyor. */}
       {guncellemeHazir && (
-        <div style={{position:"fixed",top:0,left:0,right:0,zIndex:9999,
-          background:"#1B9E7A",color:"#fff",padding:"9px 14px",
-          display:"flex",alignItems:"center",justifyContent:"center",gap:10,
-          fontSize:12,fontWeight:700,boxShadow:"0 2px 10px rgba(0,0,0,0.3)"}}>
-          <span>🔄 Yeni güncelleme var</span>
-          <button onClick={async ()=>{
-            try {
-              const mod = await import("@capawesome/capacitor-live-update");
-              await mod.LiveUpdate.reload();
-            } catch (e) { console.error("LiveUpdate reload hatası:", e); }
-          }} style={{background:"#fff",color:"#1B9E7A",border:"none",borderRadius:6,
-            padding:"5px 12px",fontWeight:800,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>
-            Yeniden Başlat
-          </button>
+        <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.6)",zIndex:9999,
+          display:"flex",alignItems:"center",justifyContent:"center",padding:20,
+          ...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}}>
+          <div style={{background:C.card,borderRadius:18,maxWidth:340,width:"100%",
+            padding:"24px 22px 20px",textAlign:"center",boxShadow:"0 8px 32px rgba(0,0,0,0.4)"}}>
+            <div style={{fontSize:34,marginBottom:10}}>🔄</div>
+            <div style={{fontSize:16,fontWeight:800,color:C.label,marginBottom:6}}>Yeni güncelleme var</div>
+            <p style={{margin:"0 0 18px",fontSize:12.5,color:C.sub,lineHeight:1.5}}>
+              Uygulamanın yeni bir sürümü hazır. Devam etmek için yeniden başlatman gerekiyor.
+            </p>
+            <button onClick={async ()=>{
+              // Güvenlik ağı: LiveUpdate.reload() beklenen webview yenilemesini
+              // bir şekilde tetiklemezse (nadiren de olsa), 2.5 sn içinde hâlâ
+              // aynı ekrandaysak tarayıcı düzeyinde ZORLA yeniden yükleme
+              // yapılıyor — kullanıcı butona basıp hiçbir şey olmamasıyla
+              // baş başa kalmasın diye.
+              const zorlaYenile = setTimeout(()=>{ try{ window.location.reload(); }catch{} }, 2500);
+              try {
+                const mod = await import("@capawesome/capacitor-live-update");
+                await mod.LiveUpdate.reload();
+                clearTimeout(zorlaYenile);
+              } catch (e) {
+                console.error("LiveUpdate reload hatası:", e);
+                // reload() başarısız olduysa güvenlik ağını beklemeden hemen devreye sok
+                clearTimeout(zorlaYenile);
+                try{ window.location.reload(); }catch{}
+              }
+            }} style={{background:C.blue,color:"#fff",border:"none",borderRadius:12,
+              padding:"12px 20px",fontWeight:800,fontSize:14,cursor:"pointer",
+              fontFamily:"inherit",width:"100%"}}>
+              Yeniden Başlat
+            </button>
+          </div>
         </div>
       )}
       {/* ── MASAÜSTÜ YAN MENÜ (sadece geniş ekran web) ── */}
