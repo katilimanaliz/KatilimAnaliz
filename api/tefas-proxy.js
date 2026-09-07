@@ -151,6 +151,59 @@ const FON_DETAY_CACHE_TTL_SANIYE = 86400; // 24 saat — fon NAV'ı/yatırımcı
 // ayrıştırma bu gerçek şekle göre yazıldı (tahmini alan adı denemesi değil).
 const FON_HOLDINGS_CACHE_TTL_SANIYE = 86400; // 24 saat — periyodik veri, günlük değişmez
 
+// ── MANUEL HOLDINGS YAZMA (2026-09-07, geçici) ──────────────────────────────
+// TEFAS/Fonoloji otomatik pipeline'ı Vercel Hobby plan timeout sorunu
+// yüzünden geçici olarak sağlıksız — beş fon (THF/TLY/DOH/TMV/KHA) için FVT
+// karşılaştırma verisinden elle toplanan hisse ağırlıkları bu uçtan yazılıyor.
+// Mevcut CRON_SECRET yerine AYRI bir gizli anahtar (MANUEL_YAZ_SECRET)
+// kullanılıyor — Uğur bu değeri kendisi Vercel'e girdiği için elinde kalır,
+// başka hiçbir cron/uca dokunmaz (bkz. FON_TAHMIN_CRON_SECRET'teki aynı
+// gerekçe). Uygulamanın KENDİ kv bağlantısını kullandığı için (yukarıdaki
+// `kv` nesnesi), Colab'dan doğrudan Upstash'e yazmanın aksine, DOĞRU
+// veritabanına yazıldığından emin oluruz — env var adı farklılıkları
+// (KV_REST_API_URL vs UPSTASH_REDIS_REST_URL) burada sorun teşkil etmez.
+//
+// Yazılan paket, holdingsGetirDahili()'nin okuduğu `fon:holdings:${kod}`
+// anahtarıyla AYNI şekli taşır (kaynak alanı "manuel-2026-09-07" olarak
+// işaretlenir ki ileride otomatik veri geri geldiğinde bu anahtarların
+// elle temizlenmesi gerektiği unutulmasın).
+async function manuelHoldingsYaz(req, res) {
+  const manuelSecret = process.env.MANUEL_YAZ_SECRET;
+  const gelenAuth = req.headers.authorization;
+  if (manuelSecret && gelenAuth !== `Bearer ${manuelSecret}`) {
+    return res.status(401).json({ success: false, error: "Yetkisiz" });
+  }
+  const kod = String(req.query?.kod || "").toUpperCase().trim();
+  if (!kod) return res.status(400).json({ success: false, error: "kod parametresi gerekli" });
+
+  let govde;
+  try {
+    govde = req.body;
+    if (typeof govde === "string") govde = JSON.parse(govde);
+  } catch {
+    return res.status(400).json({ success: false, error: "Geçersiz JSON gövde" });
+  }
+  if (!govde || !Array.isArray(govde.kalemler) || !govde.kalemler.length) {
+    return res.status(400).json({ success: false, error: "kalemler dizisi gerekli" });
+  }
+
+  const paket = {
+    success: true,
+    kod,
+    dagilimDonemi: null,
+    dagilimYayinTarihiMs: null,
+    kaynak: "manuel-2026-09-07",
+    agirlikGuncellemesi: { basarili: false, hata: "Manuel override — fiyat kaymasi düzeltmesi uygulanmadi" },
+    kalemler: govde.kalemler,
+  };
+  try {
+    await kv.set(`fon:holdings:${kod}`, paket, { ex: FON_HOLDINGS_CACHE_TTL_SANIYE });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: String(e.message || e) });
+  }
+  return res.status(200).json({ success: true, kod, yazildi: true, kalemSayisi: govde.kalemler.length });
+}
+
 // ── HİSSE AĞIRLIĞI — FİYAT KAYMASI DÜZELTMESİ (2026-09-06 eklendi) ──────────
 // SORUN: Fonoloji'nin hisse ağırlıkları KAP'ın AYLIK portföy bildiriminden
 // geliyor — bir ay boyunca fon hiç alım-satım yapmasa bile, hisse fiyatları
@@ -1587,6 +1640,7 @@ export default async function handler(req, res) {
   if (req.query?.detay === "1") return fonDetayGetir(req, res);
   if (req.query?.adKategori === "1") return fonAdKategoriGetir(req, res);
   if (req.query?.holdings === "1") return fonHoldingsGetir(req, res);
+  if (req.query?.manuelHoldingsYaz === "1") return manuelHoldingsYaz(req, res);
   if (req.query?.tahminGecmis === "1") return tahminGecmisGetir(req, res);
   if (req.query?.fonTahminGecmisTemizle === "1") return fonTahminGecmisTemizle(req, res);
   if (req.query?.fonTahminListesi === "1") return fonTahminListesiGetir(req, res);
