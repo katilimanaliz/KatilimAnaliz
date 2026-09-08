@@ -1161,12 +1161,26 @@ async function fonDetayGetir(req, res) {
         const dNav = await rNav.json().catch(() => null);
         const hamNoktalar = dNav?.nav?.points ?? dNav?.timeseries?.nav?.points
                          ?? (Array.isArray(dNav?.nav) ? dNav.nav : null) ?? dNav?.points ?? [];
+        // ⚠️ DÜZELTME (2026-09-08, kullanıcı raporu): İlk sürüm burada
+        // `son.total_value - onceki.total_value` hesaplıyordu — bu, GERÇEK
+        // para girişini fonun kendi GÜNLÜK DEĞER ARTIŞIYLA (getiriyle)
+        // karıştırıyordu. Örnek: fon %1,5 değer kazanmışsa, hiç yeni para
+        // girmese bile 96 milyar TL büyüklüğündeki bir fonun ~1,44 milyar
+        // TL'si sırf fiyat artışından "artmış" görünürdü — bu "giriş" DEĞİL.
+        // Düzeltme: dünkü büyüklüğü BUGÜNKÜ fiyatla yeniden değerleyip
+        // ("dünkü sermaye hiç değişmeseydi bugün ne kadar olurdu") bunu
+        // bugünkü GERÇEK büyüklükten çıkarıyoruz — kalan fark SADECE net
+        // para girişi/çıkışı (fiyat hareketinden arındırılmış).
         const doluNoktalar = (Array.isArray(hamNoktalar) ? hamNoktalar : [])
-          .filter((p) => typeof p?.total_value === "number" && typeof p?.investor_count === "number");
+          .filter((p) => typeof p?.total_value === "number" && typeof p?.investor_count === "number"
+                       && typeof (p?.price ?? p?.value) === "number" && (p?.price ?? p?.value) > 0);
         if (doluNoktalar.length >= 2) {
           const son = doluNoktalar[doluNoktalar.length - 1];
           const onceki = doluNoktalar[doluNoktalar.length - 2];
-          gunlukFonAkisiTL = son.total_value - onceki.total_value;
+          const sonFiyat = son.price ?? son.value;
+          const oncekiFiyat = onceki.price ?? onceki.value;
+          const degerArtisiHaricTutulmusOncekiButuyukluk = onceki.total_value * (sonFiyat / oncekiFiyat);
+          gunlukFonAkisiTL = son.total_value - degerArtisiHaricTutulmusOncekiButuyukluk;
           gunlukYatirimciDegisimi = son.investor_count - onceki.investor_count;
           gunlukAkisTarihi = son.date ?? null;
         }
