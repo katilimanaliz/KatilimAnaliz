@@ -628,26 +628,37 @@ async function fonGunlukGercekGetiriDahiliTeshisli(kod, hedefTarih, { onbellekAt
 
   const siraliNoktalar = [...noktalar].sort((a, b) => String(a.tarih).localeCompare(String(b.tarih)));
   const idx = siraliNoktalar.findIndex((p) => p.tarih === hedefTarih);
-  teshis.idxBulunduMu = idx > 0;
   if (onbellekAtla) {
-    // ⚠️ EKLENDİ (2026-09-08, kullanıcı raporu): sadece tarihler yeterli
-    // değildi — kullanıcı, önceki günün AYNI hesaplama zincirinde farklı bir
-    // güne kaymış olabileceğini fark etti (THF için TEFAS'ın resmi kapanışı
-    // 0,84 iken bizim hesapladığımız 0,90 çıkmış). Hangi tarih-çiftinin hangi
-    // oranı verdiğini görebilmek için artık ham fiyat noktaları da dönüyor.
     teshis.tarihler = siraliNoktalar.map((p) => p.tarih);
     teshis.noktalarHamFiyat = siraliNoktalar.slice(-8); // son 8 nokta yeterli, tüm 21-22'yi dökmeye gerek yok
   }
 
-  if (idx <= 0) {
-    // hedef tarih seride yok (henüz yayınlanmamış) YA DA serideki ilk nokta
-    // (kıyaslanacak önceki gün verisi yok) — bulunamadı say.
+  // ⚠️ DÜZELTME (2026-09-08, kullanıcı raporu + rakamla doğrulandı): İlk
+  // sürüm burada `siraliNoktalar[idx]` (hedefTarih'in KENDİ etiketi) ile
+  // `siraliNoktalar[idx-1]` (BİR ÖNCEKİ etiket) arasındaki oranı alıyordu —
+  // yani "hedefTarih etiketi = hedefTarih'in gerçek kapanışı" varsayımıyla.
+  // CANLI TESTTE ORTAYA ÇIKTI: TEFAS'ın resmi API'sindeki "tarih" alanı
+  // DEĞERLEME tarihi DEĞİL, YAYIN tarihi — her kayıt, o günün sabahı (~09-10
+  // TSİ) hesaplanıp yayınlanan BİR ÖNCEKİ iş gününün kapanışını taşıyor.
+  // Örnek (THF, 2026-09-08 canlı test): "2026-09-08" etiketli kayıt aslında
+  // 07.09'un (Pazartesi) gerçek kapanışı, "2026-09-07" etiketli kayıt aslında
+  // 04.09'un (Cuma) kapanışı. Yani hedefTarih'in KENDİ gerçek kapanışını
+  // görmek için hedefTarih'in etiketini DEĞİL, hedefTarih'ten SONRAKİ etiketi
+  // kullanmak gerekiyor — kıyaslama tabanı da hedefTarih'in kendi etiketi
+  // (bir önceki iş gününün kapanışını taşıdığı için tam kıyaslanacak nokta).
+  // idx-1 yerine idx, idx yerine idx+1 kullanılıyor.
+  teshis.idxBulunduMu = idx >= 0 && idx < siraliNoktalar.length - 1;
+
+  if (idx < 0 || idx >= siraliNoktalar.length - 1) {
+    // hedef tarih seride yok, YA DA seride var ama henüz "ertesi gün"
+    // etiketi (hedefTarih'in ASIL gerçek kapanışını taşıyan kayıt) TEFAS
+    // tarafından yayınlanmamış — henüz bulunamadı say.
     try { await kv.set(cacheAnahtar, { bulunamadi: true }, { ex: FON_GERCEK_GETIRI_BULUNAMADI_TTL_SANIYE }); } catch {}
     return { gercek: null, kaynak: "yok", teshis };
   }
 
-  const bugunFiyat = siraliNoktalar[idx].fiyat;
-  const oncekiFiyat = siraliNoktalar[idx - 1].fiyat;
+  const oncekiFiyat = siraliNoktalar[idx].fiyat;       // hedefTarih'in kendi etiketi = bir önceki iş gününün kapanışı
+  const bugunFiyat = siraliNoktalar[idx + 1].fiyat;    // hedefTarih'ten sonraki etiket = hedefTarih'in ASIL kapanışı
   if (typeof bugunFiyat !== "number" || typeof oncekiFiyat !== "number" || oncekiFiyat === 0) {
     try { await kv.set(cacheAnahtar, { bulunamadi: true }, { ex: FON_GERCEK_GETIRI_BULUNAMADI_TTL_SANIYE }); } catch {}
     return { gercek: null, kaynak: "yok", teshis };
@@ -668,6 +679,15 @@ async function fonGunlukGercekGetiriDahili(kod, hedefTarih) {
 // gösterir: /api/tefas-proxy?gercekTeshis=1&kod=THF&tarih=2026-09-07
 // Başarılı bulunursa cache'e de yazar — yani bu çağrı aynı zamanda önceki
 // başarısız denemenin "bulunamadı" cache kaydını da DÜZELTİR.
+//
+// `&duzelt=1` (2026-09-08, aynı gün eklendi): off-by-one düzeltmesinden
+// ÖNCE `gerceklestir` zaten çalışıp bazı fonlar için YANLIŞ `gercek` değerini
+// `fonTahmin:gecmis:{kod}` kaydına YAZMIŞTI. `gerceklestir`in normal akışı
+// SADECE `gercek == null` olan kayıtları dolduruyor — zaten dolu (ama yanlış)
+// bir kaydı bir daha ELLEMİYOR. Bu yüzden düzeltilmiş formülü hesapladıktan
+// sonra, `duzelt=1` verilirse, o tarihe ait kaydı KV'de bulup gercek/isabet
+// alanlarını doğru değerle ÜZERİNE YAZIYOR — tek seferlik, elle tetiklenen
+// bir düzeltme (manuelHoldingsYaz'daki "elle override" felsefesiyle aynı).
 async function gercekTeshisGetir(req, res) {
   const kod = String(req.query?.kod || "").toUpperCase().trim();
   const hedefTarih = String(req.query?.tarih || "");
@@ -675,8 +695,28 @@ async function gercekTeshisGetir(req, res) {
     return res.status(400).json({ success: false, error: "kod ve tarih parametreleri gerekli (tarih: YYYY-MM-DD)" });
   }
   const sonuc = await fonGunlukGercekGetiriDahiliTeshisli(kod, hedefTarih, { onbellekAtla: true });
+
+  let kayitDuzeltildiMi = false;
+  let kayitOncekiGercek = null;
+  if (req.query?.duzelt === "1" && typeof sonuc.gercek === "number") {
+    const gecmisAnahtar = `fonTahmin:gecmis:${kod}`;
+    try {
+      let kayitlar = (await kv.get(gecmisAnahtar).catch(() => null)) || [];
+      if (Array.isArray(kayitlar)) {
+        const kayit = kayitlar.find((k) => k?.tarih === hedefTarih);
+        if (kayit) {
+          kayitOncekiGercek = kayit.gercek;
+          kayit.gercek = sonuc.gercek;
+          kayit.isabet = isabetHesapla(kayit.tahmin, sonuc.gercek);
+          await kv.set(gecmisAnahtar, kayitlar);
+          kayitDuzeltildiMi = true;
+        }
+      }
+    } catch {}
+  }
+
   res.setHeader("Cache-Control", "no-store");
-  return res.status(200).json({ success: true, ...sonuc });
+  return res.status(200).json({ success: true, kayitDuzeltildiMi, kayitOncekiGercek, ...sonuc });
 }
 
 // Türkiye saatiyle (TSİ, UTC+3) bugünün tarihini "YYYY-MM-DD" döner —
