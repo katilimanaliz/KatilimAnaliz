@@ -4624,13 +4624,16 @@ function FonTahminDetayModal({
   // açıldığında (lazy) çekiliyor.
   const [fonDetayTam, setFonDetayTam] = useState<any | null>(null);
   const [fonDetayTamYukleniyor, setFonDetayTamYukleniyor] = useState(false);
-  // Günlük getiri takvimi (2026-09-05) — Getiri sekmesindeki ısı haritası.
-  // Ayrı bir kaynağa gerek yok: "Getiri İzleme" grafiğinin de kullandığı
-  // ?gecmis=1&kod=X&donem=1y ucu zaten 1 yıllık GÜNLÜK fiyat noktalarını
-  // veriyor (noktalar: [{tarih, fiyat}]) — ardışık iki günün fiyat oranından
-  // günlük getiri buradan (istemci tarafında) hesaplanıyor.
-  const [fonGecmisNoktalar, setFonGecmisNoktalar] = useState<any[] | null>(null);
-  const [fonGecmisNoktalarYukleniyor, setFonGecmisNoktalarYukleniyor] = useState(false);
+  // Günlük getiri takvimi (2026-09-05, 2026-09-08'de yeniden yapıldı) —  // Getiri sekmesindeki ısı haritası. ESKİDEN ?gecmis=1 ucundan ham fiyat
+  // noktaları çekilip getiri istemci tarafında hesaplanıyordu — bu hem
+  // TEFAS'ın "tarih = yayın günü, değerleme günü değil" davranışından
+  // kaynaklanan bir off-by-one hatası taşıyordu (bkz. backend'deki
+  // gunlukGetiriSerisiGetirVeGuncelle başındaki not) HEM DE her ekran
+  // açılışında aynı hesaplamayı tekrarlıyordu. Artık backend'de KALICI
+  // olarak hesaplanıp saklanan (?gunlukGetiriSerisi=1) hazır {tarih, getiri}
+  // serisini doğrudan kullanıyoruz — hesaplama TEK yerde, bir kere yapılıyor.
+  const [fonGunlukGetiriSerisi, setFonGunlukGetiriSerisi] = useState<any[] | null>(null);
+  const [fonGunlukGetiriSerisiYukleniyor, setFonGunlukGetiriSerisiYukleniyor] = useState(false);
 
   useEffect(() => {
     if (sekme !== "gecmis" || gecmis !== null) return;
@@ -4653,14 +4656,14 @@ function FonTahminDetayModal({
   }, [sekme, fonDetayTam, fonDetayTamYukleniyor, kod]);
 
   useEffect(() => {
-    if (sekme !== "getiri" || fonGecmisNoktalar !== null || fonGecmisNoktalarYukleniyor) return;
-    setFonGecmisNoktalarYukleniyor(true);
-    fetch(`${API_BASE}/api/tefas-proxy?gecmis=1&kod=${kod}&donem=1y`)
+    if (sekme !== "getiri" || fonGunlukGetiriSerisi !== null || fonGunlukGetiriSerisiYukleniyor) return;
+    setFonGunlukGetiriSerisiYukleniyor(true);
+    fetch(`${API_BASE}/api/tefas-proxy?gunlukGetiriSerisi=1&kod=${kod}`)
       .then((r) => r.json())
-      .then((d) => setFonGecmisNoktalar(d.success ? (d.noktalar || []) : []))
-      .catch(() => setFonGecmisNoktalar([]))
-      .finally(() => setFonGecmisNoktalarYukleniyor(false));
-  }, [sekme, fonGecmisNoktalar, fonGecmisNoktalarYukleniyor, kod]);
+      .then((d) => setFonGunlukGetiriSerisi(d.success ? (d.kayitlar || []) : []))
+      .catch(() => setFonGunlukGetiriSerisi([]))
+      .finally(() => setFonGunlukGetiriSerisiYukleniyor(false));
+  }, [sekme, fonGunlukGetiriSerisi, fonGunlukGetiriSerisiYukleniyor, kod]);
 
   const kalemler: any[] = Array.isArray(holdings?.kalemler) ? holdings.kalemler : [];
   const siraliKalemler = useMemo(
@@ -4958,39 +4961,21 @@ function FonTahminDetayModal({
                   <div style={{textAlign:"center",padding:"20px 0",fontSize:12,color:WA(0.4)}}>Getiri bilgisi alınamadı.</div>
                 )}
 
-                {/* ── GÜNLÜK GETİRİ TAKVİMİ (2026-09-05) ────────────────────
-                    Ay×gün ısı haritası — kaynak: fonGecmisNoktalar (1 yıllık
-                    günlük fiyat noktaları, ayrı bir kaynağa gerek yok). */}
+                {/* ── GÜNLÜK GETİRİ TAKVİMİ (2026-09-05, 2026-09-08'de backend'e
+                    taşındı) ── Ay×gün ısı haritası — kaynak: fonGunlukGetiriSerisi
+                    (backend'de KALICI olarak hesaplanıp saklanan {tarih, getiri}
+                    serisi, bkz. ?gunlukGetiriSerisi=1). Hesaplama artık burada
+                    DEĞİL, backend'deki gunlukGetiriSerisiGetirVeGuncelle'de
+                    tek yerde yapılıyor — tarih hizalaması (TEFAS'ın "tarih"
+                    alanı yayın günü, değerleme günü değil) orada düzeltildi. */}
                 <div style={{marginTop:20,fontSize:11,fontWeight:700,color:WA(0.4),textTransform:"uppercase",marginBottom:8}}>Günlük Getiri Takvimi</div>
-                {fonGecmisNoktalarYukleniyor && (
+                {fonGunlukGetiriSerisiYukleniyor && (
                   <div style={{textAlign:"center",padding:"16px 0",fontSize:12,color:WA(0.4)}}>Yükleniyor…</div>
                 )}
-                {!fonGecmisNoktalarYukleniyor && (() => {
-                  const noktalar = fonGecmisNoktalar || [];
-                  if (noktalar.length < 2) {
+                {!fonGunlukGetiriSerisiYukleniyor && (() => {
+                  const gunlukGetiriler: { tarih: string; getiri: number }[] = fonGunlukGetiriSerisi || [];
+                  if (gunlukGetiriler.length < 1) {
                     return <div style={{textAlign:"center",padding:"16px 0",fontSize:12,color:WA(0.4)}}>Takvim için yeterli geçmiş veri yok.</div>;
-                  }
-                  // ⚠️ DÜZELTME (2026-09-08, backend'deki gercekTeshis
-                  // araştırmasıyla aynı gün bulundu): TEFAS'ın resmi API'sinden
-                  // gelen "tarih" alanı DEĞERLEME tarihi DEĞİL, YAYIN tarihi —
-                  // her nokta, o günün sabahı yayınlanan BİR ÖNCEKİ iş
-                  // gününün kapanışını taşıyor. Yani noktalar[i] ile
-                  // noktalar[i-1] arasındaki oran, noktalar[i]'nin KENDİ
-                  // tarihine değil, noktalar[i-1]'in tarihine ait GERÇEK
-                  // günlük getiridir (backend'deki fonGunlukGercekGetiriDahiliTeshisli
-                  // ile aynı formül — orada rakamla doğrulandı: THF için
-                  // "2026-09-08" etiketli fiyat aslında 07.09'un, "2026-09-07"
-                  // etiketli fiyat aslında 04.09'un kapanışıydı).
-                  // ESKİ (yanlış) davranış: getiriyi noktalar[i].tarih'e
-                  // yazıyordu — bu yüzden takvimde her gün bir gün ileri
-                  // kaymış görünüyordu. Son (en güncel) noktanın kendi günü
-                  // için artık hiç değer YOK — çünkü o günün ASIL kapanışı
-                  // henüz TEFAS tarafından yayınlanmadı (ertesi sabah gelecek).
-                  const gunlukGetiriler: { tarih: string; getiri: number }[] = [];
-                  for (let i = 1; i < noktalar.length; i++) {
-                    const onceki = noktalar[i-1]?.fiyat, simdi = noktalar[i]?.fiyat;
-                    if (typeof onceki !== "number" || typeof simdi !== "number" || onceki === 0) continue;
-                    gunlukGetiriler.push({ tarih: noktalar[i-1].tarih, getiri: ((simdi/onceki)-1)*100 });
                   }
                   // Aya göre grupla: "YYYY-MM" -> { gun -> getiri }
                   const aylikHarita: Record<string, Record<number, number>> = {};
