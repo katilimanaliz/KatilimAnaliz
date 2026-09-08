@@ -629,7 +629,15 @@ async function fonGunlukGercekGetiriDahiliTeshisli(kod, hedefTarih, { onbellekAt
   const siraliNoktalar = [...noktalar].sort((a, b) => String(a.tarih).localeCompare(String(b.tarih)));
   const idx = siraliNoktalar.findIndex((p) => p.tarih === hedefTarih);
   teshis.idxBulunduMu = idx > 0;
-  if (onbellekAtla) teshis.tarihler = siraliNoktalar.map((p) => p.tarih);
+  if (onbellekAtla) {
+    // ⚠️ EKLENDİ (2026-09-08, kullanıcı raporu): sadece tarihler yeterli
+    // değildi — kullanıcı, önceki günün AYNI hesaplama zincirinde farklı bir
+    // güne kaymış olabileceğini fark etti (THF için TEFAS'ın resmi kapanışı
+    // 0,84 iken bizim hesapladığımız 0,90 çıkmış). Hangi tarih-çiftinin hangi
+    // oranı verdiğini görebilmek için artık ham fiyat noktaları da dönüyor.
+    teshis.tarihler = siraliNoktalar.map((p) => p.tarih);
+    teshis.noktalarHamFiyat = siraliNoktalar.slice(-8); // son 8 nokta yeterli, tüm 21-22'yi dökmeye gerek yok
+  }
 
   if (idx <= 0) {
     // hedef tarih seride yok (henüz yayınlanmamış) YA DA serideki ilk nokta
