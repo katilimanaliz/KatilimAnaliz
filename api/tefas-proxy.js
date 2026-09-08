@@ -997,6 +997,25 @@ async function fonGecmisGetir(req, res) {
     }
   } catch {}
 
+  // ── TEFAS-DOĞRUDAN HIZLI YOL (2026-09-08 eklendi) ────────────────────────
+  // Önbellekte taze kayıt yoksa, Fonoloji'ye gitmeden ÖNCE aynı veriyi
+  // TEFAS'ın resmi ucundan (kota sıfır) almayı dene. Başarılı olursa
+  // Fonoloji'ye HİÇ dokunulmaz. Boş/başarısız dönerse (ör. TEFAS o an
+  // erişilemezse) aşağıdaki mevcut Fonoloji kodu DEĞİŞMEDEN devreye girer.
+  try {
+    const gunSayisiMap = { "1a": 35, "3a": 100, "1y": 380 };
+    const gunSayisi = gunSayisiMap[donemGiris] || 35;
+    const tefasNoktalar = await tefasFonGecmisResmiCek(kod, gunSayisi);
+    if (tefasNoktalar && tefasNoktalar.length) {
+      const guncelFiyatT = tefasNoktalar[tefasNoktalar.length - 1].fiyat;
+      const oncekiKapanisT = tefasNoktalar.length > 1 ? tefasNoktalar[tefasNoktalar.length - 2].fiyat : null;
+      const paketT = { success: true, kod, donem: donemGiris, noktalar: tefasNoktalar, guncelFiyat: guncelFiyatT, oncekiKapanis: oncekiKapanisT, kaynak: "tefas-resmi" };
+      try { await kv.set(cacheAnahtar, paketT, { ex: FON_GECMIS_CACHE_TTL_SANIYE }); } catch {}
+      res.setHeader("Cache-Control", "max-age=0, s-maxage=300, stale-while-revalidate=300");
+      return res.status(200).json(paketT);
+    }
+  } catch {}
+
   const API_KEY = process.env.FONOLOJI_KEY;
   if (!API_KEY) return res.status(500).json({ success: false, error: "FONOLOJI_KEY tanımlı değil" });
 
@@ -1318,6 +1337,54 @@ const TEFAS_TUM_BAYATLIK_SINIRI_SAAT = 20;
 // Tam tur tamamlanınca (tamamlandiMi=true) imleç sıfırlanır — ertesi günkü
 // taze tur yine baştan başlar.
 const TEFAS_TUM_IMLEC_KV = "tefas:tum-fonlar-diger:imlec";
+// ── BİRİKİMLİ GÜNLÜK FİYAT GEÇMİŞİ (2026-09-08 eklendi) ─────────────────────
+// Amaç: "Yatırım Fonları Getiri İzleme" listesindeki katılım DIŞI fonlarda
+// Günlük/Haftalık/Aylık/vb. sütunları hep "—" görünüyordu (kullanıcı
+// bildirdi) — çünkü toplu TEFAS çekimi (tumFonlar=1) her fon için SADECE o
+// günkü TEK fiyatı veriyor, geçmiş serisi vermiyor. Tek tek 2000+ fon için
+// TEFAS'a ayrı istek atmak (yukarıdaki tefasFonGecmisResmiCek ile mümkün
+// olsa da) günlerce sürecek bir arka plan işi olurdu (aynı 429 hız sınırı
+// sorunu, bkz. tefasTumFonlariCek). Bunun yerine: zaten HER GÜN çalışan
+// toplu crawl'ın (tefasTumCronYaz) ürettiği günlük fiyat, HER FON için TEK
+// bir birikimli diziye EKLENİYOR — hiçbir ek TEFAS isteği gerekmiyor. Günlük
+// getiri 2. günden, haftalık ~1 haftadan, aylık ~1 aydan itibaren doğru
+// görünmeye başlar; tam 1 yıllık geçmiş birikene kadar yıllık/YTD "—" kalır.
+// TÜM fonlar TEK bir KV anahtarında (kod başına ayrı anahtar yerine) —
+// binlerce ayrı KV round-trip yerine tur başına 1 okuma + 1 yazma.
+const TEFAS_DIGER_GECMIS_KV = "tefas:diger-gecmis";
+const TEFAS_DIGER_GECMIS_MAKS_NOKTA = 400; // ~1.5 yıllık işlem günü — sınırsız büyümesin
+
+// Kronolojik (eskiden yeniye) {t, f} noktalarından Günlük/Haftalık/Aylık/3
+// Aylık/YTD/Yıllık yüzde değişimleri hesaplar. Yetersiz geçmiş varsa ilgili
+// alan null bırakılır (uydurma yok — mevcut "diğer fon" felsefesiyle aynı).
+function getiriHesaplaNoktalar(noktalar) {
+  if (!Array.isArray(noktalar) || noktalar.length < 2) {
+    return { gunluk: null, haftalik: null, aylik: null, uc_aylik: null, ytd: null, yillik: null };
+  }
+  const son = noktalar[noktalar.length - 1];
+  const sonTarih = new Date(son.t);
+  // Hedef tarihten GERİYE doğru en yakın (o tarihte veya öncesinde) noktayı
+  // bulur — tatil/hafta sonu boşluklarında en yakın işlem gününü yakalar.
+  const enYakinBul = (hedefTarih) => {
+    for (let i = noktalar.length - 2; i >= 0; i--) {
+      if (new Date(noktalar[i].t) <= hedefTarih) return noktalar[i];
+    }
+    return null;
+  };
+  const yuzde = (eski) => (eski && eski.f > 0) ? Math.round(((son.f / eski.f) - 1) * 10000) / 100 : null;
+  const gunOncesi = (n) => { const d = new Date(sonTarih); d.setDate(d.getDate() - n); return d; };
+  const ytdBaslangic = new Date(sonTarih.getFullYear(), 0, 1);
+
+  return {
+    gunluk: yuzde(noktalar[noktalar.length - 2]),
+    haftalik: yuzde(enYakinBul(gunOncesi(7))),
+    aylik: yuzde(enYakinBul(gunOncesi(30))),
+    uc_aylik: yuzde(enYakinBul(gunOncesi(90))),
+    ytd: sonTarih > ytdBaslangic ? yuzde(enYakinBul(ytdBaslangic)) : null,
+    yillik: yuzde(enYakinBul(gunOncesi(365))),
+  };
+}
+
 
 function tefasGovdeOlustur(fonTipi, basSira, bitSira, basTarih, bitTarih) {
   return {
@@ -1340,6 +1407,63 @@ function tefasFonNormallestir(f) {
     portfoyBuyuklukTL: (typeof f.portfoyBuyukluk === "number") ? f.portfoyBuyukluk : null,
     kaynak: "tefas-resmi",
   };
+}
+
+// ── TEK FON GEÇMİŞİ — DOĞRUDAN TEFAS (2026-09-08 eklendi) ───────────────────
+// Kullanıcı isteği: Fon Detay ekranındaki geçmiş fiyat grafiği (?gecmis=1),
+// katılım DIŞI fonlar için her tıklamada Fonoloji kotasını tüketiyordu (kod
+// AAL gibi "diğer" fonlar için de Fonoloji'nin tekil fon ucunu çağırıyordu).
+// Canlı testte doğrulandı (2026-09-08): AYNI resmi TEFAS ucu
+// (fonGnlBlgSiraliGetir), fonKodu BOŞ değil BELİRLİ bir kod ve basTarih/
+// bitTarih GENİŞ bir aralık verildiğinde, o TEK fon için GERÇEK bir günlük
+// seri döndürüyor (30 günlük istekte 22 işlem günü satırı geldi) — toplu
+// çekimde (fonKodu:null) her fon için sadece TEK (en güncel) satır gelmesiyle
+// TAM TERSİ bir davranış. Bu, Fonoloji'ye HİÇ dokunmadan (kota sıfır) çalışan
+// bir geçmiş kaynağı — hem katılım hem katılım dışı TÜM fonlar için TEFAS'ın
+// kendi resmi verisi olduğundan kullanılabilir. fonGecmisGetir artık bunu
+// ÖNCELİKLİ deniyor, sadece boş/başarısız dönerse Fonoloji'ye (aşağıdaki
+// eski kod, DOKUNULMADI) düşüyor — mevcut katılım fonu davranışında
+// regresyon riski yok, sadece bir hızlı-yol eklendi.
+async function tefasFonGecmisResmiCek(kod, gunSayisi) {
+  const bugun = new Date();
+  const baslangic = new Date(bugun); baslangic.setDate(baslangic.getDate() - gunSayisi);
+  const yyyymmdd = (d) => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+  const govde = {
+    fonTipi: "YAT", fonKodu: kod, aramaMetni: null,
+    basSira: 1, bitSira: gunSayisi + 30, // güvenlik payı — tatil/hafta sonu boşlukları için
+    basTarih: yyyymmdd(baslangic), bitTarih: yyyymmdd(bugun),
+    dil: "TR", fonGrubu: null, fonTurAciklama: null,
+    fonTurKod: null, kurucuKod: null, sfonTurKod: null,
+  };
+  const controller = new AbortController();
+  const zamanlayici = setTimeout(() => controller.abort(), 12000);
+  try {
+    const r = await fetch(TEFAS_RESMI_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+        "Referer": "https://www.tefas.gov.tr/",
+        "Origin": "https://www.tefas.gov.tr",
+      },
+      body: JSON.stringify(govde),
+      signal: controller.signal,
+    }).finally(() => clearTimeout(zamanlayici));
+    if (!r.ok) return null;
+    const d = await r.json().catch(() => null);
+    const liste = Array.isArray(d?.resultList) ? d.resultList : [];
+    if (!liste.length) return null;
+    // Canlı testte TEFAS en yeni tarihi ÖNCE veriyordu — grafik/getiri
+    // hesaplamaları eskiden-yeniye sıra beklediği için burada çeviriliyor.
+    const noktalar = liste
+      .filter((f) => typeof f?.fiyat === "number" && f?.tarih)
+      .map((f) => ({ tarih: f.tarih, fiyat: f.fiyat }))
+      .sort((a, b) => String(a.tarih).localeCompare(String(b.tarih)));
+    return noktalar.length ? noktalar : null;
+  } catch {
+    return null;
+  }
 }
 
 // TEFAS'ın resmi API'sinden fonTipi="YAT" ile TÜM sayfaları sırayla çeker.
@@ -1531,15 +1655,37 @@ async function tefasTumCronYaz(req, res) {
         const ilerlemeSonrasi = birlestir(ilerlemeOncesi, taze.data);
 
         if (taze.tamamlandiMi) {
+          // ── BİRİKİMLİ GEÇMİŞ GÜNCELLEME (2026-09-08 eklendi) ─────────────
+          // Tam tur bittiğinde HER fonun bugünkü fiyatı kendi birikimli
+          // dizisine eklenir (aynı tarih zaten varsa — ör. cron aynı gün
+          // içinde tekrar tam tur atarsa — tekrar eklenmez), sonra
+          // Günlük/Haftalık/vb. yüzdeler bu güncel diziden hesaplanıp fon
+          // nesnesine yazılır. TÜM bu işlem TEK bir KV okuma + TEK bir KV
+          // yazma ile yapılıyor (2000+ ayrı round-trip YOK).
+          let gecmisBlob = {};
+          try { gecmisBlob = (await kv.get(TEFAS_DIGER_GECMIS_KV).catch(() => null)) || {}; } catch {}
+          const zenginlestirilmis = ilerlemeSonrasi.map((f) => {
+            if (!f?.kod || !f?.tarih || typeof f.fiyat !== "number") return f;
+            const mevcut = Array.isArray(gecmisBlob[f.kod]) ? gecmisBlob[f.kod] : [];
+            const sonNokta = mevcut[mevcut.length - 1];
+            const guncellenmis = (sonNokta && sonNokta.t === f.tarih)
+              ? mevcut // aynı gün için zaten var — tekrar ekleme
+              : [...mevcut, { t: f.tarih, f: f.fiyat }].slice(-TEFAS_DIGER_GECMIS_MAKS_NOKTA);
+            gecmisBlob[f.kod] = guncellenmis;
+            const getiriler = getiriHesaplaNoktalar(guncellenmis);
+            return { ...f, ...getiriler };
+          });
+          try { await kv.set(TEFAS_DIGER_GECMIS_KV, gecmisBlob); } catch {}
+
           // Tam tur tamamlandı — KULLANICIYA SUNULAN kalıcı veri TOPTAN bu
           // turun sonucuyla değiştirilir (dünkü veri değil, bugünkü tam veri).
           const kaydedilecek = {
             success: true,
-            count: ilerlemeSonrasi.length,
+            count: zenginlestirilmis.length,
             guncelleme: new Date().toISOString(),
             tamamlandiMi: true,
             sonHata: taze.hata,
-            data: ilerlemeSonrasi,
+            data: zenginlestirilmis,
           };
           await kv.set(TEFAS_TUM_KV_ANAHTAR, kaydedilecek);
           await kv.del(TEFAS_TUM_ILERLEME_KV).catch(() => {});
