@@ -4505,7 +4505,7 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
 // ─── FON TAHMİN DETAY MODALI — AI Tahmin Ağı / Portföy Dağılımı / Tahmin
 // Geçmişi (2026-09-04 eklendi) ────────────────────────────────────────────
 function FonTahminDetayModal({
-  kod, fonAdi, holdings, hisseDegisimMap, tahminVeri, onKapat, onFonDetay, fonDetayYukleniyor,
+  kod, fonAdi, holdings, hisseDegisimMap: hisseDegisimMapEski, tahminVeri, onKapat, onFonDetay, fonDetayYukleniyor,
 }: {
   kod: string;
   fonAdi?: string | null;
@@ -4526,21 +4526,61 @@ function FonTahminDetayModal({
   // CDN'de kısa süreli önbelleklendiği için (bkz. hisse-proxy.js) bu ekstra
   // çekim gerçek bir kota maliyeti getirmiyor — BistHisseTarayici de aynı
   // deseni (tam liste çek, istemcide filtrele) kullanıyor.
-  const [detayAcikKod, setDetayAcikKod] = useState<string | null>(null);
-  const [detayHisseObj, setDetayHisseObj] = useState<any | null>(null);
+  // ── TEK ORTAK HİSSE VERİSİ (2026-09-08 eklendi) ───────────────────────────
+  // ÖNCEDEN: Portföy Dağılımı'ndaki "Değişim" sütunu, DIŞARIDAN gelen
+  // hisseDegisimMapEski prop'unu (Ana Sayfa'daki FonTahminleriWidget'ın
+  // KENDİ hisseler state'i — SADECE piyasa açıkken yenilenen, piyasa
+  // kapalıyken günlerce donuk kalabilen bir kaynak) kullanıyordu. HisseDetay
+  // ise (bkz. eski detayAcikKod effect'i) TAMAMEN AYRI, kendi taze
+  // /api/hisse-proxy çekimini yapıyordu. Bu İKİ FARKLI KAYNAK, aynı hisse
+  // için FARKLI değerler gösterebiliyordu (kullanıcı PASEU örneğiyle
+  // bildirdi: Portföy Dağılımı'nda -2.46%, HisseDetay'da -9.97%). ÇÖZÜM:
+  // artık TEK bir hisseVerisi state'i var — hem Portföy Dağılımı/AI Tahmin
+  // Ağı'nın hisseDegisimMap'i HEM de HisseDetay'a aktarılan obje AYNI
+  // diziden geliyor. Böylece ikisinin farklı veri göstermesi YAPISAL OLARAK
+  // imkansız hale geldi (aynı referans, ayrı bir çekim yok).
+  const [hisseVerisi, setHisseVerisi] = useState<any[]>(() => {
+    try {
+      const raw = sessionStorage.getItem("kea_hisseler");
+      if (!raw) return [];
+      const { data } = JSON.parse(raw);
+      return Array.isArray(data) ? data : [];
+    } catch { return []; }
+  });
   useEffect(() => {
-    if (!detayAcikKod) { setDetayHisseObj(null); return; }
     let iptal = false;
-    fetch(`${API_BASE}/api/hisse-proxy`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (iptal) return;
-        const bulunan = Array.isArray(d?.data) ? d.data.find((h: any) => h.ticker === detayAcikKod) : null;
-        setDetayHisseObj(bulunan ?? null);
-      })
-      .catch(() => { if (!iptal) setDetayHisseObj(null); });
-    return () => { iptal = true; };
-  }, [detayAcikKod]);
+    const cek = () => {
+      fetch(`${API_BASE}/api/hisse-proxy`)
+        .then((r) => r.json())
+        .then((d) => {
+          if (iptal || !d?.success || !Array.isArray(d.data)) return;
+          setHisseVerisi(d.data);
+          try { sessionStorage.setItem("kea_hisseler", JSON.stringify({ data: d.data, ts: Date.now() })); } catch {}
+        })
+        .catch(() => {});
+    };
+    // Modal her açıldığında KOŞULSUZ bir kez çekiyor (piyasa kapalı olsa
+    // bile) — HisseDetay'ın önceki (doğru) davranışıyla aynı, "en güncel
+    // bilinen veri" gösterilsin diye. Piyasa açıkken ayrıca 5 saniyede bir
+    // tazeleniyor (BistHisseTarayici ile aynı desen).
+    cek();
+    const interval = setInterval(() => { if (piyasaAcikMi()) cek(); }, 5 * 1000);
+    return () => { iptal = true; clearInterval(interval); };
+  }, []);
+  const hisseDegisimMap = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const h of hisseVerisi) if (typeof h.degisim1g === "number" && h.ticker) m[h.ticker] = h.degisim1g;
+    return m;
+  }, [hisseVerisi]);
+
+  const [detayAcikKod, setDetayAcikKod] = useState<string | null>(null);
+  // detayHisseObj artık AYRI bir fetch DEĞİL — doğrudan yukarıdaki
+  // hisseVerisi'nden aranıyor. Portföy Dağılımı'nda gösterilen değişim ile
+  // hisseye tıklayınca açılan HisseDetay'daki değişim GARANTİ OLARAK aynı.
+  const detayHisseObj = useMemo(
+    () => (detayAcikKod ? hisseVerisi.find((h: any) => h.ticker === detayAcikKod) ?? null : null),
+    [detayAcikKod, hisseVerisi]
+  );
   // ⚠️ DÜZELTİLDİ (2026-09-07, aynı gün): erken çıkış (if detayAcikKod return…)
   // İLK sürümde BURADA, yani bileşenin DİĞER hook'larından (gecmis/fonDetayTam/
   // fonGecmisNoktalar/useMemo'lar aşağıda) ÖNCE duruyordu. React'ta koşullu bir
@@ -4652,7 +4692,14 @@ function FonTahminDetayModal({
             (kullanıcı ekran görüntüsüyle bildirdi) — üst güvenli alan boşluğu
             burada AÇIKÇA ekleniyor (diğer tam ekran modallerdeki
             env(safe-area-inset-top) deseniyle aynı). */}
-        <div style={{width:"100%",maxWidth:genisEkran?"none":680,margin:"0 auto",display:"flex",flexDirection:"column",height:"100%",paddingTop:"env(safe-area-inset-top,0px)"}}>
+        <div style={{width:"100%",maxWidth:genisEkran?"none":680,margin:"0 auto",display:"flex",flexDirection:"column",height:"100%",paddingTop:"env(safe-area-inset-top,0px)",overflowY:"auto"}}>
+          {/* ⚠️ DÜZELTME (2026-09-08): overflowY:"auto" eklendi. HisseDetay
+              normalde (BistHisseTarayici'de) sayfanın doğal kaydırmasına
+              güveniyor — bizim position:fixed sarmalayıcımızda bu doğal
+              kaydırma YOKTU, içerik viewport'tan taştığında sabit bir
+              "resim" gibi kalıp kaydırılamıyordu (kullanıcı bildirdi). Diğer
+              sekmelerin (Portföy Dağılımı vb.) kullandığı AYNI
+              "flex:1,overflowY:auto" deseniyle tutarlı. */}
           {!detayHisseObj ? (
             <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
               <span style={{fontSize:13,color:WA(0.5)}}>Yükleniyor…</span>
