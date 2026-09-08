@@ -5154,13 +5154,13 @@ function FonTahminAgGorseli({ kalemler, hisseDegisimMap, tahmin }: {
             return (
               <g key={k.kod}>
                 <path d={yol} fill={renk} />
-                <text x={lx} y={ly - 15} textAnchor="middle" fontSize={8} fontWeight={600} fill={WA(0.5)}>
+                <text x={lx} y={ly - 19} textAnchor="middle" fontSize={10} fontWeight={600} fill={WA(0.5)}>
                   %{(k.agirlik ?? 0).toFixed(1)}
                 </text>
-                <text x={lx} y={ly - 3} textAnchor="middle" fontSize={10.5} fontWeight={700} fill={C.label}>
+                <text x={lx} y={ly - 4} textAnchor="middle" fontSize={13} fontWeight={700} fill={C.label}>
                   {k.kod}
                 </text>
-                <text x={lx} y={ly + 9} textAnchor="middle" fontSize={9} fontWeight={600}
+                <text x={lx} y={ly + 11} textAnchor="middle" fontSize={11} fontWeight={600}
                   fill={k.pozitif == null ? WA(0.4) : k.pozitif ? C.green : C.red}>
                   {yuzdeMetni}
                 </text>
