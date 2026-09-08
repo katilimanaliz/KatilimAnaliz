@@ -557,69 +557,118 @@ function isabetHesapla(tahmin, gercek) {
 const FON_GERCEK_GETIRI_CACHE_TTL_SANIYE = 30 * 86400; // bulunduysa 30 gün (geçmiş tarihin gerçekleşen getirisi hiç değişmez)
 const FON_GERCEK_GETIRI_BULUNAMADI_TTL_SANIYE = 6 * 3600; // henüz fiyat serisinde yoksa 6 saat sonra tekrar denensin
 
-async function fonGunlukGercekGetiriDahili(kod, hedefTarih) {
-  const cacheAnahtar = `fonTahmin:gercekGetiri:${kod}:${hedefTarih}`;
-  try {
-    const onbellek = await kv.get(cacheAnahtar).catch(() => null);
-    if (onbellek && typeof onbellek.gercek === "number") return onbellek.gercek;
-    if (onbellek && onbellek.bulunamadi) return null; // yakın zamanda denendi, henüz yok — TTL dolunca tekrar denenecek
-  } catch {}
+// ⚠️ DÜZELTME (2026-09-08, canlı testte bulundu): İlk sürüm burada 40 günlük
+// pencere istiyordu — ama TEFAS resmi API'si fon kodu belirtildiğinde tarih
+// aralığını KESİN OLARAK 1 AYLA sınırlıyor (bkz. tefasFonGecmisResmiZincir
+// başındaki not, "Geçersiz veri: Tarih aralığı 1 ayı aşamaz"). 40 gün bu
+// sınırı aştığı için TEFAS isteği HER SEFERİNDE reddediyordu, sonuç "bulunamadı"
+// olarak 6 saatliğine cache'leniyordu — Tahmin Geçmişi'nin "Gerçek" alanı hiç
+// dolmuyordu. PENCERE_GUN (28, tefasFonGecmisResmiZincir'de zaten kanıtlanmış
+// güvenli değer) ile aynı sınıra çekildi.
+const FON_GERCEK_GETIRI_PENCERE_GUN = 28;
 
-  // hedefTarih + bir önceki işlem gününü kapsayacak kadar geniş bir pencere
-  // (40 gün — hafta sonu/resmi tatil boşluklarına karşı güvenlik payı).
+async function fonGunlukGercekGetiriDahiliTeshisli(kod, hedefTarih, { onbellekAtla = false } = {}) {
+  const cacheAnahtar = `fonTahmin:gercekGetiri:${kod}:${hedefTarih}`;
+  const teshis = { kod, hedefTarih, tefasHata: null, fonolojiDenendi: false, fonolojiHata: null, noktaSayisi: 0 };
+
+  if (!onbellekAtla) {
+    try {
+      const onbellek = await kv.get(cacheAnahtar).catch(() => null);
+      if (onbellek && typeof onbellek.gercek === "number") return { gercek: onbellek.gercek, kaynak: "cache", teshis };
+      if (onbellek && onbellek.bulunamadi) return { gercek: null, kaynak: "cache-bulunamadi", teshis };
+    } catch {}
+  }
+
   let noktalar = null;
   try {
-    const tefasSonuc = await tefasFonGecmisResmiCek(kod, 40);
+    const tefasSonuc = await tefasFonGecmisResmiCek(kod, FON_GERCEK_GETIRI_PENCERE_GUN);
     noktalar = tefasSonuc?.noktalar ?? null;
-  } catch {}
+    teshis.tefasHata = tefasSonuc?.hata ?? null;
+  } catch (e) {
+    teshis.tefasHata = `dış try/catch: ${String(e?.message || e)}`;
+  }
 
   // TEFAS başarısız olursa Fonoloji'ye düş (kota maliyeti var ama nadir
   // tetiklenir — sadece TEFAS o an erişilemezse).
   if (!noktalar || !noktalar.length) {
+    teshis.fonolojiDenendi = true;
     const API_KEY = process.env.FONOLOJI_KEY;
-    if (API_KEY) {
+    if (!API_KEY) {
+      teshis.fonolojiHata = "FONOLOJI_KEY tanımlı değil";
+    } else {
       try {
         await siraliBekle();
         const r = await fetch(
           `https://fonoloji.com/v1/funds/${encodeURIComponent(kod)}/timeseries?include=nav&period=1m`,
           { headers: { "X-API-Key": API_KEY, "Accept": "application/json" } }
         );
-        if (r.ok) {
+        if (!r.ok) {
+          teshis.fonolojiHata = `HTTP ${r.status}`;
+        } else {
           const d = await r.json().catch(() => null);
           const hamNoktalar = d?.nav?.points ?? d?.timeseries?.nav?.points
                            ?? (Array.isArray(d?.nav) ? d.nav : null) ?? d?.points ?? [];
           noktalar = (Array.isArray(hamNoktalar) ? hamNoktalar : [])
             .filter((p) => typeof (p?.price ?? p?.value) === "number")
             .map((p) => ({ tarih: p.date ?? p.tarih, fiyat: p.price ?? p.value }));
+          if (!noktalar.length) teshis.fonolojiHata = "nokta boş döndü";
         }
-      } catch {}
+      } catch (e) {
+        teshis.fonolojiHata = `exception: ${String(e?.message || e)}`;
+      }
     }
   }
 
+  teshis.noktaSayisi = noktalar?.length || 0;
+
   if (!noktalar || !noktalar.length) {
     try { await kv.set(cacheAnahtar, { bulunamadi: true }, { ex: FON_GERCEK_GETIRI_BULUNAMADI_TTL_SANIYE }); } catch {}
-    return null;
+    return { gercek: null, kaynak: "yok", teshis };
   }
 
   const siraliNoktalar = [...noktalar].sort((a, b) => String(a.tarih).localeCompare(String(b.tarih)));
   const idx = siraliNoktalar.findIndex((p) => p.tarih === hedefTarih);
+  teshis.idxBulunduMu = idx > 0;
+  if (onbellekAtla) teshis.tarihler = siraliNoktalar.map((p) => p.tarih);
+
   if (idx <= 0) {
     // hedef tarih seride yok (henüz yayınlanmamış) YA DA serideki ilk nokta
     // (kıyaslanacak önceki gün verisi yok) — bulunamadı say.
     try { await kv.set(cacheAnahtar, { bulunamadi: true }, { ex: FON_GERCEK_GETIRI_BULUNAMADI_TTL_SANIYE }); } catch {}
-    return null;
+    return { gercek: null, kaynak: "yok", teshis };
   }
 
   const bugunFiyat = siraliNoktalar[idx].fiyat;
   const oncekiFiyat = siraliNoktalar[idx - 1].fiyat;
   if (typeof bugunFiyat !== "number" || typeof oncekiFiyat !== "number" || oncekiFiyat === 0) {
     try { await kv.set(cacheAnahtar, { bulunamadi: true }, { ex: FON_GERCEK_GETIRI_BULUNAMADI_TTL_SANIYE }); } catch {}
-    return null;
+    return { gercek: null, kaynak: "yok", teshis };
   }
 
   const gercek = ((bugunFiyat / oncekiFiyat) - 1) * 100;
   try { await kv.set(cacheAnahtar, { gercek }, { ex: FON_GERCEK_GETIRI_CACHE_TTL_SANIYE }); } catch {}
+  return { gercek, kaynak: "hesaplandi", teshis };
+}
+
+async function fonGunlukGercekGetiriDahili(kod, hedefTarih) {
+  const { gercek } = await fonGunlukGercekGetiriDahiliTeshisli(kod, hedefTarih);
   return gercek;
+}
+
+// ── TEŞHİS UCU (2026-09-08 eklendi, gerçekleştirme fiyat serisinden geçişiyle
+// aynı gün) — fonGunlukGercekGetiriDahili'nin cache'ini ATLAYARAK tam nedeni
+// gösterir: /api/tefas-proxy?gercekTeshis=1&kod=THF&tarih=2026-09-07
+// Başarılı bulunursa cache'e de yazar — yani bu çağrı aynı zamanda önceki
+// başarısız denemenin "bulunamadı" cache kaydını da DÜZELTİR.
+async function gercekTeshisGetir(req, res) {
+  const kod = String(req.query?.kod || "").toUpperCase().trim();
+  const hedefTarih = String(req.query?.tarih || "");
+  if (!kod || !hedefTarih) {
+    return res.status(400).json({ success: false, error: "kod ve tarih parametreleri gerekli (tarih: YYYY-MM-DD)" });
+  }
+  const sonuc = await fonGunlukGercekGetiriDahiliTeshisli(kod, hedefTarih, { onbellekAtla: true });
+  res.setHeader("Cache-Control", "no-store");
+  return res.status(200).json({ success: true, ...sonuc });
 }
 
 // Türkiye saatiyle (TSİ, UTC+3) bugünün tarihini "YYYY-MM-DD" döner —
@@ -2009,6 +2058,7 @@ export default async function handler(req, res) {
   }
 
   if (req.query?.gecmis === "1") return fonGecmisGetir(req, res);
+  if (req.query?.gercekTeshis === "1") return gercekTeshisGetir(req, res);
   if (req.query?.detay === "1") return fonDetayGetir(req, res);
   if (req.query?.adKategori === "1") return fonAdKategoriGetir(req, res);
   if (req.query?.holdings === "1") return fonHoldingsGetir(req, res);
