@@ -540,6 +540,88 @@ function isabetHesapla(tahmin, gercek) {
   return Math.max(0, Math.min(100, 100 - (fark / ISABET_ESIK_PUAN) * 100));
 }
 
+// ── FON GÜNLÜK GERÇEK GETİRİ — FİYAT SERİSİNDEN (2026-09-08 eklendi) ───────
+// AMAÇ: Tahmin Geçmişi'ndeki "Gerçek" alanı ÖNCEDEN `tefas:katilim-fonlari`
+// KV kaydındaki (ana katılım fon listesi cron'unun yazdığı) `gunluk` alanına
+// bakıyordu — bu hem o cron'un o gün çalışmış olmasına HEM DE ayrı bir
+// `?mod=gerceklestir` cron'unun DOĞRU SAATTE (TEFAS'ın günlük veriyi
+// yayınladığı sabahtan SONRA) tetiklenmesine bağımlıydı. Kullanıcı, Günlük
+// Getiri Takvimi'nde (aynı günün) gerçek getirinin ZATEN dolu göründüğünü
+// ama Tahmin Geçmişi'nde hâlâ "—" kaldığını fark etti (2026-09-08) — KÖK
+// NEDEN: takvim, fonun GERÇEK FİYAT SERİSİNDEN (bkz. fonGecmisGetir /
+// ?gecmis=1) hesaplanıyor, hiçbir cron zamanlamasına bağımlı değil.
+// Bu fonksiyon, Tahmin Geçmişi'nin "Gerçek" alanını da AYNI fiyat serisi
+// kaynağına taşıyarak cron zamanlaması bağımlılığını KALDIRIYOR — SADECE bu
+// alan için; "tahmin" (kaydet adımı, hisse ağırlığı × günlük hisse fiyatı
+// ile hesaplanan tahmin) kendi cron'unda DEĞİŞMEDEN devam ediyor.
+const FON_GERCEK_GETIRI_CACHE_TTL_SANIYE = 30 * 86400; // bulunduysa 30 gün (geçmiş tarihin gerçekleşen getirisi hiç değişmez)
+const FON_GERCEK_GETIRI_BULUNAMADI_TTL_SANIYE = 6 * 3600; // henüz fiyat serisinde yoksa 6 saat sonra tekrar denensin
+
+async function fonGunlukGercekGetiriDahili(kod, hedefTarih) {
+  const cacheAnahtar = `fonTahmin:gercekGetiri:${kod}:${hedefTarih}`;
+  try {
+    const onbellek = await kv.get(cacheAnahtar).catch(() => null);
+    if (onbellek && typeof onbellek.gercek === "number") return onbellek.gercek;
+    if (onbellek && onbellek.bulunamadi) return null; // yakın zamanda denendi, henüz yok — TTL dolunca tekrar denenecek
+  } catch {}
+
+  // hedefTarih + bir önceki işlem gününü kapsayacak kadar geniş bir pencere
+  // (40 gün — hafta sonu/resmi tatil boşluklarına karşı güvenlik payı).
+  let noktalar = null;
+  try {
+    const tefasSonuc = await tefasFonGecmisResmiCek(kod, 40);
+    noktalar = tefasSonuc?.noktalar ?? null;
+  } catch {}
+
+  // TEFAS başarısız olursa Fonoloji'ye düş (kota maliyeti var ama nadir
+  // tetiklenir — sadece TEFAS o an erişilemezse).
+  if (!noktalar || !noktalar.length) {
+    const API_KEY = process.env.FONOLOJI_KEY;
+    if (API_KEY) {
+      try {
+        await siraliBekle();
+        const r = await fetch(
+          `https://fonoloji.com/v1/funds/${encodeURIComponent(kod)}/timeseries?include=nav&period=1m`,
+          { headers: { "X-API-Key": API_KEY, "Accept": "application/json" } }
+        );
+        if (r.ok) {
+          const d = await r.json().catch(() => null);
+          const hamNoktalar = d?.nav?.points ?? d?.timeseries?.nav?.points
+                           ?? (Array.isArray(d?.nav) ? d.nav : null) ?? d?.points ?? [];
+          noktalar = (Array.isArray(hamNoktalar) ? hamNoktalar : [])
+            .filter((p) => typeof (p?.price ?? p?.value) === "number")
+            .map((p) => ({ tarih: p.date ?? p.tarih, fiyat: p.price ?? p.value }));
+        }
+      } catch {}
+    }
+  }
+
+  if (!noktalar || !noktalar.length) {
+    try { await kv.set(cacheAnahtar, { bulunamadi: true }, { ex: FON_GERCEK_GETIRI_BULUNAMADI_TTL_SANIYE }); } catch {}
+    return null;
+  }
+
+  const siraliNoktalar = [...noktalar].sort((a, b) => String(a.tarih).localeCompare(String(b.tarih)));
+  const idx = siraliNoktalar.findIndex((p) => p.tarih === hedefTarih);
+  if (idx <= 0) {
+    // hedef tarih seride yok (henüz yayınlanmamış) YA DA serideki ilk nokta
+    // (kıyaslanacak önceki gün verisi yok) — bulunamadı say.
+    try { await kv.set(cacheAnahtar, { bulunamadi: true }, { ex: FON_GERCEK_GETIRI_BULUNAMADI_TTL_SANIYE }); } catch {}
+    return null;
+  }
+
+  const bugunFiyat = siraliNoktalar[idx].fiyat;
+  const oncekiFiyat = siraliNoktalar[idx - 1].fiyat;
+  if (typeof bugunFiyat !== "number" || typeof oncekiFiyat !== "number" || oncekiFiyat === 0) {
+    try { await kv.set(cacheAnahtar, { bulunamadi: true }, { ex: FON_GERCEK_GETIRI_BULUNAMADI_TTL_SANIYE }); } catch {}
+    return null;
+  }
+
+  const gercek = ((bugunFiyat / oncekiFiyat) - 1) * 100;
+  try { await kv.set(cacheAnahtar, { gercek }, { ex: FON_GERCEK_GETIRI_CACHE_TTL_SANIYE }); } catch {}
+  return gercek;
+}
+
 // Türkiye saatiyle (TSİ, UTC+3) bugünün tarihini "YYYY-MM-DD" döner —
 // Vercel fonksiyonları UTC'de çalışır, yerel tarihe göre snapshot almak için
 // sabit +3 ofset uygulanıyor (DST yok, TSİ sabit UTC+3).
@@ -729,8 +811,10 @@ async function fonTahminSnapshotCalistir(req, res) {
   // cron-job.org zamanlaması hafta içiyle sınırlandırılacak (dış düzeltme),
   // ama burada da BACKEND kendi kendini koruyor — elle/yanlışlıkla hafta
   // sonu tetiklenirse bile "kaydet" adımı SESSİZCE atlanıyor. `gerceklestir`
-  // adımına dokunulmuyor (hafta sonu zaten fonGercekMap boş gelir, zararsız
-  // no-op olur; Pazartesi sabahı Cuma'nın kaydını normal şekilde kapatabilir).
+  // adımına dokunulmuyor (hafta sonu zaten fiyat serisinde o güne ait yeni
+  // bir nokta olmadığından fonGunlukGercekGetiriDahili "bulunamadı" döner,
+  // zararsız no-op olur; Pazartesi sabahı Cuma'nın kaydını normal şekilde
+  // kapatabilir).
   const trGunu = new Date(Date.now() + 3 * 3600 * 1000).getUTCDay(); // 0=Pazar, 6=Cumartesi (TSİ)
   const haftaSonuMu = trGunu === 0 || trGunu === 6;
   if (haftaSonuMu && kaydetMi) {
@@ -739,12 +823,11 @@ async function fonTahminSnapshotCalistir(req, res) {
 
   const bugun = bugunTarihiTR();
   const hisseDegisimMap = kaydetMi ? await hisseDegisimMapGetirDahili() : {};
-  // Gerçek getiri kapatma adımı için mevcut TEFAS fon listesini bir kez oku.
-  const tefasKayit = gerceklestirMi ? await kv.get(KV_ANAHTAR).catch(() => null) : null;
-  const fonGercekMap = {};
-  for (const f of (tefasKayit?.data || [])) {
-    if (f?.kod && typeof f.gunluk === "number") fonGercekMap[f.kod] = f.gunluk;
-  }
+  // ⚠️ DÜZELTME (2026-09-08): Burada eskiden `tefas:katilim-fonlari` KV
+  // kaydından (ana katılım fon listesi cron'u) bir fonGercekMap kuruluyordu.
+  // Artık gerekmiyor — gerçekleştirme adımı (aşağıda) fonu tek tek fiyat
+  // serisinden sorguluyor (bkz. fonGunlukGercekGetiriDahili). Bkz. o
+  // fonksiyonun başındaki not için gerekçe.
 
   const sonuclar = [];
   const { liste: takipListesi } = await fonTahminListesiOku();
@@ -777,13 +860,20 @@ async function fonTahminSnapshotCalistir(req, res) {
       let kayitlar = (await kv.get(gecmisAnahtar).catch(() => null)) || [];
       if (!Array.isArray(kayitlar)) kayitlar = [];
 
-      // 1) Bir önceki kaydın gerçek getirisi HENÜZ kapatılmadıysa, bugünkü
-      // TEFAS verisiyle kapat (bir önceki kayıt DÜNKÜ tahmindi, bugün onun
-      // gerçek getirisi TEFAS'ta yayınlanmış olur). SADECE gerceklestirMi.
+      // 1) Bir önceki kaydın gerçek getirisi HENÜZ kapatılmadıysa, fonun
+      // GERÇEK FİYAT SERİSİNDEN (Günlük Getiri Takvimi'yle AYNI kaynak —
+      // bkz. fonGunlukGercekGetiriDahili) kapat. ÖNCEDEN `tefas:katilim-
+      // fonlari` KV kaydındaki `gunluk` alanına bakıyordu; bu hem o cron'un
+      // o gün çalışmış olmasına HEM `?mod=gerceklestir` cron'unun DOĞRU
+      // SAATTE tetiklenmesine bağımlıydı (kullanıcı, takvimde dolu olan bir
+      // günün Tahmin Geçmişi'nde hâlâ "—" kaldığını fark etti — 2026-09-08).
+      // Artık cron zamanlamasından TAMAMEN bağımsız: fiyat serisinde o
+      // tarihe ait nokta yayınlanır yayınlanmaz (hangi saatte olursa olsun)
+      // bir sonraki gerceklestir çağrısında dolduruluyor.
       if (gerceklestirMi) {
         const son = kayitlar[kayitlar.length - 1];
         if (son && son.gercek == null && son.tarih !== bugun) {
-          const gercek = fonGercekMap[kod];
+          const gercek = await fonGunlukGercekGetiriDahili(kod, son.tarih);
           if (typeof gercek === "number") {
             son.gercek = gercek;
             son.isabet = isabetHesapla(son.tahmin, gercek);
