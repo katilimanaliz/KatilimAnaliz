@@ -3416,7 +3416,12 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri 
     // kendi 5 dakikalık döngülerinde, bilerek dokunulmadı (60 kat daha sık
     // sorgu, TÜM uygulama kullanıcıları için Vercel kotasını hızla tüketirdi
     // — bkz. bu ekranın kısıtlı kapsamda tutulma gerekçesi).
-    const interval = setInterval(() => { if (piyasaAcikMi()) fetchHisse(); }, 5 * 1000);
+    // DEĞİŞİKLİK (2026-09-08): 5 saniyeden 1 saniyeye düşürüldü — kullanıcı
+    // isteği. ⚠️ Bu, piyasa açıkken backend'e giden istek sayısını 5 KAT
+    // artırır (Vercel fonksiyon çağrısı + hisse-proxy'nin üstündeki
+    // kaynak). piyasaAcikMi() koruması hâlâ geçerli — piyasa kapalıyken
+    // hiç sorgu atılmıyor.
+    const interval = setInterval(() => { if (piyasaAcikMi()) fetchHisse(); }, 1 * 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -4038,7 +4043,10 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
   // ("kea_hisseler") paylaşılıyor, ama bu widget'ın kendi tazelik eşiği AYRI
   // ve KISA (5 saniye) — genel CACHE_TTL (5 dk, kea_fonlar için kullanılıyor)
   // ile karıştırılmasın diye ayrı bir kontrol fonksiyonu yazıldı.
-  const HISSE_TAZE_ESIK_MS = 5 * 1000;
+  // DEĞİŞİKLİK (2026-09-08): 5sn → 1sn — döngü hızlandırılınca bu eşik de
+  // aynı oranda düşürülmeli, yoksa aşağıdaki hisseCacheTaze() 1sn'lik yeni
+  // döngüyü büyük ölçüde bastırıp gereksiz yere eski davranışa geri döndürür.
+  const HISSE_TAZE_ESIK_MS = 1 * 1000;
   const hisseCacheTaze = (): boolean => {
     try {
       const raw = localStorage.getItem("kea_hisseler");
@@ -4083,7 +4091,7 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
     // backend önbelleğindeki) veriyi göstermeye devam ediyor, Pazartesi
     // piyasa açılana kadar hiç değişmiyor.
     if (piyasaAcikMi()) cekVeGuncelle();
-    const interval = setInterval(() => { if (piyasaAcikMi()) cekVeGuncelle(); }, 5 * 1000);
+    const interval = setInterval(() => { if (piyasaAcikMi()) cekVeGuncelle(); }, 1 * 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -4573,7 +4581,7 @@ function FonTahminDetayModal({
     // bilinen veri" gösterilsin diye. Piyasa açıkken ayrıca 5 saniyede bir
     // tazeleniyor (BistHisseTarayici ile aynı desen).
     cek();
-    const interval = setInterval(() => { if (piyasaAcikMi()) cek(); }, 5 * 1000);
+    const interval = setInterval(() => { if (piyasaAcikMi()) cek(); }, 1 * 1000);
     return () => { iptal = true; clearInterval(interval); };
   }, []);
   const hisseDegisimMap = useMemo(() => {
@@ -24708,20 +24716,17 @@ function App(){
       }
     };
 
-    // ── İLK KEZ KULLANICI İSTİSNASI (2026-09-07 eklendi) ────────────────────
-    // ÖNCEDEN: açılıştaki kontrol HER ZAMAN otomatikUygula=true (sessizce
-    // bulup hemen reload) idi. İLK KEZ açan kullanıcıda (onboarding turu
-    // henüz kapanmamış) bu, tanıtım turu sırasında/hemen öncesinde beklenmedik
-    // bir sessiz reload'a yol açabiliyordu — kullanıcı isteği: ilk kez
-    // kullanıcılar da tanıtım turunu bitirince, varsa güncelleme için AYNI
-    // "Yeniden Başlat" banner'ını görsün (otomatik/sessiz DEĞİL). "İlk kez mi"
-    // sorusu, onboardingAcik state'i BURADAN erişilemeyeceği için (bu effect
-    // metinsel olarak o state'in tanımından ÖNCE duruyor — React'ta hook
-    // sırası sorun değil ama TypeScript/JS DEĞİŞKEN KAPSAMI sorun olurdu)
-    // AYNI localStorage bayrağı BAĞIMSIZ olarak burada tekrar okunuyor.
-    let ilkKezMi = false;
-    try { ilkKezMi = localStorage.getItem("kp_onboarding_v1") !== "1"; } catch {}
-    kontrolEt(!ilkKezMi); // ilk kez kullanıcıda false (banner) — aksi halde eskisi gibi true (sessiz+otomatik)
+  // GÜNCELLEME (2026-09-08) — AÇILIŞTA DA ARTIK SESSİZCE UYGULANMIYOR:
+  // Kullanıcı isteği: uygulamayı açan biri, güncelleme varsa bunu HER ZAMAN
+  // ekranın ortasında çıkan "Yeni güncelleme var — Yeniden Başlat" popup'ıyla
+  // görsün — açılışta sessiz otomatik reload artık YOK. "İlk kez kullanıcı"
+  // ayrımına da gerek kalmadı (o zaten sadece açılıştaki otomatik/sessiz
+  // davranışı bypass etmek için vardı); tüm kullanıcılarda artık aynı: hem
+  // açılışta hem uygulama açıkken (arka plandan öne gelince) bulunursa
+  // banner gösterilir, seçim kullanıcıya bırakılır. İlk kez kullanıcıda
+  // tanıtım turu açıkken popup'ın gizli kalması (guncellemeHazir && !onboardingAcik
+  // koşulu, aşağıdaki JSX'te) hâlâ geçerli — tur bitene kadar bekler.
+  kontrolEt(false); // artık her zaman banner — açılışta bile sessiz/otomatik uygulama yok
 
     // Uygulama arka plandan öne gelince tekrar kontrol et. Mount sırasında
     // bazı WebView'lerde "visible" hemen bir kez daha ateşlenebiliyor —
