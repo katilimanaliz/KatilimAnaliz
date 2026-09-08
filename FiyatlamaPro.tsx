@@ -4598,15 +4598,29 @@ function FonTahminDetayModal({
 
   // Hisse detayına geçiş — bkz. yukarıdaki detayAcikKod/detayHisseObj notu.
   // Artık BURADA (tüm hook'lardan SONRA) — hooks sırası ihlali düzeltildi.
+  // ⚠️ İKİNCİ DÜZELTME (2026-09-07, aynı gün): İlk düzeltmede HisseDetay
+  // ÇIPLAK (sarmalayıcısız) döndürülüyordu. Bu modalin KENDİSİ "tam ekran"
+  // olmayı KENDİ position:fixed sarmalayıcısıyla sağlıyor (aşağıdaki asıl
+  // return'e bkz.) — üst bileşenden (Ana Sayfa) bunu miras almıyor. Çıplak
+  // <HisseDetay/> normal doküman akışına düşüp Ana Sayfa'nın İÇİNE, Popüler
+  // Fonlar listesinin altına gömülüyordu (kullanıcı ekran görüntüsüyle
+  // bildirdi) — sayfayı hiç kaplamıyordu. Şimdi AYNI sarmalayıcı (position:
+  // fixed inset:0, zoom telafisi, genisEkran'a duyarlı orta sütun) hem
+  // yükleniyor durumuna hem asıl HisseDetay'a uygulanıyor.
   if (detayAcikKod) {
-    if (!detayHisseObj) {
-      return (
-        <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:C.card,zIndex:601,display:"flex",alignItems:"center",justifyContent:"center"}}>
-          <span style={{fontSize:13,color:WA(0.5)}}>Yükleniyor…</span>
+    return (
+      <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:C.card,zIndex:600,display:"flex",flexDirection:"column",...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}}>
+        <div style={{width:"100%",maxWidth:genisEkran?"none":680,margin:"0 auto",display:"flex",flexDirection:"column",height:"100%"}}>
+          {!detayHisseObj ? (
+            <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <span style={{fontSize:13,color:WA(0.5)}}>Yükleniyor…</span>
+            </div>
+          ) : (
+            <HisseDetay hisse={detayHisseObj} onGeri={() => setDetayAcikKod(null)} />
+          )}
         </div>
-      );
-    }
-    return <HisseDetay hisse={detayHisseObj} onGeri={() => setDetayAcikKod(null)} />;
+      </div>
+    );
   }
 
   // TAM EKRAN (2026-09-04 değişikliği): önceki bottom-sheet yerine tüm
@@ -24573,7 +24587,20 @@ function App(){
       }
     };
 
-    kontrolEt(true); // açılış — sessiz + otomatik uygula (mevcut davranış)
+    // ── İLK KEZ KULLANICI İSTİSNASI (2026-09-07 eklendi) ────────────────────
+    // ÖNCEDEN: açılıştaki kontrol HER ZAMAN otomatikUygula=true (sessizce
+    // bulup hemen reload) idi. İLK KEZ açan kullanıcıda (onboarding turu
+    // henüz kapanmamış) bu, tanıtım turu sırasında/hemen öncesinde beklenmedik
+    // bir sessiz reload'a yol açabiliyordu — kullanıcı isteği: ilk kez
+    // kullanıcılar da tanıtım turunu bitirince, varsa güncelleme için AYNI
+    // "Yeniden Başlat" banner'ını görsün (otomatik/sessiz DEĞİL). "İlk kez mi"
+    // sorusu, onboardingAcik state'i BURADAN erişilemeyeceği için (bu effect
+    // metinsel olarak o state'in tanımından ÖNCE duruyor — React'ta hook
+    // sırası sorun değil ama TypeScript/JS DEĞİŞKEN KAPSAMI sorun olurdu)
+    // AYNI localStorage bayrağı BAĞIMSIZ olarak burada tekrar okunuyor.
+    let ilkKezMi = false;
+    try { ilkKezMi = localStorage.getItem("kp_onboarding_v1") !== "1"; } catch {}
+    kontrolEt(!ilkKezMi); // ilk kez kullanıcıda false (banner) — aksi halde eskisi gibi true (sessiz+otomatik)
 
     // Uygulama arka plandan öne gelince tekrar kontrol et. Mount sırasında
     // bazı WebView'lerde "visible" hemen bir kez daha ateşlenebiliyor —
@@ -25304,7 +25331,12 @@ function App(){
           arka plan deseni) TUTARLI, ekran ORTASINDA bir kart. Sabit yeşil
           (#1B9E7A) yerine tema duyarlı C.card/C.label/C.blue kullanılıyor —
           koyu/açık tema hangisi olursa olsun doğru kontrast sağlanıyor. */}
-      {guncellemeHazir && (
+      {/* ⚠️ DÜZELTME (2026-09-07): "!onboardingAcik" koşulu eklendi — ilk kez
+          kullanıcıda banner artık tanıtım turu AÇIKKEN gösterilmiyor (arkada
+          hazır bekliyor), tur kapanır kapanmaz (onboardingAcik false olunca)
+          otomatik olarak ortaya çıkıyor. Diğer kullanıcılarda onboardingAcik
+          zaten hep false olduğu için davranış değişmiyor. */}
+      {guncellemeHazir && !onboardingAcik && (
         <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.6)",zIndex:9999,
           display:"flex",alignItems:"center",justifyContent:"center",padding:20,
           ...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}}>
