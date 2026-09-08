@@ -4610,7 +4610,14 @@ function FonTahminDetayModal({
   if (detayAcikKod) {
     return (
       <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:C.card,zIndex:600,display:"flex",flexDirection:"column",...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}}>
-        <div style={{width:"100%",maxWidth:genisEkran?"none":680,margin:"0 auto",display:"flex",flexDirection:"column",height:"100%"}}>
+        {/* ⚠️ DÜZELTME (2026-09-07, aynı gün): paddingTop eklendi — bu sarmalayıcı
+            BistHisseTarayici'nin aksine üst navigasyon/tab katmanının içinde
+            DEĞİL, bağımsız bir position:fixed inset:0 katman. O yüzden
+            HisseDetay'ın kendi başlığı çentik/Dynamic Island ile çakışıyordu
+            (kullanıcı ekran görüntüsüyle bildirdi) — üst güvenli alan boşluğu
+            burada AÇIKÇA ekleniyor (diğer tam ekran modallerdeki
+            env(safe-area-inset-top) deseniyle aynı). */}
+        <div style={{width:"100%",maxWidth:genisEkran?"none":680,margin:"0 auto",display:"flex",flexDirection:"column",height:"100%",paddingTop:"env(safe-area-inset-top,0px)"}}>
           {!detayHisseObj ? (
             <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
               <span style={{fontSize:13,color:WA(0.5)}}>Yükleniyor…</span>
@@ -5163,6 +5170,21 @@ function FonTahminAgGorseli({ kalemler, hisseDegisimMap, tahmin }: {
 
   return (
     <div style={{ padding: "8px 0 4px" }}>
+      {/* ── GİRİŞ ANİMASYONU (2026-09-07 eklendi) ────────────────────────────
+          Kullanıcı isteği: veri geldiğinde grafik durağan/statik görünmesin,
+          "birazcık oynama" olsun. Her dilim, sırayla (index bazlı kademeli
+          gecikmeyle) merkezden büyüyerek ve belirerek (opacity+scale) içeri
+          giriyor — referans görseldeki "çubuklar merkezden fışkırıyor" hissini
+          güçlendiriyor. transform-box:fill-box ile SVG path'in kendi sınırlayıcı
+          kutusu merkez alınıyor (modern WebView'lerde desteklenir). Uygulamada
+          zaten var olan "fi" (fade-in) deseniyle TUTARLI, sadece SVG path'lere
+          özel scale eklenmiş hali. */}
+      <style>{`
+        @keyframes radDilimGiris { from { opacity:0; transform:scale(0.35); } to { opacity:1; transform:scale(1); } }
+        @keyframes radMerkezGiris { from { opacity:0; transform:scale(0.7); } to { opacity:1; transform:scale(1); } }
+        .rad-dilim { transform-box: fill-box; transform-origin: center; animation: radDilimGiris 0.42s cubic-bezier(.22,.9,.36,1) both; }
+        .rad-merkez { transform-box: fill-box; transform-origin: center; animation: radMerkezGiris 0.32s ease both; }
+      `}</style>
       <div style={{ position: "relative", width: "100%", maxWidth: 400, margin: "0 auto" }}>
         <svg viewBox={`0 0 ${VB} ${VB}`} style={{ width: "100%", height: "auto", display: "block" }}>
           {renkli.map((k, i) => {
@@ -5180,7 +5202,7 @@ function FonTahminAgGorseli({ kalemler, hisseDegisimMap, tahmin }: {
             // gerek kalmadı.
             const yuzdeMetni = typeof k.deg === "number" ? isaretliYuzde(k.deg, 2) : "—";
             return (
-              <g key={k.kod}>
+              <g key={k.kod} className="rad-dilim" style={{ animationDelay: `${i * 22}ms` }}>
                 <path d={yol} fill={renk} />
                 <text x={lx} y={ly - 19} textAnchor="middle" fontSize={10} fontWeight={600} fill={WA(0.5)}>
                   %{(k.agirlik ?? 0).toFixed(1)}
@@ -5195,13 +5217,15 @@ function FonTahminAgGorseli({ kalemler, hisseDegisimMap, tahmin }: {
               </g>
             );
           })}
-          <circle cx={CX} cy={CY} r={IC_R} fill={C.card} stroke={WA(0.12)} strokeWidth={1} />
-          <text x={CX} y={CY - 4} textAnchor="middle" fontSize={19} fontWeight={800} fill={tahminRenk}>
-            {tahmin == null ? "—" : isaretliYuzde(tahmin, 4)}
-          </text>
-          <text x={CX} y={CY + 14} textAnchor="middle" fontSize={9.5} fill={WA(0.5)}>
-            % Yapay zeka tahmini
-          </text>
+          <g className="rad-merkez">
+            <circle cx={CX} cy={CY} r={IC_R} fill={C.card} stroke={WA(0.12)} strokeWidth={1} />
+            <text x={CX} y={CY - 4} textAnchor="middle" fontSize={19} fontWeight={800} fill={tahminRenk}>
+              {tahmin == null ? "—" : isaretliYuzde(tahmin, 4)}
+            </text>
+            <text x={CX} y={CY + 14} textAnchor="middle" fontSize={9.5} fill={WA(0.5)}>
+              % Yapay zeka tahmini
+            </text>
+          </g>
         </svg>
       </div>
       <div style={{ display: "flex", gap: 14, marginTop: 10, justifyContent: "center", fontSize: 10.5, color: WA(0.5) }}>
