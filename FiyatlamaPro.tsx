@@ -4970,12 +4970,27 @@ function FonTahminDetayModal({
                   if (noktalar.length < 2) {
                     return <div style={{textAlign:"center",padding:"16px 0",fontSize:12,color:WA(0.4)}}>Takvim için yeterli geçmiş veri yok.</div>;
                   }
-                  // Günlük getiri: ardışık iki günün fiyat oranı.
+                  // ⚠️ DÜZELTME (2026-09-08, backend'deki gercekTeshis
+                  // araştırmasıyla aynı gün bulundu): TEFAS'ın resmi API'sinden
+                  // gelen "tarih" alanı DEĞERLEME tarihi DEĞİL, YAYIN tarihi —
+                  // her nokta, o günün sabahı yayınlanan BİR ÖNCEKİ iş
+                  // gününün kapanışını taşıyor. Yani noktalar[i] ile
+                  // noktalar[i-1] arasındaki oran, noktalar[i]'nin KENDİ
+                  // tarihine değil, noktalar[i-1]'in tarihine ait GERÇEK
+                  // günlük getiridir (backend'deki fonGunlukGercekGetiriDahiliTeshisli
+                  // ile aynı formül — orada rakamla doğrulandı: THF için
+                  // "2026-09-08" etiketli fiyat aslında 07.09'un, "2026-09-07"
+                  // etiketli fiyat aslında 04.09'un kapanışıydı).
+                  // ESKİ (yanlış) davranış: getiriyi noktalar[i].tarih'e
+                  // yazıyordu — bu yüzden takvimde her gün bir gün ileri
+                  // kaymış görünüyordu. Son (en güncel) noktanın kendi günü
+                  // için artık hiç değer YOK — çünkü o günün ASIL kapanışı
+                  // henüz TEFAS tarafından yayınlanmadı (ertesi sabah gelecek).
                   const gunlukGetiriler: { tarih: string; getiri: number }[] = [];
                   for (let i = 1; i < noktalar.length; i++) {
                     const onceki = noktalar[i-1]?.fiyat, simdi = noktalar[i]?.fiyat;
                     if (typeof onceki !== "number" || typeof simdi !== "number" || onceki === 0) continue;
-                    gunlukGetiriler.push({ tarih: noktalar[i].tarih, getiri: ((simdi/onceki)-1)*100 });
+                    gunlukGetiriler.push({ tarih: noktalar[i-1].tarih, getiri: ((simdi/onceki)-1)*100 });
                   }
                   // Aya göre grupla: "YYYY-MM" -> { gun -> getiri }
                   const aylikHarita: Record<string, Record<number, number>> = {};
