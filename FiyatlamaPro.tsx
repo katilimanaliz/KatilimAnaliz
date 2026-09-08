@@ -3256,7 +3256,32 @@ function HisseAvatar({ticker, boyut=42}:{ticker:string, boyut?:number}){
 }
 
 function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri }: { initialTicker?: string | null; onInitialTuketildi?: () => void; onDisaridanGeri?: () => void } = {}) {
-  const [hisseler, setHisseler]         = useState<any[]>([]);
+  // ── HİSSE ÖNBELLEĞİ (2026-09-08 eklendi) ────────────────────────────────
+  // ÖNCEDEN: bu bileşende okuCache/yazCache HİÇ yoktu, hisseler state'i her
+  // zaman BOŞ ([]) başlıyordu — ekran her açıldığında (piyasa kapalı da olsa)
+  // fetchHisse() KOŞULSUZ çalışıp veriyi doldurana kadar kullanıcı boş bir
+  // liste görüyordu. Diğer bileşenlerde (KatilimEndeksiTopHareketliler,
+  // FonTahminleriWidget) zaten var olan AYNI desen (sessionStorage, AYNI
+  // "kea_hisseler" anahtarı — böylece bu ekranlar arasında önbellek
+  // PAYLAŞILIYOR) buraya da taşındı. Kullanıcı isteği (2026-09-08): piyasa
+  // kapalıyken ekran açılışta artık YENİ bir istek ATMASIN, bunun yerine
+  // varsa önbellekteki (herhangi bir ekrandan gelmiş) son bilinen veriyi
+  // göstersin — sunucuya gereksiz yük binmesin. Bkz. aşağıdaki
+  // "if (piyasaAcikMi()) fetchHisse();" değişikliği.
+  const okuCache = (key: string): any[] => {
+    try {
+      const raw = sessionStorage.getItem(key);
+      if (!raw) return [];
+      const { data } = JSON.parse(raw);
+      return Array.isArray(data) && data.length > 0 ? data : [];
+    } catch { return []; }
+  };
+  const yazCache = (key: string, data: any[]) => {
+    if (!Array.isArray(data) || data.length === 0) return;
+    try { sessionStorage.setItem(key, JSON.stringify({ data, ts: Date.now() })); } catch {}
+  };
+
+  const [hisseler, setHisseler]         = useState<any[]>(() => okuCache("kea_hisseler"));
   const [yukleniyor, setYukleniyor]     = useState(true);
   const [hata, setHata]                 = useState<string|null>(null);
   const [arama, setArama]               = useState("");
@@ -3335,6 +3360,7 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri 
         .then(d => {
           if (d.success) {
             setHisseler(d.data);
+            yazCache("kea_hisseler", d.data);
             setSonGuncelleme(new Date());
             if (d.veriZamani) { const t=new Date(d.veriZamani); if(!isNaN(t.getTime())) setVeriZamani(t); }
             const yeniFlash: Record<string,"up"|"down"> = {};
@@ -3356,7 +3382,16 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri 
         .finally(() => setYukleniyor(false));
     };
 
-    fetchHisse();
+    // ── DEĞİŞİKLİK (2026-09-08) ──────────────────────────────────────────
+    // ÖNCEDEN: koşulsuz her mount'ta bir kez çalışıyordu (piyasa kapalıyken
+    // bile). Kullanıcı isteği: piyasa kapalıyken ekran açılışta YENİ istek
+    // ATMASIN — yukarıdaki önbellek (varsa) zaten ilk render'da gösteriliyor,
+    // fetchHisse burada SADECE piyasa açıkken (ya da önbellek hiç yoksa —
+    // ilk kurulum/hiç veri gelmemiş durum için tek seferlik kurtarma amaçlı)
+    // çalışır. "yukleniyor" durumu da buna göre: önbellek varsa zaten
+    // dolu geldiği için kullanıcı boş ekran görmez.
+    if (piyasaAcikMi() || hisseler.length === 0) fetchHisse();
+    else setYukleniyor(false);
     // DEĞİŞİKLİK (2026-09-04): Piyasa açıkken (hafta içi 10:00–18:00) artık
     // 5 SANİYEDE bir yenileniyor — kullanıcı isteği üzerine, canlı hisse
     // ekranının gerçekten anlık hissettirmesi için. Piyasa kapalıyken
@@ -5204,13 +5239,13 @@ function FonTahminAgGorseli({ kalemler, hisseDegisimMap, tahmin }: {
             return (
               <g key={k.kod} className="rad-dilim" style={{ animationDelay: `${i * 22}ms` }}>
                 <path d={yol} fill={renk} />
-                <text x={lx} y={ly - 19} textAnchor="middle" fontSize={10} fontWeight={600} fill={WA(0.5)}>
+                <text x={lx} y={ly - 22} textAnchor="middle" fontSize={12} fontWeight={600} fill={WA(0.5)}>
                   %{(k.agirlik ?? 0).toFixed(1)}
                 </text>
-                <text x={lx} y={ly - 4} textAnchor="middle" fontSize={13} fontWeight={700} fill={C.label}>
+                <text x={lx} y={ly - 4} textAnchor="middle" fontSize={16} fontWeight={700} fill={C.label}>
                   {k.kod}
                 </text>
-                <text x={lx} y={ly + 11} textAnchor="middle" fontSize={11} fontWeight={600}
+                <text x={lx} y={ly + 14} textAnchor="middle" fontSize={14} fontWeight={700}
                   fill={k.pozitif == null ? WA(0.4) : k.pozitif ? C.green : C.red}>
                   {yuzdeMetni}
                 </text>
