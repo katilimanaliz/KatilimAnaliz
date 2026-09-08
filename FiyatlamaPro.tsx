@@ -4506,16 +4506,17 @@ function FonTahminDetayModal({
       .catch(() => { if (!iptal) setDetayHisseObj(null); });
     return () => { iptal = true; };
   }, [detayAcikKod]);
-  if (detayAcikKod) {
-    if (!detayHisseObj) {
-      return (
-        <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:C.card,zIndex:601,display:"flex",alignItems:"center",justifyContent:"center"}}>
-          <span style={{fontSize:13,color:WA(0.5)}}>Yükleniyor…</span>
-        </div>
-      );
-    }
-    return <HisseDetay hisse={detayHisseObj} onGeri={() => setDetayAcikKod(null)} />;
-  }
+  // ⚠️ DÜZELTİLDİ (2026-09-07, aynı gün): erken çıkış (if detayAcikKod return…)
+  // İLK sürümde BURADA, yani bileşenin DİĞER hook'larından (gecmis/fonDetayTam/
+  // fonGecmisNoktalar/useMemo'lar aşağıda) ÖNCE duruyordu. React'ta koşullu bir
+  // early-return'ün ardından hâlâ hook çağıran bir bileşende, o hook'lar bazı
+  // render'larda (detayAcikKod set olduğunda) HİÇ ÇALIŞMIYORDU — bu, React'ın
+  // "hooks sırası her render'da aynı olmalı" kuralını ihlal edip fatal bir
+  // hataya (ekranın tamamen siyah/boş kalması) yol açıyordu (kullanıcı ekran
+  // görüntüsüyle bildirdi). Erken çıkış artık aşağıda, TÜM hook'lar
+  // tanımlandıktan SONRA, ana JSX return'ünün hemen öncesinde — tıpkı
+  // BistHisseTarayici'deki çalışan `if (detayHisse) return <HisseDetay .../>`
+  // deseniyle aynı yerde.
   // ── GENİŞ EKRAN DESTEĞİ (2026-09-07 eklendi) ──────────────────────────
   // ÖNCEDEN: kapsayıcı sabit maxWidth:680 kullanıyordu — bu bileşen ana
   // uygulamadan genisEkran prop'u ALMIYOR, bu yüzden masaüstünde (geniş
@@ -4594,6 +4595,19 @@ function FonTahminDetayModal({
     if (degerler.length === 0) return null;
     return degerler.reduce((a: number, b: number) => a + b, 0) / degerler.length;
   }, [gecmis]);
+
+  // Hisse detayına geçiş — bkz. yukarıdaki detayAcikKod/detayHisseObj notu.
+  // Artık BURADA (tüm hook'lardan SONRA) — hooks sırası ihlali düzeltildi.
+  if (detayAcikKod) {
+    if (!detayHisseObj) {
+      return (
+        <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:C.card,zIndex:601,display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <span style={{fontSize:13,color:WA(0.5)}}>Yükleniyor…</span>
+        </div>
+      );
+    }
+    return <HisseDetay hisse={detayHisseObj} onGeri={() => setDetayAcikKod(null)} />;
+  }
 
   // TAM EKRAN (2026-09-04 değişikliği): önceki bottom-sheet yerine tüm
   // viewport'u kaplayan opak bir ekran — arkada Ana Sayfa görünmüyor.
