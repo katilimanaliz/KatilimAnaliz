@@ -635,9 +635,19 @@ export default async function handler(req, res) {
     // kaynağın en fazla 5 sn'de bir çağrılmasını garanti ediyor (tüm
     // kullanıcılar/istekler aynı önbellekten okuyor). İstemcinin yenileme
     // sıklığıyla eşleşsin diye piyasa açıkken 5 sn'ye çekildi.
+    //
+    // DEĞİŞİKLİK (2026-09-08): İstemci tarafı (FiyatlamaPro.tsx) 5sn'den
+    // 1sn'ye çekildi ama bu CDN süresi GÜNCELLENMEMİŞTİ — istemci 1sn'de bir
+    // sorsa da Vercel CDN'i yanıtı hâlâ 5 saniye (+ stale-while-revalidate
+    // ile pratikte biraz daha fazla) boyunca önbellekte tutmaya devam
+    // ediyordu. İstemci hızının bir anlam ifade etmesi için burası da 1sn'ye
+    // çekildi — aynı gerekçe (paylaşılan CDN önbelleği, kullanıcı bazlı
+    // değil) geçerli: 1sn'ye çekmek Midas'a saniyede binlerce istek atmak
+    // DEMEK DEĞİL, sadece kaynağın en fazla 1sn'de bir çağrılmasını
+    // garanti ediyor. stale-while-revalidate de orantılı küçültüldü (10→3).
     const tazelenmeli = veriTazelenirMi();
-    const onbellekSn = tazelenmeli ? 5 : 3600;
-    res.setHeader("Cache-Control", `s-maxage=${onbellekSn}, stale-while-revalidate=10`);
+    const onbellekSn = tazelenmeli ? 1 : 3600;
+    res.setHeader("Cache-Control", `s-maxage=${onbellekSn}, stale-while-revalidate=3`);
 
     try {
       const fiyatHaritasi = {};
