@@ -1466,7 +1466,7 @@ async function tefasFonGecmisResmiCek(kod, gunSayisi) {
     const d = await r.json().catch((e) => ({ __parseHata: String(e?.message || e) }));
     if (d?.__parseHata) return { noktalar: null, hata: `JSON parse: ${d.__parseHata}` };
     const liste = Array.isArray(d?.resultList) ? d.resultList : [];
-    if (!liste.length) return { noktalar: null, hata: `resultList boş/yok — yanıt anahtarları: ${Object.keys(d || {}).join(",")}` };
+    if (!liste.length) return { noktalar: null, hata: `resultList boş/yok — errorCode:${JSON.stringify(d?.errorCode)} errorMessage:${JSON.stringify(d?.errorMessage)} toplamSayi:${JSON.stringify(d?.toplamSayi)}` };
     // Canlı testte TEFAS en yeni tarihi ÖNCE veriyordu — grafik/getiri
     // hesaplamaları eskiden-yeniye sıra beklediği için burada çeviriliyor.
     const noktalar = liste
