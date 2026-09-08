@@ -130,7 +130,7 @@ const FON_GECMIS_CACHE_TTL_SANIYE = 600; // 10 dk — aynı fon+dönem sık soru
 // kategori/yatirimci/portfoy/fiyat/gunluk/gunlukNorm/haftalik/aylik/yillik/
 // takasAraligi) — böylece FonDetay/GetiriHesaplayici hangi ekrandan açıldığına
 // bakmaksızın hep aynı alan adlarını bulur.
-const FON_DETAY_CACHE_TTL_SANIYE = 86400; // 24 saat — fon NAV'ı/yatırımcı sayısı günde bir kez değişiyor (2026-09-05'te 15 dk'dan yükseltildi, gereksiz Fonoloji sorgusu)
+const FON_DETAY_CACHE_TTL_SANIYE = 2 * 86400; // 48 saat — GÜVENLİK AĞI ÜST SINIRI. Asıl tazelik artık rastgele 24 saatlik sayaç DEĞİL, gün+saat bazlı (bkz. fonDetayGetir içindeki SABAH_ESIK_DK mantığı, 2026-09-07 eklendi) — bu TTL sadece bir günden fazla hiç istek gelmezse KV'nin sonsuza dek şişmesini önlüyor.
 
 // ── Tek fon HİSSE AĞIRLIK DAĞILIMI (2026-09 eklendi — Fon Tahminleri) ──────
 // /api/tefas-proxy?holdings=1&kod=THF
@@ -185,6 +185,26 @@ async function manuelHoldingsYaz(req, res) {
   }
   if (!govde || !Array.isArray(govde.kalemler) || !govde.kalemler.length) {
     return res.status(400).json({ success: false, error: "kalemler dizisi gerekli" });
+  }
+
+  // ── ALT FON ZENGİNLEŞTİRME (2026-09-07 eklendi) ─────────────────────────
+  // SORUN: Otomatik pipeline (holdingsGetirDahili), tur:"fund" kalemleri
+  // (ör. THF içindeki TLY/DOH/TMV) için Fonoloji'den o alt fonun kendi son
+  // açıklanan günlük getirisini (oncekiGunGetiri) AYRICA çekip ekliyordu —
+  // AI Tahmin Ağı/Portföy Dağılımı hesaplamaları bu alanı kullanıyor. Manuel
+  // yazma bu adımı hiç yapmadığı için alt fon satırları "—" görünüyordu
+  // (kullanıcı ekran görüntüsüyle bildirdi). Burada AYNI yardımcı fonksiyon
+  // (altFonGunlukGetiriGetir — kendi 24 saatlik KV önbelleği ve hız sınırı
+  // zaten var) çağrılarak manuel yazılan veri de otomatik pipeline'la AYNI
+  // zenginliğe kavuşturuluyor. Hisse (tur:"stock") kalemlerine dokunulmuyor.
+  const altFonKalemleri = govde.kalemler.filter((k) => k?.tur === "fund");
+  if (altFonKalemleri.length) {
+    for (const k of altFonKalemleri) {
+      try {
+        const getiri = await altFonGunlukGetiriGetir(String(k.kod || "").toUpperCase());
+        if (typeof getiri === "number") k.oncekiGunGetiri = getiri;
+      } catch {}
+    }
   }
 
   const paket = {
@@ -528,6 +548,14 @@ function bugunTarihiTR() {
   return simdi.toISOString().slice(0, 10);
 }
 
+// Türkiye saatiyle (TSİ, UTC+3) gece yarısından bu yana geçen dakika sayısını
+// döner (0-1439) — "sabah eşiği geçti mi" gibi saat bazlı kontroller için,
+// bugunTarihiTR() ile AYNI +3 ofset yöntemi kullanılıyor (tutarlılık için).
+function suankiDakikaTR() {
+  const simdi = new Date(Date.now() + 3 * 3600 * 1000);
+  return simdi.getUTCHours() * 60 + simdi.getUTCMinutes();
+}
+
 const FON_TAHMIN_PILOT = ["THF", "DFI", "DOH", "PBR", "PHE", "PUK", "TLY", "TMV", "KHA"];
 
 // ── DİNAMİK TAKİP LİSTESİ (2026-09-04 eklendi) ──────────────────────────────
@@ -849,12 +877,34 @@ async function fonDetayGetir(req, res) {
   const kod = String(req.query?.kod || "").toUpperCase().trim();
   if (!kod) return res.status(400).json({ success: false, error: "kod parametresi gerekli" });
 
+  // ── GÜN+SAAT BAZLI TAZELİK (2026-09-07 eklendi) ───────────────────────────
+  // ESKİ DAVRANIŞ: rastgele 24 saatlik sayaç (ex:86400) — cache HANGİ SAATTE
+  // ilk çekildiyse, "yenilenme saati" kalıcı olarak o saate kilitleniyordu.
+  // İlk çekim akşam bir saatte olduysa, Bilgi sekmesi (Fon Büyüklüğü/Yatırımcı
+  // Sayısı/Aylık Fon Akışı vb.) her gün hep O AKŞAM SAATİNDE yenileniyordu —
+  // TEFAS'ın gerçek veriyi sabah ~09:00-10:00 yayınlamasıyla hiç ilgisi
+  // olmadan (kullanıcı bildirdi). YENİ DAVRANIŞ: cache "bugün zaten çekildiyse"
+  // YA DA "henüz sabah eşiğine gelinmediyse" (dünkü veri hâlâ en güncel veri
+  // sayılır, TEFAS henüz yenisini yayınlamamıştır) taze kabul edilir. Sadece
+  // "dünden kalma VE sabah eşiği geçilmiş" durumda yeniden çekim tetiklenir —
+  // böylece yenileme her gün aynı (sabah) pencerede olur, çekildiği saatten
+  // BAĞIMSIZ hale gelir.
+  const SABAH_ESIK_DK = 9 * 60 + 30; // 09:30 TSİ — TEFAS'ın günlük NAV/yatırımcı verisini yayınladığı saatin hemen sonrası
+
   const cacheAnahtar = `fon:detay:${kod}`;
   try {
     const onbellek = await kv.get(cacheAnahtar).catch(() => null);
     if (onbellek) {
-      res.setHeader("Cache-Control", "max-age=0, s-maxage=3600, stale-while-revalidate=3600");
-      return res.status(200).json(onbellek);
+      const bugun = bugunTarihiTR();
+      const dakika = suankiDakikaTR();
+      const buguneAitMi = onbellek.guncellemeTarihiTR === bugun;
+      const sabahEsikOncesiMi = dakika < SABAH_ESIK_DK;
+      if (buguneAitMi || sabahEsikOncesiMi) {
+        res.setHeader("Cache-Control", "max-age=0, s-maxage=3600, stale-while-revalidate=3600");
+        return res.status(200).json(onbellek);
+      }
+      // Aksi halde: önbellek dünden kalma VE sabah eşiği geçilmiş — aşağıda
+      // yeniden çekilecek (TEFAS'ın bugünkü taze verisini yakalamak için).
     }
   } catch {}
 
@@ -907,7 +957,7 @@ async function fonDetayGetir(req, res) {
       }
     } catch {}
 
-    const paket = { success: true, ...fon, gunlukFonAkisiTL, gunlukYatirimciDegisimi, gunlukAkisTarihi };
+    const paket = { success: true, ...fon, gunlukFonAkisiTL, gunlukYatirimciDegisimi, gunlukAkisTarihi, guncellemeTarihiTR: bugunTarihiTR() };
     try { await kv.set(cacheAnahtar, paket, { ex: FON_DETAY_CACHE_TTL_SANIYE }); } catch {}
 
     // ⚠️ 2026-08-06 DÜZELTİLDİ: Burada "noktalar.length" kontrolü vardı ama bu
