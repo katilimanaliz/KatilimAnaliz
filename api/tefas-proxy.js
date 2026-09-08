@@ -997,16 +997,26 @@ async function fonGecmisGetir(req, res) {
     }
   } catch {}
 
-  // ── TEFAS-DOĞRUDAN HIZLI YOL (2026-09-08 eklendi) ────────────────────────
+  // ── TEFAS-DOĞRUDAN HIZLI YOL (2026-09-08 eklendi, aynı gün genişletildi) ──
   // Önbellekte taze kayıt yoksa, Fonoloji'ye gitmeden ÖNCE aynı veriyi
   // TEFAS'ın resmi ucundan (kota sıfır) almayı dene. Başarılı olursa
   // Fonoloji'ye HİÇ dokunulmaz. Boş/başarısız dönerse (ör. TEFAS o an
   // erişilemezse) aşağıdaki mevcut Fonoloji kodu DEĞİŞMEDEN devreye girer.
+  //
+  // ⚠️ DÜZELTME (2026-09-08, canlı teşhisle bulundu): TEFAS, fonKodu BELİRLİ
+  // bir kod olduğunda tarih aralığını KESİN OLARAK 1 AYLA sınırlıyor —
+  // "Geçersiz veri: Tarih aralığı 1 ayı aşamaz" hatası döndü. "1a" için tek
+  // pencere (30 gün, Colab'da canlı doğrulandı) yeterli. "3a"/"1y" için
+  // KULLANICI ÖNERİSİYLE (2 ay önceki 1 ay'ı da AYRI bir pencere olarak
+  // iste) çok pencereli zincirleme (tefasFonGecmisResmiZincir) eklendi —
+  // art arda ≤28 günlük pencereler istenip birleştiriliyor.
   let tefasHataTeshis = null; // ⚠️ geçici teşhis alanı — ?debugGecmis=1 ile görülür
   try {
-    const gunSayisiMap = { "1a": 35, "3a": 100, "1y": 380 };
-    const gunSayisi = gunSayisiMap[donemGiris] || 35;
-    const tefasSonuc = await tefasFonGecmisResmiCek(kod, gunSayisi);
+    const toplamGunMap = { "1a": 30, "3a": 92, "1y": 370 };
+    const toplamGun = toplamGunMap[donemGiris] || 30;
+    const tefasSonuc = donemGiris === "1a"
+      ? await tefasFonGecmisResmiCek(kod, toplamGun)
+      : await tefasFonGecmisResmiZincir(kod, toplamGun);
     tefasHataTeshis = tefasSonuc?.hata ?? null;
     const tefasNoktalar = tefasSonuc?.noktalar;
     if (tefasNoktalar && tefasNoktalar.length) {
@@ -1432,8 +1442,8 @@ function tefasFonNormallestir(f) {
 // ÖNCELİKLİ deniyor, sadece boş/başarısız dönerse Fonoloji'ye (aşağıdaki
 // eski kod, DOKUNULMADI) düşüyor — mevcut katılım fonu davranışında
 // regresyon riski yok, sadece bir hızlı-yol eklendi.
-async function tefasFonGecmisResmiCek(kod, gunSayisi) {
-  const bugun = new Date();
+async function tefasFonGecmisResmiCek(kod, gunSayisi, bitisOfsetGun = 0) {
+  const bugun = new Date(); bugun.setDate(bugun.getDate() - bitisOfsetGun);
   const baslangic = new Date(bugun); baslangic.setDate(baslangic.getDate() - gunSayisi);
   const yyyymmdd = (d) => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
   const govde = {
@@ -1477,6 +1487,45 @@ async function tefasFonGecmisResmiCek(kod, gunSayisi) {
   } catch (e) {
     return { noktalar: null, hata: `fetch/exception: ${String(e?.message || e)}` };
   }
+}
+
+// ── ÇOK PENCERELİ ZİNCİRLEME (2026-09-08 eklendi) ────────────────────────────
+// TEFAS, fonKodu belirli olduğunda tarih aralığını KESİN 1 ayla sınırlıyor
+// (canlı teşhiste doğrulandı: "Geçersiz veri: Tarih aralığı 1 ayı aşamaz").
+// 3 aylık/1 yıllık geçmiş için TEK istekle bu sınırı aşmanın yolu yok —
+// bunun yerine ART ARDA ≤28 günlük pencereler istenip (kullanıcı önerisi:
+// "2 ay önceki 1 ay"ı da ayrı bir pencere olarak iste) sonuçlar birleştirilir.
+// İstekler arasına kısa bir bekleme konuyor (TEFAS'ın 429 hız sınırına aynı
+// IP'den art arda çok hızlı istek gitmesin diye — bkz. tefasTumFonlariCek'teki
+// AYNI gerekçe). İlk pencere (en güncel ay) başarısız olursa TÜMÜNDEN
+// vazgeçilir (kısmi/tutarsız bir grafik göstermektense hiç göstermemek —
+// mevcut "diğer fon" felsefesiyle aynı: eksik veri UYDURULMAZ).
+async function tefasFonGecmisResmiZincir(kod, toplamGunSayisi) {
+  const PENCERE_GUN = 28; // TEFAS'ın kesin 1 aylık sınırı içinde güvenli pay
+  const ARA_BEKLEME_MS = 700;
+  const MAKS_PENCERE = 15; // güvenlik tavanı (1 yıl için ~13 pencere yeterli)
+  let tumNoktalar = [];
+  let kalanGun = toplamGunSayisi;
+  let bitisOfset = 0;
+  let sonHata = null;
+  for (let i = 0; i < MAKS_PENCERE && kalanGun > 0; i++) {
+    const buPencereGun = Math.min(PENCERE_GUN, kalanGun);
+    const sonuc = await tefasFonGecmisResmiCek(kod, buPencereGun, bitisOfset);
+    if (sonuc?.noktalar?.length) {
+      tumNoktalar = tumNoktalar.concat(sonuc.noktalar);
+    } else {
+      sonHata = sonuc?.hata || "boş pencere";
+      if (i === 0) return { noktalar: null, hata: `ilk pencere başarısız: ${sonHata}` }; // en güncel ay bile gelmiyorsa tümden vazgeç
+      break; // eski bir pencere başarısız oldu — o zamana kadar toplananla devam et
+    }
+    bitisOfset += buPencereGun;
+    kalanGun -= buPencereGun;
+    if (kalanGun > 0) await new Promise((r) => setTimeout(r, ARA_BEKLEME_MS));
+  }
+  const map = new Map();
+  for (const p of tumNoktalar) map.set(p.tarih, p); // aynı tarih iki pencerede de gelmişse tekilleştir
+  const birlesikNoktalar = [...map.values()].sort((a, b) => String(a.tarih).localeCompare(String(b.tarih)));
+  return birlesikNoktalar.length ? { noktalar: birlesikNoktalar, hata: null } : { noktalar: null, hata: sonHata || "hiçbir pencereden veri gelmedi" };
 }
 
 // TEFAS'ın resmi API'sinden fonTipi="YAT" ile TÜM sayfaları sırayla çeker.
