@@ -540,56 +540,62 @@ function isabetHesapla(tahmin, gercek) {
   return Math.max(0, Math.min(100, 100 - (fark / ISABET_ESIK_PUAN) * 100));
 }
 
-// ── FON GÜNLÜK GERÇEK GETİRİ — FİYAT SERİSİNDEN (2026-09-08 eklendi) ───────
-// AMAÇ: Tahmin Geçmişi'ndeki "Gerçek" alanı ÖNCEDEN `tefas:katilim-fonlari`
-// KV kaydındaki (ana katılım fon listesi cron'unun yazdığı) `gunluk` alanına
-// bakıyordu — bu hem o cron'un o gün çalışmış olmasına HEM DE ayrı bir
-// `?mod=gerceklestir` cron'unun DOĞRU SAATTE (TEFAS'ın günlük veriyi
-// yayınladığı sabahtan SONRA) tetiklenmesine bağımlıydı. Kullanıcı, Günlük
-// Getiri Takvimi'nde (aynı günün) gerçek getirinin ZATEN dolu göründüğünü
-// ama Tahmin Geçmişi'nde hâlâ "—" kaldığını fark etti (2026-09-08) — KÖK
-// NEDEN: takvim, fonun GERÇEK FİYAT SERİSİNDEN (bkz. fonGecmisGetir /
-// ?gecmis=1) hesaplanıyor, hiçbir cron zamanlamasına bağımlı değil.
-// Bu fonksiyon, Tahmin Geçmişi'nin "Gerçek" alanını da AYNI fiyat serisi
-// kaynağına taşıyarak cron zamanlaması bağımlılığını KALDIRIYOR — SADECE bu
-// alan için; "tahmin" (kaydet adımı, hisse ağırlığı × günlük hisse fiyatı
-// ile hesaplanan tahmin) kendi cron'unda DEĞİŞMEDEN devam ediyor.
-const FON_GERCEK_GETIRI_CACHE_TTL_SANIYE = 30 * 86400; // bulunduysa 30 gün (geçmiş tarihin gerçekleşen getirisi hiç değişmez)
-const FON_GERCEK_GETIRI_BULUNAMADI_TTL_SANIYE = 6 * 3600; // henüz fiyat serisinde yoksa 6 saat sonra tekrar denensin
+// ── FON GÜNLÜK GERÇEK GETİRİ — KALICI SERİ (2026-09-08 eklendi, aynı gün
+// genişletildi) ─────────────────────────────────────────────────────────
+// AMAÇ (ilk hâli): Tahmin Geçmişi'ndeki "Gerçek" alanı ÖNCEDEN `tefas:
+// katilim-fonlari` KV kaydındaki `gunluk` alanına bakıyordu — cron
+// zamanlamasına bağımlıydı. Sonra fiyat serisinden hesaplamaya geçirildi.
+//
+// GENİŞLETME (aynı gün): Kullanıcı fark etti ki geçmiş bir günün getirisi
+// bir kere hesaplandıktan sonra ASLA değişmez (TEFAS'ın o günkü kapanışı
+// kesinleşmiş, sabit) — o yüzden her istekte yeniden hesaplamak yerine
+// KALICI bir seriye (`fon:gunlukGetiriKalici:${kod}`) yazıp SADECE yeni
+// günler geldikçe üzerine eklemek mantıklı. Bu seri artık HEM
+// gerçekleştirme adımı HEM DE Günlük Getiri Takvimi (frontend, ?gunlukGetiriSerisi=1
+// ucu üzerinden) tarafından ORTAK kullanılıyor — aynı hesaplama, aynı kaynak,
+// tek yerde bakım.
+//
+// Günde en fazla 1 kez TEFAS'a gidiyor (sonKontrolTarihiTR ile işaretleniyor).
+// İlk çağrıda (seri boşsa) tam 1 yıllık zincir çekiyor; sonraki çağrılarda
+// sadece son ~28 günlük kısa pencere çekip YALNIZCA henüz seride olmayan
+// tarihleri hesaplayıp ekliyor — TEFAS'a her seferinde tüm yılı sormuyor.
+//
+// Tarih hizalaması: TEFAS'ın resmi API'sindeki "tarih" alanı DEĞERLEME
+// tarihi DEĞİL, YAYIN tarihi — her nokta, o günün sabahı yayınlanan BİR
+// ÖNCEKİ iş gününün kapanışını taşıyor (canlı testte rakamla doğrulandı —
+// THF örneği: "2026-09-08" etiketli fiyat aslında 07.09'un, "2026-09-07"
+// etiketli fiyat aslında 04.09'un kapanışıydı). Bu yüzden getiri(tarih=T),
+// noktalar[i] (T'nin kendi etiketi) ile noktalar[i+1] (T'den sonraki etiket,
+// T'nin ASIL kapanışını taşıyan) arasındaki orandan hesaplanıyor — idx ile
+// idx-1 DEĞİL, idx ile idx+1.
+const FON_GUNLUK_GETIRI_PENCERE_GUN = 28; // TEFAS'ın kesin 1 aylık sınırı içinde güvenli pay
 
-// ⚠️ DÜZELTME (2026-09-08, canlı testte bulundu): İlk sürüm burada 40 günlük
-// pencere istiyordu — ama TEFAS resmi API'si fon kodu belirtildiğinde tarih
-// aralığını KESİN OLARAK 1 AYLA sınırlıyor (bkz. tefasFonGecmisResmiZincir
-// başındaki not, "Geçersiz veri: Tarih aralığı 1 ayı aşamaz"). 40 gün bu
-// sınırı aştığı için TEFAS isteği HER SEFERİNDE reddediyordu, sonuç "bulunamadı"
-// olarak 6 saatliğine cache'leniyordu — Tahmin Geçmişi'nin "Gerçek" alanı hiç
-// dolmuyordu. PENCERE_GUN (28, tefasFonGecmisResmiZincir'de zaten kanıtlanmış
-// güvenli değer) ile aynı sınıra çekildi.
-const FON_GERCEK_GETIRI_PENCERE_GUN = 28;
-
-async function fonGunlukGercekGetiriDahiliTeshisli(kod, hedefTarih, { onbellekAtla = false } = {}) {
-  const cacheAnahtar = `fonTahmin:gercekGetiri:${kod}:${hedefTarih}`;
-  const teshis = { kod, hedefTarih, tefasHata: null, fonolojiDenendi: false, fonolojiHata: null, noktaSayisi: 0 };
-
-  if (!onbellekAtla) {
-    try {
-      const onbellek = await kv.get(cacheAnahtar).catch(() => null);
-      if (onbellek && typeof onbellek.gercek === "number") return { gercek: onbellek.gercek, kaynak: "cache", teshis };
-      if (onbellek && onbellek.bulunamadi) return { gercek: null, kaynak: "cache-bulunamadi", teshis };
-    } catch {}
+function gunlukGetiriNoktalardanHesapla(siraliNoktalar) {
+  // Ardışık her etiket çiftinden bir {tarih, getiri} üretir — tarih, ÖNCEKİ
+  // (erken) etiketin tarihidir (bkz. yukarıdaki tarih hizalaması notu).
+  const sonuc = [];
+  for (let i = 0; i < siraliNoktalar.length - 1; i++) {
+    const onceki = siraliNoktalar[i]?.fiyat;
+    const sonraki = siraliNoktalar[i + 1]?.fiyat;
+    if (typeof onceki !== "number" || typeof sonraki !== "number" || onceki === 0) continue;
+    sonuc.push({ tarih: siraliNoktalar[i].tarih, getiri: ((sonraki / onceki) - 1) * 100 });
   }
+  return sonuc;
+}
 
+async function fiyatNoktalariCekDahili(kod, gunSayisi, fonolojiDonem) {
+  const teshis = { tefasHata: null, fonolojiDenendi: false, fonolojiHata: null };
   let noktalar = null;
   try {
-    const tefasSonuc = await tefasFonGecmisResmiCek(kod, FON_GERCEK_GETIRI_PENCERE_GUN);
+    const tefasSonuc = gunSayisi <= 30
+      ? await tefasFonGecmisResmiCek(kod, gunSayisi)
+      : await tefasFonGecmisResmiZincir(kod, gunSayisi);
     noktalar = tefasSonuc?.noktalar ?? null;
     teshis.tefasHata = tefasSonuc?.hata ?? null;
   } catch (e) {
     teshis.tefasHata = `dış try/catch: ${String(e?.message || e)}`;
   }
 
-  // TEFAS başarısız olursa Fonoloji'ye düş (kota maliyeti var ama nadir
-  // tetiklenir — sadece TEFAS o an erişilemezse).
   if (!noktalar || !noktalar.length) {
     teshis.fonolojiDenendi = true;
     const API_KEY = process.env.FONOLOJI_KEY;
@@ -599,7 +605,7 @@ async function fonGunlukGercekGetiriDahiliTeshisli(kod, hedefTarih, { onbellekAt
       try {
         await siraliBekle();
         const r = await fetch(
-          `https://fonoloji.com/v1/funds/${encodeURIComponent(kod)}/timeseries?include=nav&period=1m`,
+          `https://fonoloji.com/v1/funds/${encodeURIComponent(kod)}/timeseries?include=nav&period=${fonolojiDonem}`,
           { headers: { "X-API-Key": API_KEY, "Accept": "application/json" } }
         );
         if (!r.ok) {
@@ -618,60 +624,83 @@ async function fonGunlukGercekGetiriDahiliTeshisli(kod, hedefTarih, { onbellekAt
       }
     }
   }
+  return { noktalar: noktalar || [], teshis };
+}
 
-  teshis.noktaSayisi = noktalar?.length || 0;
+// Kalıcı seriyi getirir ve gerekirse günceller. `zorlaKontrol` true ise
+// "bugün zaten kontrol edildi" korumasını atlar (teşhis/manuel tetikleme için).
+async function gunlukGetiriSerisiGetirVeGuncelle(kod, { zorlaKontrol = false } = {}) {
+  const seriAnahtar = `fon:gunlukGetiriKalici:${kod}`;
+  const bugun = bugunTarihiTR();
+  const teshis = { kod, tefasHata: null, fonolojiDenendi: false, fonolojiHata: null, noktaSayisi: 0, yeniEklenen: 0 };
 
-  if (!noktalar || !noktalar.length) {
-    try { await kv.set(cacheAnahtar, { bulunamadi: true }, { ex: FON_GERCEK_GETIRI_BULUNAMADI_TTL_SANIYE }); } catch {}
-    return { gercek: null, kaynak: "yok", teshis };
+  let mevcut = null;
+  try { mevcut = await kv.get(seriAnahtar).catch(() => null); } catch {}
+  const kayitliKayitlar = Array.isArray(mevcut?.kayitlar) ? mevcut.kayitlar : [];
+  const sonKontrolTarihiTR = mevcut?.sonKontrolTarihiTR || null;
+
+  // Bugün zaten kontrol edildiyse VE seri boş değilse — ağa hiç gitme.
+  if (!zorlaKontrol && sonKontrolTarihiTR === bugun && kayitliKayitlar.length > 0) {
+    return { kayitlar: kayitliKayitlar, kaynak: "cache-bugun-kontrol-edildi", teshis };
+  }
+
+  const ilkKez = kayitliKayitlar.length === 0;
+  const { noktalar, teshis: cekimTeshis } = await fiyatNoktalariCekDahili(
+    kod,
+    ilkKez ? 370 : FON_GUNLUK_GETIRI_PENCERE_GUN,
+    ilkKez ? "1y" : "1m"
+  );
+  Object.assign(teshis, cekimTeshis);
+  teshis.noktaSayisi = noktalar.length;
+
+  if (!noktalar.length) {
+    // Ağ hatası — mevcut kayıtlı seriyi olduğu gibi dön, sonKontrolTarihiTR
+    // GÜNCELLENMEZ (yarın tekrar denensin).
+    return { kayitlar: kayitliKayitlar, kaynak: "cekim-basarisiz-eskiKullanildi", teshis };
   }
 
   const siraliNoktalar = [...noktalar].sort((a, b) => String(a.tarih).localeCompare(String(b.tarih)));
-  const idx = siraliNoktalar.findIndex((p) => p.tarih === hedefTarih);
+  const yeniHesaplanan = gunlukGetiriNoktalardanHesapla(siraliNoktalar);
+
+  const mevcutTarihSeti = new Set(kayitliKayitlar.map((k) => k.tarih));
+  const eklenecekler = yeniHesaplanan.filter((k) => !mevcutTarihSeti.has(k.tarih));
+  teshis.yeniEklenen = eklenecekler.length;
+
+  const birlesikKayitlar = [...kayitliKayitlar, ...eklenecekler]
+    .sort((a, b) => String(a.tarih).localeCompare(String(b.tarih)));
+
+  try {
+    await kv.set(seriAnahtar, { kayitlar: birlesikKayitlar, sonKontrolTarihiTR: bugun }); // TTL yok — kalıcı
+  } catch {}
+
+  return { kayitlar: birlesikKayitlar, kaynak: ilkKez ? "ilk-tam-zincir" : "kismi-guncelleme", teshis };
+}
+
+async function fonGunlukGercekGetiriDahiliTeshisli(kod, hedefTarih, { onbellekAtla = false } = {}) {
+  const { kayitlar, kaynak, teshis } = await gunlukGetiriSerisiGetirVeGuncelle(kod, { zorlaKontrol: onbellekAtla });
+  const bulunan = kayitlar.find((k) => k.tarih === hedefTarih);
   if (onbellekAtla) {
-    teshis.tarihler = siraliNoktalar.map((p) => p.tarih);
-    teshis.noktalarHamFiyat = siraliNoktalar.slice(-8); // son 8 nokta yeterli, tüm 21-22'yi dökmeye gerek yok
+    teshis.tarihler = kayitlar.slice(-10).map((k) => k.tarih);
+    teshis.serideBulunanTarihSayisi = kayitlar.length;
   }
-
-  // ⚠️ DÜZELTME (2026-09-08, kullanıcı raporu + rakamla doğrulandı): İlk
-  // sürüm burada `siraliNoktalar[idx]` (hedefTarih'in KENDİ etiketi) ile
-  // `siraliNoktalar[idx-1]` (BİR ÖNCEKİ etiket) arasındaki oranı alıyordu —
-  // yani "hedefTarih etiketi = hedefTarih'in gerçek kapanışı" varsayımıyla.
-  // CANLI TESTTE ORTAYA ÇIKTI: TEFAS'ın resmi API'sindeki "tarih" alanı
-  // DEĞERLEME tarihi DEĞİL, YAYIN tarihi — her kayıt, o günün sabahı (~09-10
-  // TSİ) hesaplanıp yayınlanan BİR ÖNCEKİ iş gününün kapanışını taşıyor.
-  // Örnek (THF, 2026-09-08 canlı test): "2026-09-08" etiketli kayıt aslında
-  // 07.09'un (Pazartesi) gerçek kapanışı, "2026-09-07" etiketli kayıt aslında
-  // 04.09'un (Cuma) kapanışı. Yani hedefTarih'in KENDİ gerçek kapanışını
-  // görmek için hedefTarih'in etiketini DEĞİL, hedefTarih'ten SONRAKİ etiketi
-  // kullanmak gerekiyor — kıyaslama tabanı da hedefTarih'in kendi etiketi
-  // (bir önceki iş gününün kapanışını taşıdığı için tam kıyaslanacak nokta).
-  // idx-1 yerine idx, idx yerine idx+1 kullanılıyor.
-  teshis.idxBulunduMu = idx >= 0 && idx < siraliNoktalar.length - 1;
-
-  if (idx < 0 || idx >= siraliNoktalar.length - 1) {
-    // hedef tarih seride yok, YA DA seride var ama henüz "ertesi gün"
-    // etiketi (hedefTarih'in ASIL gerçek kapanışını taşıyan kayıt) TEFAS
-    // tarafından yayınlanmamış — henüz bulunamadı say.
-    try { await kv.set(cacheAnahtar, { bulunamadi: true }, { ex: FON_GERCEK_GETIRI_BULUNAMADI_TTL_SANIYE }); } catch {}
-    return { gercek: null, kaynak: "yok", teshis };
-  }
-
-  const oncekiFiyat = siraliNoktalar[idx].fiyat;       // hedefTarih'in kendi etiketi = bir önceki iş gününün kapanışı
-  const bugunFiyat = siraliNoktalar[idx + 1].fiyat;    // hedefTarih'ten sonraki etiket = hedefTarih'in ASIL kapanışı
-  if (typeof bugunFiyat !== "number" || typeof oncekiFiyat !== "number" || oncekiFiyat === 0) {
-    try { await kv.set(cacheAnahtar, { bulunamadi: true }, { ex: FON_GERCEK_GETIRI_BULUNAMADI_TTL_SANIYE }); } catch {}
-    return { gercek: null, kaynak: "yok", teshis };
-  }
-
-  const gercek = ((bugunFiyat / oncekiFiyat) - 1) * 100;
-  try { await kv.set(cacheAnahtar, { gercek }, { ex: FON_GERCEK_GETIRI_CACHE_TTL_SANIYE }); } catch {}
-  return { gercek, kaynak: "hesaplandi", teshis };
+  if (!bulunan) return { gercek: null, kaynak: `${kaynak}-tarihYok`, teshis };
+  return { gercek: bulunan.getiri, kaynak, teshis };
 }
 
 async function fonGunlukGercekGetiriDahili(kod, hedefTarih) {
   const { gercek } = await fonGunlukGercekGetiriDahiliTeshisli(kod, hedefTarih);
   return gercek;
+}
+
+// ── UÇ: kalıcı günlük getiri serisi (2026-09-08 eklendi) — Günlük Getiri
+// Takvimi artık ham fiyat noktalarını çekip istemci tarafında hesaplamak
+// yerine BU ucu çağırıyor; hesaplama TEK yerde (yukarıda) yapılıyor.
+async function gunlukGetiriSerisiGetir(req, res) {
+  const kod = String(req.query?.kod || "").toUpperCase().trim();
+  if (!kod) return res.status(400).json({ success: false, error: "kod parametresi gerekli" });
+  const { kayitlar, kaynak } = await gunlukGetiriSerisiGetirVeGuncelle(kod);
+  res.setHeader("Cache-Control", "max-age=0, s-maxage=1800, stale-while-revalidate=1800");
+  return res.status(200).json({ success: true, kod, kaynak, kayitlar });
 }
 
 // ── TEŞHİS UCU (2026-09-08 eklendi, gerçekleştirme fiyat serisinden geçişiyle
@@ -2107,6 +2136,7 @@ export default async function handler(req, res) {
 
   if (req.query?.gecmis === "1") return fonGecmisGetir(req, res);
   if (req.query?.gercekTeshis === "1") return gercekTeshisGetir(req, res);
+  if (req.query?.gunlukGetiriSerisi === "1") return gunlukGetiriSerisiGetir(req, res);
   if (req.query?.detay === "1") return fonDetayGetir(req, res);
   if (req.query?.adKategori === "1") return fonAdKategoriGetir(req, res);
   if (req.query?.holdings === "1") return fonHoldingsGetir(req, res);
