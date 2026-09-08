@@ -81,9 +81,9 @@
   ],
   "finansman": {
     "guncelleme": {
-      "konut": "2026-08-31",
-      "tasit": "2026-08-31",
-      "ihtiyac": "2026-08-31"
+      "konut": "2026-09-08",
+      "tasit": "2026-09-08",
+      "ihtiyac": "2026-09-08"
     },
     "bankalar": [
       {
@@ -137,8 +137,8 @@
         "konut120": 2.89,
         "tasit12": 3.49,
         "tasit24": 3.49,
-        "ihtiyac12": 4.89,
-        "ihtiyac24": 4.89
+        "ihtiyac12": 4.39,
+        "ihtiyac24": 4.29
       },
       {
         "ad": "Emlak Katılım",
