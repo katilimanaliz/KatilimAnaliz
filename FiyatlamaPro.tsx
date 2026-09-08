@@ -5191,11 +5191,17 @@ function FonTahminAgGorseli({ kalemler, hisseDegisimMap, tahmin }: {
     .sort((a, b) => b.agirlik - a.agirlik)
     .slice(0, 20);
 
-  const VB = 440; // SVG viewBox kare boyutu (2026-09-07: 400'den büyütüldü — ağırlık satırı eklenince 3 satırlı etiketler üstte/altta taşabiliyordu)
+  const VB = 560; // SVG viewBox kare boyutu (2026-09-08: 440'tan büyütüldü — fontlar büyüyünce etiketler birbirine giriyordu, tüm geometri ~1.25x oranında büyütüldü)
   const CX = VB / 2, CY = VB / 2;
-  const IC_R = 62; // merkez daire yarıçapı (dilimlerin başladığı iç sınır)
-  const DIS_R_MAX = 148; // en büyük ağırlıklı dilimin ulaşacağı dış yarıçap
-  const ETIKET_R = DIS_R_MAX + 26; // TÜM etiketler bu sabit yarıçapta (referans görseldeki düzenli dış halka)
+  const IC_R = 78; // merkez daire yarıçapı (dilimlerin başladığı iç sınır)
+  const DIS_R_MAX = 185; // en büyük ağırlıklı dilimin ulaşacağı dış yarıçap
+  // ⚠️ DÜZELTME (2026-09-08): Sadece font büyütülüp yarıçap SABİT kalınca,
+  // her dilimin (20 kalem × 18°) etiket halkasındaki ÇEVRESEL (yay) uzunluğu
+  // artmadığı için komşu etiketler üst üste binmeye başladı (kullanıcı ekran
+  // görüntüsüyle bildirdi). ETIKET_R'nin DIS_R_MAX'a olan farkı 26'dan 45'e
+  // çıkarıldı — bu, aynı 18°'lik dilim başına yay uzunluğunu ~55px'ten
+  // ~72px'e çıkarıp büyük fontlara (12/16/14px) yetecek boşluğu sağlıyor.
+  const ETIKET_R = DIS_R_MAX + 45; // TÜM etiketler bu sabit yarıçapta (referans görseldeki düzenli dış halka)
   const BOSLUK_DERECE = 2.5; // dilimler arası ince boşluk
   const n = renkli.length;
   const dilimAcisi = n > 0 ? 360 / n : 0;
