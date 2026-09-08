@@ -1642,11 +1642,20 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
   // TEFAS resmi API'sinden gelen ham kaydı, ekranın geri kalanının beklediği
   // fon şekline dönüştürür. Eksik alanlar (getiri, kategori, yönetici) null/
   // boş bırakılıyor — TAHMİN EDİLMİYOR.
+  // ⚠️ GÜNCELLEME (2026-09-08): getiri alanları artık backend'de
+  // (tefasTumCronYaz → birikimli günlük fiyat geçmişi) hesaplanıp
+  // dolduruluyor — kullanıcı bildirdi: liste hep "—" gösteriyordu, Fon
+  // Detay'da gerçek rakamlar vardı. Backend her gün tur tamamlandığında bu
+  // alanları f.gunluk/f.haftalik/vb. olarak dolduruyor (yeterli geçmiş
+  // birikene kadar hâlâ null olabilir — bu durumda ekran yine "—" gösterir,
+  // UYDURULMUYOR). Sabit null'lar kaldırıldı, backend'den gelen değer
+  // olduğu gibi geçiriliyor.
   const digerFonNormallestir = useCallback((f:any) => ({
     kod: f.kod, ad: f.ad || "", yonetici: "", kategori: "",
     oncelik: 2, katilimUygun: false,
     fiyat: f.fiyat ?? null, fiyatTarihi: f.tarih ?? null, islemDurumu: null,
-    gunluk: null, haftalik: null, aylik: null, uc_aylik: null, ytd: null, yillik: null,
+    gunluk: f.gunluk ?? null, haftalik: f.haftalik ?? null, aylik: f.aylik ?? null,
+    uc_aylik: f.uc_aylik ?? null, ytd: f.ytd ?? null, yillik: f.yillik ?? null,
     portfoy: f.portfoyBuyuklukTL ?? 0, yatirimci: f.kisiSayisi ?? 0,
     kaynak: "tefas-resmi",
   }), []);
