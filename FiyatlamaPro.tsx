@@ -4482,6 +4482,40 @@ function FonTahminDetayModal({
   fonDetayYukleniyor?: boolean;
 }) {
   const [sekme, setSekme] = useState<"ag" | "dagilim" | "getiri" | "bilgi" | "gecmis">("ag");
+  // ── PORTFÖY DAĞILIMI'NDAN HİSSE DETAYINA GEÇİŞ (2026-09-07 eklendi) ────────
+  // Kullanıcı isteği: hisse adına tıklayınca BİST Hisse Veri İzleme'deki AYNI
+  // hisse detay sayfası açılsın. Bu modal BistHisseTarayici'nin `hisseler`
+  // listesine erişemiyor (ayrı component, prop olarak da gelmiyor) — bu yüzden
+  // kendi başına /api/hisse-proxy'den TEK seferlik bir çekim yapıp tıklanan
+  // koda ait tam kaydı (fiyat/yüksek/düşük/hacim vb.) buluyor. Aynı uç zaten
+  // CDN'de kısa süreli önbelleklendiği için (bkz. hisse-proxy.js) bu ekstra
+  // çekim gerçek bir kota maliyeti getirmiyor — BistHisseTarayici de aynı
+  // deseni (tam liste çek, istemcide filtrele) kullanıyor.
+  const [detayAcikKod, setDetayAcikKod] = useState<string | null>(null);
+  const [detayHisseObj, setDetayHisseObj] = useState<any | null>(null);
+  useEffect(() => {
+    if (!detayAcikKod) { setDetayHisseObj(null); return; }
+    let iptal = false;
+    fetch(`${API_BASE}/api/hisse-proxy`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (iptal) return;
+        const bulunan = Array.isArray(d?.data) ? d.data.find((h: any) => h.ticker === detayAcikKod) : null;
+        setDetayHisseObj(bulunan ?? null);
+      })
+      .catch(() => { if (!iptal) setDetayHisseObj(null); });
+    return () => { iptal = true; };
+  }, [detayAcikKod]);
+  if (detayAcikKod) {
+    if (!detayHisseObj) {
+      return (
+        <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:C.card,zIndex:601,display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <span style={{fontSize:13,color:WA(0.5)}}>Yükleniyor…</span>
+        </div>
+      );
+    }
+    return <HisseDetay hisse={detayHisseObj} onGeri={() => setDetayAcikKod(null)} />;
+  }
   // ── GENİŞ EKRAN DESTEĞİ (2026-09-07 eklendi) ──────────────────────────
   // ÖNCEDEN: kapsayıcı sabit maxWidth:680 kullanıyordu — bu bileşen ana
   // uygulamadan genisEkran prop'u ALMIYOR, bu yüzden masaüstünde (geniş
@@ -4663,9 +4697,9 @@ function FonTahminDetayModal({
                 // kapatıyor.
                 const etki = bilinenFiyat ? ((k.agirlik ?? 0) / 100) * deg : null;
                 return (
-                  <div key={k.kod} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 4px",borderBottom:`1px solid ${WA(0.05)}`}}>
+                  <div key={k.kod} onClick={() => setDetayAcikKod(k.kod)} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 4px",borderBottom:`1px solid ${WA(0.05)}`,cursor:"pointer"}}>
                     <div style={{flex:"1 1 auto",minWidth:0}}>
-                      <div style={{fontSize:13,fontWeight:700,color:C.label}}>{k.kod}</div>
+                      <div style={{fontSize:13,fontWeight:700,color:C.blue}}>{k.kod}</div>
                       <div style={{fontSize:10.5,color:WA(0.45),overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{k.ad ?? ""}</div>
                     </div>
                     <div style={{width:56,textAlign:"right",fontSize:12,fontWeight:600,color: !bilinenFiyat ? WA(0.35) : degUp ? C.green : C.red}}>
@@ -5071,12 +5105,13 @@ function FonTahminAgGorseli({ kalemler, hisseDegisimMap, tahmin }: {
   kalemler: any[]; hisseDegisimMap: Record<string, number>; tahmin: number | null;
 }) {
   const renkli = kalemler
+    // Kullanıcı isteği (2026-09-07): radyal görselde SADECE hisseler olsun —
+    // VIOP/nakit/sabit getiri/alt fon gibi kalemler (canlı fiyatı olmayan ya
+    // da doğrudan hisse olmayan) tamamen çıkarılıyor. Bu, Portföy Dağılımı
+    // sekmesindeki "Yerli Hisseler" ayrımıyla tutarlı.
+    .filter((k) => k.tur === "stock")
     .map((k) => {
-      // Hisseler: canlı BİST değişimi. Alt fonlar (tur:"fund"): kendi son
-      // açıklanan günlük getirisi (bkz. backend'deki oncekiGunGetiri notu).
-      const deg = k.tur === "stock" ? hisseDegisimMap[k.kod]
-        : k.tur === "fund" && typeof k.oncekiGunGetiri === "number" ? k.oncekiGunGetiri
-        : undefined;
+      const deg = hisseDegisimMap[k.kod];
       const pozitif = typeof deg === "number" ? deg >= 0 : null;
       const agirlik = typeof k.agirlik === "number" && k.agirlik > 0 ? k.agirlik : 0.05; // 0 ağırlık dilimi yok etmesin
       return { ...k, deg, pozitif, agirlik };
@@ -5086,7 +5121,7 @@ function FonTahminAgGorseli({ kalemler, hisseDegisimMap, tahmin }: {
     .sort((a, b) => b.agirlik - a.agirlik)
     .slice(0, 20);
 
-  const VB = 400; // SVG viewBox kare boyutu
+  const VB = 440; // SVG viewBox kare boyutu (2026-09-07: 400'den büyütüldü — ağırlık satırı eklenince 3 satırlı etiketler üstte/altta taşabiliyordu)
   const CX = VB / 2, CY = VB / 2;
   const IC_R = 62; // merkez daire yarıçapı (dilimlerin başladığı iç sınır)
   const DIS_R_MAX = 148; // en büyük ağırlıklı dilimin ulaşacağı dış yarıçap
@@ -5110,15 +5145,18 @@ function FonTahminAgGorseli({ kalemler, hisseDegisimMap, tahmin }: {
             const yol = radyalDilimYolu(CX, CY, IC_R, disR, baslangicAci, bitisAci);
             const ortaAci = (baslangicAci + bitisAci) / 2;
             const [lx, ly] = polarNoktasi(CX, CY, ETIKET_R, ortaAci);
-            // 20 kalemle sınırlı olduğu için (min 18° dilim) her zaman kod +
-            // yüzde birlikte gösterilebiliyor — treemap'teki kademeli gizleme
-            // burada gerekmiyor.
-            const yuzdeMetni = typeof k.deg === "number"
-              ? isaretliYuzde(k.deg, 2)
-              : (k.tur !== "stock" ? `%${(k.agirlik ?? 0).toFixed(1)}` : "—");
+            // 20 kalemle sınırlı olduğu için (min 18° dilim) her zaman
+            // ağırlık + kod + yüzde birlikte gösterilebiliyor — treemap'teki
+            // kademeli gizleme burada gerekmiyor. Artık SADECE stock kalemleri
+            // geldiği için (bkz. yukarıdaki filter) "tur !== stock" dalına
+            // gerek kalmadı.
+            const yuzdeMetni = typeof k.deg === "number" ? isaretliYuzde(k.deg, 2) : "—";
             return (
               <g key={k.kod}>
                 <path d={yol} fill={renk} />
+                <text x={lx} y={ly - 15} textAnchor="middle" fontSize={8} fontWeight={600} fill={WA(0.5)}>
+                  %{(k.agirlik ?? 0).toFixed(1)}
+                </text>
                 <text x={lx} y={ly - 3} textAnchor="middle" fontSize={10.5} fontWeight={700} fill={C.label}>
                   {k.kod}
                 </text>
