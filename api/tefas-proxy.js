@@ -1442,7 +1442,7 @@ function tefasFonNormallestir(f) {
 // ÖNCELİKLİ deniyor, sadece boş/başarısız dönerse Fonoloji'ye (aşağıdaki
 // eski kod, DOKUNULMADI) düşüyor — mevcut katılım fonu davranışında
 // regresyon riski yok, sadece bir hızlı-yol eklendi.
-async function tefasFonGecmisResmiCek(kod, gunSayisi, bitisOfsetGun = 0) {
+async function tefasFonGecmisResmiCekTek(kod, gunSayisi, bitisOfsetGun) {
   const bugun = new Date(); bugun.setDate(bugun.getDate() - bitisOfsetGun);
   const baslangic = new Date(bugun); baslangic.setDate(baslangic.getDate() - gunSayisi);
   const yyyymmdd = (d) => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
@@ -1487,6 +1487,30 @@ async function tefasFonGecmisResmiCek(kod, gunSayisi, bitisOfsetGun = 0) {
   } catch (e) {
     return { noktalar: null, hata: `fetch/exception: ${String(e?.message || e)}` };
   }
+}
+
+// ── 429 İÇİN KISA YENİDEN DENEME (2026-09-08 eklendi) ───────────────────────
+// Canlı testte görüldü: art arda birkaç fon için hızlı istek atınca (ör.
+// kullanıcının manuel testleri) TEFAS 429 (çok istek) döndürebiliyor — aynı
+// bulgu toplu taramada da vardı (bkz. tefasTumFonlariCek). Tek fon isteği
+// için TAM o mekanizma (4 deneme, üstel bekleme) fazla ağır olurdu (sayfa
+// yükleme süresini gereksiz uzatır) — burada SADECE 1 kez, kısa bir bekleme
+// (2.5sn) sonrası tekrar deneniyor. Yine 429 gelirse ya da başka bir hata
+// olursa Fonoloji'ye düşülür (mevcut davranış).
+async function tefasFonGecmisResmiCek(kod, gunSayisi, bitisOfsetGun = 0) {
+  const MAKS_DENEME = 2;
+  const BEKLEME_MS = 2500;
+  let sonSonuc = null;
+  for (let deneme = 0; deneme < MAKS_DENEME; deneme++) {
+    sonSonuc = await tefasFonGecmisResmiCekTek(kod, gunSayisi, bitisOfsetGun);
+    if (sonSonuc?.noktalar?.length) return sonSonuc;
+    if (sonSonuc?.hata === "HTTP 429" && deneme < MAKS_DENEME - 1) {
+      await new Promise((r) => setTimeout(r, BEKLEME_MS));
+      continue;
+    }
+    break;
+  }
+  return sonSonuc;
 }
 
 // ── ÇOK PENCERELİ ZİNCİRLEME (2026-09-08 eklendi) ────────────────────────────
