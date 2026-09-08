@@ -414,15 +414,18 @@ async function altFonGunlukGetiriGetir(kod) {
   }
 }
 
-async function holdingsGetirDahili(kod) {
+// ── DEĞİŞİKLİK (2026-09-08): Fonksiyon ikiye bölündü ────────────────────────
+// ÖNCEDEN tek bir fonksiyondu (cache kontrolü + Fonoloji çekimi iç içeydi).
+// Kullanıcı isteği: fonlar her sabah 08:00'de OTOMATİK tazelensin (Fonoloji
+// ne zaman güncellerse güncellesin, pasif 24 saatlik cache'in "kim önce
+// isterse o tetikler" belirsizliğini beklemeden). Bunun için cache'i
+// ATLAYIP doğrudan Fonoloji'den çeken bir "çekirdek" fonksiyona ihtiyaç
+// vardı — holdingsFonolojiCekVeYaz() bu çekirdek, aşağıdaki
+// holdingsGunlukYenile() cron'u bunu doğrudan (cache kontrolsüz) çağırıyor.
+// holdingsGetirDahili() (kullanıcı isteklerinin yolu) DEĞİŞMEDİ — hâlâ önce
+// cache'e bakıyor, sadece boşsa çekirdeği çağırıyor.
+async function holdingsFonolojiCekVeYaz(kod) {
   const cacheAnahtar = `fon:holdings:${kod}`;
-  try {
-    const onbellek = await kv.get(cacheAnahtar).catch(() => null);
-    if (onbellek && Array.isArray(onbellek.kalemler) && onbellek.kalemler.length) {
-      return onbellek;
-    }
-  } catch {}
-
   const API_KEY = process.env.FONOLOJI_KEY;
   if (!API_KEY) return null;
 
@@ -489,6 +492,91 @@ async function holdingsGetirDahili(kod) {
   } catch {
     return null;
   }
+}
+
+async function holdingsGetirDahili(kod) {
+  const cacheAnahtar = `fon:holdings:${kod}`;
+  try {
+    const onbellek = await kv.get(cacheAnahtar).catch(() => null);
+    if (onbellek && Array.isArray(onbellek.kalemler) && onbellek.kalemler.length) {
+      return onbellek;
+    }
+  } catch {}
+  return holdingsFonolojiCekVeYaz(kod);
+}
+
+// ── GÜNLÜK OTOMATİK HOLDINGS TAZELEME (2026-09-08 eklendi) ──────────────────
+// Kullanıcı isteği: "Her gün sabah 8'de otomatik güncellesin, tüm popüler
+// fonlar da böyle yapsın, manuel olan fonları da otomatik dönelim."
+//
+// TASARIM — NEDEN TEK TEK, TOPLU DEĞİL: manuelHoldingsYaz'ın başındaki not
+// (2026-09-07) açık: otomatik toplu çekim, büyük fonlarda (THF'nin 77
+// hissesi gibi) TEK istekte 15-20 saniye sürebiliyor — bu, 10 fonu ARKA
+// ARKAYA tek bir çağrıda işlemeye kalkarsak Vercel'in zaman aşımına
+// kesin çarpar (tam da THF/TLY/DOH/TMV/KHA'nın manuel yazılma sebebi buydu).
+// Çözüm: TEFAS Tüm Fonlar cron'undaki (tefasTumFonlariCek) İLERLEME
+// İMLECİ deseniyle AYNI mantık — bu uç HER ÇAĞRIDA sadece küçük bir zaman
+// bütçesi (≈8 sn) kadar fon işler, kaldığı yerden devam etmek üzere
+// ilerlemeyi KV'ye yazar. cron-job.org'da bu uç GÜN İÇİNDE BİRKAÇ KEZ
+// (örn. 08:00'den başlayıp birkaç dakika arayla) çağrılırsa, liste
+// (şu an 10 fon: 9 pilot + FSU) birkaç çağrıda TAMAMLANIR — her tek fon
+// kendi isteğinde işlendiği için (holdingsFonolojiCekVeYaz), THF gibi büyük
+// fonlar bile kendi payına düşen zaman bütçesi içinde tek başına rahatça
+// sığar. Bu otomatik yol MANUEL fonlar için de AYNI kod yolunu kullanıyor —
+// yani Fonoloji artık zamanında yanıt veriyorsa (manuel yazımın sebebi olan
+// asıl sorun geçmişse), THF/TLY/DOH/TMV/KHA da burada normal şekilde
+// güncellenip kaynak alanı otomatik olarak "fonoloji"ye döner — ayrı bir
+// "manuelden otomatiğe geçiş" adımına gerek yok.
+const HOLDINGS_YENILE_ILERLEME_KV = "fonTahmin:holdingsYenile:ilerleme";
+const HOLDINGS_YENILE_ZAMAN_BUTCESI_MS = 8000; // güvenlik payı — Vercel zaman aşımından önce dur
+
+async function holdingsGunlukYenile(req, res) {
+  const cronSecret = process.env.FON_TAHMIN_CRON_SECRET;
+  const gelenAuth = req.headers.authorization;
+  const vercelCronMu = req.headers["x-vercel-cron"] === "1";
+  if (cronSecret && !vercelCronMu && gelenAuth !== `Bearer ${cronSecret}`) {
+    return res.status(401).json({ success: false, error: "Yetkisiz" });
+  }
+
+  const { liste } = await fonTahminListesiOku();
+  const bugun = bugunTarihiTR();
+
+  let ilerleme = null;
+  try { ilerleme = await kv.get(HOLDINGS_YENILE_ILERLEME_KV).catch(() => null); } catch {}
+  let baslangicIndex = (ilerleme && ilerleme.tarihTR === bugun) ? (ilerleme.index || 0) : 0;
+
+  if (baslangicIndex >= liste.length) {
+    return res.status(200).json({
+      success: true, tarih: bugun, tamamlandiMi: true,
+      mesaj: "Bugün için tüm popüler fonlar zaten tazelendi.",
+      toplamFon: liste.length,
+    });
+  }
+
+  const baslangicMs = Date.now();
+  const islenenler = [];
+  let index = baslangicIndex;
+  for (; index < liste.length; index++) {
+    if (Date.now() - baslangicMs > HOLDINGS_YENILE_ZAMAN_BUTCESI_MS) break;
+    const kod = liste[index];
+    const sonuc = await holdingsFonolojiCekVeYaz(kod);
+    islenenler.push({
+      kod,
+      basarili: !!sonuc,
+      kalemSayisi: sonuc?.kalemler?.length ?? 0,
+      kaynak: sonuc?.kaynak ?? null,
+    });
+  }
+
+  const tamamlandiMi = index >= liste.length;
+  try {
+    await kv.set(HOLDINGS_YENILE_ILERLEME_KV, { index: tamamlandiMi ? liste.length : index, tarihTR: bugun });
+  } catch {}
+
+  return res.status(200).json({
+    success: true, tarih: bugun, tamamlandiMi,
+    islenenler, kalanFonSayisi: liste.length - index, toplamFon: liste.length,
+  });
 }
 
 async function fonHoldingsGetir(req, res) {
@@ -2155,6 +2243,7 @@ export default async function handler(req, res) {
   if (req.query?.adKategori === "1") return fonAdKategoriGetir(req, res);
   if (req.query?.holdings === "1") return fonHoldingsGetir(req, res);
   if (req.query?.manuelHoldingsYaz === "1") return manuelHoldingsYaz(req, res);
+  if (req.query?.holdingsGunlukYenile === "1") return holdingsGunlukYenile(req, res);
   if (req.query?.tahminGecmis === "1") return tahminGecmisGetir(req, res);
   if (req.query?.fonTahminGecmisTemizle === "1") return fonTahminGecmisTemizle(req, res);
   if (req.query?.fonTahminListesi === "1") return fonTahminListesiGetir(req, res);
