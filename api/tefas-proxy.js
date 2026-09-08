@@ -1002,10 +1002,13 @@ async function fonGecmisGetir(req, res) {
   // TEFAS'ın resmi ucundan (kota sıfır) almayı dene. Başarılı olursa
   // Fonoloji'ye HİÇ dokunulmaz. Boş/başarısız dönerse (ör. TEFAS o an
   // erişilemezse) aşağıdaki mevcut Fonoloji kodu DEĞİŞMEDEN devreye girer.
+  let tefasHataTeshis = null; // ⚠️ geçici teşhis alanı — ?debugGecmis=1 ile görülür
   try {
     const gunSayisiMap = { "1a": 35, "3a": 100, "1y": 380 };
     const gunSayisi = gunSayisiMap[donemGiris] || 35;
-    const tefasNoktalar = await tefasFonGecmisResmiCek(kod, gunSayisi);
+    const tefasSonuc = await tefasFonGecmisResmiCek(kod, gunSayisi);
+    tefasHataTeshis = tefasSonuc?.hata ?? null;
+    const tefasNoktalar = tefasSonuc?.noktalar;
     if (tefasNoktalar && tefasNoktalar.length) {
       const guncelFiyatT = tefasNoktalar[tefasNoktalar.length - 1].fiyat;
       const oncekiKapanisT = tefasNoktalar.length > 1 ? tefasNoktalar[tefasNoktalar.length - 2].fiyat : null;
@@ -1014,7 +1017,12 @@ async function fonGecmisGetir(req, res) {
       res.setHeader("Cache-Control", "max-age=0, s-maxage=300, stale-while-revalidate=300");
       return res.status(200).json(paketT);
     }
-  } catch {}
+  } catch (e) {
+    tefasHataTeshis = `dış try/catch: ${String(e?.message || e)}`;
+  }
+  if (req.query?.debugGecmis === "1") {
+    return res.status(200).json({ success: false, teshis: true, tefasHataTeshis, not: "TEFAS-dogrudan basarisiz oldugu icin Fonoloji'ye dusulecekti, ama debugGecmis=1 oldugu icin burada durduruldu" });
+  }
 
   const API_KEY = process.env.FONOLOJI_KEY;
   if (!API_KEY) return res.status(500).json({ success: false, error: "FONOLOJI_KEY tanımlı değil" });
@@ -1450,19 +1458,24 @@ async function tefasFonGecmisResmiCek(kod, gunSayisi) {
       body: JSON.stringify(govde),
       signal: controller.signal,
     }).finally(() => clearTimeout(zamanlayici));
-    if (!r.ok) return null;
-    const d = await r.json().catch(() => null);
+    // ⚠️ TEŞHİS (2026-09-08 eklendi, geçici): önce sessizce null dönüyordu —
+    // canlı testte üretimde beklenmedik şekilde hep Fonoloji'ye düşüyordu ama
+    // NEDENİ görünmüyordu. Artık HER durumda { noktalar, hata } döndürüyor —
+    // hata dolu geldiğinde tam nedeni ?debugGecmis=1 ile görebiliriz.
+    if (!r.ok) return { noktalar: null, hata: `HTTP ${r.status}` };
+    const d = await r.json().catch((e) => ({ __parseHata: String(e?.message || e) }));
+    if (d?.__parseHata) return { noktalar: null, hata: `JSON parse: ${d.__parseHata}` };
     const liste = Array.isArray(d?.resultList) ? d.resultList : [];
-    if (!liste.length) return null;
+    if (!liste.length) return { noktalar: null, hata: `resultList boş/yok — yanıt anahtarları: ${Object.keys(d || {}).join(",")}` };
     // Canlı testte TEFAS en yeni tarihi ÖNCE veriyordu — grafik/getiri
     // hesaplamaları eskiden-yeniye sıra beklediği için burada çeviriliyor.
     const noktalar = liste
       .filter((f) => typeof f?.fiyat === "number" && f?.tarih)
       .map((f) => ({ tarih: f.tarih, fiyat: f.fiyat }))
       .sort((a, b) => String(a.tarih).localeCompare(String(b.tarih)));
-    return noktalar.length ? noktalar : null;
-  } catch {
-    return null;
+    return noktalar.length ? { noktalar, hata: null } : { noktalar: null, hata: "resultList doluydu ama filtre sonrası 0 nokta kaldı" };
+  } catch (e) {
+    return { noktalar: null, hata: `fetch/exception: ${String(e?.message || e)}` };
   }
 }
 
