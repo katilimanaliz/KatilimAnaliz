@@ -126,7 +126,16 @@ function piyasaAcikMi(): boolean {
   if (piyasaHaftaSonuMu()) return false;
   const simdi = new Date();
   const dk = simdi.getHours() * 60 + simdi.getMinutes();
-  return dk >= 10 * 60 && dk < 18 * 60 + 20;
+  // DEĞİŞİKLİK (2026-09-08): 18:20 → 18:30. BIST'in kapanış seansı (tek
+  // fiyat açık artırması) ~18:00'de bitiyor ama resmi kapanış fiyatının
+  // netleşip Midas/TradingView'a yansıması birkaç dakika sürebiliyor —
+  // istemci tam 18:20'de durup elindeki (henüz netleşmemiş) son değeri
+  // dondurunca, aynı gün daha sonra çalışan kaydet cron'unun (kendi kapanış
+  // sonrası çekimiyle) kaydettiği resmi tahminle uyuşmuyordu (kullanıcı
+  // örnek verdi: ekranda donan %1,48 iken kaydedilen resmi tahmin %1,74
+  // çıktı). Pencereyi 10 dakika uzatmak kesin çözüm garantisi vermiyor
+  // (kaynağın kendi gecikmesi değişken olabilir) ama payı büyütüyor.
+  return dk >= 10 * 60 && dk < 18 * 60 + 30;
 }
 
 // ── FON TAHMİN SIFIRLAMA PENCERESİ — 2026-09-04 eklendi, 2026-09-07 GÜNCELLENDİ ─
@@ -3434,7 +3443,7 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri 
     const now = new Date();
     const gun = now.getDay(); // 0=Pazar, 6=Cumartesi
     const dk = now.getHours()*60 + now.getMinutes();
-    const acilis = 10*60, kapanis = 18*60+20; // 10:00–18:20
+    const acilis = 10*60, kapanis = 18*60+30; // 10:00–18:30 (2026-09-08: 18:20'den uzatıldı, bkz. piyasaAcikMi notu)
     const haftaIci = gun>=1 && gun<=5;
     const acik = haftaIci && dk>=acilis && dk<kapanis;
     let etiket = "Kapalı";
@@ -4182,21 +4191,26 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
     PBR: "Pusula Portföy Birinci Değişken Fon",
   };
 
-  // ── FON YÖNETİM ŞİRKETİ LOGOLARI (2026-09-04) ───────────────────────────
-  // Resmi şirket sitelerinden alınan gerçek logo URL'leri — dosya
-  // indirilmiyor, doğrudan kaynağa bağlanılıyor (hotlink). Sadece 9 pilot
-  // fonun yönetim şirketleri kapsanıyor (Atlas, Tera, Pardus, Pusula).
-  // Görsel yüklenemezse (site logosunu değiştirir/kaldırırsa) onError ile
-  // sessizce gizleniyor — kırık resim ikonu görünmesin diye.
+  // ── FON YÖNETİM ŞİRKETİ LOGOLARI (2026-09-04, 2026-09-08'de FSU eklendi,
+  // AYNI GÜN İKONLAR GÜNCELLENDİ) ──────────────────────────────────────────
+  // ÖNCEDEN: 3 farklı kaynaktan (kendi PNG/SVG sitesi) yatay/metin ağırlıklı
+  // TAM ŞİRKET LOGOLARI çekilip küçük bir kareye zorlanıyordu, üstüne beyaz
+  // kutu + çerçeve ekleniyordu (kullanıcı "çerçeveli, profesyonel değil"
+  // diye belirtti — bir de Pusula'nınki düşük çözünürlüklü favicon'du,
+  // diğerleriyle tutarsızdı). Artık TÜMÜ için sitelerin kendi gerçek favicon
+  // ikonları (Google'ın favicon servisi üzerinden, yüksek çözünürlükte,
+  // sz=128) kullanılıyor — favicon'lar zaten küçük kare alanda çalışacak
+  // şekilde tasarlandığı için hem tutarlı hem çerçevesiz/şeffaf görünüyor.
+  // Görsel yüklenemezse onError ile sessizce gizleniyor.
   const FON_SIRKET_LOGO: Record<string, string> = {
-    Atlas: "https://www.atlasportfoy.com/media/img/atlas-portfoy-logo.png",
-    Tera: "https://www.teraportfoy.com/img/logo.svg",
-    Pardus: "https://pardusportfoy.com/wp-content/uploads/2026/02/PARDUS-PORTFOY-LOGO-fav.png",
+    Atlas: "https://www.google.com/s2/favicons?domain=atlasportfoy.com&sz=128",
+    Tera: "https://www.google.com/s2/favicons?domain=teraportfoy.com&sz=128",
+    Pardus: "https://www.google.com/s2/favicons?domain=pardusportfoy.com&sz=128",
     Pusula: "https://www.google.com/s2/favicons?domain=pusulaportfoy.com.tr&sz=128",
   };
   const FON_KOD_SIRKET: Record<string, string> = {
     DFI: "Atlas",
-    TMV: "Tera", THF: "Tera", DOH: "Tera", TLY: "Tera",
+    TMV: "Tera", THF: "Tera", DOH: "Tera", TLY: "Tera", FSU: "Tera",
     KHA: "Pardus",
     PUK: "Pusula", PHE: "Pusula", PBR: "Pusula",
   };
@@ -4476,7 +4490,7 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
                 <img
                   src={fonLogoUrl(t.kod)!}
                   alt=""
-                  style={{ width: 28, height: 28, borderRadius: 7, objectFit: "contain", background: "#fff", padding: 3, marginRight: 8, flexShrink: 0, border: `1px solid ${WA(0.08)}` }}
+                  style={{ width: 32, height: 32, borderRadius: 8, objectFit: "contain", marginRight: 8, flexShrink: 0 }}
                   onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
                 />
               )}
@@ -5170,7 +5184,7 @@ function FonTahminDetayModal({
                 )}
                 <div style={{display:"flex",fontSize:9.5,fontWeight:700,color:WA(0.35),textTransform:"uppercase",padding:"0 2px 8px",borderBottom:`1px solid ${WA(0.08)}`}}>
                   <div style={{flex:"1 1 auto"}}>Tarih</div>
-                  <div style={{width:66,textAlign:"right"}}>Gerçek</div>
+                  <div style={{width:84,textAlign:"right"}}>Gerçek Getiri</div>
                   <div style={{width:66,textAlign:"right"}}>Tahmin</div>
                   <div style={{width:52,textAlign:"right"}}>İsabet</div>
                 </div>
@@ -5179,7 +5193,7 @@ function FonTahminDetayModal({
                     <div style={{flex:"1 1 auto",fontSize:12.5,fontWeight:700,color:C.label}}>
                       {k.tarih ? new Date(k.tarih).toLocaleDateString("tr-TR",{day:"2-digit",month:"2-digit",year:"2-digit"}) : "—"}
                     </div>
-                    <div style={{width:66,textAlign:"right",fontSize:12,fontWeight:600,color: k.gercek==null?WA(0.35): k.gercek>=0?C.green:C.red}}>
+                    <div style={{width:84,textAlign:"right",fontSize:12,fontWeight:600,color: k.gercek==null?WA(0.35): k.gercek>=0?C.green:C.red}}>
                       {isaretliYuzde(k.gercek, 4)}
                     </div>
                     <div style={{width:66,textAlign:"right",fontSize:12,fontWeight:600,color: k.tahmin==null?WA(0.35): k.tahmin>=0?C.green:C.red}}>
