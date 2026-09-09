@@ -570,9 +570,19 @@ async function holdingsGunlukYenile(req, res) {
   const { liste } = await fonTahminListesiOku();
   const bugun = bugunTarihiTR();
 
+  // `&sifirla=1` (2026-09-09 eklendi): normalde ilerleme imleci gün içinde
+  // TAMAMLANDIYSA bir daha hiçbir şey yapmıyor (istenen davranış — gün
+  // içinde tekrar tekrar Fonoloji'ye gitmesin diye). Ama fiyat kaymasi
+  // düzeltmesi az önce devre dışı bırakıldığında, o gün ZATEN tazelenmiş
+  // fonların cache'i hâlâ ESKİ (düzeltilmiş) ağırlıkları taşıyordu —
+  // kullanıcı bunları HEMEN yeniden (artık ham haliyle) çekmek istedi.
+  // Bu bayrak imleci 0'a zorlayıp TÜM listeyi (bugün zaten işlenmiş olsa
+  // bile) yeniden işletir.
+  const zorlaSifirla = req.query?.sifirla === "1";
+
   let ilerleme = null;
   try { ilerleme = await kv.get(HOLDINGS_YENILE_ILERLEME_KV).catch(() => null); } catch {}
-  let baslangicIndex = (ilerleme && ilerleme.tarihTR === bugun) ? (ilerleme.index || 0) : 0;
+  let baslangicIndex = (!zorlaSifirla && ilerleme && ilerleme.tarihTR === bugun) ? (ilerleme.index || 0) : 0;
 
   if (baslangicIndex >= liste.length) {
     return res.status(200).json({
