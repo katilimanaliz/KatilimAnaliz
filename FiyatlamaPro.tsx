@@ -21818,7 +21818,26 @@ function portfoyGuncelDeger(k: PortfoyKalemi): number {
   // katılmaz — miktar girilmiş olsa bile. (Akışta alış adımına miktarsız
   // ulaşılamadığı için alis!=null her zaman miktar!=null demektir.)
   if (k.alis == null) return 0;
-  if (k.tur === "fon") return k.miktar!; // fon miktarı zaten ₺ tutar olarak tutuluyor
+  if (k.tur === "fon") {
+    // DEĞİŞİKLİK (2026-09-08, kullanıcı raporu): ÖNCEDEN her zaman `k.miktar`
+    // (girilen ₺ tutarı) SABİT dönüyordu — fon birim fiyatı ne kadar
+    // hareket ederse etsin toplam değer hiç değişmiyordu, bu yüzden kâr/zarar
+    // hep hesaplanamıyordu. Artık alış fiyatı VE güncel fiyat ikisi de
+    // mevcutsa, tutar fiyat oranıyla ölçekleniyor (₺ tutarı, birim fiyat
+    // yüzde kaç değiştiyse aynı yüzde büyüyüp küçülüyor). Biri eksikse
+    // (alış fiyatı girilmemiş / güncel fiyat henüz çekilmemiş) eski güvenli
+    // davranışa (statik tutar) düşülüyor — NaN üretmektense.
+    // ⚠️ Not: birden fazla alış lotu (farklı fiyatlardan) BİRLEŞTİRİLMİŞSE,
+    // portfoyBirlestir'deki ortalama-fiyat formülü hisse tipi için tasarlandı
+    // (miktar×fiyat=maliyet varsayımı) — fon'da miktar zaten ₺ tutarı olduğu
+    // için o formül birim-tutarsız kalıyor. Tek lot'ta (yaygın durum) bu sorun
+    // yok; çoklu-lot fon birleştirme ayrı bir konu, buraya dahil değil.
+    const alisFiyat = k.alis!.fiyat;
+    if (typeof alisFiyat === "number" && alisFiyat > 0 && typeof k.fiyat === "number" && k.fiyat > 0) {
+      return k.miktar! * (k.fiyat / alisFiyat);
+    }
+    return k.miktar!;
+  }
   // ── KATILIM HESABI (2026-08-12) ─────────────────────────────────────────
   // VadeliKatilim ekranındaki (Hesapla > Katılım Hesabı Getiri Hesaplama) İLE
   // BİREBİR AYNI formül: basit oran × geçen gün, dondurulmuş kademeli stopaj.
@@ -21873,7 +21892,15 @@ function portfoyBugunkuKatki(k: PortfoyKalemi): number {
 }
 function portfoyMaliyet(k: PortfoyKalemi): number | null {
   if (!k.alis || k.miktar == null) return null;
-  if (k.tur === "fon") return null; // fon için maliyet konsepti Faz 2'de (geçmiş fiyat backend'i) netleşecek
+  if (k.tur === "fon") {
+    // DEĞİŞİKLİK (2026-09-08): portfoyGuncelDeger artık fon için fiyat
+    // oranıyla ölçekleniyor (yukarıya bkz.) — bu yüzden maliyet artık
+    // anlamlı: girilen ₺ tutarının kendisi (yatırılan anapara). Alış
+    // fiyatı gerçekten girilmemişse (eski/bozuk kayıt) yine null dönüp
+    // "hesaplanamadı" göstermeye devam ediyoruz.
+    if (typeof k.alis!.fiyat !== "number" || k.alis!.fiyat <= 0) return null;
+    return k.miktar!;
+  }
   // Katılım hesabında miktar zaten anapara — maliyet tanımı gereği anaparanın
   // kendisi (portfoyGuncelDeger'deki "anapara + net tahakkuk" formülüyle
   // tutarlı: kâr/zarar = tahakkuk eden net kâr payı).
@@ -23377,6 +23404,7 @@ function PortfoyEkleModal({onKapat, onEklendi, settings, duzenlenecekKalem}:{onK
   const [aramaMetni, setAramaMetni] = useState("");
   const [hisseListesi, setHisseListesi] = useState<any[]>([]);
   const [fonListesi, setFonListesi] = useState<any[]>([]);
+  const [fonListesiTeshis, setFonListesiTeshis] = useState<string>("");
   const [aramaYukleniyor, setAramaYukleniyor] = useState(false);
   const [secilenEnstruman, setSecilenEnstruman] = useState<any>(null); // {kod,ad,fiyat,g,h,a,y,birim}
   const [enstrumanYukleniyor, setEnstrumanYukleniyor] = useState(false);
@@ -23567,9 +23595,65 @@ function PortfoyEkleModal({onKapat, onEklendi, settings, duzenlenecekKalem}:{onK
       }).catch(()=>{}).finally(()=>setAramaYukleniyor(false));
     } else if (tur==="fon" && fonListesi.length===0) {
       setAramaYukleniyor(true);
-      fetch(`${API_BASE}/api/tefas-proxy`).then(r=>r.json()).then(d=>{
-        if (d?.success) setFonListesi(d.data||[]);
-      }).catch(()=>{}).finally(()=>setAramaYukleniyor(false));
+      setFonListesiTeshis("");
+      // DEĞİŞİKLİK (2026-09-08, kullanıcı isteği): ÖNCEDEN sadece varsayılan
+      // ucun (katılıma uygun 434 fon) sonucu kullanılıyordu — kullanıcı,
+      // katılım dışı bir fonu Portföyüm/Takip Listem'e eklemek istediğinde
+      // arama kutusunda bulamıyordu. FonGetiriIzleme ekranındaki "Tümü"
+      // birleştirme deseniyle AYNI mantık buraya da taşındı: katılım fonları
+      // (varsayılan uç) + diğer fonlar (?tumFonlar=1, ~1600+ katılım dışı)
+      // kod bazında birleştiriliyor, katılım kaydı önceliklidir.
+      //
+      // DEĞİŞİKLİK (2026-09-08, 2. tur): THF gibi katılım dışı fonlar arama
+      // sonucunda çıkmıyordu — kullanıcının cihazında ham API yanıtı (?tumFonlar=1)
+      // doğru veriyi (THF dahil) döndürdüğü doğrulandı, yani sorun ya
+      // uygulamanın kendi fetch'inin (büyük payload — ~2041 fon — WebView'da
+      // sessizce başarısız olması) ya da Promise.all ile İKİ büyük isteğin AYNI
+      // ANDA çakışması olabilir. Kesin teşhis için: (1) ARDIŞIK çekime
+      // geçildi (paralel değil), (2) her adımın sonucu fonListesiTeshis'e
+      // yazılıyor — arama kutusunun altında GEÇİCİ olarak görünür, sorun
+      // netleşince kaldırılacak.
+      (async () => {
+        let katilimFonlar: any[] = [];
+        let digerNormal: any[] = [];
+        const notlar: string[] = [];
+        try {
+          const r1 = await fetch(`${API_BASE}/api/tefas-proxy`);
+          const j1 = await r1.json();
+          katilimFonlar = j1?.success ? (j1.data||[]) : [];
+          notlar.push(`katılım: ${katilimFonlar.length}`);
+        } catch (e: any) {
+          notlar.push(`katılım HATA: ${String(e?.message||e).slice(0,40)}`);
+        }
+        try {
+          const r2 = await fetch(`${API_BASE}/api/tefas-proxy?tumFonlar=1`);
+          const j2 = await r2.json();
+          const digerHam = j2?.success ? (j2.data||[]) : [];
+          notlar.push(`diğer: ${digerHam.length}${j2?.success ? "" : " (success:false)"}`);
+          // Diğer fonların ham TEFAS şekli (kod/ad/fiyat/tarih/portföy/kişi
+          // sayısı) birleştirilmiş listenin geri kalanının beklediği ortak
+          // şekle normalize ediliyor — eksik alanlar (getiri/kategori/yönetici)
+          // null bırakılıyor, UYDURULMUYOR.
+          digerNormal = digerHam.filter((f:any)=>f?.kod).map((f:any) => ({
+            kod: f.kod, ad: f.ad || "", yonetici: "", kategori: "",
+            fiyat: f.fiyat ?? null, fiyatTarihi: f.tarih ?? null,
+            gunluk: f.gunluk ?? null, haftalik: f.haftalik ?? null, aylik: f.aylik ?? null,
+            uc_aylik: f.uc_aylik ?? null, ytd: f.ytd ?? null, yillik: f.yillik ?? null,
+            portfoy: f.portfoyBuyuklukTL ?? 0, yatirimci: f.kisiSayisi ?? 0,
+            kaynak: "tefas-resmi",
+          }));
+        } catch (e: any) {
+          notlar.push(`diğer HATA: ${String(e?.message||e).slice(0,40)}`);
+        }
+        const map = new Map<string, any>();
+        for (const f of digerNormal) map.set(f.kod, f);
+        for (const f of katilimFonlar) { if (f?.kod) map.set(f.kod, f); } // katılım kazanır
+        const birlesik = [...map.values()];
+        notlar.push(`toplam: ${birlesik.length}`);
+        setFonListesi(birlesik);
+        setFonListesiTeshis(notlar.join(" · "));
+        setAramaYukleniyor(false);
+      })();
     }
   }, [asama, tur]);
 
@@ -23920,6 +24004,10 @@ function PortfoyEkleModal({onKapat, onEklendi, settings, duzenlenecekKalem}:{onK
               />
             </div>
 
+            {tur==="fon" && fonListesiTeshis && (
+              <div style={{marginTop:6,fontSize:9.5,color:WA(0.3)}}>🔧 {fonListesiTeshis}</div>
+            )}
+
             {(aramaYukleniyor || enstrumanYukleniyor) && (
               <div style={{textAlign:"center",padding:"20px 0",color:C.sub,fontSize:12}}>⟳ Yükleniyor…</div>
             )}
@@ -24228,7 +24316,7 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onDuzen
           {kzKalemleri.length<portfoyListesi.length && portfoyListesi.length>0 && (
             <div style={{display:"flex",alignItems:"flex-start",gap:5,marginTop:10,fontSize:10,color:PORTFOY_ETIKET,lineHeight:1.4}}>
               <Info size={11} style={{flexShrink:0,marginTop:1}}/>
-              <span>{portfoyListesi.length-kzKalemleri.length} kalemde kar/zarar hesaplanamadı (fon için henüz desteklenmiyor).</span>
+              <span>{portfoyListesi.length-kzKalemleri.length} kalemde kar/zarar hesaplanamadı (alış fiyatı eksik).</span>
             </div>
           )}
           {toplamlar.haric>0 && (
@@ -24459,7 +24547,7 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onDuzen
                       {kz>=0?"+":""}{gizli?"₺••••":portfoyFmtDeger(kz, k)} ({kz>=0?"+":""}{kzYuzde?.toFixed(1)}%)
                     </span>
                   ) : (
-                    <span style={{fontSize:10,color:PORTFOY_ETIKET}}>Kar/zarar hesaplanamıyor (fon)</span>
+                    <span style={{fontSize:10,color:PORTFOY_ETIKET}}>Kar/zarar hesaplanamıyor (alış fiyatı eksik)</span>
                   )}
                 </div>
                 {(k.alisKalemleri?.length||0)>1 && (
@@ -25712,6 +25800,28 @@ function App(){
                   <span style={{fontSize:10.5,fontWeight:600,color:(TEMA==="acik"?"#2E4256":"rgba(255,255,255,0.62)"),letterSpacing:"0.01em",marginTop:1}}>{CV("Katılım Finansının Akıllı Asistanı")}</span>
                 </div>
               </div>
+              {/* ── PORTFÖYÜM KISAYOLU (2026-09-08 eklendi, 2. turda tasarım
+                  gözden geçirildi) ──────────────────────────────────────
+                  Ana sayfadaki Portföyüm kartı (PortfoyWidget) kaldırılıp
+                  header'a taşındı — kullanıcı isteği. Kart'ın kodu SİLİNMEDİ,
+                  aşağıda JSX yorumu içinde saklı duruyor (bkz. "PORTFÖYÜM
+                  KARTI — GEÇİCİ OLARAK GİZLENDİ" notu); vazgeçilirse tek
+                  satırlık yorum işaretini kaldırmak yeterli. Bu ikon,
+                  Araçlar > Portföyüm ile AYNI tam sayfaya (nav("portfoyum"))
+                  bağlanıyor — ayrı bir mini görünüm değil.
+                  TASARIM (2. tur — kullanıcı "profesyonel/güzel değil" dedi):
+                  düz gri daire yerine markanın kendi logosundaki yeşil
+                  gradyanı (#1B9E7A→#2CCB9A) dolgu olarak kullanıldı — hem
+                  ayırt edici hem markayla tutarlı. Sıra da bildirimden ÖNCE
+                  (solda) olacak şekilde değiştirildi. */}
+              <button onClick={()=>{setPortfoyBaslangicSekme("portfoy"); nav("portfoyum","home");}} style={{
+                position:"relative",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
+                width:40,height:40,borderRadius:20,border:"none",cursor:"pointer",
+                background:"linear-gradient(135deg,#1B9E7A,#2CCB9A)",
+                boxShadow:"0 2px 8px rgba(27,158,122,0.35)",
+              }}>
+                <Wallet size={18} color="#FFFFFF" strokeWidth={2} absoluteStrokeWidth/>
+              </button>
               <button onClick={()=>{setBildirimGecmisiAcik(true);bildirimOkunduIsaretle();}} style={{
                 position:"relative",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
                 width:40,height:40,borderRadius:20,border:"none",background:WA(0.06),cursor:"pointer",
@@ -26111,7 +26221,11 @@ function App(){
               </div>
             </div>
 
-            {/* Portföyüm — AI Finans Asistanı'nın hemen altında */}
+            {/* ── PORTFÖYÜM KARTI — GEÇİCİ OLARAK GİZLENDİ (2026-09-08) ──────
+                Kullanıcı isteğiyle ana sayfadan kaldırıldı, yerine header'daki
+                çanta ikonu (bkz. yukarısı, Bell butonunun yanı) kondu. Kod
+                SİLİNMEDİ — sadece JSX yorumu içine alındı. Geri getirmek için
+                bu yorumu (ve alttaki kapanışını) kaldırmak yeterli.
             <PortfoyWidget
               liste={portfoy}
               gizli={portfoyGizli}
@@ -26123,6 +26237,7 @@ function App(){
               onGrafik={()=>setPortfoyGrafikAcik(true)}
               onSirala={portfoySirala}
             />
+            */}
             {portfoyGrafikAcik && <PortfoyKarZararModal liste={portfoy} onClose={()=>setPortfoyGrafikAcik(false)}/>}
 
             {/* Katılım Endeksi Top Hareketliler */}
