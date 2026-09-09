@@ -25890,11 +25890,15 @@ function App(){
                   ile TAM 3 öğe (logo, Portföyüm, bildirim) taşıyordu — dar
                   mobil genişlikte fark az görünüyordu ama masaüstünün geniş
                   kolonunda (640px+) ortadaki Portföyüm ikonu bildirimden
-                  uzağa, satırın ortasına düşüyordu. Kullanıcı SADECE masaüstü
-                  için düzeltme istedi, mobili DEĞİŞTİRME dedi — bu yüzden
-                  ikisi SADECE genişEkran'da (native/mobil web'de her zaman
-                  false) ortak bir gruba alınıp bitişik hale getiriliyor;
-                  mobilde alttaki dal (iki ayrı kardeş öğe) AYNEN koruyor. */}
+                  uzağa, satırın ortasına düşüyordu. O turda kullanıcı SADECE
+                  masaüstü için düzeltme istemişti.
+                  MOBİL DÜZELTMESİ (2026-09-09, AYNI GÜN 2. rapor): kullanıcı
+                  bu sefer mobilde de aradaki boşluğun fazla olduğunu belirtti
+                  — mobil dal da artık AYNI gruplama desenini kullanıyor
+                  (sadece daha küçük bir gap: 6px, masaüstündeki 8px'ten az —
+                  mobil ekranda görsel olarak daha sıkı durması için). İki
+                  dal hâlâ ayrı tutuldu (kod tekrarı var) ki ileride biri
+                  değişirse diğeri YANLIŞLIKLA etkilenmesin. */}
               {genisEkran ? (
                 <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
                   <button onClick={()=>{setPortfoyBaslangicSekme("portfoy"); nav("portfoyum","home");}} style={{
@@ -25918,7 +25922,7 @@ function App(){
                   </button>
                 </div>
               ) : (
-                <>
+                <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
                   <button onClick={()=>{setPortfoyBaslangicSekme("portfoy"); nav("portfoyum","home");}} style={{
                     position:"relative",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
                     width:40,height:40,borderRadius:20,border:"none",cursor:"pointer",
@@ -25938,7 +25942,7 @@ function App(){
                       </span>
                     )}
                   </button>
-                </>
+                </div>
               )}
             </div>
             {/* ── ANA MENÜ ARAMA ── */}
