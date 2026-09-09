@@ -387,9 +387,21 @@ const ALT_FON_GETIRI_CACHE_TTL_SANIYE = 86400; // 24 saat
 
 async function altFonGunlukGetiriGetir(kod) {
   const cacheAnahtar = `fon:gunluk-getiri:${kod}`;
+  const bugun = bugunTarihiTR();
+  // ⚠️ DÜZELTME (2026-09-09, kullanıcı raporu — FSU içindeki THF alt fon
+  // satırı günlerce %0.90'da takılı kalmıştı, oysa THF'nin gerçek getirisi
+  // güncellenmişti): ÖNCEDEN önbellek sadece "24 saat içinde mi yazılmış"
+  // diye kontrol ediliyordu (`ex: 86400`, takvim gününden BAĞIMSIZ kayan
+  // pencere) — yazılma anı kaydıkça bir günün verisi hiç çekilmeden
+  // atlanabiliyor ya da eski değer günlerce dönebiliyordu (gunlukGetiriKalici
+  // serisinde daha önce düzeltilen SORUNUN AYNISI). Artık kayıtla birlikte
+  // TARİH (TR) de saklanıyor — sadece BUGÜNE ait bir kayıt varsa önbellekten
+  // dönülüyor, farklı günse (dünkü/daha eski) taze çekim yapılıyor.
   try {
     const onbellek = await kv.get(cacheAnahtar).catch(() => null);
-    if (onbellek && typeof onbellek.getiri === "number") return onbellek.getiri;
+    if (onbellek && typeof onbellek.getiri === "number" && onbellek.tarihTR === bugun) {
+      return onbellek.getiri;
+    }
   } catch {}
 
   const API_KEY = process.env.FONOLOJI_KEY;
@@ -407,7 +419,7 @@ async function altFonGunlukGetiriGetir(kod) {
     const getiriHam = ham?.return_1d;
     if (typeof getiriHam !== "number") return null;
     const getiri = parseFloat((getiriHam * 100).toFixed(4));
-    try { await kv.set(cacheAnahtar, { getiri, ts: Date.now() }, { ex: ALT_FON_GETIRI_CACHE_TTL_SANIYE }); } catch {}
+    try { await kv.set(cacheAnahtar, { getiri, tarihTR: bugun, ts: Date.now() }, { ex: ALT_FON_GETIRI_CACHE_TTL_SANIYE }); } catch {}
     return getiri;
   } catch {
     return null;
