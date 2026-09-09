@@ -1799,7 +1799,10 @@ async function tefasKategoriTekSorgu(kategoriKod) {
     fonTurKod: null, kurucuKod: null, sfonTurKod: String(kategoriKod),
   };
 
-  const MAKS_DENEME = 3;
+  // DÜZELTME (2026-09-09, 3. tur): Para Piyasası (en büyük kategori, muhtemelen
+  // 300-400+ fon) 3 denemede bile ısrarla 429 alıyordu — 5 denemeye, daha
+  // uzun geri çekilmeye (3sn, 6sn, 12sn, 24sn) çıkarıldı.
+  const MAKS_DENEME = 5;
   for (let deneme = 1; deneme <= MAKS_DENEME; deneme++) {
     const controller = new AbortController();
     const zamanlayici = setTimeout(() => controller.abort(), 28000);
@@ -1813,7 +1816,7 @@ async function tefasKategoriTekSorgu(kategoriKod) {
       clearTimeout(zamanlayici);
       if (r.status === 429) {
         if (deneme === MAKS_DENEME) return { kalemler: [], hata: "HTTP 429 (3 denemeden sonra)" };
-        await new Promise((res2) => setTimeout(res2, 2000 * deneme)); // 2sn, 4sn
+        await new Promise((res2) => setTimeout(res2, 3000 * deneme)); // 3sn, 6sn, 9sn, 12sn
         continue;
       }
       if (!r.ok) return { kalemler: [], hata: `HTTP ${r.status}` };
@@ -1826,7 +1829,7 @@ async function tefasKategoriTekSorgu(kategoriKod) {
       if (deneme === MAKS_DENEME) {
         return { kalemler: [], hata: e?.name === "AbortError" ? "Zaman aşımı (28sn)" : String(e?.message || e) };
       }
-      await new Promise((res2) => setTimeout(res2, 2000 * deneme));
+      await new Promise((res2) => setTimeout(res2, 3000 * deneme));
     }
   }
   return { kalemler: [], hata: "Bilinmeyen hata" };
