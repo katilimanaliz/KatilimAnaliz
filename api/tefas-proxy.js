@@ -1784,6 +1784,11 @@ const TEFAS_KATEGORI_CACHE_TTL_SANIYE = 30 * 86400;
 // çıkarıldı VE artık {kalemler, hata} şeklinde dönüyor — çağıran taraf
 // (kategoriTablosuGuncelle) artık HANGİ kategorilerin gerçekten başarısız
 // olduğunu görüp özet yanıtta gösterebiliyor.
+// DÜZELTME (2026-09-09, kullanıcı raporu — 2. tur): Canlı testte 4 kategori
+// (Para Piyasası/Serbest/Karma/Katılım) HTTP 429 (hız sınırı) ile döndü —
+// sıralı istekler arasındaki genel amaçlı siraliBekle() bu büyük kategori
+// sorguları için yetersizmiş. Artık 429 için 3 denemeye kadar ÜSTEL geri
+// çekilmeyle (2sn, 4sn, 8sn) yeniden deniyor.
 async function tefasKategoriTekSorgu(kategoriKod) {
   const bugun = bugunTarihiTR().replace(/-/g, "");
   const govde = {
@@ -1793,25 +1798,38 @@ async function tefasKategoriTekSorgu(kategoriKod) {
     dil: "TR", fonGrubu: null, fonTurAciklama: null,
     fonTurKod: null, kurucuKod: null, sfonTurKod: String(kategoriKod),
   };
-  const controller = new AbortController();
-  const zamanlayici = setTimeout(() => controller.abort(), 28000);
-  try {
-    const r = await fetch(TEFAS_RESMI_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Accept": "application/json", "User-Agent": "Mozilla/5.0" },
-      body: JSON.stringify(govde),
-      signal: controller.signal,
-    });
-    clearTimeout(zamanlayici);
-    if (!r.ok) return { kalemler: [], hata: `HTTP ${r.status}` };
-    const d = await r.json().catch(() => null);
-    if (d?.errorMessage) return { kalemler: [], hata: `TEFAS: ${d.errorMessage}` };
-    if (!Array.isArray(d?.resultList)) return { kalemler: [], hata: "resultList yok/geçersiz yanıt şekli" };
-    return { kalemler: d.resultList, hata: null };
-  } catch (e) {
-    clearTimeout(zamanlayici);
-    return { kalemler: [], hata: e?.name === "AbortError" ? "Zaman aşımı (28sn)" : String(e?.message || e) };
+
+  const MAKS_DENEME = 3;
+  for (let deneme = 1; deneme <= MAKS_DENEME; deneme++) {
+    const controller = new AbortController();
+    const zamanlayici = setTimeout(() => controller.abort(), 28000);
+    try {
+      const r = await fetch(TEFAS_RESMI_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json", "User-Agent": "Mozilla/5.0" },
+        body: JSON.stringify(govde),
+        signal: controller.signal,
+      });
+      clearTimeout(zamanlayici);
+      if (r.status === 429) {
+        if (deneme === MAKS_DENEME) return { kalemler: [], hata: "HTTP 429 (3 denemeden sonra)" };
+        await new Promise((res2) => setTimeout(res2, 2000 * deneme)); // 2sn, 4sn
+        continue;
+      }
+      if (!r.ok) return { kalemler: [], hata: `HTTP ${r.status}` };
+      const d = await r.json().catch(() => null);
+      if (d?.errorMessage) return { kalemler: [], hata: `TEFAS: ${d.errorMessage}` };
+      if (!Array.isArray(d?.resultList)) return { kalemler: [], hata: "resultList yok/geçersiz yanıt şekli" };
+      return { kalemler: d.resultList, hata: null };
+    } catch (e) {
+      clearTimeout(zamanlayici);
+      if (deneme === MAKS_DENEME) {
+        return { kalemler: [], hata: e?.name === "AbortError" ? "Zaman aşımı (28sn)" : String(e?.message || e) };
+      }
+      await new Promise((res2) => setTimeout(res2, 2000 * deneme));
+    }
   }
+  return { kalemler: [], hata: "Bilinmeyen hata" };
 }
 
 // `?kategoriTablosuGuncelle=1` — 10 kategori için 10 istek, tek çağrıda
@@ -1830,6 +1848,10 @@ async function kategoriTablosuGuncelle(req, res) {
   const ozet = [];
   for (const [kod, aciklama] of Object.entries(TEFAS_KATEGORI_KODLARI)) {
     await siraliBekle();
+    // Ekstra bekleme (2026-09-09 eklendi): genel amaçlı siraliBekle() bu
+    // büyük kategori sorguları için yetersiz kalıp 429'a yol açmıştı —
+    // burada ayrıca 800ms daha bekleniyor.
+    await new Promise((res2) => setTimeout(res2, 800));
     const { kalemler, hata } = await tefasKategoriTekSorgu(kod);
     for (const f of kalemler) {
       const fonKodu = String(f?.fonKodu || "").toUpperCase().trim();
