@@ -530,24 +530,31 @@ export default async function handler(req, res) {
       })
       .sort((a,b) => (b.piyasaDegeri||0) - (a.piyasaDegeri||0));
 
-    // KAYNAK SECIMI (2026-08-17: MIDAS TEKRAR ANA KAYNAK)
+    // KAYNAK SECIMI (2026-09-09: TRADINGVIEW'A GERI DONULDU)
     // GECMIS: 24-27 Temmuz'da Midas'in ucu 4 gun donmustu (ayni DateTime
     // damgasini tekrarliyordu), bu yuzden 28 Temmuz'da TradingView'a
     // gecilmisti. 17 Agustos'ta canli kontrol edildi: Midas'in DateTime
-    // damgalari GERCEKTEN GUNCEL (aktif hisselerde son birkac saniye icinde,
-    // seans saatiyle uyumlu) - sorun duzelmis gorunuyor.
+    // damgalari GERCEKTEN GUNCEL gorundugu icin Midas'a geri donulmustu.
     //
-    // Midas'in ham yaniti TradingView'dan daha ZENGIN (Taban/Tavan/Sermaye/
-    // Halka Aciklik/Net Kar/Agirlikli Ortalama gibi TradingView'in hic
-    // saglamadigi alanlari iceriyor) - bu yuzden Midas TERCIH EDILEN kaynak
-    // yapildi. AMA gecmisteki donma riski gercek oldugu icin KORU KORUNE
-    // guvenilmiyor: mevcut midasBayatMi() (45 dk esik, sadece seans icinde
-    // anlamli) her istekte kontrol ediliyor. Bayat/yetersizse TradingView'a
-    // OTOMATIK yedek geciliyor.
+    // 09 Eylul 2026: Kullanici piyasa acikken (10:30 civari) fiyatlarin TAM
+    // 58 SANIYE boyunca hic hareket etmedigini kronometreyle DOGRULADI —
+    // ham API ucunu iki ayri istekte (aralarinda CDN onbellek suresinden
+    // (1sn) COK daha uzun bir bosluk birakarak) kontrol etti, veriZamani
+    // ikisinde de AYNIYDI. Bu, sorunun bizim CDN/polling katmanimizda
+    // DEGIL, doğrudan Midas kaynaginin kendisinde oldugunu kanitliyor.
+    // 45 dakikalik "bayat" esigi bu kisa donmayi yakalayacak kadar duyarli
+    // degildi (kasitli olarak oyle tasarlanmisti — ama kullanici artik
+    // TradingView'in daha erken veri verebilecegini dusunerek TERCIH
+    // degisikligini istedi).
     //
-    // GERI ALMAK KOLAY: ?kaynak=tradingview ile aninda test edilir, kalici
-    // donus icin TERCIH sabitini "tradingview" yapmak yeterli.
-    const TERCIH = "midas";
+    // TAKAS (kullanici bilsin diye not edildi): TradingView, Midas'in
+    // sagladigi bazi zengin alanlari (Taban/Tavan/Sermaye/Halka Aciklik/
+    // Net Kar/Agirlikli Ortalama/hacimTL) SAGLAMIYOR — bu alanlar simdi
+    // null donecek (ekranlarda "—" gorunur, uydurma deger degil).
+    //
+    // GERI ALMAK KOLAY: ?kaynak=midas ile aninda test edilir, kalici donus
+    // icin TERCIH sabitini "midas" yapmak yeterli.
+    const TERCIH = "tradingview";
     const zorlananKaynak = req.query.kaynak;
     const oncelik = (zorlananKaynak === "midas" || zorlananKaynak === "tradingview")
       ? zorlananKaynak : TERCIH;
