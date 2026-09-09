@@ -5319,6 +5319,23 @@ function radyalDilimYolu(cx: number, cy: number, icR: number, disR: number, basl
 function FonTahminAgGorseli({ kalemler, hisseDegisimMap, tahmin }: {
   kalemler: any[]; hisseDegisimMap: Record<string, number>; tahmin: number | null;
 }) {
+  // ── MASAÜSTÜ (GENİŞ EKRAN) ALGISI (2026-09-09 eklendi) ──────────────────
+  // Kullanıcı raporu: masaüstünde bu grafik küçük kalıyordu (400px sabit
+  // tavan, geniş monitörde etrafında boşuna boşluk). BistHisseTarayici'deki
+  // (satır ~4695) AYNI bağımsız desen kullanıldı — bu bileşen ana uygulamadan
+  // genişEkran prop'u ALMIYOR (ayrı bir alt bileşen), o yüzden kendi
+  // window.innerWidth kontrolünü kendi yapıyor. Native/mobil web'de
+  // (IS_NATIVE true ya da ekran <1024px) davranış TAMAMEN eskisiyle aynı.
+  const [genisEkran, setGenisEkran] = useState(
+    () => typeof window !== "undefined" && !IS_NATIVE && window.innerWidth >= 1024
+  );
+  useEffect(() => {
+    if (IS_NATIVE) return;
+    const guncelle = () => setGenisEkran(window.innerWidth >= 1024);
+    window.addEventListener("resize", guncelle);
+    return () => window.removeEventListener("resize", guncelle);
+  }, []);
+
   const renkli = kalemler
     // Kullanıcı isteği (2026-09-07): radyal görselde SADECE hisseler olsun —
     // VIOP/nakit/sabit getiri/alt fon gibi kalemler (canlı fiyatı olmayan ya
@@ -5371,7 +5388,7 @@ function FonTahminAgGorseli({ kalemler, hisseDegisimMap, tahmin }: {
         .rad-dilim { transform-box: fill-box; transform-origin: center; animation: radDilimGiris 0.42s cubic-bezier(.22,.9,.36,1) both; }
         .rad-merkez { transform-box: fill-box; transform-origin: center; animation: radMerkezGiris 0.32s ease both; }
       `}</style>
-      <div style={{ position: "relative", width: "100%", maxWidth: 400, margin: "0 auto" }}>
+      <div style={{ position: "relative", width: "100%", maxWidth: genisEkran ? 640 : 400, margin: "0 auto" }}>
         <svg viewBox={`0 0 ${VB} ${VB}`} style={{ width: "100%", height: "auto", display: "block" }}>
           {renkli.map((k, i) => {
             const baslangicAci = i * dilimAcisi + BOSLUK_DERECE / 2;
@@ -25855,7 +25872,7 @@ function App(){
                 </div>
               </div>
               {/* ── PORTFÖYÜM KISAYOLU (2026-09-08 eklendi, 2. turda tasarım
-                  gözden geçirildi) ──────────────────────────────────────
+                  gözden geçirildi, 3. turda masaüstü grup düzeltmesi) ──────
                   Ana sayfadaki Portföyüm kartı (PortfoyWidget) kaldırılıp
                   header'a taşındı — kullanıcı isteği. Kart'ın kodu SİLİNMEDİ,
                   aşağıda JSX yorumu içinde saklı duruyor (bkz. "PORTFÖYÜM
@@ -25867,26 +25884,62 @@ function App(){
                   düz gri daire yerine markanın kendi logosundaki yeşil
                   gradyanı (#1B9E7A→#2CCB9A) dolgu olarak kullanıldı — hem
                   ayırt edici hem markayla tutarlı. Sıra da bildirimden ÖNCE
-                  (solda) olacak şekilde değiştirildi. */}
-              <button onClick={()=>{setPortfoyBaslangicSekme("portfoy"); nav("portfoyum","home");}} style={{
-                position:"relative",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
-                width:40,height:40,borderRadius:20,border:"none",cursor:"pointer",
-                background:"linear-gradient(135deg,#1B9E7A,#2CCB9A)",
-                boxShadow:"0 2px 8px rgba(27,158,122,0.35)",
-              }}>
-                <Wallet size={18} color="#FFFFFF" strokeWidth={2} absoluteStrokeWidth/>
-              </button>
-              <button onClick={()=>{setBildirimGecmisiAcik(true);bildirimOkunduIsaretle();}} style={{
-                position:"relative",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
-                width:40,height:40,borderRadius:20,border:"none",background:WA(0.06),cursor:"pointer",
-              }}>
-                <Bell size={19} color={(TEMA==="acik"?"#2E6DA8":"#9FC1EA")} strokeWidth={2} absoluteStrokeWidth/>
-                {bildirimOkunmamisSayisi>0&&(
-                  <span style={{position:"absolute",top:5,right:6,minWidth:16,height:16,padding:"0 4px",borderRadius:8,background:C.red,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:800,color:"#fff",lineHeight:1}}>
-                    {bildirimOkunmamisSayisi>9?"9+":bildirimOkunmamisSayisi}
-                  </span>
-                )}
-              </button>
+                  (solda) olacak şekilde değiştirildi.
+                  MASAÜSTÜ DÜZELTMESİ (2026-09-09, kullanıcı raporu, ekran
+                  görüntüsüyle): dıştaki satır `justify-content:space-between`
+                  ile TAM 3 öğe (logo, Portföyüm, bildirim) taşıyordu — dar
+                  mobil genişlikte fark az görünüyordu ama masaüstünün geniş
+                  kolonunda (640px+) ortadaki Portföyüm ikonu bildirimden
+                  uzağa, satırın ortasına düşüyordu. Kullanıcı SADECE masaüstü
+                  için düzeltme istedi, mobili DEĞİŞTİRME dedi — bu yüzden
+                  ikisi SADECE genişEkran'da (native/mobil web'de her zaman
+                  false) ortak bir gruba alınıp bitişik hale getiriliyor;
+                  mobilde alttaki dal (iki ayrı kardeş öğe) AYNEN koruyor. */}
+              {genisEkran ? (
+                <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+                  <button onClick={()=>{setPortfoyBaslangicSekme("portfoy"); nav("portfoyum","home");}} style={{
+                    position:"relative",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
+                    width:40,height:40,borderRadius:20,border:"none",cursor:"pointer",
+                    background:"linear-gradient(135deg,#1B9E7A,#2CCB9A)",
+                    boxShadow:"0 2px 8px rgba(27,158,122,0.35)",
+                  }}>
+                    <Wallet size={18} color="#FFFFFF" strokeWidth={2} absoluteStrokeWidth/>
+                  </button>
+                  <button onClick={()=>{setBildirimGecmisiAcik(true);bildirimOkunduIsaretle();}} style={{
+                    position:"relative",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
+                    width:40,height:40,borderRadius:20,border:"none",background:WA(0.06),cursor:"pointer",
+                  }}>
+                    <Bell size={19} color={(TEMA==="acik"?"#2E6DA8":"#9FC1EA")} strokeWidth={2} absoluteStrokeWidth/>
+                    {bildirimOkunmamisSayisi>0&&(
+                      <span style={{position:"absolute",top:5,right:6,minWidth:16,height:16,padding:"0 4px",borderRadius:8,background:C.red,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:800,color:"#fff",lineHeight:1}}>
+                        {bildirimOkunmamisSayisi>9?"9+":bildirimOkunmamisSayisi}
+                      </span>
+                    )}
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <button onClick={()=>{setPortfoyBaslangicSekme("portfoy"); nav("portfoyum","home");}} style={{
+                    position:"relative",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
+                    width:40,height:40,borderRadius:20,border:"none",cursor:"pointer",
+                    background:"linear-gradient(135deg,#1B9E7A,#2CCB9A)",
+                    boxShadow:"0 2px 8px rgba(27,158,122,0.35)",
+                  }}>
+                    <Wallet size={18} color="#FFFFFF" strokeWidth={2} absoluteStrokeWidth/>
+                  </button>
+                  <button onClick={()=>{setBildirimGecmisiAcik(true);bildirimOkunduIsaretle();}} style={{
+                    position:"relative",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
+                    width:40,height:40,borderRadius:20,border:"none",background:WA(0.06),cursor:"pointer",
+                  }}>
+                    <Bell size={19} color={(TEMA==="acik"?"#2E6DA8":"#9FC1EA")} strokeWidth={2} absoluteStrokeWidth/>
+                    {bildirimOkunmamisSayisi>0&&(
+                      <span style={{position:"absolute",top:5,right:6,minWidth:16,height:16,padding:"0 4px",borderRadius:8,background:C.red,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:800,color:"#fff",lineHeight:1}}>
+                        {bildirimOkunmamisSayisi>9?"9+":bildirimOkunmamisSayisi}
+                      </span>
+                    )}
+                  </button>
+                </>
+              )}
             </div>
             {/* ── ANA MENÜ ARAMA ── */}
             {(()=>{
