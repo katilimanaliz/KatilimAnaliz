@@ -476,7 +476,17 @@ export default async function handler(req, res) {
           sirket:       isimMap[kod] || kod,
           sektor:       "",
           fiyat:        h.Last || h.Close || 0,
-          degisim1g:    parseFloat((h.DailyChangePercent || 0).toFixed(2)),
+          // ⚠️ DÜZELTME (2026-09-09, kullanıcı raporu — piyasa yeni açılmışken
+          // TÜM hisseler aynı anda %0.00 gösteriyordu): ÖNCEDEN `|| 0`
+          // kullanılıyordu — Midas'ın `DailyChangePercent` alanı henüz
+          // hesaplanmamışsa (seansın ilk dakikalarında olabiliyor) bu, "veri
+          // yok"u SESSİZCE "gerçekten %0 değişti" gibi gösteriyordu. Hemen
+          // altındaki degisim1h/1a/1y zaten DOĞRU deseni (`!= null ? ... :
+          // null`) kullanıyordu — sadece bu alan aynı deseni kullanmıyordu.
+          // Artık alan gerçekten sayı DEĞİLSE null dönüyor, frontend bunu
+          // "—" gösteriyor (mevcut ternary zaten buna hazırdı) — uydurma %0
+          // yerine dürüst "veri yok".
+          degisim1g:    typeof h.DailyChangePercent === "number" ? parseFloat(h.DailyChangePercent.toFixed(2)) : null,
           degisim1h:    h.WeeklyChangePercent != null ? parseFloat(h.WeeklyChangePercent.toFixed(2)) : null,
           degisim1a:    (h.MOMChangePercent ?? h.MonthlyChangePercent) != null
                           ? parseFloat((h.MOMChangePercent ?? h.MonthlyChangePercent).toFixed(2)) : null,
