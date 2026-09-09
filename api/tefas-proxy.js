@@ -1775,6 +1775,15 @@ const TEFAS_KATEGORI_KV_ANAHTARI = "tefas:kategori-tablosu";
 // olay) — 30 gün TTL yeterince güvenli, gereksiz sık yenilemeyi önlüyor.
 const TEFAS_KATEGORI_CACHE_TTL_SANIYE = 30 * 86400;
 
+// DÜZELTME (2026-09-09, kullanıcı raporu): İlk sürüm HTTP hatasını/zaman
+// aşımını sessizce yutup boş dizi ([]) dönüyordu — bu, "kategori gerçekten
+// boş" ile "istek başarısız oldu"yu AYIRT EDİLEMEZ hale getirdi. Canlı
+// testte Para Piyasası (107) gibi BÜYÜK kategoriler (yüzlerce fon, büyük
+// yanıt gövdesi) 15 saniyelik zaman aşımına takılıp sessizce 0 fon
+// döndürmüştü — hâlbuki kategori gerçekte doluydu. Süre 15sn'den 28sn'ye
+// çıkarıldı VE artık {kalemler, hata} şeklinde dönüyor — çağıran taraf
+// (kategoriTablosuGuncelle) artık HANGİ kategorilerin gerçekten başarısız
+// olduğunu görüp özet yanıtta gösterebiliyor.
 async function tefasKategoriTekSorgu(kategoriKod) {
   const bugun = bugunTarihiTR().replace(/-/g, "");
   const govde = {
@@ -1785,7 +1794,7 @@ async function tefasKategoriTekSorgu(kategoriKod) {
     fonTurKod: null, kurucuKod: null, sfonTurKod: String(kategoriKod),
   };
   const controller = new AbortController();
-  const zamanlayici = setTimeout(() => controller.abort(), 15000);
+  const zamanlayici = setTimeout(() => controller.abort(), 28000);
   try {
     const r = await fetch(TEFAS_RESMI_URL, {
       method: "POST",
@@ -1794,12 +1803,14 @@ async function tefasKategoriTekSorgu(kategoriKod) {
       signal: controller.signal,
     });
     clearTimeout(zamanlayici);
-    if (!r.ok) return [];
+    if (!r.ok) return { kalemler: [], hata: `HTTP ${r.status}` };
     const d = await r.json().catch(() => null);
-    return Array.isArray(d?.resultList) ? d.resultList : [];
-  } catch {
+    if (d?.errorMessage) return { kalemler: [], hata: `TEFAS: ${d.errorMessage}` };
+    if (!Array.isArray(d?.resultList)) return { kalemler: [], hata: "resultList yok/geçersiz yanıt şekli" };
+    return { kalemler: d.resultList, hata: null };
+  } catch (e) {
     clearTimeout(zamanlayici);
-    return [];
+    return { kalemler: [], hata: e?.name === "AbortError" ? "Zaman aşımı (28sn)" : String(e?.message || e) };
   }
 }
 
@@ -1819,12 +1830,29 @@ async function kategoriTablosuGuncelle(req, res) {
   const ozet = [];
   for (const [kod, aciklama] of Object.entries(TEFAS_KATEGORI_KODLARI)) {
     await siraliBekle();
-    const kalemler = await tefasKategoriTekSorgu(kod);
+    const { kalemler, hata } = await tefasKategoriTekSorgu(kod);
     for (const f of kalemler) {
       const fonKodu = String(f?.fonKodu || "").toUpperCase().trim();
       if (fonKodu) tablo[fonKodu] = aciklama;
     }
-    ozet.push({ kategoriKod: Number(kod), aciklama, fonSayisi: kalemler.length });
+    ozet.push({ kategoriKod: Number(kod), aciklama, fonSayisi: kalemler.length, hata });
+  }
+
+  // ⚠️ Sadece BAŞARILI kategorileri kalıcı tabloya yazıyoruz — bir kategori
+  // bu turda başarısız olduysa (hata !== null), o kategorinin ÖNCEKİ (varsa)
+  // doğru verisini KORUYORUZ, üzerine 0 fonluk yanlış bir sonuçla YAZMIYORUZ.
+  // Bunun için önce mevcut tabloyu okuyup, sadece bu turda başarılı olan
+  // kategorilerin fonlarını GÜNCELLEYİP birleştiriyoruz.
+  let mevcutTablo = {};
+  try {
+    const mevcutKayit = await kv.get(TEFAS_KATEGORI_KV_ANAHTARI).catch(() => null);
+    mevcutTablo = (mevcutKayit && mevcutKayit.tablo) ? mevcutKayit.tablo : {};
+  } catch {}
+  const basarisizAciklamalar = new Set(ozet.filter(o => o.hata).map(o => o.aciklama));
+  // Önceki tablodan, bu turda BAŞARISIZ olan kategorilere ait eski kayıtları
+  // koru (silme) — başarılı kategoriler zaten yeni `tablo` içinde tam.
+  for (const [kod, aciklama] of Object.entries(mevcutTablo)) {
+    if (basarisizAciklamalar.has(aciklama) && !(kod in tablo)) tablo[kod] = aciklama;
   }
 
   try {
@@ -1833,8 +1861,10 @@ async function kategoriTablosuGuncelle(req, res) {
     return res.status(500).json({ success: false, error: "KV yazma hatası: " + String(e?.message || e) });
   }
 
+  const hepsiBasariliMi = ozet.every(o => !o.hata);
   return res.status(200).json({
-    success: true, toplamFonSayisi: Object.keys(tablo).length, kategoriler: ozet,
+    success: true, tumKategorilerBasariliMi: hepsiBasariliMi,
+    toplamFonSayisi: Object.keys(tablo).length, kategoriler: ozet,
   });
 }
 
