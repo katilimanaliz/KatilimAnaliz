@@ -1743,6 +1743,110 @@ const TEFAS_RESMI_URL = "https://www.tefas.gov.tr/api/funds/fonGnlBlgSiraliGetir
 const TEFAS_TUM_KV_ANAHTAR = "tefas:tum-fonlar-diger";
 const TEFAS_TUM_KILIT_ANAHTARI = `lock:${TEFAS_TUM_KV_ANAHTAR}`;
 const TEFAS_SAYFA_BOYUTU = 25;
+
+// ── TEFAS FON KATEGORİ TABLOSU (2026-09-09 eklendi) ─────────────────────────
+// AMAÇ: "Tüm Fonlar" (katılım dışı) listesinde Kategori sütunu hep boş
+// kalıyordu — TEFAS'ın bulk fon listesi ucu (fonGnlBlgSiraliGetir) kategori
+// alanı DÖNDÜRMÜYOR (2026-09-09'da canlı test edilip doğrulandı). AMA aynı
+// ucun İSTEK gövdesinde bir FİLTRE parametresi olarak `sfonTurKod` kabul
+// ediyor — kullanıcı tarayıcı geliştirici araçlarından TEFAS'ın kendi
+// "fonTurGetir" ucunu buldu, 10 sabit kategori kodu/açıklaması çıktı
+// (100:Borçlanma, 101:Değişken, 102:Fon Sepeti, 103:Garantili, 104:Hisse
+// Senedi, 105:Kıymetli Madenler, 107:Para Piyasası, 108:Serbest,
+// 110:Karma, 114:Katılım). Canlı testte doğrulandı: sfonTurKod=104 filtresi
+// GERÇEKTEN sadece hisse senedi fonlarını döndürüyor. Çözüm: bu 10 sabit
+// kategori için AYRI AYRI (10 istek) TÜM fonları çekip kendi kod→kategori
+// eşlememizi kuruyoruz — TEFAS'ın resmi, ücretsiz, kotasız ucundan, yeni
+// bir dış kaynağa hiç gerek kalmadan.
+const TEFAS_KATEGORI_KODLARI = {
+  100: "Borçlanma Araçları Şemsiye Fonu",
+  101: "Değişken Şemsiye Fonu",
+  102: "Fon Sepeti Şemsiye Fonu",
+  103: "Garantili Şemsiye Fonu",
+  104: "Hisse Senedi Şemsiye Fonu",
+  105: "Kıymetli Madenler Şemsiye Fonu",
+  107: "Para Piyasası Şemsiye Fonu",
+  108: "Serbest Şemsiye Fonu",
+  110: "Karma Şemsiye Fonu",
+  114: "Katılım Şemsiye Fonu",
+};
+const TEFAS_KATEGORI_KV_ANAHTARI = "tefas:kategori-tablosu";
+// Kategoriler neredeyse hiç değişmez (bir fon türünü değiştirmek nadir bir
+// olay) — 30 gün TTL yeterince güvenli, gereksiz sık yenilemeyi önlüyor.
+const TEFAS_KATEGORI_CACHE_TTL_SANIYE = 30 * 86400;
+
+async function tefasKategoriTekSorgu(kategoriKod) {
+  const bugun = bugunTarihiTR().replace(/-/g, "");
+  const govde = {
+    fonTipi: "YAT", fonKodu: null, aramaMetni: null,
+    basSira: 1, bitSira: 5000, // güvenlik payı — tek kategoride bu kadar fon olmaz
+    basTarih: bugun, bitTarih: bugun,
+    dil: "TR", fonGrubu: null, fonTurAciklama: null,
+    fonTurKod: null, kurucuKod: null, sfonTurKod: String(kategoriKod),
+  };
+  const controller = new AbortController();
+  const zamanlayici = setTimeout(() => controller.abort(), 15000);
+  try {
+    const r = await fetch(TEFAS_RESMI_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "application/json", "User-Agent": "Mozilla/5.0" },
+      body: JSON.stringify(govde),
+      signal: controller.signal,
+    });
+    clearTimeout(zamanlayici);
+    if (!r.ok) return [];
+    const d = await r.json().catch(() => null);
+    return Array.isArray(d?.resultList) ? d.resultList : [];
+  } catch {
+    clearTimeout(zamanlayici);
+    return [];
+  }
+}
+
+// `?kategoriTablosuGuncelle=1` — 10 kategori için 10 istek, tek çağrıda
+// tamamlanır (TEFAS Tüm Fonlar cron'undaki gibi sayfalı ilerlemeye GEREK
+// YOK — toplam istek sayısı zaten küçük, tek Vercel çağrısı süresi içinde
+// rahatça biter).
+async function kategoriTablosuGuncelle(req, res) {
+  const cronSecret = process.env.FON_TAHMIN_CRON_SECRET;
+  const gelenAuth = req.headers.authorization;
+  const vercelCronMu = req.headers["x-vercel-cron"] === "1";
+  if (cronSecret && !vercelCronMu && gelenAuth !== `Bearer ${cronSecret}`) {
+    return res.status(401).json({ success: false, error: "Yetkisiz" });
+  }
+
+  const tablo = {};
+  const ozet = [];
+  for (const [kod, aciklama] of Object.entries(TEFAS_KATEGORI_KODLARI)) {
+    await siraliBekle();
+    const kalemler = await tefasKategoriTekSorgu(kod);
+    for (const f of kalemler) {
+      const fonKodu = String(f?.fonKodu || "").toUpperCase().trim();
+      if (fonKodu) tablo[fonKodu] = aciklama;
+    }
+    ozet.push({ kategoriKod: Number(kod), aciklama, fonSayisi: kalemler.length });
+  }
+
+  try {
+    await kv.set(TEFAS_KATEGORI_KV_ANAHTARI, { tablo, guncellemeTarihiTR: bugunTarihiTR() }, { ex: TEFAS_KATEGORI_CACHE_TTL_SANIYE });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: "KV yazma hatası: " + String(e?.message || e) });
+  }
+
+  return res.status(200).json({
+    success: true, toplamFonSayisi: Object.keys(tablo).length, kategoriler: ozet,
+  });
+}
+
+async function tefasKategoriTablosuOku() {
+  try {
+    const kayit = await kv.get(TEFAS_KATEGORI_KV_ANAHTARI).catch(() => null);
+    return (kayit && kayit.tablo) ? kayit.tablo : {};
+  } catch {
+    return {};
+  }
+}
+
 // Güvenlik tavanı: gerçek evren ~200 sayfada (5000 fon) bitmediği canlı
 // testte görüldü (2041 fon toplanmışken hâlâ bitmemişti) — tavan 500 sayfaya
 // (12.500 fon) çıkarıldı. Asıl bitiş artık TEFAS'ın kendi toplamSayfa
@@ -1822,9 +1926,10 @@ function tefasGovdeOlustur(fonTipi, basSira, bitSira, basTarih, bitTarih) {
   };
 }
 
-function tefasFonNormallestir(f) {
+function tefasFonNormallestir(f, kategoriTablosu) {
+  const kod = f.fonKodu || "";
   return {
-    kod: f.fonKodu || "",
+    kod,
     ad: f.fonUnvan || "",
     tarih: f.tarih || null,
     fiyat: (typeof f.fiyat === "number") ? f.fiyat : null,
@@ -1832,6 +1937,10 @@ function tefasFonNormallestir(f) {
     tedavuldekiPaySayisi: (typeof f.tedPaySayisi === "number") ? f.tedPaySayisi : null,
     kisiSayisi: (typeof f.kisiSayisi === "number") ? f.kisiSayisi : null,
     portfoyBuyuklukTL: (typeof f.portfoyBuyukluk === "number") ? f.portfoyBuyukluk : null,
+    // 2026-09-09 eklendi — bkz. TEFAS_KATEGORI_KODLARI notu. Tablo boşsa
+    // (henüz hiç oluşturulmadıysa) ya da kod tabloda yoksa null kalır,
+    // UYDURULMAZ.
+    kategori: (kategoriTablosu && kategoriTablosu[kod.toUpperCase()]) || null,
     kaynak: "tefas-resmi",
   };
 }
@@ -1981,6 +2090,11 @@ async function tefasTumFonlariCek(baslangicSayfa = 0, bilinenKodlar = new Set())
   const basTarih = yyyymmdd(besGunOnce);
   const bitTarih = yyyymmdd(bugun);
 
+  // Kategori tablosu (2026-09-09 eklendi) — ayrı bir cronla (?kategori-
+  // TablosuGuncelle=1) günde bir dolduruluyor, burada sadece OKUNUYOR (ekstra
+  // TEFAS isteği YOK) — her fon normalize edilirken kod bazında eşleniyor.
+  const kategoriTablosu = await tefasKategoriTablosuOku();
+
   const taramaBaslangicMs = Date.now();
   const SURE_BUTCESI_MS = 230000; // maxDuration 280sn; güvenli pay bırakılıyor
 
@@ -2064,7 +2178,7 @@ async function tefasTumFonlariCek(baslangicSayfa = 0, bilinenKodlar = new Set())
       const kod = f?.fonKodu;
       if (!kod || gorulenKodlar.has(kod) || bilinenKodlar.has(kod)) continue;
       gorulenKodlar.add(kod);
-      tumFonlar.push(tefasFonNormallestir(f));
+      tumFonlar.push(tefasFonNormallestir(f, kategoriTablosu));
       buSayfadaYeniKod++;
     }
     ardikYeniKodYokSayaci = (buSayfadaYeniKod === 0) ? ardikYeniKodYokSayaci + 1 : 0;
@@ -2347,6 +2461,7 @@ export default async function handler(req, res) {
   // genel ?cron=1 dalı) hiç kesişmiyor.
   if (req.query?.tefasTumCron === "1") return tefasTumCronYaz(req, res);
   if (req.query?.tumFonlar === "1") return tefasTumOku(req, res);
+  if (req.query?.kategoriTablosuGuncelle === "1") return kategoriTablosuGuncelle(req, res);
 
   const cronIstegi = req.headers["x-vercel-cron"] === "1" || req.query?.cron === "1";
   if (cronIstegi) return cronYaz(req, res);
