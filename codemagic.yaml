@@ -12,7 +12,7 @@ workflows:
         XCODE_SCHEME: "App"
         BUNDLE_ID: "com.katilimplus.app"
         MARKETING_VERSION: "1.8"
-        BUILD_NUMBER: 36
+        BUILD_NUMBER: 37
       xcode: latest
       node: 22
 
