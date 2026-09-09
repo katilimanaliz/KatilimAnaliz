@@ -618,7 +618,16 @@ async function fonHoldingsGetir(req, res) {
     res.setHeader("Cache-Control", "no-store");
     return res.status(502).json({ success: false, error: "Holdings verisi alınamadı" });
   }
-  res.setHeader("Cache-Control", "max-age=0, s-maxage=3600, stale-while-revalidate=3600");
+  // DEĞİŞİKLİK (2026-09-09, kullanıcı raporu): CDN önbelleği 1 saatti
+  // (s-maxage=3600) — bu, holdings verisi (fiyat kayması düzeltmesiyle
+  // birlikte) günde bir kez gerçekten değiştiği için normalde makuldü, AMA
+  // `gercekTeshis&duzelt=1` gibi ELLE yapılan düzeltmeler KV'ye anında
+  // yansısa bile, CDN eski (düzeltmeden önceki) yanıtı en fazla 1 saat daha
+  // sunmaya devam ediyordu — kullanıcı düzeltmeyi hemen görmek istiyordu.
+  // 5 dakikaya indirildi: hem CDN'in temel amacı (Fonoloji'yi/agirlikFiyat-
+  // Kaymasi hesaplamasını her istekte tekrar çalıştırmamak) korunuyor hem de
+  // elle yapılan düzeltmeler artık en fazla 5 dk içinde görünür oluyor.
+  res.setHeader("Cache-Control", "max-age=0, s-maxage=300, stale-while-revalidate=300");
   return res.status(200).json(paket);
 }
 
