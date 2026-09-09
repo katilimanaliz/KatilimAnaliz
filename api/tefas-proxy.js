@@ -479,15 +479,32 @@ async function holdingsFonolojiCekVeYaz(kod) {
       altFonKalemleri.forEach((k, i) => { k.oncekiGunGetiri = sonuclar[i]; });
     }
 
-    // ── FİYAT KAYMASI DÜZELTMESİ (2026-09-06) ────────────────────────────
+    // ── FİYAT KAYMASI DÜZELTMESİ (2026-09-06, 2026-09-09'da DEVRE DIŞI
+    // BIRAKILDI) ──────────────────────────────────────────────────────────
     // Yukarıdaki notta açıklanan mantıkla hisse ağırlıklarını güncel
     // fiyatlara göre yeniden ölçeklendirmeyi DENE — başarısız olursa (yetersiz
     // veri kapsamı, ağ hatası vb.) ham ağırlıklar OLDUĞU GİBİ kalır.
+    // ⚠️ 2026-09-09: Kullanıcı, PHE fonunda DSTKF kaleminin ham %7,44'ten
+    // düzeltilmiş %14,36'ya (neredeyse 2 katına) sıçradığını fark etti —
+    // Fonoloji'nin ham verisiyle bizim ham verimiz birebir örtüştüğü
+    // doğrulandı (okuma doğru), ama bu büyüklükte tekil bir sıçrama
+    // düzeltmenin GÜVENİLİRLİĞİNİ sorgulattı (kaynak fiyat verisinde tekil
+    // bir hata mı, gerçek bir hareket mi ayırt edilemedi). Kullanıcı kararı:
+    // özellik SİLİNMEDİ — FIYAT_KAYMASI_AKTIF bayrağıyla devre dışı
+    // bırakıldı, tek satır değiştirerek geri açılabilir. Devre dışıyken
+    // ham (KAP'tan gelen orijinal) ağırlıklar doğrudan gösterilir,
+    // agirlikHam alanı hiç dolmaz (frontend zaten bunu opsiyonel/eksik
+    // olarak ele alacak şekilde yazılmıştı).
+    const FIYAT_KAYMASI_AKTIF = false;
     let fiyatKaymasi = { basarili: false, hata: "Denenmedi" };
-    try {
-      fiyatKaymasi = await agirlikFiyatKaymasiIleGuncelle(kalemler, donemEtiketi);
-    } catch (e) {
-      fiyatKaymasi = { basarili: false, hata: String(e?.message || e) };
+    if (FIYAT_KAYMASI_AKTIF) {
+      try {
+        fiyatKaymasi = await agirlikFiyatKaymasiIleGuncelle(kalemler, donemEtiketi);
+      } catch (e) {
+        fiyatKaymasi = { basarili: false, hata: String(e?.message || e) };
+      }
+    } else {
+      fiyatKaymasi = { basarili: false, hata: "Özellik devre dışı (2026-09-09, güvenilirlik incelemesi)" };
     }
 
     const paket = {
