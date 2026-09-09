@@ -862,7 +862,15 @@ async function gercekTeshisGetir(req, res) {
 
   let kayitDuzeltildiMi = false;
   let kayitOncekiGercek = null;
-  if (req.query?.duzelt === "1" && typeof sonuc.gercek === "number") {
+  // ⚠️ DÜZELTME (2026-09-09, kullanıcı raporu — FSU'nun Tahmin Geçmişi'nde
+  // eski bozuk "-100" değeri hâlâ duruyordu): ÖNCEDEN sadece `sonuc.gercek`
+  // bir SAYI ise düzeltme yazılıyordu — hesaplama null döndüğünde (kaynak
+  // verisi o gün için gerçekten yoksa/bozuksa, -100% bug'ının düzeltilmiş
+  // hâli) kayıt HİÇ dokunulmuyordu, eski hatalı -100 kalıcı olarak
+  // kayıtta kalmaya devam ediyordu. Artık `duzelt=1` verildiğinde null da
+  // dahil YAZILIYOR — "bilinmiyor" durumu, "eski yanlış sayı"dan HER ZAMAN
+  // daha doğru bir sonuçtur.
+  if (req.query?.duzelt === "1") {
     const gecmisAnahtar = `fonTahmin:gecmis:${kod}`;
     try {
       let kayitlar = (await kv.get(gecmisAnahtar).catch(() => null)) || [];
