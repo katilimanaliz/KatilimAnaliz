@@ -1694,7 +1694,7 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
   // UYDURULMUYOR). Sabit null'lar kaldırıldı, backend'den gelen değer
   // olduğu gibi geçiriliyor.
   const digerFonNormallestir = useCallback((f:any) => ({
-    kod: f.kod, ad: f.ad || "", yonetici: "", kategori: "",
+    kod: f.kod, ad: f.ad || "", yonetici: "", kategori: f.kategori || "",
     oncelik: 2, katilimUygun: false,
     fiyat: f.fiyat ?? null, fiyatTarihi: f.tarih ?? null, islemDurumu: null,
     gunluk: f.gunluk ?? null, haftalik: f.haftalik ?? null, aylik: f.aylik ?? null,
@@ -23714,7 +23714,7 @@ function PortfoyEkleModal({onKapat, onEklendi, settings, duzenlenecekKalem}:{onK
           // şekle normalize ediliyor — eksik alanlar (getiri/kategori/yönetici)
           // null bırakılıyor, UYDURULMUYOR.
           digerNormal = digerHam.filter((f:any)=>f?.kod).map((f:any) => ({
-            kod: f.kod, ad: f.ad || "", yonetici: "", kategori: "",
+            kod: f.kod, ad: f.ad || "", yonetici: "", kategori: f.kategori || "",
             fiyat: f.fiyat ?? null, fiyatTarihi: f.tarih ?? null,
             gunluk: f.gunluk ?? null, haftalik: f.haftalik ?? null, aylik: f.aylik ?? null,
             uc_aylik: f.uc_aylik ?? null, ytd: f.ytd ?? null, yillik: f.yillik ?? null,
