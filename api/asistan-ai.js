@@ -714,6 +714,24 @@ const GUVENLI_RET_MESAJI =
   "asistanıyım. Bir hesaplama yapmak istiyorsanız, formülü ve sonucu adım adım " +
   "sizin için açıklayabilirim; sadece neyi hesaplamak istediğinizi yazmanız yeterli.";
 
+// ── GÜNLÜK CİHAZ BAŞI SORU LİMİTİ (2026-09-09 eklendi) ──────────────────────
+// Kullanıcı isteği: her cihaz günde en fazla N soru sorabilsin (şu an 7).
+// IP DEĞİL, frontend'in artık her istekte gönderdiği kalıcı `cihazId`
+// (localStorage'da saklanan, cihaz başına bir kere üretilen UUID) kullanıldı
+// — kullanıcı bilerek bu yönü seçti: aynı WiFi/ofis IP'sini paylaşan farklı
+// kişilerin birbirinin kotasını yememesi için. Anahtar TARİHİ İÇERİYOR
+// (asistan:gunlukLimit:{cihazId}:{YYYY-MM-DD}) — bu sayede gece yarısı TR
+// saatiyle doğal olarak "sıfırlanmış" olur, ayrıca TTL 26 saat (güvenlik payı)
+// verilip KV'de sonsuza dek şişmesi önleniyor.
+// Yukarıdaki IP bazlı hız sınırı (dakikada 10, bot/kötüye kullanım koruması)
+// AYNEN KALIYOR — bu, ONA EK bir katman, yerine geçmiyor.
+const GUNLUK_SORU_LIMITI = 7;
+
+function bugunTarihiTR() {
+  const simdi = new Date(Date.now() + 3 * 3600 * 1000);
+  return simdi.toISOString().slice(0, 10);
+}
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -726,11 +744,12 @@ export default async function handler(req, res) {
   // --- HIZ SINIRI (2026-07-17): IP basina dakikada 10 istek.
   // Amac: Gemini API'sinin botlarla dovulup kota/fatura sisirilmesini onlemek.
   // Redis'e ulasilamazsa istek ENGELLENMEZ (fail-open) - asistan calismaya devam eder.
+  let redisRL = null;
   try {
     const rlUrl = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
     const rlToken = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
     if (rlUrl && rlToken) {
-      const redisRL = new Redis({ url: rlUrl, token: rlToken });
+      redisRL = new Redis({ url: rlUrl, token: rlToken });
       const ip = (String(req.headers["x-forwarded-for"] || "").split(",")[0].trim())
         || req.socket?.remoteAddress || "bilinmeyen";
       const rlAnahtar = "rl:asistan:" + ip;
@@ -752,9 +771,32 @@ export default async function handler(req, res) {
     return res.status(500).json({ success: false, error: "GEMINI_API_KEY eksik — Vercel ortam değişkenlerine ekleyin." });
   }
 
-  const { messages, takvimOzet, piyasaOzeti } = req.body || {};
+  const { messages, takvimOzet, piyasaOzeti, cihazId } = req.body || {};
   if (!Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ success: false, error: "messages dizisi boş olamaz" });
+  }
+
+  // ── GÜNLÜK CİHAZ BAŞI LİMİT KONTROLÜ ────────────────────────────────────
+  // redisRL zaten yukarıda (hız sınırı bloğunda) kurulmuş olabilir — varsa
+  // TEKRAR bağlantı açmadan onu kullanıyoruz. cihazId gelmezse (eski/güncel-
+  // lenmemiş bir istemci) limit uygulanamaz — kullanıcı ENGELLENMEZ (fail-
+  // open, üstteki IP hız sınırı zaten temel korumayı sağlıyor).
+  if (redisRL && cihazId) {
+    try {
+      const gunAnahtari = "asistan:gunlukLimit:" + cihazId + ":" + bugunTarihiTR();
+      const gunlukSayi = await redisRL.incr(gunAnahtari);
+      if (gunlukSayi === 1) await redisRL.expire(gunAnahtari, 26 * 3600); // 26 saat güvenlik payı
+      if (gunlukSayi > GUNLUK_SORU_LIMITI) {
+        return res.status(429).json({
+          success: false,
+          limitAsildi: true,
+          error: `Bugünlük soru hakkınız doldu (günde en fazla ${GUNLUK_SORU_LIMITI} soru). Yarın tekrar deneyebilirsiniz.`,
+        });
+      }
+    } catch (limitHata) {
+      // KV altyapısı çökerse kullanıcıyı cezalandırma — sessizce devam et
+      // (üstteki IP bazlı hız sınırı zaten devrede).
+    }
   }
 
   // Frontend'in Asistan bileşeni mesajları {role:"user"|"assistant", text:"..."}

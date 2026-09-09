@@ -335,6 +335,31 @@ function WA(a: number): string {
 
 let DIL: "tr" | "en" = (() => { try { return localStorage.getItem("kp_dil") === "en" ? "en" : "tr"; } catch (e) { return "tr"; } })();
 
+// ── CİHAZ KİMLİĞİ (2026-09-09 eklendi) ───────────────────────────────────
+// AI Finans Asistanı'na günlük kişi başı soru limiti (backend'de kontrol
+// edilecek) koymak için kullanılıyor. IP tabanlı limit yerine bilerek CİHAZ
+// bazlı seçildi (kullanıcı kararı) — aynı WiFi/ofis IP'sini paylaşan farklı
+// kişilerin birbirinin kotasını yemesini önlemek için. localStorage'da
+// SAKLANIYOR (sessionStorage değil — uygulama kapanınca kaybolmasın diye,
+// bkz. "sessionStorage vs localStorage" dersi). İlk çağrıda üretilip
+// kalıcılaşıyor, sonraki her çağrıda AYNI değer dönüyor. crypto.randomUUID
+// yoksa (çok eski WebView) basit bir yedek üretici kullanılıyor.
+function cihazIdGetir(): string {
+  try {
+    const mevcut = localStorage.getItem("kp_cihaz_id");
+    if (mevcut) return mevcut;
+    const yeni = (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function")
+      ? crypto.randomUUID()
+      : "cihaz-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 12);
+    localStorage.setItem("kp_cihaz_id", yeni);
+    return yeni;
+  } catch {
+    // localStorage hiç yoksa (gizli mod vb.) her seferinde yeni üretilir —
+    // limit kontrolü çalışmaya devam eder, sadece kalıcı olmaz.
+    return "cihaz-gecici-" + Math.random().toString(36).slice(2, 12);
+  }
+}
+
 // ── App Store QR (masaüstü popup) ──
 // Yer tutucu; Colab push hücresi build öncesi bunu gerçek "data:image/png;base64,..."
 // QR görseliyle değiştirir (qrcode kütüphanesi, https://apps.apple.com/app/id6788268835).
@@ -9284,13 +9309,20 @@ function Asistan({nav, settings}:{nav:any, settings?:any}){
           messages:newMsgs.map(m=>({role:m.role,text:m.text})),
           takvimOzet:asistanTakvimOzeti(),
           piyasaOzeti,
+          cihazId:cihazIdGetir(),
         }),
       });
       const d=await r.json().catch(()=>null);
       if(!r.ok||!d?.success){
-        const hataMsg=d?.error||`HTTP ${r.status}`;
+        // ⚠️ Günlük limit aşımı (backend'den özel bir hata kodu/mesajıyla
+        // gelir) kullanıcıya normal bir bağlantı hatası gibi değil, NET bir
+        // dille gösterilsin diye ayrı ele alınıyor.
+        const limitAsildiMi = d?.limitAsildi === true || r.status === 429;
+        const hataMsg = limitAsildiMi
+          ? (d?.error || "Bugünlük soru hakkın doldu. Yarın tekrar deneyebilirsin.")
+          : (d?.error||`HTTP ${r.status}`);
         setAsistanHata(hataMsg);
-        setMsgs(p=>[...p,{role:"assistant",text:`⚠️ Yanıt alınamadı: ${hataMsg}`,ekler:[]}]);
+        setMsgs(p=>[...p,{role:"assistant",text:limitAsildiMi?`⏳ ${hataMsg}`:`⚠️ Yanıt alınamadı: ${hataMsg}`,ekler:[]}]);
       } else {
         const ilgiliEkran=asistanIlgiliEkran(q,d.text);
         setMsgs(p=>[...p,{role:"assistant",text:d.text,ekler:[],ilgiliEkran}]);
