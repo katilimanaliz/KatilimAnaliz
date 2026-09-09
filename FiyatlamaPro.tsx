@@ -4378,7 +4378,15 @@ function FonTahminleriWidget({ nav, onSecim, onFonDetayAc }: { nav: (sc: string)
     };
     const haftaIci = bugunHaftaIci();
     takipListesi.forEach((kod) => {
-      const cacheKey = `fon_holdings_${kod}`;
+      // DEĞİŞİKLİK (2026-09-09, kullanıcı raporu): "fon_holdings_" anahtarı
+      // (v2'siz) altında biriken eski kayıtlar, backend'deki fiyat kayması
+      // düzeltmesi kapatıldıktan SONRA bile 6 saatlik TTL'leri dolana kadar
+      // ESKİ (düzeltilmiş) ağırlıkları göstermeye devam ediyordu — kullanıcı
+      // uygulamayı yeniden başlatmasına rağmen THF'de hâlâ yanlış rakamlar
+      // görüyordu (localStorage, uygulama kapanınca SİLİNMEZ). Anahtara "v2"
+      // eklenip TÜM cihazlardaki eski kayıtlar aynı anda geçersiz kılındı —
+      // her cihaz bir sonraki açılışta otomatik olarak taze veri çeker.
+      const cacheKey = `fon_holdings_v2_${kod}`;
       try {
         const raw = localStorage.getItem(cacheKey);
         if (raw) {
