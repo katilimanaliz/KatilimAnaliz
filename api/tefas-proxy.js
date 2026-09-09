@@ -661,11 +661,19 @@ const FON_GUNLUK_GETIRI_PENCERE_GUN = 28; // TEFAS'ın kesin 1 aylık sınırı 
 function gunlukGetiriNoktalardanHesapla(siraliNoktalar) {
   // Ardışık her etiket çiftinden bir {tarih, getiri} üretir — tarih, ÖNCEKİ
   // (erken) etiketin tarihidir (bkz. yukarıdaki tarih hizalaması notu).
+  // ⚠️ DÜZELTME (2026-09-09, kullanıcı raporu — PUK için gerçek getiri
+  // "-100%" çıkmıştı): ÖNCEDEN sadece `onceki === 0` kontrol ediliyordu —
+  // `sonraki` (o günün fiyatı) 0 veya negatif geldiyse (TEFAS/Fonoloji'den
+  // arızalı/eksik bir veri noktası) formül otomatik olarak tam -100%
+  // üretiyordu, bu GERÇEK bir kayıp değil, veri hatasıydı. Artık HER İKİ
+  // fiyat da pozitif olmalı, yoksa o çift tamamen ATLANIYOR (o gün için
+  // hiç kayıt eklenmiyor — sessizce yanlış bir sayı üretmektense boş
+  // bırakmak tercih edildi, bu kod tabanındaki yerleşik felsefeyle aynı).
   const sonuc = [];
   for (let i = 0; i < siraliNoktalar.length - 1; i++) {
     const onceki = siraliNoktalar[i]?.fiyat;
     const sonraki = siraliNoktalar[i + 1]?.fiyat;
-    if (typeof onceki !== "number" || typeof sonraki !== "number" || onceki === 0) continue;
+    if (typeof onceki !== "number" || typeof sonraki !== "number" || onceki <= 0 || sonraki <= 0) continue;
     sonuc.push({ tarih: siraliNoktalar[i].tarih, getiri: ((sonraki / onceki) - 1) * 100 });
   }
   return sonuc;
@@ -805,12 +813,39 @@ async function gunlukGetiriSerisiGetir(req, res) {
 // sonra, `duzelt=1` verilirse, o tarihe ait kaydı KV'de bulup gercek/isabet
 // alanlarını doğru değerle ÜZERİNE YAZIYOR — tek seferlik, elle tetiklenen
 // bir düzeltme (manuelHoldingsYaz'daki "elle override" felsefesiyle aynı).
+// `&noktaTemizle=1` (2026-09-09 eklendi): -100% bug'ı (bkz. yukarıdaki
+// gunlukGetiriNoktalardanHesapla düzeltmesi) DÜZELTİLMEDEN ÖNCE hesaplanıp
+// KALICI seriye (`fon:gunlukGetiriKalici:{kod}`) YAZILMIŞ bozuk noktalar
+// için — kod düzeltmesi sadece YENİ bozuk noktaların eklenmesini önlüyor,
+// seri "TTL yok — kalıcı" olduğu için ESKİ bozuk kayıt kendiliğinden
+// silinmiyor/yeniden hesaplanmıyor (o tarih zaten "var" sayılıp bir daha
+// dokunulmuyor). Bu bayrak verilirse, hedef tarihe ait kayıt kalıcı seriden
+// SİLİNİR — böylece hemen ardından çalışan onbellekAtla:true'lu hesaplama,
+// o tarihi GERÇEKTEN eksik görüp (artık düzeltilmiş formülle) yeniden
+// hesaplamaya çalışır.
 async function gercekTeshisGetir(req, res) {
   const kod = String(req.query?.kod || "").toUpperCase().trim();
   const hedefTarih = String(req.query?.tarih || "");
   if (!kod || !hedefTarih) {
     return res.status(400).json({ success: false, error: "kod ve tarih parametreleri gerekli (tarih: YYYY-MM-DD)" });
   }
+
+  let noktaTemizlendiMi = false;
+  if (req.query?.noktaTemizle === "1") {
+    const seriAnahtar = `fon:gunlukGetiriKalici:${kod}`;
+    try {
+      const mevcut = await kv.get(seriAnahtar).catch(() => null);
+      if (mevcut && Array.isArray(mevcut.kayitlar)) {
+        const oncekiUzunluk = mevcut.kayitlar.length;
+        mevcut.kayitlar = mevcut.kayitlar.filter((k) => k?.tarih !== hedefTarih);
+        if (mevcut.kayitlar.length !== oncekiUzunluk) {
+          await kv.set(seriAnahtar, mevcut);
+          noktaTemizlendiMi = true;
+        }
+      }
+    } catch {}
+  }
+
   const sonuc = await fonGunlukGercekGetiriDahiliTeshisli(kod, hedefTarih, { onbellekAtla: true });
 
   let kayitDuzeltildiMi = false;
@@ -833,7 +868,7 @@ async function gercekTeshisGetir(req, res) {
   }
 
   res.setHeader("Cache-Control", "no-store");
-  return res.status(200).json({ success: true, kayitDuzeltildiMi, kayitOncekiGercek, ...sonuc });
+  return res.status(200).json({ success: true, noktaTemizlendiMi, kayitDuzeltildiMi, kayitOncekiGercek, ...sonuc });
 }
 
 // Türkiye saatiyle (TSİ, UTC+3) bugünün tarihini "YYYY-MM-DD" döner —
