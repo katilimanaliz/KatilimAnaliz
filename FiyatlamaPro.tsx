@@ -3493,7 +3493,19 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri 
   const hisseIstatistik = useMemo(() => {
     const artan = hisseler.filter(h=>h.degisim1g>0).length;
     const azalan = hisseler.filter(h=>h.degisim1g<0).length;
-    const hacimToplam = hisseler.reduce((a,h)=>a+(h.hacim||0),0);
+    // ⚠️ DÜZELTME (2026-09-09, kullanıcı raporu): ÖNCEDEN `h.hacim` (ham hisse
+    // ADEDİ — TradingView'ın "volume" alanı, TL cirosu DEĞİL) doğrudan
+    // toplanıp "₺" etiketiyle gösteriliyordu — birim karışıklığı, sonuç
+    // aslında "20,95 milyar hisse" iken "20,95 Mr ₺" gibi görünüyordu.
+    // TradingView `hacimTL` sağlamadığı için (bkz. tradingViewNormalize'daki
+    // "hacimTL: null" notu) gerçek ciro yoksa fiyat × hacim ile YAKLAŞIK
+    // TL cirosu hesaplanıyor — kaba bir tahmin ama en azından doğru BİRİMDE.
+    const hacimToplam = hisseler.reduce((a,h)=>{
+      const satirHacimTL = typeof h.hacimTL === "number" && h.hacimTL > 0
+        ? h.hacimTL
+        : (h.fiyat || 0) * (h.hacim || 0);
+      return a + satirHacimTL;
+    },0);
     return { toplam: hisseler.length, artan, azalan, hacimToplam };
   }, [hisseler]);
 
@@ -3800,9 +3812,19 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri 
                   </div>
                   <div style={{fontSize:10,color:C.sub,marginTop:1}}>
                     {/* Sektör bilgisi kaynakta boş geldiği için hep "—" görünüyordu;
-                        anlamsız bir tire yerine yalnızca dolu olan alan yazılıyor. */}
-                    {[(SEKTOR_TR[h.sektor]||h.sektor||null), (h.hacim?fmtByk(h.hacim):null)]
-                      .filter(Boolean).join(" · ") || "—"}
+                        anlamsız bir tire yerine yalnızca dolu olan alan yazılıyor.
+                        ⚠️ DÜZELTME (2026-09-09): h.hacim ham HİSSE ADEDİ (TL değil,
+                        bkz. hisseIstatistik'teki aynı düzeltme notu) — burada da
+                        gerçek TL cirosu (hacimTL) varsa o, yoksa fiyat×hacim
+                        yaklaşık cirosu kullanılıyor, artık ham adet "₺" diye
+                        etiketlenmiyor. */}
+                    {(() => {
+                      const hacimTLDeger = typeof h.hacimTL === "number" && h.hacimTL > 0
+                        ? h.hacimTL
+                        : (h.fiyat && h.hacim ? h.fiyat * h.hacim : null);
+                      return [(SEKTOR_TR[h.sektor]||h.sektor||null), (hacimTLDeger?fmtByk(hacimTLDeger):null)]
+                        .filter(Boolean).join(" · ") || "—";
+                    })()}
                   </div>
                 </div>
 
