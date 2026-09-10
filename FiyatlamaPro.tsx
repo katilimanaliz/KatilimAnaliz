@@ -21699,14 +21699,23 @@ function portfoyPartiOzet(partiler: {fiyat:number; miktar:number}[]): {miktar:nu
   return { miktar, ortalama };
 }
 
-// Son partiyi verilen değerlerle değiştirip kalemi yeniden kurar.
-function portfoySonAlisGuncelle(
+// Belirtilen indeksteki partiyi verilen değerlerle değiştirip kalemi yeniden
+// kurar. ⚠️ DEĞİŞİKLİK (2026-09-10, kullanıcı raporu): ÖNCEDEN her zaman
+// SADECE SON parti düzenlenebiliyordu ("az önce yanlış fiyat girdim"
+// senaryosu için yeterli sanılmıştı) — ama kullanıcı İLK girdiği alışın
+// tarihini/fiyatını düzeltmek istediğinde uygulama izin vermiyordu. Artık
+// hangi partinin düzenleneceği çağıran taraftan (partiIndex) geliyor —
+// PortfoyDuzenleModal artık çok partili kalemlerde bir seçici gösterip
+// kullanıcının SEÇTİĞİ partiyi bu indeksle gönderiyor.
+function portfoyPartiGuncelle(
   k: PortfoyKalemi,
+  partiIndex: number,
   yeni: { miktar: number; fiyat: number; tarih: string }
 ): PortfoyKalemi {
   const partiler = portfoyPartileriCikar(k);
   if (!partiler.length) return k;
-  partiler[partiler.length - 1] = {
+  const guvenliIndex = Math.max(0, Math.min(partiIndex, partiler.length - 1));
+  partiler[guvenliIndex] = {
     tarih: yeni.tarih,
     fiyat: yeni.fiyat,
     miktar: yeni.miktar,
@@ -21714,8 +21723,8 @@ function portfoySonAlisGuncelle(
   };
   const ozet = portfoyPartiOzet(partiler);
   if (!ozet) return k;
-  // alis.tarih olarak SON partinin tarihi kullanılıyor — mevcut birleştirme
-  // mantığıyla aynı (en son alış tarihi gösterilir).
+  // alis.tarih olarak EN SON (tarihe göre değil, dizideki son) partinin
+  // tarihi kullanılıyor — mevcut birleştirme mantığıyla aynı.
   return {
     ...k,
     miktar: ozet.miktar,
@@ -23349,18 +23358,41 @@ function PortfoyWidget({liste, gizli, onGizliToggle, onDetay, onEkle, onSil, onD
 // Son alışı düzenleme penceresi. Yalnız alış bilgisi OLAN kalemler için
 // açılır (takip kalemlerinde düzenlenecek bir şey yok).
 function PortfoyDuzenleModal({kalem, onKapat, onKaydet}:{
-  kalem: PortfoyKalemi; onKapat:()=>void; onKaydet:(g:{miktar:number;fiyat:number;tarih:string})=>void;
+  kalem: PortfoyKalemi; onKapat:()=>void; onKaydet:(g:{miktar:number;fiyat:number;tarih:string;partiIndex:number})=>void;
 }){
   const partiler = portfoyPartileriCikar(kalem);
-  const son = partiler[partiler.length-1];
   const cokParti = partiler.length > 1;
+  // ⚠️ DEĞİŞİKLİK (2026-09-10, kullanıcı raporu): ÖNCEDEN hep SON parti
+  // (partiler.length-1) düzenlenirdi — kullanıcı İLK girdiği alışı düzeltmek
+  // isteyince uygulama izin vermiyordu. Artık hangi partinin düzenleneceği
+  // seçilebiliyor (varsayılan yine SONUNCUSU — eski davranışla uyumlu,
+  // "az önce yanlış girdim" senaryosu hâlâ tek dokunuşla çalışır).
+  const [secilenIndex, setSecilenIndex] = useState(partiler.length - 1);
+  const son = partiler[secilenIndex];
   const dec = kalem.dec ?? 2;
   const onek = kalem.paraOnek ?? "₺";
+  // Fon/katılım/sukuk gibi "adet" değil ₺ TUTARI giren türlerde "MİKTAR"
+  // etiketi kullanıcıyı buraya fiyat girmeye sürükleyebiliyordu (kullanıcı
+  // raporu: "miktar yazan yere fiyat giriyorum") — birim zaten "₺ tutar"
+  // olan kalemlerde etiket "TUTAR" yapıldı, veri modeli DEĞİŞMEDİ (hâlâ tek
+  // bir ₺ tutarı olarak saklanıyor).
+  const tutarTipiMi = kalem.birim === "₺ tutar";
+  const miktarEtiket = tutarTipiMi ? "TUTAR" : "MİKTAR";
 
   const [miktarInput,setMiktarInput] = useState(son ? String(son.miktar) : "");
   const [fiyatInput,setFiyatInput]   = useState(son ? String(son.fiyat) : "");
   const [tarihInput,setTarihInput]   = useState(son ? String(son.tarih).slice(0,10) : "");
   const [hata,setHata] = useState<string|null>(null);
+
+  // Seçilen parti değişince formu o partinin değerleriyle yeniden doldur.
+  useEffect(() => {
+    const p = partiler[secilenIndex];
+    if (!p) return;
+    setMiktarInput(String(p.miktar));
+    setFiyatInput(String(p.fiyat));
+    setTarihInput(String(p.tarih).slice(0,10));
+    setHata(null);
+  }, [secilenIndex]);
 
   const sayi=(x:string)=>{ const v=parseFloat(String(x).replace(",",".")); return isFinite(v)?v:NaN; };
   const mi=sayi(miktarInput), fi=sayi(fiyatInput);
@@ -23368,14 +23400,14 @@ function PortfoyDuzenleModal({kalem, onKapat, onKaydet}:{
   // Yeni ortalamayı KAYDETMEDEN önce gösteriyoruz — çok partili kalemde
   // kullanıcı neyi değiştirdiğini görmeden onaylamak zorunda kalmasın.
   const onizleme = (isFinite(mi)&&mi>0&&isFinite(fi)&&fi>0)
-    ? portfoyPartiOzet([...partiler.slice(0,-1), {fiyat:fi, miktar:mi}])
+    ? portfoyPartiOzet(partiler.map((p,i)=> i===secilenIndex ? {fiyat:fi, miktar:mi} : p))
     : null;
 
   const kaydet=()=>{
-    if (!isFinite(mi) || mi<=0) { setHata("Miktar sıfırdan büyük olmalı."); return; }
+    if (!isFinite(mi) || mi<=0) { setHata(`${tutarTipiMi?"Tutar":"Miktar"} sıfırdan büyük olmalı.`); return; }
     if (!isFinite(fi) || fi<=0) { setHata("Alış fiyatı sıfırdan büyük olmalı."); return; }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(tarihInput)) { setHata("Tarih GG bilgisi eksik (YYYY-AA-GG)."); return; }
-    onKaydet({miktar:mi, fiyat:fi, tarih:tarihInput});
+    onKaydet({miktar:mi, fiyat:fi, tarih:tarihInput, partiIndex:secilenIndex});
   };
 
   const alanStil:any = {
@@ -23398,16 +23430,30 @@ function PortfoyDuzenleModal({kalem, onKapat, onKaydet}:{
         <div style={{fontSize:12.5,color:C.sub,marginBottom:cokParti?10:16}}>{kalem.ad}</div>
 
         {cokParti && (
-          <div style={{background:WA(0.06),borderRadius:10,padding:"10px 12px",marginBottom:16,
-                       fontSize:12,color:C.sub,lineHeight:1.5}}>
-            Bu kalemde <b style={{color:C.label}}>{partiler.length} alış</b> var.
-            Düzenlenen <b style={{color:C.label}}>sonuncusu</b>; ortalama maliyet
-            kaydedince yeniden hesaplanır.
+          <div style={{marginBottom:16}}>
+            <span style={etiketStil}>DÜZENLENECEK ALIŞ ({partiler.length} alış var)</span>
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {partiler.map((p,i)=>(
+                <div key={i} onClick={()=>setSecilenIndex(i)} style={{
+                  display:"flex",justifyContent:"space-between",alignItems:"center",
+                  padding:"9px 12px",borderRadius:10,cursor:"pointer",
+                  border:`1px solid ${i===secilenIndex?C.blue:C.border}`,
+                  background:i===secilenIndex?WA(0.08):"transparent",
+                }}>
+                  <span style={{fontSize:12.5,fontWeight:i===secilenIndex?800:600,color:C.label}}>
+                    {portfoyTarihGoster(p.tarih)}
+                  </span>
+                  <span style={{fontSize:12.5,color:C.sub}}>
+                    {p.miktar.toLocaleString("tr-TR",{maximumFractionDigits:4})} {kalem.birim} · {onek}{p.fiyat.toLocaleString("tr-TR",{minimumFractionDigits:dec,maximumFractionDigits:dec})}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
         <div style={{marginBottom:12}}>
-          <span style={etiketStil}>MİKTAR ({kalem.birim})</span>
+          <span style={etiketStil}>{miktarEtiket} ({kalem.birim})</span>
           <input value={miktarInput} onChange={e=>{setMiktarInput(e.target.value);setHata(null);}}
                  inputMode="decimal" style={alanStil}/>
         </div>
@@ -23488,6 +23534,16 @@ function PortfoyEkleModal({onKapat, onEklendi, settings, duzenlenecekKalem}:{onK
   const [secilenEnstruman, setSecilenEnstruman] = useState<any>(null); // {kod,ad,fiyat,g,h,a,y,birim}
   const [enstrumanYukleniyor, setEnstrumanYukleniyor] = useState(false);
   const [miktarInput, setMiktarInput] = useState("");
+  // ── FON İÇİN ADET GİRİŞİ (2026-09-10, kullanıcı isteği) ──────────────────
+  // Fonlar önceden ₺ TUTARI olarak tek elden giriliyordu ("MİKTAR (₺
+  // tutar)") — kullanıcı bunun yerine PAY ADEDİ girip fiyatla çarpılarak
+  // tutarın otomatik hesaplanmasını istedi (hisse'de zaten böyle çalışıyor).
+  // ⚠️ VERİ MODELİ DEĞİŞMEDİ: kalem.miktar hâlâ ₺ tutarı olarak saklanıyor
+  // (bugün kurulan fon kâr/zarar hesaplaması, ortalama maliyet, vb. TÜMÜ
+  // buna göre yazıldı) — sadece GİRİŞ ekranında adet×fiyat=tutar hesaplanıp
+  // sonuç miktar olarak kaydediliyor. fonAdetInput SADECE bu ekranda
+  // geçici bir ara değer, kalıcı veriye hiç yazılmıyor.
+  const [fonAdetInput, setFonAdetInput] = useState("");
   const [alisModu, setAlisModu] = useState<null|"tarih"|"fiyat">(null);
   const [alisTarihInput, setAlisTarihInput] = useState("");
   const [alisFiyatInput, setAlisFiyatInput] = useState("");
@@ -23816,8 +23872,14 @@ function PortfoyEkleModal({onKapat, onEklendi, settings, duzenlenecekKalem}:{onK
     }
   };
 
-  const kaydetVeKapat = (alis: PortfoyKalemi["alis"]) => {
-    const miktar = miktarInput.trim()==="" ? null : parseFloat(miktarInput.replace(",","."));
+  // `miktarOverride` (2026-09-10 eklendi): fon için adet×fiyat çarpımıyla
+  // hesaplanan tutar, miktarInput state'inden DEĞİL doğrudan buradan
+  // geliyor — React state'in asenkron güncellenmesi yüzünden (setMiktarInput
+  // çağırıp hemen ardından kaydetVeKapat çağırmak ESKİ değeri okurdu)
+  // parametre olarak geçirmek daha güvenilir.
+  const kaydetVeKapat = (alis: PortfoyKalemi["alis"], miktarOverride?: number) => {
+    const miktar = (miktarOverride!=null && isFinite(miktarOverride)) ? miktarOverride
+      : (miktarInput.trim()==="" ? null : parseFloat(miktarInput.replace(",",".")));
     const k: PortfoyKalemi = {
       id: `${Date.now()}_${Math.random().toString(36).slice(2,8)}`,
       tur: tur!,
@@ -23881,7 +23943,19 @@ function PortfoyEkleModal({onKapat, onEklendi, settings, duzenlenecekKalem}:{onK
 
   return (
     <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.6)",zIndex:500,display:"flex",alignItems:"flex-end",...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}} onClick={onKapat}>
-      <div onClick={(e)=>e.stopPropagation()} style={{background:C.card,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",maxHeight:gorunurYukseklik?Math.round(gorunurYukseklik*0.85):"85vh",overflowY:"auto",padding:"14px 18px 28px"}}>
+      <div onClick={(e)=>e.stopPropagation()} style={{background:C.card,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",maxHeight:gorunurYukseklik?gorunurYukseklik:"85vh",overflowY:"auto",padding:"14px 18px 28px"}}>
+        {/* ⚠️ DEĞİŞİKLİK (2026-09-10, kullanıcı raporu — ekran görüntüsüyle):
+            ÖNCEDEN gorunurYukseklik VARKEN bile üzerine ekstra %15 kısaltma
+            (×0.85) uygulanıyordu. gorunurYukseklik zaten klavye açıkken
+            KLAVYENİN ÜSTÜNDE KALAN gerçek alanı temsil ediyor (visualViewport
+            tabanlı) — üzerine bir de %15 kesmek, klavye açıkken zaten dar
+            olan pencereyi GEREKSİZ yere daha da küçültüp üstte boş/donuk bir
+            boşluk bırakıyordu (arama kutusu neredeyse ekranın ortasına
+            düşüyordu). ×0.85 çarpanı SADECE gorunurYukseklik BİLİNMİYORKEN
+            (klavye kapalı, "85vh" yedek değeri) anlamlıydı — o durumda tam
+            ekranın üstünde hafif bir boşluk bırakmak estetik bir tercihti.
+            Artık klavye açıkken pencere kendisine ayrılan TÜM alanı
+            kullanıyor. */}
         <div style={{width:36,height:4,background:WA(0.2),borderRadius:2,margin:"0 auto 14px"}}/>
 
         {asama==="tur" && (
@@ -24138,25 +24212,41 @@ function PortfoyEkleModal({onKapat, onEklendi, settings, duzenlenecekKalem}:{onK
           <>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
               <span onClick={()=>setAsama(tur==="altin"?"altinAlt":"ara")} style={{fontSize:18,color:C.sub,cursor:"pointer"}}>‹</span>
-              <span style={{fontSize:16,fontWeight:800,color:C.text}}>Ne kadar sahipsin? — {secilenEnstruman.ad}</span>
+              <span style={{fontSize:16,fontWeight:800,color:C.text}}>{tur==="fon"?"Kaç adet/pay aldın?":"Ne kadar sahipsin?"} — {secilenEnstruman.ad}</span>
               <div style={{flex:1}}/>
               <button onClick={onKapat} style={{background:WA(0.1),border:"none",width:30,height:30,borderRadius:15,fontSize:16,color:C.text,cursor:"pointer"}}>×</button>
             </div>
             <div style={{fontSize:11.5,color:C.sub,marginBottom:10,lineHeight:1.5}}>
-              Buna gerçekten sahipsen miktar gir — kar/zararını hesaplayalım. Sadece fiyatını takip etmek istiyorsan atlayabilirsin.
+              {tur==="fon"
+                ? "Adet/pay sayısını gir — bir sonraki adımda alış fiyatını girince toplam tutarı senin için hesaplarız. Sadece fiyatını takip etmek istiyorsan atlayabilirsin."
+                : "Buna gerçekten sahipsen miktar gir — kar/zararını hesaplayalım. Sadece fiyatını takip etmek istiyorsan atlayabilirsin."}
             </div>
             <div style={{display:"flex",alignItems:"center",background:WA(0.04),border:`1px solid ${WA(0.08)}`,borderRadius:10,padding:"10px 12px",marginBottom:12}}>
-              <input value={miktarInput} onChange={e=>setMiktarInput(e.target.value)} placeholder="0" inputMode="decimal" style={{flex:1,background:"none",border:"none",outline:"none",color:C.text,fontSize:16,fontWeight:700,fontFamily:"inherit"}}/>
-              <span style={{fontSize:12,color:C.sub}}>{secilenEnstruman.birim}</span>
+              {tur==="fon" ? (
+                <>
+                  <input value={fonAdetInput} onChange={e=>setFonAdetInput(e.target.value)} placeholder="0" inputMode="decimal" style={{flex:1,background:"none",border:"none",outline:"none",color:C.text,fontSize:16,fontWeight:700,fontFamily:"inherit"}}/>
+                  <span style={{fontSize:12,color:C.sub}}>adet</span>
+                </>
+              ) : (
+                <>
+                  <input value={miktarInput} onChange={e=>setMiktarInput(e.target.value)} placeholder="0" inputMode="decimal" style={{flex:1,background:"none",border:"none",outline:"none",color:C.text,fontSize:16,fontWeight:700,fontFamily:"inherit"}}/>
+                  <span style={{fontSize:12,color:C.sub}}>{secilenEnstruman.birim}</span>
+                </>
+              )}
             </div>
             <button onClick={()=>{
+              if (tur==="fon") {
+                if (fonAdetInput.trim()==="") { kaydetVeKapat(null); return; }
+                setAsama("alis");
+                return;
+              }
               if (miktarInput.trim()==="") { kaydetVeKapat(null); return; }
               setAsama("alis");
             }} style={{width:"100%",background:C.blue,color:C.bg,border:"none",borderRadius:10,padding:"11px 0",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"inherit",marginBottom:8}}>
               Devam et
             </button>
             <button onClick={()=>kaydetVeKapat(null)} style={{width:"100%",background:"none",border:"none",color:C.sub,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",padding:"8px 0"}}>
-              Sadece takip et, miktar girmeden ekle
+              Sadece takip et, {tur==="fon"?"adet":"miktar"} girmeden ekle
             </button>
           </>
         )}
@@ -24191,7 +24281,20 @@ function PortfoyEkleModal({onKapat, onEklendi, settings, duzenlenecekKalem}:{onK
                     {!tarihOtomatikDestekli && <div style={{fontSize:10,color:C.orange}}>Fon için geçmiş fiyat otomatik bulunamıyor</div>}
                   </div>
                 </div>
-                <button onClick={()=>kaydetVeKapat(null)} style={{background:"none",border:"none",color:C.sub,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",padding:"10px 0"}}>
+                <button onClick={()=>{
+                  // Fon'da adet girilmişse ama alış fiyatı atlanıyorsa, tutarı
+                  // GÜNCEL fiyatla hesaplıyoruz (tarihsel maliyet bilinmiyor,
+                  // ama en azından bugünkü değeri takip edilebilsin diye).
+                  if (tur==="fon" && fonAdetInput.trim()!=="") {
+                    const adet = parseFloat(fonAdetInput.replace(",","."));
+                    const guncelFiyat = secilenEnstruman.fiyat;
+                    if (isFinite(adet) && adet>0 && typeof guncelFiyat==="number" && guncelFiyat>0) {
+                      kaydetVeKapat(null, adet*guncelFiyat);
+                      return;
+                    }
+                  }
+                  kaydetVeKapat(null);
+                }} style={{background:"none",border:"none",color:C.sub,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",padding:"10px 0"}}>
                   Atla, sadece bugünkü değişimi göster
                 </button>
               </div>
@@ -24209,7 +24312,7 @@ function PortfoyEkleModal({onKapat, onEklendi, settings, duzenlenecekKalem}:{onK
                 <div style={{fontSize:10,color:C.sub2,marginBottom:10}}>Boş bırakırsan bugünün tarihi kullanılır.</div>
                 <div style={{display:"flex",alignItems:"center",background:WA(0.04),border:`1px solid ${WA(0.08)}`,borderRadius:10,padding:"10px 12px",marginBottom:6}}>
                   <input value={alisFiyatInput} onChange={e=>setAlisFiyatInput(e.target.value)} placeholder="0" inputMode="decimal" style={{flex:1,background:"none",border:"none",outline:"none",color:C.text,fontSize:16,fontWeight:700,fontFamily:"inherit"}}/>
-                  <span style={{fontSize:12,color:C.sub}}>₺ / {secilenEnstruman.birim==="lot"?"hisse":secilenEnstruman.birim}</span>
+                  <span style={{fontSize:12,color:C.sub}}>₺ / {tur==="fon"?"adet":(secilenEnstruman.birim==="lot"?"hisse":secilenEnstruman.birim)}</span>
                 </div>
                 {secilenEnstruman.fiyat!=null && (
                   <div style={{fontSize:10,color:C.sub2,marginBottom:12}}>Güncel fiyatla dolduruldu — farklıysa üzerine yazabilirsin.</div>
@@ -24221,7 +24324,13 @@ function PortfoyEkleModal({onKapat, onEklendi, settings, duzenlenecekKalem}:{onK
                   // tarih karşılaştırması (sıralama, "N gün önce" vb.) buna dayanıyor.
                   // Kullanıcı "Alış tarihini gir"den buraya (otomatik bulunamadığı
                   // için) düştüyse zaten girdiği tarih (alisTarihInput) korunur.
-                  kaydetVeKapat({tarih: alisTarihInput || new Date().toISOString().slice(0,10), fiyat:f, kaynak:"elle"});
+                  // Fon'da: adet × girilen alış fiyatı = tutar (miktarOverride).
+                  let miktarOverride: number|undefined = undefined;
+                  if (tur==="fon") {
+                    const adet = parseFloat(fonAdetInput.replace(",","."));
+                    if (isFinite(adet) && adet>0 && isFinite(f)) miktarOverride = adet*f;
+                  }
+                  kaydetVeKapat({tarih: alisTarihInput || new Date().toISOString().slice(0,10), fiyat:f, kaynak:"elle"}, miktarOverride);
                 }} style={{width:"100%",background:C.blue,color:C.bg,border:"none",borderRadius:10,padding:"11px 0",fontSize:13,fontWeight:800,cursor:alisFiyatInput?"pointer":"default",opacity:alisFiyatInput?1:0.5,fontFamily:"inherit"}}>
                   Portföyüme ekle
                 </button>
@@ -25191,11 +25300,11 @@ function App(){
       return yeni;
     });
   };
-  // Son alışı düzenle → partiler yeniden kurulur, ortalama maliyet yeniden
-  // hesaplanır (bkz. portfoySonAlisGuncelle).
-  const portfoyAlisGuncelle=(id:string, g:{miktar:number;fiyat:number;tarih:string})=>{
+  // Seçilen alışı düzenle → partiler yeniden kurulur, ortalama maliyet
+  // yeniden hesaplanır (bkz. portfoyPartiGuncelle).
+  const portfoyAlisGuncelle=(id:string, partiIndex:number, g:{miktar:number;fiyat:number;tarih:string})=>{
     setPortfoy(liste=>{
-      const yeni=liste.map(k=> k.id===id ? portfoySonAlisGuncelle(k,g) : k);
+      const yeni=liste.map(k=> k.id===id ? portfoyPartiGuncelle(k,partiIndex,g) : k);
       portfoyYaz(yeni);
       return yeni;
     });
@@ -26192,7 +26301,7 @@ function App(){
                     onEklendi={portfoyVadeliGuncelle} settings={settings} duzenlenecekKalem={dk}/>;
         }
         return <PortfoyDuzenleModal kalem={dk} onKapat={()=>setPortfoyDuzenleId(null)}
-                      onKaydet={(g)=>portfoyAlisGuncelle(dk.id,g)}/>; })()}
+                      onKaydet={(g)=>portfoyAlisGuncelle(dk.id,g.partiIndex,g)}/>; })()}
       {gostergeTablo&&<GostergeTabloModal ad={gostergeTablo.ad} seri={gostergeTablo.seri||[]} birim={gostergeTablo.birim} onClose={()=>setGostergeTablo(null)}/>}
       {gostergeUyari&&<div style={{position:"fixed",top:64,left:`calc(50% + ${SIDEBAR_W/2}px)`,transform:"translateX(-50%)",background:C.thead,color:"#fff",borderRadius:20,padding:"10px 20px",fontSize:13,fontWeight:600,zIndex:700,boxShadow:"0 4px 14px rgba(0,0,0,0.35)"}}>{gostergeUyari}</div>}
       {hakkindaAcik&&<HakkindaModal onClose={()=>setHakkindaAcik(false)}/>}
