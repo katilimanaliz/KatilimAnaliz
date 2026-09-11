@@ -22104,6 +22104,19 @@ async function portfoyFiyatlariTazele(liste: PortfoyKalemi[]): Promise<PortfoyKa
   const fonIstek = turler.has("fon")
     ? fetch(`${API_BASE}/api/tefas-proxy`).then(r => r.ok ? r.json() : null).catch(() => null)
     : Promise.resolve(null);
+  // ⚠️ DÜZELTME (2026-09-10, kullanıcı raporu — THF portföyde günlerce
+  // güncellenmiyordu): varsayılan /api/tefas-proxy ucu SADECE katılıma
+  // uygun fonları (~442) döndürüyor. Portföyüm'e artık (bugün eklenen
+  // adet×fiyat özelliğiyle) katılıma UYGUN OLMAYAN fonlar da eklenebiliyor
+  // (THF gibi) — bunlar bu listede hiç yok, bu yüzden `fonHarita.get(k.kod)`
+  // hep `undefined` dönüp kalem SESSİZCE hiç güncellenmiyordu (k.fiyat
+  // eklendiği andaki donmuş değerde sonsuza dek kalıyordu). Artık fon
+  // türünde en az bir kalem varsa "Tüm Fonlar" (`?tumFonlar=1`, katılım dışı
+  // dahil TÜM TEFAS fonları) da PARALEL çekiliyor, katılım listesinde
+  // bulunamayan kodlar için buna bakılıyor.
+  const digerFonIstek = turler.has("fon")
+    ? fetch(`${API_BASE}/api/tefas-proxy?tumFonlar=1`).then(r => r.ok ? r.json() : null).catch(() => null)
+    : Promise.resolve(null);
   const altinIstek = turler.has("altin")
     ? fetch(`${API_BASE}/api/piyasa-fiyatlar?tip=altinapi`).then(r => r.ok ? r.json() : null).catch(() => null)
     : Promise.resolve(null);
@@ -22116,8 +22129,8 @@ async function portfoyFiyatlariTazele(liste: PortfoyKalemi[]): Promise<PortfoyKa
     return [kod, v] as const;
   }));
 
-  const [hisseYanit, fonYanit, altinYanit, digerCiftler] =
-    await Promise.all([hisseIstek, fonIstek, altinIstek, digerIstek]);
+  const [hisseYanit, fonYanit, digerFonYanit, altinYanit, digerCiftler] =
+    await Promise.all([hisseIstek, fonIstek, digerFonIstek, altinIstek, digerIstek]);
 
   const hisseHarita = new Map<string, any>();
   if (hisseYanit?.success && Array.isArray(hisseYanit.data)) {
@@ -22126,6 +22139,12 @@ async function portfoyFiyatlariTazele(liste: PortfoyKalemi[]): Promise<PortfoyKa
   const fonHarita = new Map<string, any>();
   if (fonYanit?.success && Array.isArray(fonYanit.data)) {
     for (const it of fonYanit.data) if (it?.kod) fonHarita.set(it.kod, it);
+  }
+  // "Tüm Fonlar" (katılım dışı dahil) — sadece katılım listesinde bulunamayan
+  // kodlar için YEDEK olarak kullanılıyor (bkz. yukarıdaki not).
+  const digerFonHarita = new Map<string, any>();
+  if (digerFonYanit?.success && Array.isArray(digerFonYanit.data)) {
+    for (const it of digerFonYanit.data) if (it?.kod) digerFonHarita.set(it.kod, it);
   }
   const digerHarita = new Map<string, any>();
   for (const [kod, v] of digerCiftler) if (v) digerHarita.set(kod, v);
@@ -22140,8 +22159,12 @@ async function portfoyFiyatlariTazele(liste: PortfoyKalemi[]): Promise<PortfoyKa
         g: sayi(it.degisim1g), h: sayi(it.degisim1h), a: sayi(it.degisim1a), y: sayi(it.degisim1y) };
     }
     if (k.tur === "fon") {
-      const it = fonHarita.get(k.kod);
+      const it = fonHarita.get(k.kod) ?? digerFonHarita.get(k.kod);
       if (!it) return k;
+      // "Tüm Fonlar" kaynağında (TEFAS resmi) gunluk/haftalik/aylik/yillik
+      // alanları katılım listesiyle (Fonoloji) AYNI isimde geliyor —
+      // ikisi de yoksa (henüz zenginleştirilmemiş bir "diğer" fon) sessizce
+      // null kalır, "—" gösterilir, uydurulmaz.
       return { ...k, fiyat: sayi(it.fiyat) ?? k.fiyat,
         g: sayi(it.gunluk), h: sayi(it.haftalik), a: sayi(it.aylik), y: sayi(it.yillik) };
     }
@@ -25976,6 +25999,16 @@ function App(){
       <div style={{background:C.bg,padding:screen==="home"?"calc(18px + env(safe-area-inset-top,0px)) 20px 6px":"calc(44px + env(safe-area-inset-top,0px)) 20px 20px"}}>
         {screen==="home"?(
           <div>
+            {/* ── SABİT ÜST BLOK (2026-09-10, kullanıcı isteği) ─────────────
+                Ana sayfada aşağı kaydırırken logo+ikonlar+arama kutusu artık
+                üstte SABİT kalıyor (position:sticky), altındaki içerik
+                (Zekât/Piyasa Özeti kaydırıcısı, Piyasa Özeti, vb.) onun
+                ALTINDA kayıyor. `top` değeri env(safe-area-inset-top) ile
+                verildi — çentikli telefonlarda sabitlenen blok durum
+                çubuğunun/çentiğin ALTINA oturuyor, üstüne binmiyor. zIndex
+                arama sonuçları açılır menüsünden (zIndex:50) DÜŞÜK tutuldu
+                ki açılır menü bu bloğun üzerinde kalsın. */}
+            <div style={{position:"sticky",top:"env(safe-area-inset-top, 0px)",zIndex:40,background:C.bg,paddingBottom:6}}>
             {/* Logo + marka — dikeyde tam ortalanmış, net hiyerarşi (marka adı
                 büyütülüp kalınlaştırıldı, slogan küçültülüp soluklaştırıldı) */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:20}}>
@@ -26130,6 +26163,8 @@ function App(){
                 </div>
               );
             })()}
+            </div>
+            {/* ── SABİT ÜST BLOK BİTİŞİ — buradan sonrası normal kayıyor ── */}
 
             <AnaSayfaHeroSerit selamlama={TR(selamlama)} bugunMetni={kisaTarihStr} kullaniciAdi={kullaniciAdi} genisEkran={genisEkran} git={(hedef) => {
               if (hedef === "altin") { setPiyasaTabloFiltre("altin"); nav("piyasaMenu"); }
