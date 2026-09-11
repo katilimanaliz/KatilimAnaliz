@@ -22462,9 +22462,13 @@ const PORTFOY_TUR_META: Record<string, {label:string; Icon:any; renk:string; bg:
 // Donut grafik için sıralı (varlık bazında, tür bazında DEĞİL) renk paleti —
 // gerekçe için bkz. PortfoyDetayEkrani içindeki donutVeri yorumu.
 const DONUT_PALET = ["#4ADE80","#5B9BD8","#E0A53D","#F7931A","#A78BFA","#5EEAD4","#38BDF8","#94A3B8"];
-function portfoyFmtTL(n: number): string {
+// `dec` (2026-09-10 eklendi): varsayılan 0 — TÜM mevcut çağrı yerleri
+// (kâr/zarar rozetleri, kalem satırları vb.) AYNEN eskisi gibi tam sayıya
+// yuvarlanmaya devam ediyor. Sadece kullanıcının özellikle istediği "Toplam
+// Değer" gösterimlerinde 2 ondalık için dec=2 veriliyor.
+function portfoyFmtTL(n: number, dec: number = 0): string {
   const isaret = n < 0 ? "-" : "";
-  return isaret + "₺" + Math.abs(n).toLocaleString("tr-TR", { maximumFractionDigits: 0 });
+  return isaret + "₺" + Math.abs(n).toLocaleString("tr-TR", { minimumFractionDigits: dec, maximumFractionDigits: dec });
 }
 // Fon birim pay fiyatları genelde küçük ondalıklı sayılar (örn. 2,816142 ₺) —
 // portfoyFmtTL'nin 0 ondalıklı formatı bunları "₺0"/"₺3" gibi anlamsız
@@ -23240,7 +23244,7 @@ function PortfoyWidget({liste, gizli, onGizliToggle, onDetay, onEkle, onSil, onD
             <div onClick={onGrafik} style={{cursor:"pointer"}}>
               <div style={{fontSize:10,fontWeight:800,color:PORTFOY_ETIKET,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Toplam Değer</div>
               <div style={{fontSize:24,fontWeight:800,color:PORTFOY_YAZI,fontVariantNumeric:"tabular-nums"}}>
-                {gizli ? "₺••••••" : portfoyFmtTL(toplamDeger)}
+                {gizli ? "₺••••••" : portfoyFmtTL(toplamDeger, 2)}
               </div>
             </div>
             <div onClick={()=>onDetay(undefined,"portfoy")} style={{textAlign:"right",cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
@@ -23555,7 +23559,6 @@ function useGorunurYukseklik(): number | null {
 }
 
 function PortfoyEkleModal({onKapat, onEklendi, settings, duzenlenecekKalem}:{onKapat:()=>void; onEklendi:(k:PortfoyKalemi)=>void; settings?:any; duzenlenecekKalem?:PortfoyKalemi|null}){
-  const gorunurYukseklik = useGorunurYukseklik();
   // ⚠️ DÜZENLEME MODU (2026-08-13): duzenlenecekKalem verilmişse tür SABİT —
   // kullanıcı bir Katılım Hesabını "Sukuk'a çevir" gibi bir şey yapamaz,
   // doğrudan ilgili forma başlanır, tür seçim ekranı hiç gösterilmez.
@@ -23981,20 +23984,17 @@ function PortfoyEkleModal({onKapat, onEklendi, settings, duzenlenecekKalem}:{onK
 
   return (
     <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.6)",zIndex:500,display:"flex",alignItems:"flex-end",...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}} onClick={onKapat}>
-      <div onClick={(e)=>e.stopPropagation()} style={{background:C.card,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",maxHeight:gorunurYukseklik?`calc(${gorunurYukseklik}px - env(safe-area-inset-top, 0px))`:"calc(85vh - env(safe-area-inset-top, 0px))",overflowY:"auto",padding:"14px 18px 28px"}}>
-        {/* ⚠️ DEĞİŞİKLİK (2026-09-10, kullanıcı raporu — ekran görüntüsüyle):
-            ÖNCEDEN gorunurYukseklik VARKEN bile üzerine ekstra %15 kısaltma
-            (×0.85) uygulanıyordu. gorunurYukseklik zaten klavye açıkken
-            KLAVYENİN ÜSTÜNDE KALAN gerçek alanı temsil ediyor (visualViewport
-            tabanlı) — üzerine bir de %15 kesmek, klavye açıkken zaten dar
-            olan pencereyi GEREKSİZ yere daha da küçültüp üstte boş/donuk bir
-            boşluk bırakıyordu (arama kutusu neredeyse ekranın ortasına
-            düşüyordu). ×0.85 çarpanı SADECE gorunurYukseklik BİLİNMİYORKEN
-            (klavye kapalı, "85vh" yedek değeri) anlamlıydı — o durumda tam
-            ekranın üstünde hafif bir boşluk bırakmak estetik bir tercihti.
-            AYNI GÜN 2. rapor: pencere çentikli telefonlarda üst güvenli
-            alana (durum çubuğu/çentik) taşıyordu — env(safe-area-inset-top)
-            kadar pay çıkarıldı, artık üstte asla o alana binmiyor. */}
+      <div onClick={(e)=>e.stopPropagation()} style={{background:C.card,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",height:"calc(80vh - env(safe-area-inset-top, 0px))",overflowY:"auto",padding:"14px 18px 28px"}}>
+        {/* ⚠️ DEĞİŞİKLİK (2026-09-10, 3. tur — kullanıcı raporu): ÖNCEKİ İKİ
+            TUR (gorunurYukseklik'e bağlı dinamik yükseklik, sonra debounce)
+            klavye açılıp kapanırken ve hatta YAZARKEN pencerenin boyunun
+            görünür şekilde oynamasına yol açmaya devam etti — kullanıcı
+            "standart, sabit bir ekran, hiç oynamasın" istedi. Artık
+            gorunurYukseklik'e HİÇ bakılmıyor — sabit `calc(80vh - env(safe-
+            area-inset-top))` kullanılıyor. Klavye açıldığında pencerenin alt
+            kısmı klavyenin ARKASINDA kalabilir ama `overflowY:"auto"`
+            sayesinde kullanıcı kendi kaydırıp erişebilir — boyut hiç
+            değişmediği için "titreme/zıplama" tamamen ortadan kalkıyor. */}
         <div style={{width:36,height:4,background:WA(0.2),borderRadius:2,margin:"0 auto 14px"}}/>
 
         {asama==="tur" && (
@@ -24528,7 +24528,7 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onDuzen
             </div>
           </div>
           <div onClick={()=>setGrafikAcik(true)} style={{cursor:"pointer",fontSize:26,fontWeight:800,color:PORTFOY_YAZI,marginBottom:10,fontVariantNumeric:"tabular-nums"}}>
-            {gizli?"₺••••••":portfoyFmtTL(toplamDeger)}
+            {gizli?"₺••••••":portfoyFmtTL(toplamDeger, 2)}
           </div>
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
             <span style={{fontSize:11.5,fontWeight:800,color:pozitif?C.green:C.red,background:pozitif?C.greenLight:"rgba(248,113,113,0.15)",borderRadius:8,padding:"5px 9px"}}>
