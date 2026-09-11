@@ -23522,16 +23522,31 @@ function PortfoyDuzenleModal({kalem, onKapat, onKaydet}:{
 // Sheet'in maxHeight'ını bu değere göre küçültünce (flex-end hizalamayla
 // birlikte) sheet'in tamamı her zaman klavyenin ÜSTÜNDE, görünür alanda kalır.
 // API yoksa (eski WebView) eski "85vh" davranışına sessizce düşülür.
+// ⚠️ DÜZELTME (2026-09-10, kullanıcı raporu — "arama kutusuna yazarken
+// pencere küçülüp klavyenin altında kalıyor"): iOS'ta klavye açıkken
+// YAZARKEN bile visualViewport.height küçük küçük DALGALANABİLİYOR (her
+// tuş vuruşunda klavyenin üstündeki QuickType/öneri çubuğu görünüp
+// kaybolabiliyor, bu da yüksekliği birkaç piksel oynatıyor) — bu ham
+// değeri DOĞRUDAN maxHeight'a bağlamak, kullanıcı yazarken pencerenin
+// gözle görülür şekilde titreyip küçülmesine yol açıyordu. Artık 150ms'lik
+// bir "sakinleşme" penceresi var — art arda hızlı değişen ara değerler
+// ATLANIYOR, sadece 150ms boyunca DEĞİŞMEDEN kalan SON değer uygulanıyor.
 function useGorunurYukseklik(): number | null {
   const [yukseklik, setYukseklik] = useState<number | null>(null);
   useEffect(() => {
     const vv = (window as any).visualViewport;
     if (!vv) return;
-    const guncelle = () => setYukseklik(vv.height);
-    guncelle();
+    let zamanlayici: ReturnType<typeof setTimeout> | null = null;
+    const guncelle = () => {
+      if (zamanlayici) clearTimeout(zamanlayici);
+      const hedefDeger = vv.height;
+      zamanlayici = setTimeout(() => setYukseklik(hedefDeger), 150);
+    };
+    setYukseklik(vv.height); // ilk değer anında (gecikmesiz) uygulanır
     vv.addEventListener("resize", guncelle);
     vv.addEventListener("scroll", guncelle);
     return () => {
+      if (zamanlayici) clearTimeout(zamanlayici);
       vv.removeEventListener("resize", guncelle);
       vv.removeEventListener("scroll", guncelle);
     };
@@ -23966,7 +23981,7 @@ function PortfoyEkleModal({onKapat, onEklendi, settings, duzenlenecekKalem}:{onK
 
   return (
     <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.6)",zIndex:500,display:"flex",alignItems:"flex-end",...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}} onClick={onKapat}>
-      <div onClick={(e)=>e.stopPropagation()} style={{background:C.card,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",maxHeight:gorunurYukseklik?gorunurYukseklik:"85vh",overflowY:"auto",padding:"14px 18px 28px"}}>
+      <div onClick={(e)=>e.stopPropagation()} style={{background:C.card,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",maxHeight:gorunurYukseklik?`calc(${gorunurYukseklik}px - env(safe-area-inset-top, 0px))`:"calc(85vh - env(safe-area-inset-top, 0px))",overflowY:"auto",padding:"14px 18px 28px"}}>
         {/* ⚠️ DEĞİŞİKLİK (2026-09-10, kullanıcı raporu — ekran görüntüsüyle):
             ÖNCEDEN gorunurYukseklik VARKEN bile üzerine ekstra %15 kısaltma
             (×0.85) uygulanıyordu. gorunurYukseklik zaten klavye açıkken
@@ -23977,8 +23992,9 @@ function PortfoyEkleModal({onKapat, onEklendi, settings, duzenlenecekKalem}:{onK
             düşüyordu). ×0.85 çarpanı SADECE gorunurYukseklik BİLİNMİYORKEN
             (klavye kapalı, "85vh" yedek değeri) anlamlıydı — o durumda tam
             ekranın üstünde hafif bir boşluk bırakmak estetik bir tercihti.
-            Artık klavye açıkken pencere kendisine ayrılan TÜM alanı
-            kullanıyor. */}
+            AYNI GÜN 2. rapor: pencere çentikli telefonlarda üst güvenli
+            alana (durum çubuğu/çentik) taşıyordu — env(safe-area-inset-top)
+            kadar pay çıkarıldı, artık üstte asla o alana binmiyor. */}
         <div style={{width:36,height:4,background:WA(0.2),borderRadius:2,margin:"0 auto 14px"}}/>
 
         {asama==="tur" && (
@@ -25764,7 +25780,17 @@ function App(){
         .press-card:active { transform: scale(0.98); opacity: 0.92; }
         .press-tile { transition: transform 140ms cubic-bezier(0.34,1.56,0.64,1), box-shadow 140ms ease; -webkit-tap-highlight-color: transparent; }
         .press-tile:active { transform: scale(1.03); box-shadow: 0 10px 28px rgba(91,155,216,0.28), 0 3px 10px rgba(0,0,0,0.35); }
-        @keyframes screenIn { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform: translateY(0); } }
+        /* ⚠️ DÜZELTME (2026-09-10, kullanıcı raporu — sticky header
+           kaydırınca kayboluyordu/bozuk görünüyordu): bu animasyon ÖNCEDEN
+           transform kullanıyordu — CSS kuralına göre bir üst elemanda
+           transform olması (animasyon SIRASINDA bile), içindeki TÜM
+           position:sticky/fixed öğeleri BOZAR (transform'lu eleman yeni bir
+           konumlama bağlamı/containing block oluşturur). Ana sayfadaki
+           sabit üst blok (bkz. "SABİT ÜST BLOK" notu) bu .screen-anim
+           sarmalayıcısının İÇİNDE olduğu için etkileniyordu. transform
+           kaldırılıp sadece opaklıkla geçiş yapılıyor — görsel fark çok
+           az, ama sticky artık güvenilir çalışıyor. */
+        @keyframes screenIn { from { opacity:0; } to { opacity:1; } }
         .screen-anim { animation: screenIn 260ms cubic-bezier(0.22,0.61,0.36,1); }
         @keyframes heroSlideIn { from { opacity:0; transform:translateX(28px); } to { opacity:1; transform:translateX(0); } }
         .hero-page-anim { animation: heroSlideIn 340ms cubic-bezier(0.22,0.61,0.36,1); }
