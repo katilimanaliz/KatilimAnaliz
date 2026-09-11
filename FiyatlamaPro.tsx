@@ -23373,7 +23373,7 @@ function PortfoyWidget({liste, gizli, onGizliToggle, onDetay, onEkle, onSil, onD
 
       <div onClick={onEkle} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"11px 0",borderTop:`1px solid ${C.border}`,cursor:"pointer"}}>
         <Plus size={13} color={C.blue}/>
-        <span style={{fontSize:12,fontWeight:700,color:C.blue}}>Ürün ekle</span>
+        <span style={{fontSize:12,fontWeight:700,color:C.blue}}>Pozisyon ekle</span>
       </div>
     </div>
   );
@@ -23573,6 +23573,18 @@ function PortfoyEkleModal({onKapat, onEklendi, settings, duzenlenecekKalem}:{onK
   const [fonListesiTeshis, setFonListesiTeshis] = useState<string>("");
   const [aramaYukleniyor, setAramaYukleniyor] = useState(false);
   const [secilenEnstruman, setSecilenEnstruman] = useState<any>(null); // {kod,ad,fiyat,g,h,a,y,birim}
+  // ── OTOMATİK DOLDURMA (2026-09-10, kullanıcı isteği) ─────────────────────
+  // Enstrüman seçilir seçilmez tarih BUGÜN, fiyat GÜNCEL FİYAT ile önceden
+  // dolduruluyor — tek ekran akışında kullanıcı çoğu zaman hiçbir şeye
+  // dokunmadan direkt "Portföyüme ekle"ye basabilsin diye. İkisi de hâlâ
+  // serbestçe düzenlenebilir.
+  useEffect(() => {
+    if (!secilenEnstruman) return;
+    setAlisTarihInput(new Date().toISOString().slice(0,10));
+    if (typeof secilenEnstruman.fiyat === "number") {
+      setAlisFiyatInput(String(secilenEnstruman.fiyat).replace(".", ","));
+    }
+  }, [secilenEnstruman]);
   const [enstrumanYukleniyor, setEnstrumanYukleniyor] = useState(false);
   const [miktarInput, setMiktarInput] = useState("");
   // ── FON İÇİN ADET GİRİŞİ (2026-09-10, kullanıcı isteği) ──────────────────
@@ -24247,134 +24259,77 @@ function PortfoyEkleModal({onKapat, onEklendi, settings, duzenlenecekKalem}:{onK
           </>
         )}
 
+        {/* ⚠️ DEĞİŞİKLİK (2026-09-10, kullanıcı isteği — referans ekran
+            görüntüsüyle): ÖNCEDEN "miktar" ve "alis" iki AYRI ekrandı
+            (önce lot sor, "Devam et" de, SONRA fiyat/tarih sor). Kullanıcı
+            bunun yerine TEK EKRAN istedi — lot+fiyat+tarih birlikte,
+            fiyat/tarih varsayılan olarak GÜNCEL fiyat/BUGÜN ile dolu
+            gelsin (aşağıdaki useEffect ile, secilenEnstruman seçilir
+            seçilmez dolduruluyor). "asama" state'i hâlâ "miktar" adını
+            taşıyor (tip tanımını bozmamak için) ama artık TEK ekranı
+            temsil ediyor — "alis" adımına HİÇ geçilmiyor. */}
         {asama==="miktar" && secilenEnstruman && (
           <>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
               <span onClick={()=>setAsama(tur==="altin"?"altinAlt":"ara")} style={{fontSize:18,color:C.sub,cursor:"pointer"}}>‹</span>
-              <span style={{fontSize:16,fontWeight:800,color:C.text}}>{tur==="fon"?"Kaç adet/pay aldın?":"Ne kadar sahipsin?"} — {secilenEnstruman.ad}</span>
-              <div style={{flex:1}}/>
-              <button onClick={onKapat} style={{background:WA(0.1),border:"none",width:30,height:30,borderRadius:15,fontSize:16,color:C.text,cursor:"pointer"}}>×</button>
-            </div>
-            <div style={{fontSize:11.5,color:C.sub,marginBottom:10,lineHeight:1.5}}>
-              {tur==="fon"
-                ? "Adet/pay sayısını gir — bir sonraki adımda alış fiyatını girince toplam tutarı senin için hesaplarız. Sadece fiyatını takip etmek istiyorsan atlayabilirsin."
-                : "Buna gerçekten sahipsen miktar gir — kar/zararını hesaplayalım. Sadece fiyatını takip etmek istiyorsan atlayabilirsin."}
-            </div>
-            <div style={{display:"flex",alignItems:"center",background:WA(0.04),border:`1px solid ${WA(0.08)}`,borderRadius:10,padding:"10px 12px",marginBottom:12}}>
-              {tur==="fon" ? (
-                <>
-                  <input value={fonAdetInput} onChange={e=>setFonAdetInput(e.target.value)} placeholder="0" inputMode="decimal" style={{flex:1,background:"none",border:"none",outline:"none",color:C.text,fontSize:16,fontWeight:700,fontFamily:"inherit"}}/>
-                  <span style={{fontSize:12,color:C.sub}}>adet</span>
-                </>
-              ) : (
-                <>
-                  <input value={miktarInput} onChange={e=>setMiktarInput(e.target.value)} placeholder="0" inputMode="decimal" style={{flex:1,background:"none",border:"none",outline:"none",color:C.text,fontSize:16,fontWeight:700,fontFamily:"inherit"}}/>
-                  <span style={{fontSize:12,color:C.sub}}>{secilenEnstruman.birim}</span>
-                </>
-              )}
-            </div>
-            <button onClick={()=>{
-              if (tur==="fon") {
-                if (fonAdetInput.trim()==="") { kaydetVeKapat(null); return; }
-                setAsama("alis");
-                return;
-              }
-              if (miktarInput.trim()==="") { kaydetVeKapat(null); return; }
-              setAsama("alis");
-            }} style={{width:"100%",background:C.blue,color:C.bg,border:"none",borderRadius:10,padding:"11px 0",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"inherit",marginBottom:8}}>
-              Devam et
-            </button>
-            <button onClick={()=>kaydetVeKapat(null)} style={{width:"100%",background:"none",border:"none",color:C.sub,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",padding:"8px 0"}}>
-              Sadece takip et, {tur==="fon"?"adet":"miktar"} girmeden ekle
-            </button>
-          </>
-        )}
-
-        {asama==="alis" && secilenEnstruman && (
-          <>
-            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
-              <span onClick={()=>{setAlisModu(null);setAlisHata(null);setAsama("miktar");}} style={{fontSize:18,color:C.sub,cursor:"pointer"}}>‹</span>
-              <span style={{fontSize:16,fontWeight:800,color:C.text}}>Alış fiyat bilgisi (opsiyonel)</span>
+              <span style={{fontSize:16,fontWeight:800,color:C.text}}>Pozisyon ekle — {secilenEnstruman.ad}</span>
               <div style={{flex:1}}/>
               <button onClick={onKapat} style={{background:WA(0.1),border:"none",width:30,height:30,borderRadius:15,fontSize:16,color:C.text,cursor:"pointer"}}>×</button>
             </div>
             <div style={{fontSize:11.5,color:C.sub,marginBottom:14,lineHeight:1.5}}>
-              Girersen, satın aldığından beri toplam kar/zararını da gösterebiliriz. İstersen atlayabilirsin.
+              Sahip olduğun lot/miktarı ve alış bilgilerini gir — hepsi boş bırakılırsa sadece fiyatını takip ederiz.
             </div>
 
-            {!alisModu ? (
-              <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                {tarihOtomatikDestekli && (
-                  <div onClick={()=>setAlisModu("tarih")} style={{display:"flex",alignItems:"center",gap:10,background:WA(0.04),border:`1px solid ${WA(0.08)}`,borderRadius:10,padding:12,cursor:"pointer"}}>
-                    <Calendar size={16} color={C.blue}/>
-                    <div style={{flex:1}}>
-                      <div style={{fontSize:12.5,fontWeight:700,color:C.text}}>Alış tarihini gir</div>
-                      <div style={{fontSize:10,color:C.sub2}}>O günkü fiyatı senin için otomatik buluruz</div>
-                    </div>
-                  </div>
-                )}
-                <div onClick={()=>{setAlisModu("fiyat"); if(!alisFiyatInput && secilenEnstruman.fiyat!=null) setAlisFiyatInput(String(secilenEnstruman.fiyat).replace(".",","));}} style={{display:"flex",alignItems:"center",gap:10,background:WA(0.04),border:`1px solid ${WA(0.08)}`,borderRadius:10,padding:12,cursor:"pointer"}}>
-                  <Tag size={16} color={C.blue}/>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:12.5,fontWeight:700,color:C.text}}>Fiyatı biliyorum, elle gireyim</div>
-                    {!tarihOtomatikDestekli && <div style={{fontSize:10,color:C.orange}}>Fon için geçmiş fiyat otomatik bulunamıyor</div>}
-                  </div>
-                </div>
-                <button onClick={()=>{
-                  // Fon'da adet girilmişse ama alış fiyatı atlanıyorsa, tutarı
-                  // GÜNCEL fiyatla hesaplıyoruz (tarihsel maliyet bilinmiyor,
-                  // ama en azından bugünkü değeri takip edilebilsin diye).
-                  if (tur==="fon" && fonAdetInput.trim()!=="") {
-                    const adet = parseFloat(fonAdetInput.replace(",","."));
-                    const guncelFiyat = secilenEnstruman.fiyat;
-                    if (isFinite(adet) && adet>0 && typeof guncelFiyat==="number" && guncelFiyat>0) {
-                      kaydetVeKapat(null, adet*guncelFiyat);
-                      return;
-                    }
-                  }
-                  kaydetVeKapat(null);
-                }} style={{background:"none",border:"none",color:C.sub,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",padding:"10px 0"}}>
-                  Atla, sadece bugünkü değişimi göster
-                </button>
-              </div>
-            ) : alisModu==="tarih" ? (
-              <>
-                <input type="date" value={alisTarihInput} onChange={e=>setAlisTarihInput(e.target.value)} max={new Date().toISOString().slice(0,10)} style={{width:"100%",boxSizing:"border-box",background:WA(0.04),border:`1px solid ${WA(0.08)}`,borderRadius:10,padding:"10px 12px",color:C.text,fontSize:14,fontFamily:"inherit",marginBottom:10}}/>
-                {alisHata && <div style={{fontSize:11,color:C.red,marginBottom:10}}>{alisHata}</div>}
-                <button disabled={!alisTarihInput||alisAraniyor} onClick={otomatikAlisAra} style={{width:"100%",background:C.blue,color:C.bg,border:"none",borderRadius:10,padding:"11px 0",fontSize:13,fontWeight:800,cursor:alisTarihInput?"pointer":"default",opacity:alisTarihInput?1:0.5,fontFamily:"inherit"}}>
-                  {alisAraniyor?"⟳ Fiyat aranıyor…":"Fiyatı bul ve ekle"}
-                </button>
-              </>
-            ) : (
-              <>
-                <input type="date" value={alisTarihInput} onChange={e=>setAlisTarihInput(e.target.value)} max={new Date().toISOString().slice(0,10)} style={{width:"100%",boxSizing:"border-box",background:WA(0.04),border:`1px solid ${WA(0.08)}`,borderRadius:10,padding:"10px 12px",color:C.text,fontSize:14,fontFamily:"inherit",marginBottom:8}}/>
-                <div style={{fontSize:10,color:C.sub2,marginBottom:10}}>Boş bırakırsan bugünün tarihi kullanılır.</div>
-                <div style={{display:"flex",alignItems:"center",background:WA(0.04),border:`1px solid ${WA(0.08)}`,borderRadius:10,padding:"10px 12px",marginBottom:6}}>
-                  <input value={alisFiyatInput} onChange={e=>setAlisFiyatInput(e.target.value)} placeholder="0" inputMode="decimal" style={{flex:1,background:"none",border:"none",outline:"none",color:C.text,fontSize:16,fontWeight:700,fontFamily:"inherit"}}/>
-                  <span style={{fontSize:12,color:C.sub}}>₺ / {tur==="fon"?"adet":(secilenEnstruman.birim==="lot"?"hisse":secilenEnstruman.birim)}</span>
-                </div>
-                {secilenEnstruman.fiyat!=null && (
-                  <div style={{fontSize:10,color:C.sub2,marginBottom:12}}>Güncel fiyatla dolduruldu — farklıysa üzerine yazabilirsin.</div>
-                )}
-                <button disabled={!alisFiyatInput} onClick={()=>{
-                  const f = parseFloat(alisFiyatInput.replace(",","."));
-                  if (isNaN(f)) return;
-                  // ISO (YYYY-MM-DD) formatında saklanır — kâr/zarar hesaplarında
-                  // tarih karşılaştırması (sıralama, "N gün önce" vb.) buna dayanıyor.
-                  // Kullanıcı "Alış tarihini gir"den buraya (otomatik bulunamadığı
-                  // için) düştüyse zaten girdiği tarih (alisTarihInput) korunur.
-                  // Fon'da: adet × girilen alış fiyatı = tutar (miktarOverride).
-                  let miktarOverride: number|undefined = undefined;
-                  if (tur==="fon") {
-                    const adet = parseFloat(fonAdetInput.replace(",","."));
-                    if (isFinite(adet) && adet>0 && isFinite(f)) miktarOverride = adet*f;
-                  }
-                  kaydetVeKapat({tarih: alisTarihInput || new Date().toISOString().slice(0,10), fiyat:f, kaynak:"elle"}, miktarOverride);
-                }} style={{width:"100%",background:C.blue,color:C.bg,border:"none",borderRadius:10,padding:"11px 0",fontSize:13,fontWeight:800,cursor:alisFiyatInput?"pointer":"default",opacity:alisFiyatInput?1:0.5,fontFamily:"inherit"}}>
-                  Portföyüme ekle
-                </button>
-              </>
+            <span style={{fontSize:11.5,fontWeight:700,color:C.sub,display:"block",marginBottom:5}}>
+              {tur==="fon"?"LOT":(secilenEnstruman.birim==="lot"?"LOT":secilenEnstruman.birim.toUpperCase())}
+            </span>
+            <div style={{display:"flex",alignItems:"center",background:WA(0.04),border:`1px solid ${WA(0.08)}`,borderRadius:10,padding:"10px 12px",marginBottom:12}}>
+              {tur==="fon" ? (
+                <input value={fonAdetInput} onChange={e=>setFonAdetInput(e.target.value)} placeholder="0" inputMode="decimal" style={{flex:1,background:"none",border:"none",outline:"none",color:C.text,fontSize:16,fontWeight:700,fontFamily:"inherit"}}/>
+              ) : (
+                <input value={miktarInput} onChange={e=>setMiktarInput(e.target.value)} placeholder="0" inputMode="decimal" style={{flex:1,background:"none",border:"none",outline:"none",color:C.text,fontSize:16,fontWeight:700,fontFamily:"inherit"}}/>
+              )}
+            </div>
+
+            <span style={{fontSize:11.5,fontWeight:700,color:C.sub,display:"block",marginBottom:5}}>ALIŞ FİYATI (₺)</span>
+            <div style={{display:"flex",alignItems:"center",background:WA(0.04),border:`1px solid ${WA(0.08)}`,borderRadius:10,padding:"10px 12px",marginBottom:6}}>
+              <input value={alisFiyatInput} onChange={e=>setAlisFiyatInput(e.target.value)} placeholder="0" inputMode="decimal" style={{flex:1,background:"none",border:"none",outline:"none",color:C.text,fontSize:16,fontWeight:700,fontFamily:"inherit"}}/>
+            </div>
+            {secilenEnstruman.fiyat!=null && (
+              <div style={{fontSize:10,color:C.sub2,marginBottom:12}}>Güncel fiyatla dolduruldu — farklıysa üzerine yazabilirsin.</div>
             )}
+
+            <span style={{fontSize:11.5,fontWeight:700,color:C.sub,display:"block",marginBottom:5}}>ALIŞ TARİHİ</span>
+            <input type="date" value={alisTarihInput} onChange={e=>setAlisTarihInput(e.target.value)} max={new Date().toISOString().slice(0,10)} style={{width:"100%",boxSizing:"border-box",background:WA(0.04),border:`1px solid ${WA(0.08)}`,borderRadius:10,padding:"10px 12px",color:C.text,fontSize:14,fontFamily:"inherit",marginBottom:6}}/>
+            {tarihOtomatikDestekli && alisTarihInput && alisTarihInput!==new Date().toISOString().slice(0,10) && (
+              <button disabled={alisAraniyor} onClick={otomatikAlisAra} style={{width:"100%",background:"none",border:`1px solid ${C.blue}`,color:C.blue,borderRadius:10,padding:"9px 0",fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginBottom:12}}>
+                {alisAraniyor?"⟳ Fiyat aranıyor…":`${portfoyTarihGoster(alisTarihInput)} fiyatını otomatik bul`}
+              </button>
+            )}
+            {!tarihOtomatikDestekli && <div style={{fontSize:10,color:C.orange,marginBottom:12}}>Fon için geçmiş fiyat otomatik bulunamıyor — yukarıdaki fiyatı elle düzeltebilirsin.</div>}
+            {alisHata && <div style={{fontSize:11,color:C.red,marginBottom:10}}>{alisHata}</div>}
+
+            <button onClick={()=>{
+              const lotStr = tur==="fon" ? fonAdetInput : miktarInput;
+              const f = alisFiyatInput.trim()==="" ? NaN : parseFloat(alisFiyatInput.replace(",","."));
+              if (lotStr.trim()==="") {
+                // Lot hiç girilmedi — sadece takip amaçlı, fiyat/tarih de yoksayılır.
+                kaydetVeKapat(null);
+                return;
+              }
+              if (isNaN(f) || f<=0) { setAlisHata("Alış fiyatı sıfırdan büyük olmalı."); return; }
+              let miktarOverride: number|undefined = undefined;
+              if (tur==="fon") {
+                const adet = parseFloat(fonAdetInput.replace(",","."));
+                if (isFinite(adet) && adet>0) miktarOverride = adet*f;
+              }
+              kaydetVeKapat({tarih: alisTarihInput || new Date().toISOString().slice(0,10), fiyat:f, kaynak:"elle"}, miktarOverride);
+            }} style={{width:"100%",background:C.blue,color:C.bg,border:"none",borderRadius:10,padding:"11px 0",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"inherit",marginBottom:8}}>
+              Portföyüme ekle
+            </button>
+            <button onClick={()=>kaydetVeKapat(null)} style={{width:"100%",background:"none",border:"none",color:C.sub,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",padding:"8px 0"}}>
+              Sadece takip et, {(tur==="fon"||tur==="hisse")?"lot":"miktar"} girmeden ekle
+            </button>
           </>
         )}
       </div>
@@ -24536,7 +24491,7 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onDuzen
             </span>
             {kzKalemleri.length>0 && (
               <span style={{fontSize:11.5,fontWeight:800,color:toplamKZ>=0?C.green:C.red,background:toplamKZ>=0?C.greenLight:"rgba(248,113,113,0.15)",borderRadius:8,padding:"5px 9px"}}>
-                Alıştan beri {toplamKZ>=0?"+":""}{gizli?"₺••••":portfoyFmtTL(toplamKZ)} ({toplamKZ>=0?"+":""}{toplamKZYuzde.toFixed(2)}%)
+                Toplam {toplamKZ>=0?"+":""}{gizli?"₺••••":portfoyFmtTL(toplamKZ)} ({toplamKZ>=0?"+":""}{toplamKZYuzde.toFixed(2)}%)
               </span>
             )}
           </div>
@@ -24758,7 +24713,7 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onDuzen
                     <span>
                       {(k.alisKalemleri?.length||0)>1 ? "Ort. maliyet " : ""}
                       {(k.alisKalemleri?.length||0)>1 ? "" : `${portfoyTarihGoster(k.alis!.tarih)} · `}
-                      {gizli?"₺••••":portfoyFmtDeger(k.alis!.fiyat, k)}{k.tur!=="fon"?`/${k.birim==="lot"?"hisse":k.birim}`:""}
+                      {gizli?"₺••••":portfoyFmtDeger(k.alis!.fiyat, k)}{k.tur!=="fon"?`/${k.birim}`:""}
                     </span>
                     )}
                     {k.tur!=="katilim" && k.tur!=="sukuk" && ((k.alisKalemleri?.length||0)>1 ? (
@@ -24781,8 +24736,8 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onDuzen
                   <div style={{marginTop:6,display:"flex",flexDirection:"column",gap:3}}>
                     {k.alisKalemleri!.map((l,li)=>(
                       <div key={li} style={{display:"flex",justifyContent:"space-between",fontSize:9.5,color:PORTFOY_ETIKET}}>
-                        <span>{portfoyTarihGoster(l.tarih)} · {gizli?"••":l.miktar.toLocaleString("tr-TR")} {k.birim==="lot"?"hisse":k.birim}</span>
-                        <span>{gizli?"₺••••":portfoyFmtDeger(l.fiyat, k)}{k.tur!=="fon"?`/${k.birim==="lot"?"hisse":k.birim}`:""}</span>
+                        <span>{portfoyTarihGoster(l.tarih)} · {gizli?"••":l.miktar.toLocaleString("tr-TR")} {k.birim}</span>
+                        <span>{gizli?"₺••••":portfoyFmtDeger(l.fiyat, k)}{k.tur!=="fon"?`/${k.birim}`:""}</span>
                       </div>
                     ))}
                   </div>
@@ -24795,7 +24750,7 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onDuzen
 
       <div onClick={onEkle} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"12px 0",border:`1px dashed ${WA(0.15)}`,borderRadius:12,cursor:"pointer",marginTop:4}}>
         <Plus size={14} color={C.blue}/>
-        <span style={{fontSize:12.5,fontWeight:700,color:C.blue}}>Ürün ekle</span>
+        <span style={{fontSize:12.5,fontWeight:700,color:C.blue}}>Pozisyon ekle</span>
       </div>
       {grafikAcik && <PortfoyKarZararModal liste={liste} onClose={()=>setGrafikAcik(false)}/>}
     </div>
@@ -24923,6 +24878,27 @@ function App(){
   const icerikOlcek=!IS_NATIVE&&ekranW>=1680?1.22:(genisEkran&&ekranW>=1360?1.12:1);
   const kolonW=IS_NATIVE?680:(genisEkran?640:430);
   const altBarW=IS_NATIVE?560:402;
+  // ── ANA SAYFA SABİT ÜST BLOK — YÜKSEKLİK ÖLÇÜMÜ (2026-09-10, 2. tur) ─────
+  // ÖNCEKİ tur `position:"sticky"` kullanmıştı ama kullanıcı raporunda
+  // (ekran görüntüleriyle) kaydırınca hâlâ kaybolduğu/bozuk göründüğü
+  // doğrulandı — sticky, Capacitor WebView'da (muhtemelen zoom/viewport
+  // etkileşimi yüzünden) güvenilmez çıktı. Artık DAHA SAĞLAM bir teknik:
+  // `position:"fixed"` (viewport'a gerçekten sabitlenir, scroll-container
+  // takibi gerektirmez) + altına TAM ÖLÇÜSÜNDE bir "spacer" (boşluk) —
+  // içerik fixed bloğun ALTINA girmesin diye. Blok ResizeObserver ile
+  // canlı ölçülüyor (tema değişimi, bildirim rozeti çıkması gibi yükseklik
+  // değiştirebilecek her durumda spacer otomatik senkron kalır).
+  const anaSayfaUstBlokRef = useRef<HTMLDivElement>(null);
+  const [anaSayfaUstBlokYukseklik, setAnaSayfaUstBlokYukseklik] = useState(0);
+  useEffect(() => {
+    const el = anaSayfaUstBlokRef.current;
+    if (!el || screen !== "home") return;
+    const guncelle = () => setAnaSayfaUstBlokYukseklik(el.offsetHeight);
+    guncelle();
+    const ro = new ResizeObserver(guncelle);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [screen]);
   useEffect(()=>{
     if(IS_NATIVE) return;
     // Kolon dışında kalan alan: köşelere doğru koyulaşan degrade
@@ -26022,19 +25998,33 @@ function App(){
       ...(icerikOlcek!==1?{zoom:icerikOlcek}:{})} as any}>
       <div key={screen} className="screen-anim">
       {/* header */}
-      <div style={{background:C.bg,padding:screen==="home"?"calc(18px + env(safe-area-inset-top,0px)) 20px 6px":"calc(44px + env(safe-area-inset-top,0px)) 20px 20px"}}>
+      {/* ⚠️ 2026-09-10: home ekranında padding "0" yapıldı — sabit üst blok
+          artık position:"fixed" olduğu için KENDİ padding'ini taşıyor,
+          bu dıştaki div'in AYRICA padding vermesi çakışıp altında fazladan
+          bir boşluk/hizasızlık yaratıyordu. Diğer ekranlar (home DIŞI)
+          AYNEN eskisi gibi kendi padding'ini koruyor. */}
+      <div style={{background:C.bg,padding:screen==="home"?"0 20px 6px":"calc(44px + env(safe-area-inset-top,0px)) 20px 20px"}}>
         {screen==="home"?(
           <div>
-            {/* ── SABİT ÜST BLOK (2026-09-10, kullanıcı isteği) ─────────────
+            {/* ── SABİT ÜST BLOK (2026-09-10, kullanıcı isteği; AYNI GÜN 2.
+                turda sticky→fixed'e geçirildi) ──────────────────────────
                 Ana sayfada aşağı kaydırırken logo+ikonlar+arama kutusu artık
-                üstte SABİT kalıyor (position:sticky), altındaki içerik
-                (Zekât/Piyasa Özeti kaydırıcısı, Piyasa Özeti, vb.) onun
-                ALTINDA kayıyor. `top` değeri env(safe-area-inset-top) ile
-                verildi — çentikli telefonlarda sabitlenen blok durum
-                çubuğunun/çentiğin ALTINA oturuyor, üstüne binmiyor. zIndex
-                arama sonuçları açılır menüsünden (zIndex:50) DÜŞÜK tutuldu
-                ki açılır menü bu bloğun üzerinde kalsın. */}
-            <div style={{position:"sticky",top:"env(safe-area-inset-top, 0px)",zIndex:40,background:C.bg,paddingBottom:6}}>
+                üstte SABİT kalıyor. İLK tur `position:"sticky"` kullanmıştı
+                ama kullanıcı ekran görüntüleriyle kaydırınca hâlâ
+                kaybolduğunu/bozuk göründüğünü doğruladı (Capacitor
+                WebView'da sticky güvenilmez çıktı — muhtemelen zoom/
+                viewport etkileşimi). Artık `position:"fixed"` (gerçekten
+                viewport'a sabitlenir) + altında TAM ÖLÇÜSÜNDE bir spacer
+                (aşağıda) kullanılıyor — fixed öğe normal akıştan çıktığı
+                için spacer olmazsa içerik yukarı kayıp bloğun ALTINA
+                girerdi. Spacer'ın yüksekliği ResizeObserver ile CANLI
+                ölçülüyor (tema/rozet gibi değişikliklerde otomatik senkron
+                kalır). `top` değeri env(safe-area-inset-top) ile verildi —
+                çentikli telefonlarda blok durum çubuğunun/çentiğin ALTINA
+                oturuyor. zIndex arama sonuçları açılır menüsünden
+                (zIndex:50) DÜŞÜK tutuldu ki açılır menü bu bloğun üzerinde
+                kalsın. */}
+            <div ref={anaSayfaUstBlokRef} style={{position:"fixed",top:"env(safe-area-inset-top, 0px)",left:SIDEBAR_W,right:0,maxWidth:genisEkran?"none":kolonW,margin:"0 auto",zIndex:40,background:C.bg,padding:"18px 20px 6px"}}>
             {/* Logo + marka — dikeyde tam ortalanmış, net hiyerarşi (marka adı
                 büyütülüp kalınlaştırıldı, slogan küçültülüp soluklaştırıldı) */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:20}}>
@@ -26190,7 +26180,11 @@ function App(){
               );
             })()}
             </div>
-            {/* ── SABİT ÜST BLOK BİTİŞİ — buradan sonrası normal kayıyor ── */}
+            {/* ── SABİT ÜST BLOK BİTİŞİ — position:fixed olduğu için normal
+                akıştan çıktı, bu spacer onun bıraktığı boşluğu dolduruyor
+                (yüksekliği yukarıdaki ResizeObserver ile canlı ölçülüyor —
+                tema/rozet gibi değişikliklerde otomatik senkron kalır). */}
+            <div style={{height:anaSayfaUstBlokYukseklik}}/>
 
             <AnaSayfaHeroSerit selamlama={TR(selamlama)} bugunMetni={kisaTarihStr} kullaniciAdi={kullaniciAdi} genisEkran={genisEkran} git={(hedef) => {
               if (hedef === "altin") { setPiyasaTabloFiltre("altin"); nav("piyasaMenu"); }
