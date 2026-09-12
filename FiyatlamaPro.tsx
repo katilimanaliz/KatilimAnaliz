@@ -24748,9 +24748,27 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onDuzen
         );
       })}
 
-      <div onClick={onEkle} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"12px 0",border:`1px dashed ${WA(0.15)}`,borderRadius:12,cursor:"pointer",marginTop:4}}>
-        <Plus size={14} color={C.blue}/>
-        <span style={{fontSize:12.5,fontWeight:700,color:C.blue}}>Pozisyon ekle</span>
+      {/* ── "Pozisyon ekle" — YÜZEN DÜĞME (2026-09-10, kullanıcı isteği,
+          referans ekran görüntüsüne göre) ────────────────────────────────
+          ÖNCEDEN listenin en altında tam genişlikte kesik çizgili bir
+          kutuydu; artık sağ altta, alt navigasyon çubuğunun hemen üstünde
+          yüzen koyu bir düğme. position:"fixed" — aynı ağaçtaki modaller
+          (PortfoyEkleModal vb.) de fixed kullanıp sorunsuz çalıştığı için
+          burada güvenli. zIndex alt bardan (90) DÜŞÜK tutuldu ki bar her
+          zaman üstte kalsın. Listenin son kalemi düğmenin altında
+          kalmasın diye aşağıda ekstra boşluk bırakılıyor. */}
+      <div style={{height:72}}/>
+      <div onClick={onEkle} style={{
+        position:"fixed",right:20,zIndex:80,
+        bottom:"calc(92px + env(safe-area-inset-bottom,0px))",
+        display:"flex",alignItems:"center",gap:7,
+        padding:"14px 22px",borderRadius:999,cursor:"pointer",
+        background:(TEMA==="acik"?"#16222E":"#EAF1FA"),
+        color:(TEMA==="acik"?"#FFFFFF":"#16222E"),
+        boxShadow:(TEMA==="acik"?"0 6px 20px rgba(22,34,46,0.32)":"0 6px 20px rgba(0,0,0,0.5)"),
+      }}>
+        <Plus size={15} color={TEMA==="acik"?"#FFFFFF":"#16222E"} strokeWidth={2.5}/>
+        <span style={{fontSize:13.5,fontWeight:700}}>Pozisyon ekle</span>
       </div>
       {grafikAcik && <PortfoyKarZararModal liste={liste} onClose={()=>setGrafikAcik(false)}/>}
     </div>
