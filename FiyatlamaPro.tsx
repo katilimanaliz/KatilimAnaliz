@@ -24878,27 +24878,6 @@ function App(){
   const icerikOlcek=!IS_NATIVE&&ekranW>=1680?1.22:(genisEkran&&ekranW>=1360?1.12:1);
   const kolonW=IS_NATIVE?680:(genisEkran?640:430);
   const altBarW=IS_NATIVE?560:402;
-  // ── ANA SAYFA SABİT ÜST BLOK — YÜKSEKLİK ÖLÇÜMÜ (2026-09-10, 2. tur) ─────
-  // ÖNCEKİ tur `position:"sticky"` kullanmıştı ama kullanıcı raporunda
-  // (ekran görüntüleriyle) kaydırınca hâlâ kaybolduğu/bozuk göründüğü
-  // doğrulandı — sticky, Capacitor WebView'da (muhtemelen zoom/viewport
-  // etkileşimi yüzünden) güvenilmez çıktı. Artık DAHA SAĞLAM bir teknik:
-  // `position:"fixed"` (viewport'a gerçekten sabitlenir, scroll-container
-  // takibi gerektirmez) + altına TAM ÖLÇÜSÜNDE bir "spacer" (boşluk) —
-  // içerik fixed bloğun ALTINA girmesin diye. Blok ResizeObserver ile
-  // canlı ölçülüyor (tema değişimi, bildirim rozeti çıkması gibi yükseklik
-  // değiştirebilecek her durumda spacer otomatik senkron kalır).
-  const anaSayfaUstBlokRef = useRef<HTMLDivElement>(null);
-  const [anaSayfaUstBlokYukseklik, setAnaSayfaUstBlokYukseklik] = useState(0);
-  useEffect(() => {
-    const el = anaSayfaUstBlokRef.current;
-    if (!el || screen !== "home") return;
-    const guncelle = () => setAnaSayfaUstBlokYukseklik(el.offsetHeight);
-    guncelle();
-    const ro = new ResizeObserver(guncelle);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [screen]);
   useEffect(()=>{
     if(IS_NATIVE) return;
     // Kolon dışında kalan alan: köşelere doğru koyulaşan degrade
@@ -26005,26 +25984,19 @@ function App(){
           AYNEN eskisi gibi kendi padding'ini koruyor. */}
       <div style={{background:C.bg,padding:screen==="home"?"0 20px 6px":"calc(44px + env(safe-area-inset-top,0px)) 20px 20px"}}>
         {screen==="home"?(
-          <div>
-            {/* ── SABİT ÜST BLOK (2026-09-10, kullanıcı isteği; AYNI GÜN 2.
-                turda sticky→fixed'e geçirildi) ──────────────────────────
-                Ana sayfada aşağı kaydırırken logo+ikonlar+arama kutusu artık
-                üstte SABİT kalıyor. İLK tur `position:"sticky"` kullanmıştı
-                ama kullanıcı ekran görüntüleriyle kaydırınca hâlâ
-                kaybolduğunu/bozuk göründüğünü doğruladı (Capacitor
-                WebView'da sticky güvenilmez çıktı — muhtemelen zoom/
-                viewport etkileşimi). Artık `position:"fixed"` (gerçekten
-                viewport'a sabitlenir) + altında TAM ÖLÇÜSÜNDE bir spacer
-                (aşağıda) kullanılıyor — fixed öğe normal akıştan çıktığı
-                için spacer olmazsa içerik yukarı kayıp bloğun ALTINA
-                girerdi. Spacer'ın yüksekliği ResizeObserver ile CANLI
-                ölçülüyor (tema/rozet gibi değişikliklerde otomatik senkron
-                kalır). `top` değeri env(safe-area-inset-top) ile verildi —
-                çentikli telefonlarda blok durum çubuğunun/çentiğin ALTINA
-                oturuyor. zIndex arama sonuçları açılır menüsünden
-                (zIndex:50) DÜŞÜK tutuldu ki açılır menü bu bloğun üzerinde
-                kalsın. */}
-            <div ref={anaSayfaUstBlokRef} style={{position:"fixed",top:"env(safe-area-inset-top, 0px)",left:SIDEBAR_W,right:0,maxWidth:genisEkran?"none":kolonW,margin:"0 auto",zIndex:40,background:C.bg,padding:"18px 20px 6px"}}>
+          <div style={{height:"100dvh",display:"flex",flexDirection:"column"}}>
+            {/* ── SABİT ÜST BLOK (2026-09-10, 3. tur — kullanıcı ekran
+                görüntüleriyle fixed+spacer'ın da bozuk göründüğünü
+                doğruladı: içerik bazen bloğun ÜZERİNDEN geçiyordu, bazen
+                üstte boşluk kalıyordu). ÖNCEKİ İKİ TEKNİK (sticky, sonra
+                fixed+ölçülen spacer) İKİSİ DE bu Capacitor WebView'da
+                güvenilmez çıktı. Artık KESİN/YAPISAL bir çözüm: header
+                normal (statik) bir blok, ALTINDAKİ HER ŞEY ise KENDİ
+                kaydırma kutusunda (flex:1, overflowY:"auto"). Header hiçbir
+                zaman bu kutunun İÇİNDE değil — dolayısıyla "üstünden içerik
+                geçmesi" YAPISAL OLARAK imkânsız (ölçüm/z-index/pozisyon
+                numarasına hiç ihtiyaç yok). */}
+            <div style={{flexShrink:0,background:C.bg,padding:"calc(18px + env(safe-area-inset-top,0px)) 0 6px"}}>
             {/* Logo + marka — dikeyde tam ortalanmış, net hiyerarşi (marka adı
                 büyütülüp kalınlaştırıldı, slogan küçültülüp soluklaştırıldı) */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:20}}>
@@ -26180,11 +26152,9 @@ function App(){
               );
             })()}
             </div>
-            {/* ── SABİT ÜST BLOK BİTİŞİ — position:fixed olduğu için normal
-                akıştan çıktı, bu spacer onun bıraktığı boşluğu dolduruyor
-                (yüksekliği yukarıdaki ResizeObserver ile canlı ölçülüyor —
-                tema/rozet gibi değişikliklerde otomatik senkron kalır). */}
-            <div style={{height:anaSayfaUstBlokYukseklik}}/>
+            {/* ── SABİT ÜST BLOK BİTİŞİ — buradan sonrası KENDİ kaydırma
+                kutusunda (flex:1, overflowY:"auto"), header'ın DIŞINDA. */}
+            <div style={{flex:1,overflowY:"auto"}}>
 
             <AnaSayfaHeroSerit selamlama={TR(selamlama)} bugunMetni={kisaTarihStr} kullaniciAdi={kullaniciAdi} genisEkran={genisEkran} git={(hedef) => {
               if (hedef === "altin") { setPiyasaTabloFiltre("altin"); nav("piyasaMenu"); }
@@ -26311,6 +26281,7 @@ function App(){
                 </div>
               );
             })()}
+            </div>
           </div>
         ):(
           <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
