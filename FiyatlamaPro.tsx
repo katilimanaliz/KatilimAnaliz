@@ -12110,6 +12110,33 @@ function GetiriKarsilastirma(){
       .catch(()=>{});
   },[]);
 
+  // ⚠️ EK: KATILIM DIŞI FONLAR (2026-09-10, kullanıcı raporu — "tüm fonlar
+  // eklenmiyor, sadece katılıma uygun olanlar var"). Yukarıdaki varsayılan uç
+  // SADECE katılıma uygun ~442 fonu döndürüyor; "Ekle" kutusuna THF gibi
+  // katılım dışı bir kod yazıldığında `fonListe.find(...)` boş dönüp kod bir
+  // BIST hissesi sanılıyor ("THF.IS") ve grafikte hiç görünmüyordu. (Aynı kök
+  // hata Portföyüm'ün fiyat tazelemesinde de vardı, orada da böyle çözüldü.)
+  // Artık "Tüm Fonlar" listesi de çekilip fonListe'ye EKLENİYOR — kod araması
+  // tüm TEFAS fonlarını kapsıyor.
+  // ⚠️ Ortalama (fonOrt) BİLEREK dokunulmadan bırakıldı: o, katılım para
+  // piyasası fonlarının ortalamasını temsil ediyor ve karşılaştırmada
+  // "Para P. Fonları" çubuğu olarak gösteriliyor — katılım dışı fonların
+  // buraya karışması o göstergenin anlamını bozardı.
+  useEffect(()=>{
+    fetch(`${API_BASE}/api/tefas-proxy?tumFonlar=1`)
+      .then(r=>r.ok?r.json():null)
+      .then(j=>{
+        const digerler=j?.data||[];
+        if(!digerler.length) return;
+        setFonListe(mevcut=>{
+          const varOlanKodlar=new Set(mevcut.map((f:any)=>String(f.kod||"").toUpperCase()));
+          const yeniler=digerler.filter((f:any)=>f?.kod&&!varOlanKodlar.has(String(f.kod).toUpperCase()));
+          return yeniler.length? [...mevcut,...yeniler] : mevcut;
+        });
+      })
+      .catch(()=>{});
+  },[]);
+
   // "Ekle" işlemi: önce TEFAS fon kodu olarak dene, yoksa Yahoo sembolü say.
   // Nokta/tire/= içermeyen kısa kodlar BIST hissesi varsayılır (SONEK .IS).
   const enstrumanEkle=()=>{
@@ -12273,7 +12300,7 @@ function GetiriKarsilastirma(){
               </div>
             )}
             <p style={{margin:"8px 2px 0",fontSize:10,color:WA(0.35),lineHeight:1.5}}>
-              Örnekler: <b>THYAO</b> (BIST hissesi), <b>VLT</b> (fon kodu), <b>BTC-USD</b> (kripto), <b>GBPTRY=X</b> (kur). BIST hisseleri için sadece kodu yazmanız yeterli. Fon kodları uygulamadaki katılım fonu listesinden bulunur; getirisi hesaplanamayan semboller grafikte görünmez.
+              Örnekler: <b>THYAO</b> (BIST hissesi), <b>VLT</b> (fon kodu), <b>BTC-USD</b> (kripto), <b>GBPTRY=X</b> (kur). BIST hisseleri için sadece kodu yazmanız yeterli. Tüm TEFAS fon kodları (katılım dışı dahil) kullanılabilir; getirisi hesaplanamayan semboller grafikte görünmez.
             </p>
           </div>
         )}
