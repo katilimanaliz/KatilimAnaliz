@@ -24878,6 +24878,24 @@ function App(){
   const icerikOlcek=!IS_NATIVE&&ekranW>=1680?1.22:(genisEkran&&ekranW>=1360?1.12:1);
   const kolonW=IS_NATIVE?680:(genisEkran?640:430);
   const altBarW=IS_NATIVE?560:402;
+  // ── ANA SAYFA SABİT ÜST BLOK — YÜKSEKLİK ÖLÇÜMÜ ─────────────────────────
+  // Blok artık uygulama KÖKÜNDE (alt barla aynı seviyede) position:"fixed"
+  // olarak duruyor — normal akıştan çıktığı için ana sayfa içeriğinin en
+  // üstüne onun yüksekliği kadar bir spacer koyuyoruz. ResizeObserver ile
+  // canlı ölçülüyor: tema değişimi, bildirim rozetinin çıkması, arama
+  // kutusunun açılır listesi gibi durumlarda spacer otomatik senkron kalır.
+  const anaSayfaUstBlokRef = useRef<HTMLDivElement>(null);
+  const [anaSayfaUstBlokYukseklik, setAnaSayfaUstBlokYukseklik] = useState(0);
+  useEffect(() => {
+    if (screen !== "home") return;
+    const el = anaSayfaUstBlokRef.current;
+    if (!el) return;
+    const guncelle = () => setAnaSayfaUstBlokYukseklik(el.offsetHeight);
+    guncelle();
+    const ro = new ResizeObserver(guncelle);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [screen]);
   useEffect(()=>{
     if(IS_NATIVE) return;
     // Kolon dışında kalan alan: köşelere doğru koyulaşan degrade
@@ -25984,177 +26002,19 @@ function App(){
           AYNEN eskisi gibi kendi padding'ini koruyor. */}
       <div style={{background:C.bg,padding:screen==="home"?"0 20px 6px":"calc(44px + env(safe-area-inset-top,0px)) 20px 20px"}}>
         {screen==="home"?(
-          <div style={{height:"100dvh",display:"flex",flexDirection:"column"}}>
-            {/* ── SABİT ÜST BLOK (2026-09-10, 3. tur — kullanıcı ekran
-                görüntüleriyle fixed+spacer'ın da bozuk göründüğünü
-                doğruladı: içerik bazen bloğun ÜZERİNDEN geçiyordu, bazen
-                üstte boşluk kalıyordu). ÖNCEKİ İKİ TEKNİK (sticky, sonra
-                fixed+ölçülen spacer) İKİSİ DE bu Capacitor WebView'da
-                güvenilmez çıktı. Artık KESİN/YAPISAL bir çözüm: header
-                normal (statik) bir blok, ALTINDAKİ HER ŞEY ise KENDİ
-                kaydırma kutusunda (flex:1, overflowY:"auto"). Header hiçbir
-                zaman bu kutunun İÇİNDE değil — dolayısıyla "üstünden içerik
-                geçmesi" YAPISAL OLARAK imkânsız (ölçüm/z-index/pozisyon
-                numarasına hiç ihtiyaç yok). */}
-            <div style={{flexShrink:0,background:C.bg,padding:"calc(18px + env(safe-area-inset-top,0px)) 0 6px"}}>
-            {/* Logo + marka — dikeyde tam ortalanmış, net hiyerarşi (marka adı
-                büyütülüp kalınlaştırıldı, slogan küçültülüp soluklaştırıldı) */}
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:20}}>
-              <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
-                <div style={{width:44,height:44,borderRadius:22,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,background:"#FFFFFF",boxShadow:"0 1px 4px rgba(0,0,0,0.25)"}}>
-                  <img src={KATILIM_LOGO_B64} alt="" style={{height:30,width:"auto",display:"block"}}/>
-                </div>
-                <div style={{display:"flex",flexDirection:"column",justifyContent:"center",minWidth:0}}>
-                  <span style={{fontSize:17,fontWeight:800,letterSpacing:"-0.01em",color:(TEMA==="acik"?"#16222E":"#EAF1FA")}}>Katılım <span style={{background:"linear-gradient(90deg,#1B9E7A,#2CCB9A)",WebkitBackgroundClip:"text",backgroundClip:"text",color:"transparent"}}>Plus</span></span>
-                  <span style={{fontSize:10.5,fontWeight:600,color:(TEMA==="acik"?"#2E4256":"rgba(255,255,255,0.62)"),letterSpacing:"0.01em",marginTop:1}}>{CV("Katılım Finansının Akıllı Asistanı")}</span>
-                </div>
-              </div>
-              {/* ── PORTFÖYÜM KISAYOLU (2026-09-08 eklendi, 2. turda tasarım
-                  gözden geçirildi, 3. turda masaüstü grup düzeltmesi) ──────
-                  Ana sayfadaki Portföyüm kartı (PortfoyWidget) kaldırılıp
-                  header'a taşındı — kullanıcı isteği. Kart'ın kodu SİLİNMEDİ,
-                  aşağıda JSX yorumu içinde saklı duruyor (bkz. "PORTFÖYÜM
-                  KARTI — GEÇİCİ OLARAK GİZLENDİ" notu); vazgeçilirse tek
-                  satırlık yorum işaretini kaldırmak yeterli. Bu ikon,
-                  Araçlar > Portföyüm ile AYNI tam sayfaya (nav("portfoyum"))
-                  bağlanıyor — ayrı bir mini görünüm değil.
-                  TASARIM (2. tur — kullanıcı "profesyonel/güzel değil" dedi):
-                  düz gri daire yerine markanın kendi logosundaki yeşil
-                  gradyanı (#1B9E7A→#2CCB9A) dolgu olarak kullanıldı — hem
-                  ayırt edici hem markayla tutarlı. Sıra da bildirimden ÖNCE
-                  (solda) olacak şekilde değiştirildi.
-                  MASAÜSTÜ DÜZELTMESİ (2026-09-09, kullanıcı raporu, ekran
-                  görüntüsüyle): dıştaki satır `justify-content:space-between`
-                  ile TAM 3 öğe (logo, Portföyüm, bildirim) taşıyordu — dar
-                  mobil genişlikte fark az görünüyordu ama masaüstünün geniş
-                  kolonunda (640px+) ortadaki Portföyüm ikonu bildirimden
-                  uzağa, satırın ortasına düşüyordu. O turda kullanıcı SADECE
-                  masaüstü için düzeltme istemişti.
-                  MOBİL DÜZELTMESİ (2026-09-09, AYNI GÜN 2. rapor): kullanıcı
-                  bu sefer mobilde de aradaki boşluğun fazla olduğunu belirtti
-                  — mobil dal da artık AYNI gruplama desenini kullanıyor
-                  (sadece daha küçük bir gap: 6px, masaüstündeki 8px'ten az —
-                  mobil ekranda görsel olarak daha sıkı durması için). İki
-                  dal hâlâ ayrı tutuldu (kod tekrarı var) ki ileride biri
-                  değişirse diğeri YANLIŞLIKLA etkilenmesin. */}
-              {genisEkran ? (
-                <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
-                  <button onClick={()=>{setPortfoyBaslangicSekme("portfoy"); nav("portfoyum","home");}} style={{
-                    position:"relative",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
-                    width:40,height:40,borderRadius:20,border:"none",cursor:"pointer",
-                    background:"linear-gradient(135deg,#1B9E7A,#2CCB9A)",
-                    boxShadow:"0 2px 8px rgba(27,158,122,0.35)",
-                  }}>
-                    <Wallet size={18} color="#FFFFFF" strokeWidth={2} absoluteStrokeWidth/>
-                  </button>
-                  <button onClick={()=>{setBildirimGecmisiAcik(true);bildirimOkunduIsaretle();}} style={{
-                    position:"relative",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
-                    width:40,height:40,borderRadius:20,border:"none",background:WA(0.06),cursor:"pointer",
-                  }}>
-                    <Bell size={19} color={(TEMA==="acik"?"#2E6DA8":"#9FC1EA")} strokeWidth={2} absoluteStrokeWidth/>
-                    {bildirimOkunmamisSayisi>0&&(
-                      <span style={{position:"absolute",top:5,right:6,minWidth:16,height:16,padding:"0 4px",borderRadius:8,background:C.red,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:800,color:"#fff",lineHeight:1}}>
-                        {bildirimOkunmamisSayisi>9?"9+":bildirimOkunmamisSayisi}
-                      </span>
-                    )}
-                  </button>
-                </div>
-              ) : (
-                <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
-                  <button onClick={()=>{setPortfoyBaslangicSekme("portfoy"); nav("portfoyum","home");}} style={{
-                    position:"relative",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
-                    width:40,height:40,borderRadius:20,border:"none",cursor:"pointer",
-                    background:"linear-gradient(135deg,#1B9E7A,#2CCB9A)",
-                    boxShadow:"0 2px 8px rgba(27,158,122,0.35)",
-                  }}>
-                    <Wallet size={18} color="#FFFFFF" strokeWidth={2} absoluteStrokeWidth/>
-                  </button>
-                  <button onClick={()=>{setBildirimGecmisiAcik(true);bildirimOkunduIsaretle();}} style={{
-                    position:"relative",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
-                    width:40,height:40,borderRadius:20,border:"none",background:WA(0.06),cursor:"pointer",
-                  }}>
-                    <Bell size={19} color={(TEMA==="acik"?"#2E6DA8":"#9FC1EA")} strokeWidth={2} absoluteStrokeWidth/>
-                    {bildirimOkunmamisSayisi>0&&(
-                      <span style={{position:"absolute",top:5,right:6,minWidth:16,height:16,padding:"0 4px",borderRadius:8,background:C.red,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:800,color:"#fff",lineHeight:1}}>
-                        {bildirimOkunmamisSayisi>9?"9+":bildirimOkunmamisSayisi}
-                      </span>
-                    )}
-                  </button>
-                </div>
-              )}
-            </div>
-            {/* ── ANA MENÜ ARAMA ── */}
-            {(()=>{
-              const menuSonuclar=menuAramaQ.trim().length>1
-                ?MENU_ARAMA_LIST.filter(m=>{
-                    const q=menuAramaQ.toUpperCase();
-                    return m.label.toUpperCase().includes(q)
-                      ||CV(m.label).toUpperCase().includes(q)
-                      ||m.grup.toUpperCase().includes(q)
-                      ||(m.alt&&m.alt.some((k:string)=>k.toUpperCase().includes(q)));
-                  })
-                :[];
-              return(
-                <div style={{marginBottom:10,position:"relative"}}>
-                  <div style={{display:"flex",alignItems:"center",background:WA(0.07),borderRadius:12,border:menuAramaOdakli?`1.5px solid ${C.blue}`:`1px solid ${WA(0.12)}`,padding:"0 12px",boxShadow:menuAramaOdakli?`0 0 0 3px ${C.blueLight}`:"none",transition:"border-color 0.15s, box-shadow 0.15s"}}>
-                    <span style={{fontSize:14,color:WA(0.4),marginRight:8}}>🔍</span>
-                    {/* ── OTOMATİK DOLDURMA KAPALI (2026-08-01) ────────────────
-                        Android'de (Gboard/Samsung klavye) bu alan bir "isim"
-                        alanı sanılıp sayfadaki başlık ("Hoş geldin") otomatik
-                        doldurma önerisi olarak kutunun üzerine biniyordu —
-                        kullanıcı ekranda iki kez "Hoş geldin" görüyordu,
-                        kutuya dokununca kayboluyordu. type="search" + autoComplete
-                        ve arkadaşları bu davranışı kapatıyor.
-                        name/id BİLEREK verilmedi: tarayıcılar isimlendirilmiş
-                        alanları geçmiş değerlerle eşleştirip yeniden öneri
-                        sunabiliyor. ── */}
-                    <input
-                      type="search"
-                      inputMode="search"
-                      enterKeyHint="search"
-                      autoComplete="off"
-                      autoCorrect="off"
-                      autoCapitalize="off"
-                      spellCheck={false}
-                      data-form-type="other"
-                      aria-label={CV("Menülerde ara…")}
-                      value={menuAramaQ}
-                      onChange={e=>setMenuAramaQ(e.target.value)}
-                      onFocus={()=>setMenuAramaOdakli(true)}
-                      onBlur={()=>setMenuAramaOdakli(false)}
-                      placeholder={CV("Menülerde ara…")}
-                      style={{flex:1,background:"transparent",border:"none",outline:"none",color:(TEMA==="acik"?C.label:"#fff"),fontSize:13,padding:"10px 0",WebkitAppearance:"none",WebkitTapHighlightColor:"transparent"} as any}
-                    />
-                    {menuAramaQ&&<span onClick={()=>setMenuAramaQ("")} style={{fontSize:16,color:WA(0.4),cursor:"pointer",padding:"0 4px"}}>✕</span>}
-                  </div>
-                  {menuSonuclar.length>0&&(
-                    <div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:50,background:(TEMA==="acik"?"#E9EEF4":"#1A2633"),borderRadius:12,border:`1px solid ${WA(0.12)}`,marginTop:4,maxHeight:260,overflowY:"auto",boxShadow:"0 8px 24px rgba(0,0,0,0.5)"}}>
-                      {menuSonuclar.map((m,i)=>(
-                        <div key={m.key} onClick={()=>{nav(m.key);setMenuAramaQ("");}} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",borderBottom:i<menuSonuclar.length-1?`1px solid ${WA(0.07)}`:"none",cursor:"pointer"}}
-                          onMouseEnter={e=>(e.currentTarget.style.background=WA(0.05))}
-                          onMouseLeave={e=>(e.currentTarget.style.background="transparent")}>
-                          <span style={{width:22,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon k={m.key} size={18}/></span>
-                          <div style={{flex:1,minWidth:0}}>
-                            <div style={{fontSize:12,fontWeight:700,color:"#e8f0fa",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{CV(m.label)}</div>
-                            <div style={{fontSize:10,color:WA(0.35),marginTop:1}}>{CV(m.grup)}</div>
-                          </div>
-                          <span style={{fontSize:12,color:WA(0.25),flexShrink:0}}>›</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {menuAramaQ.trim().length>1&&menuSonuclar.length===0&&(
-                    <div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:50,background:(TEMA==="acik"?"#E9EEF4":"#1A2633"),borderRadius:12,border:`1px solid ${WA(0.12)}`,marginTop:4,padding:"14px",textAlign:"center"}}>
-                      <span style={{fontSize:12,color:WA(0.35)}}>{CV("Sonuç bulunamadı")}</span>
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-            </div>
-            {/* ── SABİT ÜST BLOK BİTİŞİ — buradan sonrası KENDİ kaydırma
-                kutusunda (flex:1, overflowY:"auto"), header'ın DIŞINDA. */}
-            <div style={{flex:1,overflowY:"auto"}}>
+          <div>
+            {/* ── SABİT ÜST BLOK — artık burada DEĞİL (2026-09-10, 5. tur) ──
+                Header bu sarmalayıcıların (.screen-anim animasyonu ve
+                zoom/minHeight taşıyan kapsayıcı) İÇİNDEYKEN sticky de fixed
+                de bozuluyordu — bir üst elemanın animasyon/zoom taşıması,
+                içindeki fixed/sticky öğelerin konumlama bağlamını
+                değiştiriyor. ÇALIŞTIĞI KANITLANMIŞ örnek: alt navigasyon
+                çubuğu, bu sarmalayıcıların TAMAMEN DIŞINDA (uygulama
+                kökünde) ve sorunsuz çalışıyor. Bu yüzden header da AYNI
+                seviyeye taşındı (dosyanın sonunda, alt barın hemen
+                yanında). Burada sadece onun kapladığı yer kadar boşluk
+                bırakılıyor. */}
+            <div style={{height:anaSayfaUstBlokYukseklik}}/>
 
             <AnaSayfaHeroSerit selamlama={TR(selamlama)} bugunMetni={kisaTarihStr} kullaniciAdi={kullaniciAdi} genisEkran={genisEkran} git={(hedef) => {
               if (hedef === "altin") { setPiyasaTabloFiltre("altin"); nav("piyasaMenu"); }
@@ -26281,7 +26141,6 @@ function App(){
                 </div>
               );
             })()}
-            </div>
           </div>
         ):(
           <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
@@ -27608,6 +27467,179 @@ function App(){
       </KategoriRenkContext.Provider>
       </div>
       </div>{/* /screen-anim */}
+
+      {/* ── ANA SAYFA SABİT ÜST BLOK ─────────────────────────────────────
+          Alt navigasyon çubuğuyla AYNI seviyede (uygulama kökü) — yani
+          .screen-anim ve zoom/minHeight taşıyan kapsayıcıların DIŞINDA.
+          Alt bar bu konumda hem WebView'da hem Safari'de sorunsuz sabit
+          kaldığı için, aynı konumdaki bu blok da aynı şekilde davranır.
+          Yüksekliği ResizeObserver ile ölçülüp yukarıdaki spacer'a
+          veriliyor, böylece içerik bloğun altına girmiyor. */}
+      {screen==="home"&&(
+        <div ref={anaSayfaUstBlokRef} style={{
+          position:"fixed",top:0,left:SIDEBAR_W,right:0,zIndex:45,
+          background:C.bg,
+        }}>
+          <div style={{maxWidth:genisEkran?"none":kolonW,margin:"0 auto",padding:"0 20px"}}>
+            <div style={{background:C.bg,padding:"calc(18px + env(safe-area-inset-top,0px)) 0 6px"}}>
+            {/* Logo + marka — dikeyde tam ortalanmış, net hiyerarşi (marka adı
+                büyütülüp kalınlaştırıldı, slogan küçültülüp soluklaştırıldı) */}
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:20}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
+                <div style={{width:44,height:44,borderRadius:22,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,background:"#FFFFFF",boxShadow:"0 1px 4px rgba(0,0,0,0.25)"}}>
+                  <img src={KATILIM_LOGO_B64} alt="" style={{height:30,width:"auto",display:"block"}}/>
+                </div>
+                <div style={{display:"flex",flexDirection:"column",justifyContent:"center",minWidth:0}}>
+                  <span style={{fontSize:17,fontWeight:800,letterSpacing:"-0.01em",color:(TEMA==="acik"?"#16222E":"#EAF1FA")}}>Katılım <span style={{background:"linear-gradient(90deg,#1B9E7A,#2CCB9A)",WebkitBackgroundClip:"text",backgroundClip:"text",color:"transparent"}}>Plus</span></span>
+                  <span style={{fontSize:10.5,fontWeight:600,color:(TEMA==="acik"?"#2E4256":"rgba(255,255,255,0.62)"),letterSpacing:"0.01em",marginTop:1}}>{CV("Katılım Finansının Akıllı Asistanı")}</span>
+                </div>
+              </div>
+              {/* ── PORTFÖYÜM KISAYOLU (2026-09-08 eklendi, 2. turda tasarım
+                  gözden geçirildi, 3. turda masaüstü grup düzeltmesi) ──────
+                  Ana sayfadaki Portföyüm kartı (PortfoyWidget) kaldırılıp
+                  header'a taşındı — kullanıcı isteği. Kart'ın kodu SİLİNMEDİ,
+                  aşağıda JSX yorumu içinde saklı duruyor (bkz. "PORTFÖYÜM
+                  KARTI — GEÇİCİ OLARAK GİZLENDİ" notu); vazgeçilirse tek
+                  satırlık yorum işaretini kaldırmak yeterli. Bu ikon,
+                  Araçlar > Portföyüm ile AYNI tam sayfaya (nav("portfoyum"))
+                  bağlanıyor — ayrı bir mini görünüm değil.
+                  TASARIM (2. tur — kullanıcı "profesyonel/güzel değil" dedi):
+                  düz gri daire yerine markanın kendi logosundaki yeşil
+                  gradyanı (#1B9E7A→#2CCB9A) dolgu olarak kullanıldı — hem
+                  ayırt edici hem markayla tutarlı. Sıra da bildirimden ÖNCE
+                  (solda) olacak şekilde değiştirildi.
+                  MASAÜSTÜ DÜZELTMESİ (2026-09-09, kullanıcı raporu, ekran
+                  görüntüsüyle): dıştaki satır `justify-content:space-between`
+                  ile TAM 3 öğe (logo, Portföyüm, bildirim) taşıyordu — dar
+                  mobil genişlikte fark az görünüyordu ama masaüstünün geniş
+                  kolonunda (640px+) ortadaki Portföyüm ikonu bildirimden
+                  uzağa, satırın ortasına düşüyordu. O turda kullanıcı SADECE
+                  masaüstü için düzeltme istemişti.
+                  MOBİL DÜZELTMESİ (2026-09-09, AYNI GÜN 2. rapor): kullanıcı
+                  bu sefer mobilde de aradaki boşluğun fazla olduğunu belirtti
+                  — mobil dal da artık AYNI gruplama desenini kullanıyor
+                  (sadece daha küçük bir gap: 6px, masaüstündeki 8px'ten az —
+                  mobil ekranda görsel olarak daha sıkı durması için). İki
+                  dal hâlâ ayrı tutuldu (kod tekrarı var) ki ileride biri
+                  değişirse diğeri YANLIŞLIKLA etkilenmesin. */}
+              {genisEkran ? (
+                <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+                  <button onClick={()=>{setPortfoyBaslangicSekme("portfoy"); nav("portfoyum","home");}} style={{
+                    position:"relative",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
+                    width:40,height:40,borderRadius:20,border:"none",cursor:"pointer",
+                    background:"linear-gradient(135deg,#1B9E7A,#2CCB9A)",
+                    boxShadow:"0 2px 8px rgba(27,158,122,0.35)",
+                  }}>
+                    <Wallet size={18} color="#FFFFFF" strokeWidth={2} absoluteStrokeWidth/>
+                  </button>
+                  <button onClick={()=>{setBildirimGecmisiAcik(true);bildirimOkunduIsaretle();}} style={{
+                    position:"relative",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
+                    width:40,height:40,borderRadius:20,border:"none",background:WA(0.06),cursor:"pointer",
+                  }}>
+                    <Bell size={19} color={(TEMA==="acik"?"#2E6DA8":"#9FC1EA")} strokeWidth={2} absoluteStrokeWidth/>
+                    {bildirimOkunmamisSayisi>0&&(
+                      <span style={{position:"absolute",top:5,right:6,minWidth:16,height:16,padding:"0 4px",borderRadius:8,background:C.red,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:800,color:"#fff",lineHeight:1}}>
+                        {bildirimOkunmamisSayisi>9?"9+":bildirimOkunmamisSayisi}
+                      </span>
+                    )}
+                  </button>
+                </div>
+              ) : (
+                <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                  <button onClick={()=>{setPortfoyBaslangicSekme("portfoy"); nav("portfoyum","home");}} style={{
+                    position:"relative",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
+                    width:40,height:40,borderRadius:20,border:"none",cursor:"pointer",
+                    background:"linear-gradient(135deg,#1B9E7A,#2CCB9A)",
+                    boxShadow:"0 2px 8px rgba(27,158,122,0.35)",
+                  }}>
+                    <Wallet size={18} color="#FFFFFF" strokeWidth={2} absoluteStrokeWidth/>
+                  </button>
+                  <button onClick={()=>{setBildirimGecmisiAcik(true);bildirimOkunduIsaretle();}} style={{
+                    position:"relative",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
+                    width:40,height:40,borderRadius:20,border:"none",background:WA(0.06),cursor:"pointer",
+                  }}>
+                    <Bell size={19} color={(TEMA==="acik"?"#2E6DA8":"#9FC1EA")} strokeWidth={2} absoluteStrokeWidth/>
+                    {bildirimOkunmamisSayisi>0&&(
+                      <span style={{position:"absolute",top:5,right:6,minWidth:16,height:16,padding:"0 4px",borderRadius:8,background:C.red,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:800,color:"#fff",lineHeight:1}}>
+                        {bildirimOkunmamisSayisi>9?"9+":bildirimOkunmamisSayisi}
+                      </span>
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
+            {/* ── ANA MENÜ ARAMA ── */}
+            {(()=>{
+              const menuSonuclar=menuAramaQ.trim().length>1
+                ?MENU_ARAMA_LIST.filter(m=>{
+                    const q=menuAramaQ.toUpperCase();
+                    return m.label.toUpperCase().includes(q)
+                      ||CV(m.label).toUpperCase().includes(q)
+                      ||m.grup.toUpperCase().includes(q)
+                      ||(m.alt&&m.alt.some((k:string)=>k.toUpperCase().includes(q)));
+                  })
+                :[];
+              return(
+                <div style={{marginBottom:10,position:"relative"}}>
+                  <div style={{display:"flex",alignItems:"center",background:WA(0.07),borderRadius:12,border:menuAramaOdakli?`1.5px solid ${C.blue}`:`1px solid ${WA(0.12)}`,padding:"0 12px",boxShadow:menuAramaOdakli?`0 0 0 3px ${C.blueLight}`:"none",transition:"border-color 0.15s, box-shadow 0.15s"}}>
+                    <span style={{fontSize:14,color:WA(0.4),marginRight:8}}>🔍</span>
+                    {/* ── OTOMATİK DOLDURMA KAPALI (2026-08-01) ────────────────
+                        Android'de (Gboard/Samsung klavye) bu alan bir "isim"
+                        alanı sanılıp sayfadaki başlık ("Hoş geldin") otomatik
+                        doldurma önerisi olarak kutunun üzerine biniyordu —
+                        kullanıcı ekranda iki kez "Hoş geldin" görüyordu,
+                        kutuya dokununca kayboluyordu. type="search" + autoComplete
+                        ve arkadaşları bu davranışı kapatıyor.
+                        name/id BİLEREK verilmedi: tarayıcılar isimlendirilmiş
+                        alanları geçmiş değerlerle eşleştirip yeniden öneri
+                        sunabiliyor. ── */}
+                    <input
+                      type="search"
+                      inputMode="search"
+                      enterKeyHint="search"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
+                      data-form-type="other"
+                      aria-label={CV("Menülerde ara…")}
+                      value={menuAramaQ}
+                      onChange={e=>setMenuAramaQ(e.target.value)}
+                      onFocus={()=>setMenuAramaOdakli(true)}
+                      onBlur={()=>setMenuAramaOdakli(false)}
+                      placeholder={CV("Menülerde ara…")}
+                      style={{flex:1,background:"transparent",border:"none",outline:"none",color:(TEMA==="acik"?C.label:"#fff"),fontSize:13,padding:"10px 0",WebkitAppearance:"none",WebkitTapHighlightColor:"transparent"} as any}
+                    />
+                    {menuAramaQ&&<span onClick={()=>setMenuAramaQ("")} style={{fontSize:16,color:WA(0.4),cursor:"pointer",padding:"0 4px"}}>✕</span>}
+                  </div>
+                  {menuSonuclar.length>0&&(
+                    <div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:50,background:(TEMA==="acik"?"#E9EEF4":"#1A2633"),borderRadius:12,border:`1px solid ${WA(0.12)}`,marginTop:4,maxHeight:260,overflowY:"auto",boxShadow:"0 8px 24px rgba(0,0,0,0.5)"}}>
+                      {menuSonuclar.map((m,i)=>(
+                        <div key={m.key} onClick={()=>{nav(m.key);setMenuAramaQ("");}} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",borderBottom:i<menuSonuclar.length-1?`1px solid ${WA(0.07)}`:"none",cursor:"pointer"}}
+                          onMouseEnter={e=>(e.currentTarget.style.background=WA(0.05))}
+                          onMouseLeave={e=>(e.currentTarget.style.background="transparent")}>
+                          <span style={{width:22,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon k={m.key} size={18}/></span>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:12,fontWeight:700,color:"#e8f0fa",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{CV(m.label)}</div>
+                            <div style={{fontSize:10,color:WA(0.35),marginTop:1}}>{CV(m.grup)}</div>
+                          </div>
+                          <span style={{fontSize:12,color:WA(0.25),flexShrink:0}}>›</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {menuAramaQ.trim().length>1&&menuSonuclar.length===0&&(
+                    <div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:50,background:(TEMA==="acik"?"#E9EEF4":"#1A2633"),borderRadius:12,border:`1px solid ${WA(0.12)}`,marginTop:4,padding:"14px",textAlign:"center"}}>
+                      <span style={{fontSize:12,color:WA(0.35)}}>{CV("Sonuç bulunamadı")}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── ALT BAR (BOTTOM TAB NAVIGATION) — Yüzen (floating) tasarım ──
           Masaüstünde (geniş ekran) gizlenir; gezinme soldaki yan menüden yapılır. */}
