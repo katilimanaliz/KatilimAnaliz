@@ -24896,6 +24896,32 @@ function App(){
     ro.observe(el);
     return () => ro.disconnect();
   }, [screen]);
+  // ── SEKME EKRANLARI (Hesapla/Piyasa/Araçlar/Asistan/Profil) SABİT ÜST BLOK ──
+  // Ana sayfadaki blokla AYNI kanıtlanmış yöntem: uygulama kökünde, alt
+  // navigasyon çubuğuyla aynı seviyede position:"fixed". Hesapla ve Piyasa'da
+  // başlığın yanı sıra arama kutusu da bu blokta (kullanıcı isteği); diğer üç
+  // sekmede sadece başlık satırı sabit kalıyor.
+  // ── SABİT ÜST BLOK — KAPSAM ────────────────────────────────────────────
+  // Başlık satırı ("‹ Geri | <ekran adı>") ana sayfa DIŞINDAKİ TÜM ekranlarda
+  // sabit (kullanıcı isteği: Araçlar menüsündeki ürünlerin hepsinde de olsun).
+  // Arama kutusu ise yalnızca Hesapla ve Piyasa'da bu blokta — çünkü onların
+  // arama state'i bu bileşende. Detay ekranlarının (BİST tarayıcı, Ekonomi
+  // Sözlüğü vb.) arama kutuları KENDİ alt bileşenlerinin içinde yaşıyor;
+  // onlar ayrıca ele alınacak.
+  const sekmeEkraniMi = screen !== "home";
+  const aramaliSekmeMi = screen==="hesaplaMenu" || screen==="piyasaMenu";
+  const sekmeUstBlokRef = useRef<HTMLDivElement>(null);
+  const [sekmeUstBlokYukseklik, setSekmeUstBlokYukseklik] = useState(0);
+  useEffect(() => {
+    if (!sekmeEkraniMi) return;
+    const el = sekmeUstBlokRef.current;
+    if (!el) return;
+    const guncelle = () => setSekmeUstBlokYukseklik(el.offsetHeight);
+    guncelle();
+    const ro = new ResizeObserver(guncelle);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [screen, sekmeEkraniMi]);
   useEffect(()=>{
     if(IS_NATIVE) return;
     // Kolon dışında kalan alan: köşelere doğru koyulaşan degrade
@@ -26000,7 +26026,7 @@ function App(){
           bu dıştaki div'in AYRICA padding vermesi çakışıp altında fazladan
           bir boşluk/hizasızlık yaratıyordu. Diğer ekranlar (home DIŞI)
           AYNEN eskisi gibi kendi padding'ini koruyor. */}
-      <div style={{background:C.bg,padding:screen==="home"?"0 20px 6px":"calc(44px + env(safe-area-inset-top,0px)) 20px 20px"}}>
+      <div style={{background:C.bg,padding:screen==="home"?"0 20px 6px":(sekmeEkraniMi?"0":"calc(44px + env(safe-area-inset-top,0px)) 20px 20px")}}>
         {screen==="home"?(
           <div>
             {/* ── SABİT ÜST BLOK — artık burada DEĞİL (2026-09-10, 5. tur) ──
@@ -26143,20 +26169,9 @@ function App(){
             })()}
           </div>
         ):(
-          <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
-            <button onClick={back} style={{
-              background:"rgba(91,155,216,0.12)",border:"1px solid rgba(91,155,216,0.35)",
-              color:(TEMA==="acik"?"#2E6DA8":"#9FC1EA"),fontWeight:600,fontSize:13,cursor:"pointer",padding:"6px 12px 6px 9px",
-              borderRadius:999,flexShrink:0,display:"flex",alignItems:"center",gap:3,
-            }}>
-              <span style={{fontSize:16,lineHeight:1,marginTop:-1}}>‹</span><span>Geri</span>
-            </button>
-            <div style={{width:3,height:16,borderRadius:2,background:"linear-gradient(180deg,#9FC1EA,#5B9BD8)",flexShrink:0}}/>
-            <span style={{
-              fontSize:16,fontWeight:700,color:(TEMA==="acik"?"#16222E":"#EAF1FA"),letterSpacing:"-0.01em",
-              overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,minWidth:0,
-            }}>{CV(meta?.title)}</span>
-          </div>
+          /* Başlık artık kök seviyedeki sabit blokta (aşağıda) — burada
+             sadece onun kapladığı yer kadar boşluk bırakılıyor. */
+          <div style={{height:sekmeUstBlokYukseklik}}/>
         )}
       </div>
 
@@ -26575,19 +26590,7 @@ function App(){
           );
           return(
           <div style={{background:C.bg,padding:"12px 12px 0",paddingBottom:"calc(108px + env(safe-area-inset-bottom,0px))",boxSizing:"border-box",overflowY:"auto"}}>
-            {/* Arama çubuğu */}
-            <div style={{display:"flex",alignItems:"center",background:WA(0.07),borderRadius:12,border:hesaplaAramaOdakli?`1.5px solid ${C.blue}`:`1px solid ${WA(0.12)}`,padding:"0 12px",marginBottom:10,boxShadow:hesaplaAramaOdakli?`0 0 0 3px ${C.blueLight}`:"none",transition:"border-color 0.15s, box-shadow 0.15s"}}>
-              <span style={{fontSize:14,color:WA(0.4),marginRight:8}}>🔍</span>
-              <input
-                value={hesaplaAramaQ}
-                onChange={e=>setHesaplaAramaQ(e.target.value)}
-                onFocus={()=>setHesaplaAramaOdakli(true)}
-                onBlur={()=>setHesaplaAramaOdakli(false)}
-                placeholder={CV("Hesaplama ara…")}
-                style={{flex:1,background:"transparent",border:"none",outline:"none",color:(TEMA==="acik"?C.label:"#fff"),fontSize:13,padding:"10px 0",WebkitAppearance:"none",WebkitTapHighlightColor:"transparent"} as any}
-              />
-              {hesaplaAramaQ&&<span onClick={()=>setHesaplaAramaQ("")} style={{fontSize:16,color:WA(0.4),cursor:"pointer",padding:"0 4px"}}>✕</span>}
-            </div>
+            {/* Arama çubuğu artık kök seviyedeki sabit üst blokta. */}
 
             {/* Son Kullanılanlar yatay şeridi — sadece geçmiş varsa, arama/özel filtre yokken */}
             {gecmis.length>0 && hesaplaAramaQ==="" && (hesaplaFiltre==="tumu") && (
@@ -26676,19 +26679,7 @@ function App(){
           );
           return(
           <div style={{background:C.bg,padding:"12px 12px 0",paddingBottom:"calc(108px + env(safe-area-inset-bottom,0px))",boxSizing:"border-box",overflowY:"auto"}}>
-            {/* Arama çubuğu */}
-            <div style={{display:"flex",alignItems:"center",background:WA(0.07),borderRadius:12,border:piyasaTabloAramaOdakli?`1.5px solid ${C.blue}`:`1px solid ${WA(0.12)}`,padding:"0 12px",marginBottom:10,boxShadow:piyasaTabloAramaOdakli?`0 0 0 3px ${C.blueLight}`:"none",transition:"border-color 0.15s, box-shadow 0.15s"}}>
-              <span style={{fontSize:14,color:WA(0.4),marginRight:8}}>🔍</span>
-              <input
-                value={piyasaTabloAramaQ}
-                onChange={e=>setPiyasaTabloAramaQ(e.target.value)}
-                onFocus={()=>setPiyasaTabloAramaOdakli(true)}
-                onBlur={()=>setPiyasaTabloAramaOdakli(false)}
-                placeholder="Piyasa ara…"
-                style={{flex:1,background:"transparent",border:"none",outline:"none",color:(TEMA==="acik"?C.label:"#fff"),fontSize:13,padding:"10px 0",WebkitAppearance:"none",WebkitTapHighlightColor:"transparent"} as any}
-              />
-              {piyasaTabloAramaQ&&<span onClick={()=>setPiyasaTabloAramaQ("")} style={{fontSize:16,color:WA(0.4),cursor:"pointer",padding:"0 4px"}}>✕</span>}
-            </div>
+            {/* Arama çubuğu artık kök seviyedeki sabit üst blokta. */}
 
             {/* Kategori filtre çipleri */}
             <div className="piyasa-scroll" style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:4,marginBottom:6}}>
@@ -27620,7 +27611,13 @@ function App(){
                           onMouseLeave={e=>(e.currentTarget.style.background="transparent")}>
                           <span style={{width:22,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon k={m.key} size={18}/></span>
                           <div style={{flex:1,minWidth:0}}>
-                            <div style={{fontSize:12,fontWeight:700,color:"#e8f0fa",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{CV(m.label)}</div>
+                            {/* ⚠️ 2026-09-10: renk ÖNCEDEN sabit "#e8f0fa" idi —
+                                koyu tema için seçilmiş açık bir ton. Açık temada
+                                açılır menünün arka planı (#E9EEF4) ile neredeyse
+                                aynı tona düşüp başlık GÖRÜNMEZ oluyordu (kullanıcı
+                                ekran görüntüsüyle bildirdi: sadece alttaki grup
+                                adı okunuyordu). Artık tema duyarlı. */}
+                            <div style={{fontSize:12,fontWeight:700,color:(TEMA==="acik"?"#16222E":"#e8f0fa"),overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{CV(m.label)}</div>
                             <div style={{fontSize:10,color:WA(0.35),marginTop:1}}>{CV(m.grup)}</div>
                           </div>
                           <span style={{fontSize:12,color:WA(0.25),flexShrink:0}}>›</span>
@@ -27637,6 +27634,63 @@ function App(){
               );
             })()}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── SEKME EKRANLARI SABİT ÜST BLOK ───────────────────────────────
+          Ana sayfadakiyle AYNI konum/yöntem (uygulama kökü, alt barla aynı
+          seviye). Hesapla ve Piyasa'da başlığın altında arama kutusu da
+          sabit; diğer üç sekmede yalnızca başlık satırı. */}
+      {sekmeEkraniMi&&(
+        <div ref={sekmeUstBlokRef} style={{
+          position:"fixed",top:0,left:SIDEBAR_W,right:0,zIndex:45,
+          background:C.bg,
+        }}>
+          <div style={{maxWidth:genisEkran?"none":kolonW,margin:"0 auto",padding:"calc(44px + env(safe-area-inset-top,0px)) 20px 12px"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
+              <button onClick={back} style={{
+                background:"rgba(91,155,216,0.12)",border:"1px solid rgba(91,155,216,0.35)",
+                color:(TEMA==="acik"?"#2E6DA8":"#9FC1EA"),fontWeight:600,fontSize:13,cursor:"pointer",padding:"6px 12px 6px 9px",
+                borderRadius:999,flexShrink:0,display:"flex",alignItems:"center",gap:3,
+              }}>
+                <span style={{fontSize:16,lineHeight:1,marginTop:-1}}>‹</span><span>Geri</span>
+              </button>
+              <div style={{width:3,height:16,borderRadius:2,background:"linear-gradient(180deg,#9FC1EA,#5B9BD8)",flexShrink:0}}/>
+              <span style={{
+                fontSize:16,fontWeight:700,color:(TEMA==="acik"?"#16222E":"#EAF1FA"),letterSpacing:"-0.01em",
+                overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,minWidth:0,
+              }}>{CV(meta?.title)}</span>
+            </div>
+            {aramaliSekmeMi&&(
+              screen==="hesaplaMenu"?(
+                <div style={{display:"flex",alignItems:"center",background:WA(0.07),borderRadius:12,border:hesaplaAramaOdakli?`1.5px solid ${C.blue}`:`1px solid ${WA(0.12)}`,padding:"0 12px",marginTop:12,boxShadow:hesaplaAramaOdakli?`0 0 0 3px ${C.blueLight}`:"none",transition:"border-color 0.15s, box-shadow 0.15s"}}>
+                  <span style={{fontSize:14,color:WA(0.4),marginRight:8}}>🔍</span>
+                  <input
+                    value={hesaplaAramaQ}
+                    onChange={e=>setHesaplaAramaQ(e.target.value)}
+                    onFocus={()=>setHesaplaAramaOdakli(true)}
+                    onBlur={()=>setHesaplaAramaOdakli(false)}
+                    placeholder={CV("Hesaplama ara…")}
+                    style={{flex:1,background:"transparent",border:"none",outline:"none",color:(TEMA==="acik"?C.label:"#fff"),fontSize:13,padding:"10px 0",WebkitAppearance:"none",WebkitTapHighlightColor:"transparent"} as any}
+                  />
+                  {hesaplaAramaQ&&<span onClick={()=>setHesaplaAramaQ("")} style={{fontSize:16,color:WA(0.4),cursor:"pointer",padding:"0 4px"}}>✕</span>}
+                </div>
+              ):(
+                <div style={{display:"flex",alignItems:"center",background:WA(0.07),borderRadius:12,border:piyasaTabloAramaOdakli?`1.5px solid ${C.blue}`:`1px solid ${WA(0.12)}`,padding:"0 12px",marginTop:12,boxShadow:piyasaTabloAramaOdakli?`0 0 0 3px ${C.blueLight}`:"none",transition:"border-color 0.15s, box-shadow 0.15s"}}>
+                  <span style={{fontSize:14,color:WA(0.4),marginRight:8}}>🔍</span>
+                  <input
+                    value={piyasaTabloAramaQ}
+                    onChange={e=>setPiyasaTabloAramaQ(e.target.value)}
+                    onFocus={()=>setPiyasaTabloAramaOdakli(true)}
+                    onBlur={()=>setPiyasaTabloAramaOdakli(false)}
+                    placeholder="Piyasa ara…"
+                    style={{flex:1,background:"transparent",border:"none",outline:"none",color:(TEMA==="acik"?C.label:"#fff"),fontSize:13,padding:"10px 0",WebkitAppearance:"none",WebkitTapHighlightColor:"transparent"} as any}
+                  />
+                  {piyasaTabloAramaQ&&<span onClick={()=>setPiyasaTabloAramaQ("")} style={{fontSize:16,color:WA(0.4),cursor:"pointer",padding:"0 4px"}}>✕</span>}
+                </div>
+              )
+            )}
           </div>
         </div>
       )}
