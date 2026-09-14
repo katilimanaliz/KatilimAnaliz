@@ -4041,7 +4041,11 @@ function AnaSayfaBist100Karti({ nav, doluYukseklik }: { nav: (sc: string) => voi
   );
 }
 
-function KatilimEndeksiTopHareketliler({ nav, onSecim }: { nav: (sc: string) => void; onSecim?: (tur: "hisse" | "fon", sembol: string) => void }) {
+function KatilimEndeksiTopHareketliler({ nav, onSecim, adet }: { nav: (sc: string) => void; onSecim?: (tur: "hisse" | "fon", sembol: string) => void; adet?: number }) {
+  // adet: kaç yükselen / kaç düşen gösterilecek. Varsayılan 5 (mobil).
+  // Masaüstünde 10 veriliyor — üç kolonlu düzende bu sütun 5 satırla çok kısa
+  // kalıp altında büyük bir boşluk bırakıyordu (kullanıcı raporu 2026-09-14).
+  const LISTE_ADET = adet && adet > 0 ? adet : 5;
   const CACHE_TTL = 5 * 60 * 1000; // 5 dakika: bu süre içinde cache'i "taze" say, fetch atma
 
   const okuCache = (key: string): any[] => {
@@ -4113,16 +4117,16 @@ function KatilimEndeksiTopHareketliler({ nav, onSecim }: { nav: (sc: string) => 
     () => hisseler.filter((h: any) => h.katilimEndeksi && typeof h.degisim1g === "number"),
     [hisseler]
   );
-  const hisseYukselen = useMemo(() => [...hisseKE].sort((a, b) => b.degisim1g - a.degisim1g).slice(0, 5), [hisseKE]);
-  const hisseDusen     = useMemo(() => [...hisseKE].sort((a, b) => a.degisim1g - b.degisim1g).slice(0, 5), [hisseKE]);
+  const hisseYukselen = useMemo(() => [...hisseKE].sort((a, b) => b.degisim1g - a.degisim1g).slice(0, LISTE_ADET), [hisseKE, LISTE_ADET]);
+  const hisseDusen     = useMemo(() => [...hisseKE].sort((a, b) => a.degisim1g - b.degisim1g).slice(0, LISTE_ADET), [hisseKE, LISTE_ADET]);
 
   // DEĞİŞİKLİK (2026-07-13): ham `gunluk` gösterilir/sıralanır — Fonoloji ile
   // birebir uyum (bkz. FonGetiriIzleme.fonDeger notu). Normalizasyon yalnızca
   // yıllıklandırma ve Getiri Hesaplayıcı hesaplarında kullanılır.
   const fonGunlukDeger = (f: any) => f.gunluk;
   const fonOK       = useMemo(() => fonlar.filter((f: any) => typeof f.gunluk === "number"), [fonlar]);
-  const fonYukselen = useMemo(() => [...fonOK].sort((a, b) => fonGunlukDeger(b) - fonGunlukDeger(a)).slice(0, 5), [fonOK]);
-  const fonDusen     = useMemo(() => [...fonOK].sort((a, b) => fonGunlukDeger(a) - fonGunlukDeger(b)).slice(0, 5), [fonOK]);
+  const fonYukselen = useMemo(() => [...fonOK].sort((a, b) => fonGunlukDeger(b) - fonGunlukDeger(a)).slice(0, LISTE_ADET), [fonOK, LISTE_ADET]);
+  const fonDusen     = useMemo(() => [...fonOK].sort((a, b) => fonGunlukDeger(a) - fonGunlukDeger(b)).slice(0, LISTE_ADET), [fonOK, LISTE_ADET]);
 
   const yukselen = sekme === "hisse" ? hisseYukselen : fonYukselen;
   const dusen    = sekme === "hisse" ? hisseDusen    : fonDusen;
@@ -13390,6 +13394,13 @@ function TaksitKarsilastirma({ s }: { s: any }) {
     </div>
   );
 }
+
+// Masaüstünde ana sayfadaki "Son Haberler" ve "Yaklaşan Takvim" listeleri
+// yan yana duruyor; içerik uzunlukları farklı olduğu için kutular hizasız
+// bitiyordu (kullanıcı raporu, 2026-09-14). İkisi de bu ORTAK yüksekliği
+// kullanıyor, taşan içerik kendi içinde kayıyor. Tek yerden değiştirilsin
+// diye sabit — iki listeden birini değiştirip diğerini unutmayı önler.
+const HABER_TAKVIM_YUKSEKLIK = 300;
 
 function KatilimSektoruOzet({onAc}:{onAc:()=>void}){
   const [veri,setVeri]=useState<any>(null);
@@ -26626,15 +26637,88 @@ function App(){
                 </div>
               );
 
-              const endeksBlok = <KatilimEndeksiTopHareketliler nav={nav} onSecim={irHisseFonDetay}/>;
+              const gostergelerBlok = (
+                <>
+            {/* Finansal Göstergeler — ana sayfa özeti (Seçenek A: ikonlu satırlar) */}
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:18,marginBottom:8}}>
+                  <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Finansal Göstergeler")}</span>
+                  <span onClick={()=>{setPiyasaTabloFiltre("gostergeler");nav("piyasaMenu");}} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
+                </div>
+                {/* 2026-09-14 masaüstü düzen revizyonu: geniş ekranda 6 gösterge
+                    alt alta uzayıp her satır ~900px'e yayılıyordu; artık 3 kolonlu
+                    ızgara. Mobilde AYNEN eskisi gibi tek kolon. */}
+                <div onClick={()=>{setPiyasaTabloFiltre("gostergeler");nav("piyasaMenu");}} style={{
+                  marginBottom:14,cursor:"pointer",
+                  // 2026-09-14: masaüstünde bu blok artık SOL SÜTUNUN İÇİNDE
+                  // (Piyasalar'ın altında) — dar bir kolonda olduğu için satırlar
+                  // alt alta kalıyor, ayrıca bir ızgaraya gerek yok.
+                }}>
+                  {[
+                    {ad:"TCMB Politika Faizi", deger:"%37,00", tarih:"Haziran 2026 · PPK", ikon:Landmark, renk:C.blue},
+                    {ad:"TÜFE (Yıllık)", deger:evdsMakro?.["TUFE_YILLIK"]?.deger!=null?`%${evdsMakro["TUFE_YILLIK"].deger.toFixed(2).replace(".",",")}`:"—", tarih:evdsMakro?.["TUFE_YILLIK"]?.tarih?`${evdsMakro["TUFE_YILLIK"].tarih} · canlı`:"", ikon:TrendingUp, renk:C.red, seri:evdsMakro?.["TUFE_YILLIK_SERI"], seriAd:"TÜFE Yıllık Değişim"},
+                    {ad:"TÜFE (Aylık)", deger:evdsMakro?.["TUFE_AYLIK"]?.deger!=null?`%${evdsMakro["TUFE_AYLIK"].deger.toFixed(2).replace(".",",")}`:"—", tarih:evdsMakro?.["TUFE_AYLIK"]?.tarih?`${evdsMakro["TUFE_AYLIK"].tarih} · canlı`:"", ikon:Activity, renk:C.red, seri:evdsMakro?.["TUFE_AYLIK_SERI"], seriAd:"TÜFE Aylık Değişim"},
+                    {ad:"TLREF (Gecelik Referans)", deger:evdsMakro?.["TP.BISTTLREF.KAPANIS"]?.deger!=null?`%${evdsMakro["TP.BISTTLREF.KAPANIS"].deger.toFixed(2).replace(".",",")}`:"—", tarih:evdsMakro?.["TP.BISTTLREF.KAPANIS"]?.tarih?`${evdsMakro["TP.BISTTLREF.KAPANIS"].tarih} · canlı`:"", ikon:Percent, renk:"#8B5CF6", seri:evdsMakro?.["TP.BISTTLREF.KAPANIS_SERI"], seriAd:"TLREF (Yıllıklandırılmış)"},
+                    (()=>{const tlrefk=tlrefkTahmini(evdsMakro); return {
+                      ad:"TLREFK (Katılım)",
+                      deger:tlrefk?.deger!=null?`%${tlrefk.deger.toFixed(2).replace(".",",")}`:"—",
+                      tarih:tlrefk?.tarih?`${tlrefk.tarih} · TLREF-0,096`:"",
+                      ikon:Scale, renk:"#8B5CF6",
+                      seri:tlrefkSeriTahmini(evdsMakro), seriAd:"TLREFK (Katılım)",
+                    };})(),
+                    {ad:"TCMB Brüt Rezerv", deger:evdsMakro?.["REZERV_TOPLAM"]?.deger!=null?`$${(evdsMakro["REZERV_TOPLAM"].deger/1000).toFixed(2).replace(".",",")} Mr`:"—", tarih:evdsMakro?.["REZERV_TOPLAM"]?.tarih?`${evdsMakro["REZERV_TOPLAM"].tarih} · canlı`:"", ikon:Wallet, renk:C.green, seri:evdsMakro?.["REZERV_TOPLAM_SERI"], seriAd:"TCMB Brüt Rezerv (Milyon $)", seriBirim:"milyon$"},
+                  ].map((g:any,i,arr)=>{
+                    const IkonBileseni=g.ikon;
+                    const gecmisDestekli = !!g.seriAd; // bu gösterge kavramsal olarak geçmiş veri sunuyor mu
+                    const tiklanabilir = g.seri && g.seri.length>0;
+                    return (
+                    <div key={i} onClick={(e)=>{
+                      if(!gecmisDestekli) return; // TCMB Politika Faizi gibi hiç geçmişi olmayanlar — karta düşsün
+                      e.stopPropagation();
+                      if(tiklanabilir){
+                        setGostergeTablo({ad:g.seriAd||g.ad, seri:g.seri, birim:g.seriBirim});
+                      } else {
+                        setGostergeUyari("Veri henüz yüklenmedi, birkaç saniye sonra tekrar dene.");
+                        setTimeout(()=>setGostergeUyari(null),2200);
+                      }
+                    }} style={{display:"flex",alignItems:"center",gap:11,padding:"12px 16px",borderRadius:12,marginBottom:8,cursor:gecmisDestekli?"pointer":"default",
+                      ...(TEMA==="acik"
+                        ? {background:"#E9EEF4",border:"1px solid rgba(22,34,46,0.08)"}
+                        : {background:"#16222E",border:`1px solid ${WA(0.07)}`})}}>
+                      <div style={{width:32,height:32,borderRadius:9,background:`${g.renk}26`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        <IkonBileseni size={16} color={g.renk} strokeWidth={2}/>
+                      </div>
+                      <div style={{minWidth:0,flex:1}}>
+                        <div style={{color:WA(0.85),fontSize:12.5,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{g.ad}</div>
+                        {g.tarih&&<div style={{color:(TEMA==="acik"?"#4A6178":"rgba(255,255,255,0.55)"),fontSize:10,marginTop:1}}>{g.tarih}</div>}
+                      </div>
+                      <span style={{fontSize:14.5,fontWeight:800,fontFamily:"monospace",color:C.label,flexShrink:0}}>{g.deger}</span>
+                      {gecmisDestekli&&<span style={{fontSize:12,color:WA(0.25),flexShrink:0,marginLeft:2}}>›</span>}
+                    </div>
+                    );
+                  })}
+                </div>
+                </>
+              );
+
+              // Masaüstünde 10 yükselen / 10 düşen — üç kolonlu düzende bu
+              // sütun 5'er satırla çok kısa kalıyordu (kullanıcı raporu).
+              const endeksBlok = <KatilimEndeksiTopHareketliler nav={nav} onSecim={irHisseFonDetay} adet={genisEkran?10:5}/>;
               const fonBlok = <FonTahminleriWidget nav={nav} onSecim={irHisseFonDetay} onFonDetayAc={(fon:any)=>{setPendingFonDetay(fon); nav("fonDetay","home");}}/>;
               const portfoyModal = portfoyGrafikAcik ? <PortfoyKarZararModal liste={portfoy} onClose={()=>setPortfoyGrafikAcik(false)}/> : null;
 
               if (genisEkran) {
                 return (
                   <>
+                    {/* SOL sütun Piyasalar (4 kart) ile tek başına çok kısa
+                        kalıp altında büyük boşluk bırakıyordu; Finansal
+                        Göstergeler de aynı sütuna alındı — üç sütun artık
+                        yaklaşık aynı yükseklikte bitiyor. */}
                     <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:16,marginBottom:26,alignItems:"start"}}>
-                      <div style={{minWidth:0}}>{piyasalarBlok}</div>
+                      <div style={{minWidth:0}}>
+                        {piyasalarBlok}
+                        <div style={{height:18}}/>
+                        {gostergelerBlok}
+                      </div>
                       <div style={{minWidth:0}}>{endeksBlok}</div>
                       <div style={{minWidth:0}}>{fonBlok}</div>
                     </div>
@@ -26662,74 +26746,19 @@ function App(){
                   {portfoyModal}
                   {endeksBlok}
                   {fonBlok}
+                  {gostergelerBlok}
                 </>
               );
             })()}
 
 
-            {/* Finansal Göstergeler — ana sayfa özeti (Seçenek A: ikonlu satırlar) */}
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:18,marginBottom:8}}>
-              <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Finansal Göstergeler")}</span>
-              <span onClick={()=>{setPiyasaTabloFiltre("gostergeler");nav("piyasaMenu");}} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
-            </div>
-            {/* 2026-09-14 masaüstü düzen revizyonu: geniş ekranda 6 gösterge
-                alt alta uzayıp her satır ~900px'e yayılıyordu; artık 3 kolonlu
-                ızgara. Mobilde AYNEN eskisi gibi tek kolon. */}
-            <div onClick={()=>{setPiyasaTabloFiltre("gostergeler");nav("piyasaMenu");}} style={{
-              marginBottom:14,cursor:"pointer",
-              ...(genisEkran?{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:10}:{}),
-            }}>
-              {[
-                {ad:"TCMB Politika Faizi", deger:"%37,00", tarih:"Haziran 2026 · PPK", ikon:Landmark, renk:C.blue},
-                {ad:"TÜFE (Yıllık)", deger:evdsMakro?.["TUFE_YILLIK"]?.deger!=null?`%${evdsMakro["TUFE_YILLIK"].deger.toFixed(2).replace(".",",")}`:"—", tarih:evdsMakro?.["TUFE_YILLIK"]?.tarih?`${evdsMakro["TUFE_YILLIK"].tarih} · canlı`:"", ikon:TrendingUp, renk:C.red, seri:evdsMakro?.["TUFE_YILLIK_SERI"], seriAd:"TÜFE Yıllık Değişim"},
-                {ad:"TÜFE (Aylık)", deger:evdsMakro?.["TUFE_AYLIK"]?.deger!=null?`%${evdsMakro["TUFE_AYLIK"].deger.toFixed(2).replace(".",",")}`:"—", tarih:evdsMakro?.["TUFE_AYLIK"]?.tarih?`${evdsMakro["TUFE_AYLIK"].tarih} · canlı`:"", ikon:Activity, renk:C.red, seri:evdsMakro?.["TUFE_AYLIK_SERI"], seriAd:"TÜFE Aylık Değişim"},
-                {ad:"TLREF (Gecelik Referans)", deger:evdsMakro?.["TP.BISTTLREF.KAPANIS"]?.deger!=null?`%${evdsMakro["TP.BISTTLREF.KAPANIS"].deger.toFixed(2).replace(".",",")}`:"—", tarih:evdsMakro?.["TP.BISTTLREF.KAPANIS"]?.tarih?`${evdsMakro["TP.BISTTLREF.KAPANIS"].tarih} · canlı`:"", ikon:Percent, renk:"#8B5CF6", seri:evdsMakro?.["TP.BISTTLREF.KAPANIS_SERI"], seriAd:"TLREF (Yıllıklandırılmış)"},
-                (()=>{const tlrefk=tlrefkTahmini(evdsMakro); return {
-                  ad:"TLREFK (Katılım)",
-                  deger:tlrefk?.deger!=null?`%${tlrefk.deger.toFixed(2).replace(".",",")}`:"—",
-                  tarih:tlrefk?.tarih?`${tlrefk.tarih} · TLREF-0,096`:"",
-                  ikon:Scale, renk:"#8B5CF6",
-                  seri:tlrefkSeriTahmini(evdsMakro), seriAd:"TLREFK (Katılım)",
-                };})(),
-                {ad:"TCMB Brüt Rezerv", deger:evdsMakro?.["REZERV_TOPLAM"]?.deger!=null?`$${(evdsMakro["REZERV_TOPLAM"].deger/1000).toFixed(2).replace(".",",")} Mr`:"—", tarih:evdsMakro?.["REZERV_TOPLAM"]?.tarih?`${evdsMakro["REZERV_TOPLAM"].tarih} · canlı`:"", ikon:Wallet, renk:C.green, seri:evdsMakro?.["REZERV_TOPLAM_SERI"], seriAd:"TCMB Brüt Rezerv (Milyon $)", seriBirim:"milyon$"},
-              ].map((g:any,i,arr)=>{
-                const IkonBileseni=g.ikon;
-                const gecmisDestekli = !!g.seriAd; // bu gösterge kavramsal olarak geçmiş veri sunuyor mu
-                const tiklanabilir = g.seri && g.seri.length>0;
-                return (
-                <div key={i} onClick={(e)=>{
-                  if(!gecmisDestekli) return; // TCMB Politika Faizi gibi hiç geçmişi olmayanlar — karta düşsün
-                  e.stopPropagation();
-                  if(tiklanabilir){
-                    setGostergeTablo({ad:g.seriAd||g.ad, seri:g.seri, birim:g.seriBirim});
-                  } else {
-                    setGostergeUyari("Veri henüz yüklenmedi, birkaç saniye sonra tekrar dene.");
-                    setTimeout(()=>setGostergeUyari(null),2200);
-                  }
-                }} style={{display:"flex",alignItems:"center",gap:11,padding:"12px 16px",borderRadius:12,marginBottom:genisEkran?0:8,cursor:gecmisDestekli?"pointer":"default",
-                  ...(TEMA==="acik"
-                    ? {background:"#E9EEF4",border:"1px solid rgba(22,34,46,0.08)"}
-                    : {background:"#16222E",border:`1px solid ${WA(0.07)}`})}}>
-                  <div style={{width:32,height:32,borderRadius:9,background:`${g.renk}26`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                    <IkonBileseni size={16} color={g.renk} strokeWidth={2}/>
-                  </div>
-                  <div style={{minWidth:0,flex:1}}>
-                    <div style={{color:WA(0.85),fontSize:12.5,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{g.ad}</div>
-                    {g.tarih&&<div style={{color:(TEMA==="acik"?"#4A6178":"rgba(255,255,255,0.55)"),fontSize:10,marginTop:1}}>{g.tarih}</div>}
-                  </div>
-                  <span style={{fontSize:14.5,fontWeight:800,fontFamily:"monospace",color:C.label,flexShrink:0}}>{g.deger}</span>
-                  {gecmisDestekli&&<span style={{fontSize:12,color:WA(0.25),flexShrink:0,marginLeft:2}}>›</span>}
-                </div>
-                );
-              })}
-            </div>
 
             {/* ── ALT BÖLGE — MASAÜSTÜ 2 KOLON (2026-09-14 düzen revizyonu) ──
                 Son Haberler ve Yaklaşan Takvim geniş ekranda alt alta, her biri
                 tam genişlikte duruyordu (kullanıcı raporu: "yana uzanan boş
                 alan"). Artık masaüstünde yan yana; mobilde sıra aynı. */}
-            <div style={genisEkran?{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:16,alignItems:"start",marginBottom:10}:{}}>
-            <div style={{minWidth:0}}>
+            <div style={genisEkran?{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:16,alignItems:"stretch",marginBottom:10}:{}}>
+            <div style={genisEkran?{minWidth:0,display:"flex",flexDirection:"column"}:{minWidth:0}}>
             {/* Son Haberler — ilk bakışta 3 haber, aşağı kaydırınca daha fazlası görünür.
                 Artık veri boş/hatalı olsa bile bölüm tamamen kaybolmuyor; başlık +
                 durum mesajı (hata / boş / yükleniyor) her zaman görünür kalıyor,
@@ -26758,7 +26787,14 @@ function App(){
                 )}
                 {sonHaberler.length>0&&(
                 <div style={{position:"relative"}}>
-                  <div className="piyasa-scroll" style={{marginBottom:14,maxHeight:266,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
+                  {/* 2026-09-14: masaüstünde Son Haberler ve Yaklaşan Takvim
+                      kutuları farklı yüksekliklerde bitip hizasız duruyordu
+                      (kullanıcı raporu). Masaüstünde ikisine de AYNI sabit
+                      yükseklik veriliyor, taşan içerik kendi içinde kayıyor.
+                      Mobilde eski davranış (maxHeight 266) korunuyor. */}
+                  <div className="piyasa-scroll" style={genisEkran
+                    ?{marginBottom:14,height:HABER_TAKVIM_YUKSEKLIK,overflowY:"auto",WebkitOverflowScrolling:"touch"}
+                    :{marginBottom:14,maxHeight:266,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
                     {sonHaberler.map((h,i)=>{
                       const farkDk=Math.round((Date.now()-new Date(h.tarih).getTime())/60000);
                       const zamanEtiket = farkDk<1?"az önce":farkDk<60?`${farkDk} dk önce`:farkDk<1440?`${Math.round(farkDk/60)} sa önce`:new Date(h.tarih).toLocaleDateString("tr-TR",{day:"numeric",month:"short"});
@@ -26791,7 +26827,7 @@ function App(){
             )}
 
             </div>
-            <div style={{minWidth:0}}>
+            <div style={genisEkran?{minWidth:0,display:"flex",flexDirection:"column"}:{minWidth:0}}>
             {/* Yaklaşan Takvim — önümüzdeki 7 gün, Türkiye */}
             {yaklasanTakvim.length>0&&(
               <>
@@ -26799,7 +26835,9 @@ function App(){
                   <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Yaklaşan Takvim · 7 Gün")}</span>
                   <span onClick={()=>nav("finansalTakvim")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
                 </div>
-                <div style={{marginBottom:14}}>
+                <div className="piyasa-scroll" style={genisEkran
+                  ?{marginBottom:14,height:HABER_TAKVIM_YUKSEKLIK,overflowY:"auto",WebkitOverflowScrolling:"touch"}
+                  :{marginBottom:14}}>
                   {yaklasanTakvim.map((e:any,i:number)=>{
                     const d=new Date(e.tarih);
                     const bugun=new Date(); bugun.setHours(0,0,0,0);
@@ -26830,11 +26868,13 @@ function App(){
             </div>
             </div>
 
-            {/* ── KISAYOL KARTLARI — MASAÜSTÜ 2 KOLON (2026-09-14) ──────────
-                Haftalık Piyasa Özeti ve Getiri Karşılaştırma tek satırlık ince
-                kartlar; geniş ekranda tek başlarına 900px'e yayılıp sağ tarafta
-                kocaman boşluk bırakıyorlardı. Artık yan yana. */}
+            {/* ── ALT SATIR — MASAÜSTÜ 2 KOLON (2026-09-14, 2. revizyon) ────
+                SOL: Katılım Bankacılığı Sektörü özet kartı — tek başına tam
+                genişlikte esneyip yatay olarak uzuyordu (kullanıcı raporu).
+                SAĞ: Haftalık Piyasa Özeti + Getiri Karşılaştırma kısayolları
+                alt alta. İkisi birlikte satırı dengeli dolduruyor. */}
             <div style={genisEkran?{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:16,alignItems:"start",marginBottom:14}:{}}>
+            {genisEkran && <div style={{minWidth:0}}><KatilimSektoruOzet onAc={()=>nav("katilimSektoru")}/></div>}
             <div style={{minWidth:0}}>
             {/* Haftalık Piyasa Özeti — ana menü alt kısayolu */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
@@ -26858,8 +26898,6 @@ function App(){
               <span style={{color:WA(0.3),fontSize:20,flexShrink:0}}>›</span>
             </div>
 
-            </div>
-            <div style={{minWidth:0}}>
             {/* Getiri Karşılaştırma — ana menü alt kısayolu */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
               <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Getiri Karşılaştırma")}</span>
@@ -26887,8 +26925,11 @@ function App(){
 
             {/* ── KATILIM BANKACILIĞI SEKTÖRÜ — ana sayfa özet tablosu ──────────
                 Kullanıcı ekrana girmeden de resmi görsün diye dört satırlık özet.
-                Veri gelmezse blok hiç render edilmiyor (sessiz gizlenme). ── */}
-            <KatilimSektoruOzet onAc={()=>nav("katilimSektoru")}/>
+                Veri gelmezse blok hiç render edilmiyor (sessiz gizlenme).
+                MASAÜSTÜNDE bu kart yukarıdaki 2 kolonlu satırın SOL sütununa
+                taşındı, o yüzden burada yalnızca mobilde gösteriliyor —
+                aksi halde ekranda iki kez görünürdü. ── */}
+            {!genisEkran && <KatilimSektoruOzet onAc={()=>nav("katilimSektoru")}/>}
 
             {/* Alt bilgi. Native'de SiteAltBilgi null döner; o durumda eski
                 sade copyright satırı gösteriliyor. */}
