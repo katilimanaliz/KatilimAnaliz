@@ -4010,8 +4010,14 @@ function AnaSayfaBist100Karti({ nav, doluYukseklik }: { nav: (sc: string) => voi
     <div className="press-tile" onClick={() => nav("bistHisseTarayici")} style={{
       position: "relative", overflow: "hidden", cursor: "pointer",
       marginBottom: doluYukseklik ? 0 : 26,
-      ...(doluYukseklik ? { flex: 1, display: "flex", flexDirection: "column" as const, justifyContent: "center" } : {}),
-      borderRadius: 22, padding: "14px 16px",
+      // doluYukseklik: masaüstünde hero şeridinin YANINDA duruyor. Hero
+      // kutusunun yüksekliği SABİT 158px (bkz. AnaSayfaHeroSerit) — kart da
+      // birebir o yüksekliğe sabitleniyor ki ALT KENARLARI hizalı olsun.
+      // (Önceden ızgara "stretch" ile kartı hero'nun ALTINDAKİ karusel
+      // noktalarına kadar uzatıyordu, kart hero'dan uzun görünüyordu —
+      // kullanıcı raporu, 2026-09-14.)
+      ...(doluYukseklik ? { height: 158, boxSizing: "border-box" as const, display: "flex", flexDirection: "column" as const, justifyContent: "center" } : {}),
+      borderRadius: doluYukseklik ? 22 : 22, padding: "14px 16px",
       background: (TEMA === "acik" ? "#E9EEF4" : WA(0.05)), border: `1px solid ${WA(0.08)}`,
     }}>
       <span style={{ position: "absolute", top: 14, right: 14, color: WA(0.3), fontSize: 16 }}>›</span>
@@ -25487,17 +25493,34 @@ function App(){
   const [favoriDuzenleAcik,setFavoriDuzenleAcik]=useState(false);
   // Favori şeridi de aynı mantıkla: masaüstünde eklenen ek araçlar da
   // sürüklenebilir, öne çekilen araç favorilere eklenir.
+  // ── FAVORİ IZGARASI: SÜTUN SAYISI (2026-09-14) ────────────────────────────
+  // Masaüstünde favoriler artık ızgara. Sütun sayısını CSS'in auto-fill'ine
+  // bırakmak, listeyi sütun sayısının tam katına tamamlamadığı için son satırı
+  // yarım bırakıyordu (kullanıcı raporu: "3 hesaplama var, kalanı boş").
+  // Sütun sayısını burada HESAPLAYIP hem ızgaraya hem liste doldurmaya AYNI
+  // değeri veriyoruz — böylece her satır tam dolu.
+  const favKolon = useMemo(()=>{
+    if(!genisEkran) return 0;
+    const kullanilabilir = ekranW - SIDEBAR_W - 40;
+    return Math.max(4, Math.floor(kullanilabilir/(114*icerikOlcek)));
+  },[genisEkran,ekranW,icerikOlcek,SIDEBAR_W]);
   const favGorunen = useMemo(()=>{
     let liste=[...favoriler];
     if(genisEkran){
-      const hedef=Math.ceil((ekranW-SIDEBAR_W-40)/(100*icerikOlcek));
+      // Listeyi sütun sayısının TAM KATINA tamamla (en az bir satır dolsun).
+      const hedef=Math.max(favKolon, Math.ceil(liste.length/favKolon)*favKolon);
       for(const h of HESAPLA_ARAC_LISTESI){
         if(liste.length>=hedef) break;
         if(!liste.includes(h.key)) liste.push(h.key);
       }
+      // Elde yeterli araç yoksa (son satır yine yarım kalacaksa) fazlalığı
+      // kırp — yarım satır yerine tam satırlarla bitmek daha derli toplu.
+      if(liste.length>favKolon && liste.length%favKolon!==0){
+        liste=liste.slice(0, Math.floor(liste.length/favKolon)*favKolon);
+      }
     }
     return liste;
-  },[favoriler,genisEkran,ekranW,icerikOlcek]);
+  },[favoriler,genisEkran,favKolon]);
 
   const favoriSirala=(yeniTam:string[],tasinan:string)=>{
     const kume=new Set([...favoriler,tasinan]);
@@ -26267,7 +26290,7 @@ function App(){
               );
               if (!genisEkran) return hero;
               return (
-                <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:14,alignItems:"stretch"}}>
+                <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:14,alignItems:"start"}}>
                   <div style={{minWidth:0}}>{hero}</div>
                   <div style={{minWidth:0,display:"flex",flexDirection:"column"}}>
                     <AnaSayfaBist100Karti nav={nav} doluYukseklik/>
@@ -26441,7 +26464,12 @@ function App(){
 
         {/* ── HOME ── */}
         {screen==="home"&&(
-          <div style={{background:C.bg,padding:"10px 12px 0",paddingBottom:"calc(108px + env(safe-area-inset-bottom,0px))",boxSizing:"border-box",display:"flex",flexDirection:"column",overflowY:"auto"}}>
+          <div style={{background:C.bg,padding:genisEkran?"10px 20px 0":"10px 12px 0",paddingBottom:"calc(108px + env(safe-area-inset-bottom,0px))",boxSizing:"border-box",display:"flex",flexDirection:"column",overflowY:"auto"}}>
+            {/* ⚠️ 2026-09-14: yatay dolgu masaüstünde 12px yerine 20px — sabit
+                üst blok (header + arama kutusu) KENDİ kapsayıcısında "0 20px"
+                kullanıyor; gövde 12px kalınca başlık gövdeden geniş görünüp
+                sol/sağ kenarlar hizasız duruyordu (kullanıcı raporu). Mobilde
+                12px AYNEN korundu. */}
 
             {/* Piyasa Özeti */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
@@ -26486,7 +26514,7 @@ function App(){
                 kaydırma yerine SABİT IZGARA (satır başına ~8 kutu) — masaüstünde
                 zaten yer var, kaydırmaya gerek yok. Mobil dal AYNEN korundu. */}
             <div className="piyasa-scroll" style={genisEkran
-              ? {display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(104px,1fr))",gap:10,marginBottom:26}
+              ? {display:"grid",gridTemplateColumns:`repeat(${favKolon},minmax(0,1fr))`,gap:10,marginBottom:26}
               : {display:"flex",overflowX:"auto",gap:8,marginBottom:26,scrollSnapType:"x mandatory",WebkitOverflowScrolling:"touch",paddingBottom:2}}>
               {favGorunen.map((key,i)=>{
                 const item=HESAPLA_ARAC_LISTESI.find(h=>h.key===key);
@@ -26696,6 +26724,12 @@ function App(){
               })}
             </div>
 
+            {/* ── ALT BÖLGE — MASAÜSTÜ 2 KOLON (2026-09-14 düzen revizyonu) ──
+                Son Haberler ve Yaklaşan Takvim geniş ekranda alt alta, her biri
+                tam genişlikte duruyordu (kullanıcı raporu: "yana uzanan boş
+                alan"). Artık masaüstünde yan yana; mobilde sıra aynı. */}
+            <div style={genisEkran?{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:16,alignItems:"start",marginBottom:10}:{}}>
+            <div style={{minWidth:0}}>
             {/* Son Haberler — ilk bakışta 3 haber, aşağı kaydırınca daha fazlası görünür.
                 Artık veri boş/hatalı olsa bile bölüm tamamen kaybolmuyor; başlık +
                 durum mesajı (hata / boş / yükleniyor) her zaman görünür kalıyor,
@@ -26756,6 +26790,8 @@ function App(){
               </>
             )}
 
+            </div>
+            <div style={{minWidth:0}}>
             {/* Yaklaşan Takvim — önümüzdeki 7 gün, Türkiye */}
             {yaklasanTakvim.length>0&&(
               <>
@@ -26791,6 +26827,15 @@ function App(){
               </>
             )}
 
+            </div>
+            </div>
+
+            {/* ── KISAYOL KARTLARI — MASAÜSTÜ 2 KOLON (2026-09-14) ──────────
+                Haftalık Piyasa Özeti ve Getiri Karşılaştırma tek satırlık ince
+                kartlar; geniş ekranda tek başlarına 900px'e yayılıp sağ tarafta
+                kocaman boşluk bırakıyorlardı. Artık yan yana. */}
+            <div style={genisEkran?{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:16,alignItems:"start",marginBottom:14}:{}}>
+            <div style={{minWidth:0}}>
             {/* Haftalık Piyasa Özeti — ana menü alt kısayolu */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
               <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Haftalık Piyasa Özeti")}</span>
@@ -26813,6 +26858,8 @@ function App(){
               <span style={{color:WA(0.3),fontSize:20,flexShrink:0}}>›</span>
             </div>
 
+            </div>
+            <div style={{minWidth:0}}>
             {/* Getiri Karşılaştırma — ana menü alt kısayolu */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
               <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Getiri Karşılaştırma")}</span>
@@ -26833,6 +26880,9 @@ function App(){
                 <p style={{margin:"2px 0 0",fontSize:11,color:WA(0.45)}}>Dolar, altın, gümüş, BIST, fonlar — dönemsel getiri kıyası</p>
               </div>
               <span style={{color:WA(0.3),fontSize:20,flexShrink:0}}>›</span>
+            </div>
+
+            </div>
             </div>
 
             {/* ── KATILIM BANKACILIĞI SEKTÖRÜ — ana sayfa özet tablosu ──────────
