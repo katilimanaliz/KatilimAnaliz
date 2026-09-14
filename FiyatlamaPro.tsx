@@ -4046,7 +4046,14 @@ function SonHaberlerBlok({tekKutu,sonHaberler,sonHaberlerHata,sonHaberlerIlkYukl
                 );
               })}
             </div>
-            {sonHaberler.length>3&&(
+            {/* ⚠️ "Devamı var" solma katmanı YALNIZCA tekKutu (masaüstü sağ
+                ray) görünümünde. Sebep: katman sayfa arka planı rengini
+                (#0F1923) boyuyor; mobilde haberler AYRI kartlar hâlinde ve
+                kart zemini sayfadan AÇIK olduğu için bu katman son kartın
+                üzerine KOYU bir iz olarak düşüyordu (kullanıcı raporu,
+                2026-09-14, ekran görüntüsüyle). Tek kutuda kutunun kendi
+                zemini var, orada doğru çalışıyor. */}
+            {tekKutu && sonHaberler.length>3&&(
               <div style={{position:"absolute",bottom:14,left:0,right:0,height:36,background:(TEMA==="acik"?"linear-gradient(180deg,rgba(242,245,248,0) 0%,#F2F5F8 90%)":"linear-gradient(180deg,rgba(15,25,35,0) 0%,#0F1923 90%)"),pointerEvents:"none",borderRadius:"0 0 12px 12px"}}/>
             )}
           </div>
@@ -25196,11 +25203,24 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onDuzen
               {/* Fiyat artık isim bloğunun İÇİNDE değil, çöp kutusunun kardeşi —
                   ikisi de dikeyde ortalanıyor, böylece aynı hizaya geliyor.
                   (Önceden fiyat ilk satırda, çöp kutusu iki satırın ortasındaydı.) */}
-              <span style={{flexShrink:0,fontSize:13,fontWeight:700,color:PORTFOY_YAZI,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>
-                {sekme==="takip"
-                  ? (k.fiyat==null ? "—" : (gizli?"₺••••":portfoyFmtDeger(k.fiyat||0, k)))
-                  : (gizli?"₺••••":portfoyFmtDeger(portfoyGuncelDeger(k), k))}
-              </span>
+              <div style={{flexShrink:0,textAlign:"right",whiteSpace:"nowrap"}}>
+                <div style={{fontSize:13,fontWeight:700,color:PORTFOY_YAZI,fontVariantNumeric:"tabular-nums"}}>
+                  {sekme==="takip"
+                    ? (k.fiyat==null ? "—" : (gizli?"₺••••":portfoyFmtDeger(k.fiyat||0, k)))
+                    : (gizli?"₺••••":portfoyFmtDeger(portfoyGuncelDeger(k), k))}
+                </div>
+                {/* BİRİM FİYAT (2026-09-14, kullanıcı isteği — Fintables
+                    ekran görüntüsü): Portföyüm sekmesinde bu kart yalnızca
+                    TOPLAM değeri gösteriyordu, ürünün birim fiyatı ekranda
+                    hiç yoktu. Takip sekmesinde üstteki rakam ZATEN birim
+                    fiyat olduğu için orada tekrar edilmiyor. Katılım/Sukuk
+                    kaleminde "birim fiyat" kavramı yok — onlarda da yok. */}
+                {sekme!=="takip" && k.tur!=="katilim" && k.tur!=="sukuk" && k.fiyat!=null && (
+                  <div style={{fontSize:10,color:PORTFOY_ETIKET,marginTop:2,fontVariantNumeric:"tabular-nums"}}>
+                    {gizli?"••••":portfoyFmtDeger(k.fiyat, k)}
+                  </div>
+                )}
+              </div>
               {/* Düzenle YALNIZ alış bilgisi olan kalemde (Takip sekmesinde
                   alis==null, düzenlenecek alan yok). Ana sayfa kartındaki
                   kaydırmalı panelle aynı kural. Katılım Hesabı/Sukuk'ta da
