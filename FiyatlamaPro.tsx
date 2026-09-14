@@ -3887,7 +3887,7 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri 
 // 2026-09-14 (kullanıcı isteği): sağ taraftaki boşluğa BİST 30 eklendi, alt
 // satıra yükselen/düşen hisse sayısı (hisse-proxy, KatilimEndeksiTopHareketliler
 // ile AYNI "kea_hisseler" cache'i paylaşılarak — ekstra istek YOK).
-function AnaSayfaBist100Karti({ nav }: { nav: (sc: string) => void }) {
+function AnaSayfaBist100Karti({ nav, doluYukseklik }: { nav: (sc: string) => void; doluYukseklik?: boolean }) {
   const CACHE_TTL = 5 * 60 * 1000; // 5 dakika — KatilimEndeksiTopHareketliler ile aynı ritim
 
   // ── Endeksler (BİST 100 + BİST 30) — tek cache anahtarında birlikte ──
@@ -4008,7 +4008,9 @@ function AnaSayfaBist100Karti({ nav }: { nav: (sc: string) => void }) {
 
   return (
     <div className="press-tile" onClick={() => nav("bistHisseTarayici")} style={{
-      position: "relative", overflow: "hidden", cursor: "pointer", marginBottom: 26,
+      position: "relative", overflow: "hidden", cursor: "pointer",
+      marginBottom: doluYukseklik ? 0 : 26,
+      ...(doluYukseklik ? { flex: 1, display: "flex", flexDirection: "column" as const, justifyContent: "center" } : {}),
       borderRadius: 22, padding: "14px 16px",
       background: (TEMA === "acik" ? "#E9EEF4" : WA(0.05)), border: `1px solid ${WA(0.08)}`,
     }}>
@@ -26245,13 +26247,34 @@ function App(){
                 bırakılıyor. */}
             <div style={{height:anaSayfaUstBlokYukseklik}}/>
 
-            <AnaSayfaHeroSerit selamlama={TR(selamlama)} bugunMetni={kisaTarihStr} kullaniciAdi={kullaniciAdi} genisEkran={genisEkran} git={(hedef) => {
-              if (hedef === "altin") { setPiyasaTabloFiltre("altin"); nav("piyasaMenu"); }
-              else if (hedef === "gostergeler") { setPiyasaTabloFiltre("gostergeler"); nav("piyasaMenu"); }
-              else if (hedef === "zekat") { nav("zekatHesabi"); }
-              else if (hedef === "taksitKarsilastirma") { nav("taksitKarsilastirma"); }
-              else if (hedef === "sozluk") { nav("sozluk"); }
-            }} />
+            {/* ── HERO + BİST KARTI (2026-09-14, masaüstü düzen revizyonu) ──
+                MASAÜSTÜ: hero şeridi geniş ekranda tek başına 1000px'e
+                yayılıp içi boş kalıyordu (kullanıcı raporu, ekran
+                görüntüsüyle). Artık hero 2 birim / BİST kartı 1 birim
+                olacak şekilde YAN YANA — sağdaki boşluk dolduruluyor.
+                MOBİL: hero AYNEN eskisi gibi tek başına; BİST kartı mobilde
+                aşağıda, AI Asistanı'nın altındaki KENDİ yerinde kalıyor
+                (iki ayrı dal — biri değişirse diğeri etkilenmesin). */}
+            {(()=>{
+              const hero = (
+                <AnaSayfaHeroSerit selamlama={TR(selamlama)} bugunMetni={kisaTarihStr} kullaniciAdi={kullaniciAdi} genisEkran={genisEkran} git={(hedef) => {
+                  if (hedef === "altin") { setPiyasaTabloFiltre("altin"); nav("piyasaMenu"); }
+                  else if (hedef === "gostergeler") { setPiyasaTabloFiltre("gostergeler"); nav("piyasaMenu"); }
+                  else if (hedef === "zekat") { nav("zekatHesabi"); }
+                  else if (hedef === "taksitKarsilastirma") { nav("taksitKarsilastirma"); }
+                  else if (hedef === "sozluk") { nav("sozluk"); }
+                }} />
+              );
+              if (!genisEkran) return hero;
+              return (
+                <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:14,alignItems:"stretch"}}>
+                  <div style={{minWidth:0}}>{hero}</div>
+                  <div style={{minWidth:0,display:"flex",flexDirection:"column"}}>
+                    <AnaSayfaBist100Karti nav={nav} doluYukseklik/>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* ── APP STORE BANNER — yalnızca MOBİL tarayıcıda; native'de gizli.
                 Masaüstünde de gizli (2026-07-13): sağ alttaki QR kartı aynı işi
@@ -26459,7 +26482,12 @@ function App(){
                 <span onClick={()=>nav("hesaplaMenu")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
               </div>
             </div>
-            <div className="piyasa-scroll" style={{display:"flex",overflowX:"auto",gap:8,marginBottom:26,scrollSnapType:"x mandatory",WebkitOverflowScrolling:"touch",paddingBottom:2}}>
+            {/* 2026-09-14 masaüstü düzen revizyonu: geniş ekranda yatay
+                kaydırma yerine SABİT IZGARA (satır başına ~8 kutu) — masaüstünde
+                zaten yer var, kaydırmaya gerek yok. Mobil dal AYNEN korundu. */}
+            <div className="piyasa-scroll" style={genisEkran
+              ? {display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(104px,1fr))",gap:10,marginBottom:26}
+              : {display:"flex",overflowX:"auto",gap:8,marginBottom:26,scrollSnapType:"x mandatory",WebkitOverflowScrolling:"touch",paddingBottom:2}}>
               {favGorunen.map((key,i)=>{
                 const item=HESAPLA_ARAC_LISTESI.find(h=>h.key===key);
                 if(!item) return null;
@@ -26471,7 +26499,8 @@ function App(){
                     onTouchStart={sf.onTouchStart} onTouchEnd={sf.onTouchEnd} onTouchCancel={sf.onTouchCancel}
                     onMouseDown={sf.onMouseDown} onMouseMove={sf.onMouseMove} onMouseUp={sf.onMouseUp}
                     style={{
-                    flex:"0 0 92px",scrollSnapAlign:"start",position:"relative",overflow:"hidden",
+                    ...(genisEkran?{minWidth:0}:{flex:"0 0 92px",scrollSnapAlign:"start"}),
+                    position:"relative",overflow:"hidden",
                     background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,
                     borderRadius:22,padding:"12px 6px",cursor:"pointer",minHeight:100,
                     display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:7,
@@ -26492,101 +26521,135 @@ function App(){
               )}
             </div>
 
-            {/* Piyasalar */}
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-              <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Piyasalar")}</span>
-              <span onClick={()=>nav("piyasaMenu")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:26}}>
-              {[
-                {key:"bistHisseTarayici", icon:"📊", label:"BİST Hisse Veri İzleme"},
-                {key:"fonGetiriIzleme",   icon:"📈", label:"Yatırım Fonları Getiri İzleme"},
-                {key:"karPayiOranlari",   icon:"🏦", label:"Kâr Payı Oran Karşılaştırma"},
-                {key:"piyasaHaberleri",   icon:"📡", label:"Piyasa Haberleri"},
-              ].map(c=>{
-                const renk=KATEGORI_RENK[EKRAN_KATEGORI[c.key]];
-                return(
-                <div className="press-tile" key={c.key} onClick={()=>nav(c.key)} style={{
-                  background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,
-                  borderRadius:22,padding:"14px 8px",cursor:"pointer",minHeight:98,position:"relative",overflow:"hidden",
-                  display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:7,
-                }}>
-                {renk&&<div style={{position:"absolute",top:0,left:12,right:12,height:3,borderRadius:"0 0 3px 3px",background:`linear-gradient(90deg,transparent,${renk},transparent)`}}/>}
-                <div style={{height:46,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                  <Icon k={c.key} size={33} color={C.blue} style={{filter:"drop-shadow(0 0 6px rgba(91,155,216,0.5))"}}/>
-                </div>
-                  <span style={{fontSize:11.5,fontWeight:700,color:C.soft,textAlign:"center",lineHeight:1.25}}>{c.label}</span>
-                </div>
-                );})}
-            </div>
-
-            {/* AI Finans Asistanı — Piyasalar'ın hemen altında */}
-            <div className="press-tile" onClick={()=>nav("asistan")} style={{
-              position:"relative",overflow:"hidden",cursor:"pointer",marginBottom:26,
-              borderRadius:26,padding:"20px 18px",
-              background:(TEMA==="acik"?"linear-gradient(135deg,#E8F0FA 0%,#F6FAFD 60%,#EDF3FA 100%)":"linear-gradient(135deg,#16243A 0%,#0F1923 60%,#111C2E 100%)"),
-              border:"1px solid rgba(91,155,216,0.4)",
-              boxShadow:"0 0 30px rgba(59,130,246,0.18), inset 0 0 24px rgba(59,130,246,0.05)",
-            }}>
-              {/* Dekoratif arka plan parıltıları */}
-              <div style={{position:"absolute",top:-30,right:-30,width:120,height:120,borderRadius:"50%",background:"radial-gradient(circle,rgba(91,155,216,0.25) 0%,transparent 70%)",pointerEvents:"none"}}/>
-              <div style={{position:"absolute",bottom:-40,left:-20,width:100,height:100,borderRadius:"50%",background:"radial-gradient(circle,rgba(139,92,246,0.15) 0%,transparent 70%)",pointerEvents:"none"}}/>
-
-              <div style={{display:"flex",alignItems:"center",gap:14,position:"relative"}}>
-                <div style={{
-                  flexShrink:0,width:56,height:56,borderRadius:18,
-                  background:"linear-gradient(135deg,#3B82F6,#5B9BD8)",
-                  display:"flex",alignItems:"center",justifyContent:"center",
-                  boxShadow:"0 0 18px rgba(59,130,246,0.5)",
-                }}>
-                  <Icon k="asistan" size={28} color="#fff"/>
-                </div>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{display:"flex",alignItems:"center",gap:6}}>
-                    <span style={{fontSize:15,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff")}}>AI Finans Asistanı</span>
-                    <span style={{fontSize:9,fontWeight:800,color:C.blue,background:"rgba(91,155,216,0.15)",border:"1px solid rgba(91,155,216,0.35)",borderRadius:20,padding:"2px 7px",letterSpacing:0.4}}>YENİ</span>
+            {/* ── PİYASALAR / KATILIM ENDEKSİ / POPÜLER FONLAR ──────────────
+                2026-09-14 MASAÜSTÜ DÜZEN REVİZYONU (kullanıcı raporu, ekran
+                görüntüleriyle): geniş ekranda bu üç blok alt alta ve her biri
+                TAM GENİŞLİKTE duruyordu — Piyasalar'ın 4 kartı ~900px'e
+                yayılıp ortasında minicik bir ikonla kalıyordu, sayfa da
+                gereksiz uzuyordu. Artık masaüstünde ÜÇ KOLON (FVT/Fintables
+                deseni): Piyasalar 2×2 kompakt kart olarak sol kolonda,
+                Katılım Endeksi ortada, Popüler Fonlar sağda.
+                MOBİL: blok sırası ve görünümü AYNEN eskisi gibi — iki ayrı
+                dal olarak tutuldu ki biri değişince diğeri etkilenmesin. */}
+            {(()=>{
+              const piyasalarBlok = (
+                <>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                    <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Piyasalar")}</span>
+                    <span onClick={()=>nav("piyasaMenu")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
                   </div>
-                  <p style={{margin:"3px 0 0",fontSize:12.5,color:WA(0.6),lineHeight:1.35}}>Bugün size nasıl yardımcı olabilirim?</p>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:genisEkran?0:26}}>
+                    {[
+                      {key:"bistHisseTarayici", icon:"📊", label:"BİST Hisse Veri İzleme"},
+                      {key:"fonGetiriIzleme",   icon:"📈", label:"Yatırım Fonları Getiri İzleme"},
+                      {key:"karPayiOranlari",   icon:"🏦", label:"Kâr Payı Oran Karşılaştırma"},
+                      {key:"piyasaHaberleri",   icon:"📡", label:"Piyasa Haberleri"},
+                    ].map(c=>{
+                      const renk=KATEGORI_RENK[EKRAN_KATEGORI[c.key]];
+                      return(
+                      <div className="press-tile" key={c.key} onClick={()=>nav(c.key)} style={{
+                        background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,
+                        borderRadius:22,padding:"14px 8px",cursor:"pointer",minHeight:98,position:"relative",overflow:"hidden",
+                        display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:7,
+                      }}>
+                      {renk&&<div style={{position:"absolute",top:0,left:12,right:12,height:3,borderRadius:"0 0 3px 3px",background:`linear-gradient(90deg,transparent,${renk},transparent)`}}/>}
+                      <div style={{height:46,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        <Icon k={c.key} size={33} color={C.blue} style={{filter:"drop-shadow(0 0 6px rgba(91,155,216,0.5))"}}/>
+                      </div>
+                        <span style={{fontSize:11.5,fontWeight:700,color:C.soft,textAlign:"center",lineHeight:1.25}}>{c.label}</span>
+                      </div>
+                      );})}
+                  </div>
+                </>
+              );
+
+              // AI Finans Asistanı — masaüstünde İNCE ŞERİT (geniş ekranda
+              // eski 20px dikey dolgu + 56px ikonla gereksiz yer kaplıyordu).
+              const asistanBlok = (
+                <div className="press-tile" onClick={()=>nav("asistan")} style={{
+                  position:"relative",overflow:"hidden",cursor:"pointer",marginBottom:26,
+                  borderRadius:genisEkran?20:26,padding:genisEkran?"13px 18px":"20px 18px",
+                  background:(TEMA==="acik"?"linear-gradient(135deg,#E8F0FA 0%,#F6FAFD 60%,#EDF3FA 100%)":"linear-gradient(135deg,#16243A 0%,#0F1923 60%,#111C2E 100%)"),
+                  border:"1px solid rgba(91,155,216,0.4)",
+                  boxShadow:"0 0 30px rgba(59,130,246,0.18), inset 0 0 24px rgba(59,130,246,0.05)",
+                }}>
+                  {/* Dekoratif arka plan parıltıları */}
+                  <div style={{position:"absolute",top:-30,right:-30,width:120,height:120,borderRadius:"50%",background:"radial-gradient(circle,rgba(91,155,216,0.25) 0%,transparent 70%)",pointerEvents:"none"}}/>
+                  <div style={{position:"absolute",bottom:-40,left:-20,width:100,height:100,borderRadius:"50%",background:"radial-gradient(circle,rgba(139,92,246,0.15) 0%,transparent 70%)",pointerEvents:"none"}}/>
+
+                  <div style={{display:"flex",alignItems:"center",gap:14,position:"relative"}}>
+                    <div style={{
+                      flexShrink:0,width:genisEkran?42:56,height:genisEkran?42:56,borderRadius:genisEkran?13:18,
+                      background:"linear-gradient(135deg,#3B82F6,#5B9BD8)",
+                      display:"flex",alignItems:"center",justifyContent:"center",
+                      boxShadow:"0 0 18px rgba(59,130,246,0.5)",
+                    }}>
+                      <Icon k="asistan" size={genisEkran?22:28} color="#fff"/>
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6}}>
+                        <span style={{fontSize:15,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff")}}>AI Finans Asistanı</span>
+                        <span style={{fontSize:9,fontWeight:800,color:C.blue,background:"rgba(91,155,216,0.15)",border:"1px solid rgba(91,155,216,0.35)",borderRadius:20,padding:"2px 7px",letterSpacing:0.4}}>YENİ</span>
+                      </div>
+                      <p style={{margin:"3px 0 0",fontSize:12.5,color:WA(0.6),lineHeight:1.35}}>Bugün size nasıl yardımcı olabilirim?</p>
+                    </div>
+                    <span style={{fontSize:20,color:C.blue,flexShrink:0}}>›</span>
+                  </div>
                 </div>
-                <span style={{fontSize:20,color:C.blue,flexShrink:0}}>›</span>
-              </div>
-            </div>
+              );
 
-            {/* BİST 100 kartı — AI Finans Asistanı'nın hemen altında (2026-09-14, kullanıcı isteği) */}
-            <AnaSayfaBist100Karti nav={nav}/>
+              const endeksBlok = <KatilimEndeksiTopHareketliler nav={nav} onSecim={irHisseFonDetay}/>;
+              const fonBlok = <FonTahminleriWidget nav={nav} onSecim={irHisseFonDetay} onFonDetayAc={(fon:any)=>{setPendingFonDetay(fon); nav("fonDetay","home");}}/>;
+              const portfoyModal = portfoyGrafikAcik ? <PortfoyKarZararModal liste={portfoy} onClose={()=>setPortfoyGrafikAcik(false)}/> : null;
 
-            {/* ── PORTFÖYÜM KARTI — GEÇİCİ OLARAK GİZLENDİ (2026-09-08) ──────
-                Kullanıcı isteğiyle ana sayfadan kaldırıldı, yerine header'daki
-                çanta ikonu (bkz. yukarısı, Bell butonunun yanı) kondu. Kod
-                SİLİNMEDİ — sadece JSX yorumu içine alındı. Geri getirmek için
-                bu yorumu (ve alttaki kapanışını) kaldırmak yeterli.
-            <PortfoyWidget
-              liste={portfoy}
-              gizli={portfoyGizli}
-              onGizliToggle={portfoyGizliDegistir}
-              onDetay={(k?:PortfoyKalemi, sekme?:"portfoy"|"takip")=>{ setPortfoyBaslangicSekme(sekme || (k && k.alis==null ? "takip" : "portfoy")); nav("portfoyum","home"); }}
-              onEkle={()=>setPortfoyEkleAcik(true)}
-              onSil={portfoySil}
-              onDuzenle={(k:PortfoyKalemi)=>setPortfoyDuzenleId(k.id)}
-              onGrafik={()=>setPortfoyGrafikAcik(true)}
-              onSirala={portfoySirala}
-            />
-            */}
-            {portfoyGrafikAcik && <PortfoyKarZararModal liste={portfoy} onClose={()=>setPortfoyGrafikAcik(false)}/>}
+              if (genisEkran) {
+                return (
+                  <>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:16,marginBottom:26,alignItems:"start"}}>
+                      <div style={{minWidth:0}}>{piyasalarBlok}</div>
+                      <div style={{minWidth:0}}>{endeksBlok}</div>
+                      <div style={{minWidth:0}}>{fonBlok}</div>
+                    </div>
+                    {asistanBlok}
+                    {portfoyModal}
+                  </>
+                );
+              }
 
-            {/* Katılım Endeksi Top Hareketliler */}
-            <KatilimEndeksiTopHareketliler nav={nav} onSecim={irHisseFonDetay}/>
+              // ── MOBİL: sıra ve görünüm eskisiyle birebir aynı ──
+              return (
+                <>
+                  {piyasalarBlok}
+                  {asistanBlok}
+                  {/* BİST 100/30 kartı — MOBİLDE AI Finans Asistanı'nın hemen
+                      altında. MASAÜSTÜNDE bu kart yukarı, hero şeridinin
+                      YANINA taşındı, o yüzden burada değil. */}
+                  <AnaSayfaBist100Karti nav={nav}/>
+                  {/* ── PORTFÖYÜM KARTI — GEÇİCİ OLARAK GİZLENDİ (2026-09-08) ──
+                      Kullanıcı isteğiyle ana sayfadan kaldırıldı, yerine
+                      header'daki çanta ikonu kondu. Kod SİLİNMEDİ, geri
+                      getirmek için PortfoyWidget yeniden buraya konulabilir
+                      (props: liste/gizli/onGizliToggle/onDetay/onEkle/onSil/
+                      onDuzenle/onGrafik/onSirala). */}
+                  {portfoyModal}
+                  {endeksBlok}
+                  {fonBlok}
+                </>
+              );
+            })()}
 
-            {/* Fon Tahminleri (AI) — pilot 9 fon, 2026-09-03 eklendi */}
-            <FonTahminleriWidget nav={nav} onSecim={irHisseFonDetay} onFonDetayAc={(fon:any)=>{setPendingFonDetay(fon); nav("fonDetay","home");}}/>
 
             {/* Finansal Göstergeler — ana sayfa özeti (Seçenek A: ikonlu satırlar) */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:18,marginBottom:8}}>
               <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Finansal Göstergeler")}</span>
               <span onClick={()=>{setPiyasaTabloFiltre("gostergeler");nav("piyasaMenu");}} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
             </div>
+            {/* 2026-09-14 masaüstü düzen revizyonu: geniş ekranda 6 gösterge
+                alt alta uzayıp her satır ~900px'e yayılıyordu; artık 3 kolonlu
+                ızgara. Mobilde AYNEN eskisi gibi tek kolon. */}
             <div onClick={()=>{setPiyasaTabloFiltre("gostergeler");nav("piyasaMenu");}} style={{
               marginBottom:14,cursor:"pointer",
+              ...(genisEkran?{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:10}:{}),
             }}>
               {[
                 {ad:"TCMB Politika Faizi", deger:"%37,00", tarih:"Haziran 2026 · PPK", ikon:Landmark, renk:C.blue},
@@ -26615,7 +26678,7 @@ function App(){
                     setGostergeUyari("Veri henüz yüklenmedi, birkaç saniye sonra tekrar dene.");
                     setTimeout(()=>setGostergeUyari(null),2200);
                   }
-                }} style={{display:"flex",alignItems:"center",gap:11,padding:"12px 16px",borderRadius:12,marginBottom:8,cursor:gecmisDestekli?"pointer":"default",
+                }} style={{display:"flex",alignItems:"center",gap:11,padding:"12px 16px",borderRadius:12,marginBottom:genisEkran?0:8,cursor:gecmisDestekli?"pointer":"default",
                   ...(TEMA==="acik"
                     ? {background:"#E9EEF4",border:"1px solid rgba(22,34,46,0.08)"}
                     : {background:"#16222E",border:`1px solid ${WA(0.07)}`})}}>
