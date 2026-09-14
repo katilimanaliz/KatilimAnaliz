@@ -3879,6 +3879,60 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri 
 }
 
 // ─── ANA SAYFA: KATILIM ENDEKSİ TOP HAREKETLİLER (Hisse + Fon) ──────────────
+// ── ANA SAYFA MASAÜSTÜ SATIR DÜZENİ SABİTLERİ (2026-09-14) ─────────────────
+// Üç satırın da AYNI ızgara/hücre kuralını kullanması için tek yerde. Satır
+// yükseklikleri burada; bir satırın yüksekliğini değiştirmek, o satırdaki üç
+// kartı birden değiştirir — kartlardan birini elle büyütüp diğerlerini unutma
+// (bu düzende hizasızlığın ana kaynağı) böylece mümkün olmuyor.
+const SATIR_STIL: any = {display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:16,marginBottom:18,alignItems:"stretch"};
+// Hücre: taşan içerik kartın KENDİ içinde kayar, satırı uzatmaz.
+const HUCRE_STIL: any = {minWidth:0,overflowY:"auto",overflowX:"hidden"};
+const SATIR1_YUKSEKLIK = 470;   // Katılım Endeksi / Popüler Fonlar / Göstergeler
+const SATIR2_YUKSEKLIK = 330;   // Son Haberler / Yaklaşan Takvim / Sektör
+
+// AI Finans Asistanı kartı. 2026-09-14 (4. revizyon): masaüstünde eskiden
+// tam genişlik bir ŞERİTTİ; çevresindeki her şey kart olunca yabancı duruyordu
+// (kullanıcı geri bildirimi). Artık masaüstünde son satırda diğer kısayollarla
+// EŞİT bir kart. Mobilde eski görünüm (geniş, 56px ikon) aynen korunuyor.
+// Modül seviyesine alındı ki ana sayfanın hem mobil akışında hem masaüstü
+// satır düzeninde aynı bileşen kullanılsın — iki ayrı kopya tutulmasın.
+function AsistanKarti({nav,genisEkran}:{nav:(sc:string)=>void;genisEkran:boolean}){
+  return (
+                <div className="press-tile" onClick={()=>nav("asistan")} style={{
+                  position:"relative",overflow:"hidden",cursor:"pointer",
+                  marginBottom:genisEkran?0:26,
+                  ...(genisEkran?{height:"100%",boxSizing:"border-box" as const,display:"flex",flexDirection:"column" as const,justifyContent:"center"}:{}),
+                  borderRadius:genisEkran?20:26,padding:genisEkran?"16px 18px":"20px 18px",
+                  background:(TEMA==="acik"?"linear-gradient(135deg,#E8F0FA 0%,#F6FAFD 60%,#EDF3FA 100%)":"linear-gradient(135deg,#16243A 0%,#0F1923 60%,#111C2E 100%)"),
+                  border:"1px solid rgba(91,155,216,0.4)",
+                  boxShadow:"0 0 30px rgba(59,130,246,0.18), inset 0 0 24px rgba(59,130,246,0.05)",
+                }}>
+                  {/* Dekoratif arka plan parıltıları */}
+                  <div style={{position:"absolute",top:-30,right:-30,width:120,height:120,borderRadius:"50%",background:"radial-gradient(circle,rgba(91,155,216,0.25) 0%,transparent 70%)",pointerEvents:"none"}}/>
+                  <div style={{position:"absolute",bottom:-40,left:-20,width:100,height:100,borderRadius:"50%",background:"radial-gradient(circle,rgba(139,92,246,0.15) 0%,transparent 70%)",pointerEvents:"none"}}/>
+
+                  <div style={{display:"flex",alignItems:"center",gap:14,position:"relative"}}>
+                    <div style={{
+                      flexShrink:0,width:genisEkran?42:56,height:genisEkran?42:56,borderRadius:genisEkran?13:18,
+                      background:"linear-gradient(135deg,#3B82F6,#5B9BD8)",
+                      display:"flex",alignItems:"center",justifyContent:"center",
+                      boxShadow:"0 0 18px rgba(59,130,246,0.5)",
+                    }}>
+                      <Icon k="asistan" size={genisEkran?22:28} color="#fff"/>
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6}}>
+                        <span style={{fontSize:15,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff")}}>AI Finans Asistanı</span>
+                        <span style={{fontSize:9,fontWeight:800,color:C.blue,background:"rgba(91,155,216,0.15)",border:"1px solid rgba(91,155,216,0.35)",borderRadius:20,padding:"2px 7px",letterSpacing:0.4}}>YENİ</span>
+                      </div>
+                      <p style={{margin:"3px 0 0",fontSize:12.5,color:WA(0.6),lineHeight:1.35}}>Bugün size nasıl yardımcı olabilirim?</p>
+                    </div>
+                    <span style={{fontSize:20,color:C.blue,flexShrink:0}}>›</span>
+                  </div>
+                </div>
+  );
+}
+
 // ─── ANA SAYFA: BİST 100 / BİST 30 KARTI ────────────────────────────────────
 // Piyasalar bölümündeki "BİST Hisse Veri İzleme" kartına dokunuşla, canlı
 // izleme ekranındaki (BistHisseTarayici) hero kart ile AYNI endeks verisini
@@ -26553,15 +26607,20 @@ function App(){
               )}
             </div>
 
-            {/* ══ MASAÜSTÜ MASONRY KAPSAYICISI (2026-09-14, 3. revizyon) ══
-                Buradan "SİTE ALT BİLGİ"ye kadar olan TÜM bloklar masaüstünde
-                3 sütunlu bir CSS çok sütunlu akışta. Tarayıcı blokları en kısa
-                sütuna yerleştirip yükseklikleri dengeliyor — sabit ızgarada
-                kaçınılmaz olan "sütun altında beyaz boşluk" sorunu böylece
-                yapısal olarak ortadan kalkıyor.
-                MOBİLDE style boş nesne ({}) — düz bir div, akış eskisiyle
-                birebir aynı kalıyor. ══ */}
-            <div style={genisEkran?{columnCount:3,columnGap:18} as any:{}}>
+            {/* ══ MASAÜSTÜ SATIR DÜZENİ (2026-09-14, 4. revizyon) ══════════
+                ÖNCEKİ İKİ DENEME VE NEDEN BIRAKILDIKLARI:
+                • Sabit ızgara (grid): her sütun kendi içeriği kadar uzuyordu,
+                  en kısa sütunun ALTINDA beyaz boşluk kalıyordu.
+                • Masonry (column-count): boşluk kapandı ama düzen okunaksız
+                  oldu — bloklar sütunlara otomatik dağıldığı için ilgisiz
+                  kutular yan yana düşüyor, sıra ekran genişliğine göre
+                  değişiyordu (kullanıcı: "böyle de çok karışık oldu").
+                ŞİMDİKİ ÇÖZÜM: SATIR SATIR eşitleme. Her satır 3 eşit sütun;
+                satırdaki kartlar AYNI yüksekliği paylaşıyor, içeriği taşan
+                kart kendi içinde kayıyor. Böylece altta boşluk kalmıyor AMA
+                blok sırası da sabit kalıyor — ikisi bir arada.
+                MOBİLDE tüm satır sarmalayıcıları düz div'e düşüyor, akış
+                eskisiyle birebir aynı. ══ */}
 
             {/* ── PİYASALAR / KATILIM ENDEKSİ / POPÜLER FONLAR ──────────────
                 2026-09-14 MASAÜSTÜ DÜZEN REVİZYONU (kullanıcı raporu, ekran
@@ -26580,7 +26639,7 @@ function App(){
                     <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Piyasalar")}</span>
                     <span onClick={()=>nav("piyasaMenu")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
                   </div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:genisEkran?0:26}}>
+                  <div style={{display:"grid",gridTemplateColumns:genisEkran?"repeat(4,minmax(0,1fr))":"1fr 1fr",gap:10,marginBottom:genisEkran?18:26}}>
                     {[
                       {key:"bistHisseTarayici", icon:"📊", label:"BİST Hisse Veri İzleme"},
                       {key:"fonGetiriIzleme",   icon:"📈", label:"Yatırım Fonları Getiri İzleme"},
@@ -26605,50 +26664,8 @@ function App(){
                 </>
               );
 
-              // AI Finans Asistanı — masaüstünde İNCE ŞERİT (geniş ekranda
-              // eski 20px dikey dolgu + 56px ikonla gereksiz yer kaplıyordu).
-              const asistanBlok = (
-                <div className="press-tile" onClick={()=>nav("asistan")} style={{
-                  position:"relative",overflow:"hidden",cursor:"pointer",marginBottom:26,
-                  borderRadius:genisEkran?20:26,padding:genisEkran?"13px 18px":"20px 18px",
-                  background:(TEMA==="acik"?"linear-gradient(135deg,#E8F0FA 0%,#F6FAFD 60%,#EDF3FA 100%)":"linear-gradient(135deg,#16243A 0%,#0F1923 60%,#111C2E 100%)"),
-                  border:"1px solid rgba(91,155,216,0.4)",
-                  boxShadow:"0 0 30px rgba(59,130,246,0.18), inset 0 0 24px rgba(59,130,246,0.05)",
-                }}>
-                  {/* Dekoratif arka plan parıltıları */}
-                  <div style={{position:"absolute",top:-30,right:-30,width:120,height:120,borderRadius:"50%",background:"radial-gradient(circle,rgba(91,155,216,0.25) 0%,transparent 70%)",pointerEvents:"none"}}/>
-                  <div style={{position:"absolute",bottom:-40,left:-20,width:100,height:100,borderRadius:"50%",background:"radial-gradient(circle,rgba(139,92,246,0.15) 0%,transparent 70%)",pointerEvents:"none"}}/>
+              const asistanBlok = <AsistanKarti nav={nav} genisEkran={genisEkran}/>;
 
-                  <div style={{display:"flex",alignItems:"center",gap:14,position:"relative"}}>
-                    <div style={{
-                      flexShrink:0,width:genisEkran?42:56,height:genisEkran?42:56,borderRadius:genisEkran?13:18,
-                      background:"linear-gradient(135deg,#3B82F6,#5B9BD8)",
-                      display:"flex",alignItems:"center",justifyContent:"center",
-                      boxShadow:"0 0 18px rgba(59,130,246,0.5)",
-                    }}>
-                      <Icon k="asistan" size={genisEkran?22:28} color="#fff"/>
-                    </div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{display:"flex",alignItems:"center",gap:6}}>
-                        <span style={{fontSize:15,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff")}}>AI Finans Asistanı</span>
-                        <span style={{fontSize:9,fontWeight:800,color:C.blue,background:"rgba(91,155,216,0.15)",border:"1px solid rgba(91,155,216,0.35)",borderRadius:20,padding:"2px 7px",letterSpacing:0.4}}>YENİ</span>
-                      </div>
-                      <p style={{margin:"3px 0 0",fontSize:12.5,color:WA(0.6),lineHeight:1.35}}>Bugün size nasıl yardımcı olabilirim?</p>
-                    </div>
-                    <span style={{fontSize:20,color:C.blue,flexShrink:0}}>›</span>
-                  </div>
-                </div>
-              );
-
-              // Masonry öğesi: masaüstünde sütun ortasında bölünmeyen bir blok.
-              // Mobilde hiçbir şey sarmalamaz — eski akış birebir korunur.
-              const mOge = (icerik:any) => genisEkran
-                ? <div style={{breakInside:"avoid",WebkitColumnBreakInside:"avoid",pageBreakInside:"avoid",marginBottom:18}}>{icerik}</div>
-                : icerik;
-              // Tüm sütunları kaplayan şerit (yalnızca masaüstünde anlamlı).
-              const ustSerit = (icerik:any) => genisEkran
-                ? <div style={{columnSpan:"all",breakInside:"avoid",marginBottom:18} as any}>{icerik}</div>
-                : icerik;
 
               const gostergelerBlok = (
                 <>
@@ -26720,27 +26737,21 @@ function App(){
               const portfoyModal = portfoyGrafikAcik ? <PortfoyKarZararModal liste={portfoy} onClose={()=>setPortfoyGrafikAcik(false)}/> : null;
 
               if (genisEkran) {
-                // ── MASAÜSTÜ: MASONRY (2026-09-14, 3. revizyon) ────────────
-                // Sabit ızgara (grid) denendi ve BAŞARISIZ oldu: her sütun
-                // kendi içeriği kadar uzuyor, en kısa sütunun altında beyaz
-                // boşluk kalıyordu. Sütunlara blok dağıtarak dengelemeye
-                // çalışmak da işe yaramadı — içerik uzunlukları canlı veriyle
-                // (haber sayısı, takvim kaydı, fon adedi) her gün değiştiği
-                // için elle yapılan her denge bir sonraki gün bozuluyor.
-                // Çözüm: CSS çok sütunlu düzen (column-count) — tarayıcı
-                // blokları sütunlara KENDİSİ dağıtıp yükseklikleri dengeler,
-                // içerik değişse bile altta boşluk kalmaz. Fintables/FVT gibi
-                // panolarda kullanılan desen bu.
-                // Bloklar `breakInside:"avoid"` ile sütun ortasında İKİYE
-                // BÖLÜNMEZ; AI Asistanı `columnSpan:"all"` ile tüm sütunları
-                // kaplayan tek bir şerit olarak üstte durur.
                 return (
                   <>
-                    {ustSerit(asistanBlok)}
-                    {mOge(piyasalarBlok)}
-                    {mOge(endeksBlok)}
-                    {mOge(fonBlok)}
-                    {mOge(gostergelerBlok)}
+                    {/* Piyasalar artık bir "widget" değil, favori
+                        hesaplamalarla AYNI cinsten bir GEZİNME bloğu (her kutu
+                        bir ekrana götürüyor). Bu yüzden onlarla aynı stilde,
+                        tam genişlikte tek satır 4 kutu olarak duruyor —
+                        2×2 kompakt kart olarak bir sütuna sıkışmıyor. */}
+                    {piyasalarBlok}
+
+                    {/* SATIR 1 — üç eşit kart, ortak yükseklik, içi kaydırmalı */}
+                    <div style={SATIR_STIL}>
+                      <div style={{...HUCRE_STIL,height:SATIR1_YUKSEKLIK}}>{endeksBlok}</div>
+                      <div style={{...HUCRE_STIL,height:SATIR1_YUKSEKLIK}}>{fonBlok}</div>
+                      <div style={{...HUCRE_STIL,height:SATIR1_YUKSEKLIK}}>{gostergelerBlok}</div>
+                    </div>
                     {portfoyModal}
                   </>
                 );
@@ -26771,14 +26782,11 @@ function App(){
 
 
 
-            {/* ── ALT BÖLGE — MASONRY ÖĞELERİ (2026-09-14, 3. revizyon) ────
-                Son Haberler / Yaklaşan Takvim / Sektör / kısayollar artık
-                yukarıdaki masonry AKIŞININ devamı; her biri kendi doğal
-                yüksekliğinde ve tarayıcı bunları en kısa sütuna yerleştiriyor.
-                Sabit yükseklik VERİLMİYOR — 300px'e sabitlemek, içeriği kısa
-                olan kutunun (ör. 4 kayıtlık takvim) içinde boşluk bırakıyordu
-                (kullanıcı raporu). */}
-            <div style={genisEkran?{breakInside:"avoid",WebkitColumnBreakInside:"avoid",marginBottom:18}:{}}>
+            {/* ── SATIR 2 — Son Haberler | Yaklaşan Takvim | Sektör ─────────
+                Üçü de aynı yüksekliği paylaşıyor; içeriği uzun olan kendi
+                içinde kayıyor, kısa olan satırı bozmuyor. */}
+            <div style={genisEkran?SATIR_STIL:{}}>
+            <div style={genisEkran?{...HUCRE_STIL,height:SATIR2_YUKSEKLIK}:{}}>
             {/* Son Haberler — ilk bakışta 3 haber, aşağı kaydırınca daha fazlası görünür.
                 Artık veri boş/hatalı olsa bile bölüm tamamen kaybolmuyor; başlık +
                 durum mesajı (hata / boş / yükleniyor) her zaman görünür kalıyor,
@@ -26846,7 +26854,7 @@ function App(){
             )}
 
             </div>
-            <div style={genisEkran?{breakInside:"avoid",WebkitColumnBreakInside:"avoid",marginBottom:18}:{}}>
+            <div style={genisEkran?{...HUCRE_STIL,height:SATIR2_YUKSEKLIK}:{}}>
             {/* Yaklaşan Takvim — önümüzdeki 7 gün, Türkiye */}
             {yaklasanTakvim.length>0&&(
               <>
@@ -26884,15 +26892,18 @@ function App(){
 
             </div>
 
-            {/* Katılım Bankacılığı Sektörü — masaüstünde masonry öğesi olarak
-                buraya taşındı (aşağıdaki mobil dalda ayrıca duruyor). */}
+            {/* Katılım Bankacılığı Sektörü — masaüstünde SATIR 2'nin üçüncü
+                kartı (aşağıdaki mobil dalda kendi sırasında duruyor). */}
             {genisEkran && (
-              <div style={{breakInside:"avoid",WebkitColumnBreakInside:"avoid",marginBottom:18}}>
+              <div style={{...HUCRE_STIL,height:SATIR2_YUKSEKLIK}}>
                 <KatilimSektoruOzet onAc={()=>nav("katilimSektoru")}/>
               </div>
             )}
+            </div>{/* /satır 2 */}
 
-            <div style={genisEkran?{breakInside:"avoid",WebkitColumnBreakInside:"avoid",marginBottom:18}:{}}>
+            {/* ── SATIR 3 — Haftalık Özet | Getiri Karşılaştırma | Asistan ── */}
+            <div style={genisEkran?{...SATIR_STIL,marginBottom:14}:{}}>
+            <div style={genisEkran?{minWidth:0}:{}}>
             {/* Haftalık Piyasa Özeti — ana menü alt kısayolu */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
               <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Haftalık Piyasa Özeti")}</span>
@@ -26916,7 +26927,7 @@ function App(){
             </div>
 
             </div>
-            <div style={genisEkran?{breakInside:"avoid",WebkitColumnBreakInside:"avoid",marginBottom:18}:{}}>
+            <div style={genisEkran?{minWidth:0}:{}}>
             {/* Getiri Karşılaştırma — ana menü alt kısayolu */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
               <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Getiri Karşılaştırma")}</span>
@@ -26949,7 +26960,10 @@ function App(){
                 aksi halde ekranda iki kez görünürdü. ── */}
             {!genisEkran && <KatilimSektoruOzet onAc={()=>nav("katilimSektoru")}/>}
 
-            </div>{/* /masaüstü masonry kapsayıcısı */}
+            {/* Asistan — masaüstünde SATIR 3'ün üçüncü kartı. Mobilde
+                yukarıdaki akışta, Piyasalar'ın hemen altında duruyor. */}
+            {genisEkran && <div style={{minWidth:0}}><AsistanKarti nav={nav} genisEkran={genisEkran}/></div>}
+            </div>{/* /satır 3 */}
 
             {/* Alt bilgi. Native'de SiteAltBilgi null döner; o durumda eski
                 sade copyright satırı gösteriliyor. */}
