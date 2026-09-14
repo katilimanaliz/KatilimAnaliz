@@ -3879,56 +3879,132 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri 
 }
 
 // ─── ANA SAYFA: KATILIM ENDEKSİ TOP HAREKETLİLER (Hisse + Fon) ──────────────
-// ─── ANA SAYFA: BİST 100 KARTI ──────────────────────────────────────────────
+// ─── ANA SAYFA: BİST 100 / BİST 30 KARTI ────────────────────────────────────
 // Piyasalar bölümündeki "BİST Hisse Veri İzleme" kartına dokunuşla, canlı
 // izleme ekranındaki (BistHisseTarayici) hero kart ile AYNI endeks verisini
-// (XU100.IS, api/gecmis ucu) kullanan küçük bir özet kart. Tıklanınca AYNI
-// BİST Hisse Veri İzleme ekranına götürür (nav("bistHisseTarayici")).
+// (XU100.IS + XU030.IS, api/gecmis ucu) kullanan küçük bir özet kart.
+// Tıklanınca AYNI BİST Hisse Veri İzleme ekranına götürür.
+// 2026-09-14 (kullanıcı isteği): sağ taraftaki boşluğa BİST 30 eklendi, alt
+// satıra yükselen/düşen hisse sayısı (hisse-proxy, KatilimEndeksiTopHareketliler
+// ile AYNI "kea_hisseler" cache'i paylaşılarak — ekstra istek YOK).
 function AnaSayfaBist100Karti({ nav }: { nav: (sc: string) => void }) {
   const CACHE_TTL = 5 * 60 * 1000; // 5 dakika — KatilimEndeksiTopHareketliler ile aynı ritim
-  const okuCache = (): { deger: number; degisim: number; ts: number } | null => {
+
+  // ── Endeksler (BİST 100 + BİST 30) — tek cache anahtarında birlikte ──
+  type EndeksVeri = { deger: number; degisim: number };
+  const okuEndeksCache = (): { bist100?: EndeksVeri; bist30?: EndeksVeri; ts: number } | null => {
     try {
-      const raw = sessionStorage.getItem("kea_bist100");
+      const raw = sessionStorage.getItem("kea_bist_endeks");
       if (!raw) return null;
       const v = JSON.parse(raw);
-      return typeof v?.deger === "number" && typeof v?.ts === "number" ? v : null;
+      return typeof v?.ts === "number" ? v : null;
     } catch { return null; }
   };
-
-  const [veri, setVeri] = useState<{ deger: number; degisim: number } | null>(() => {
-    const c = okuCache();
-    return c ? { deger: c.deger, degisim: c.degisim } : null;
-  });
+  const [bist100, setBist100] = useState<EndeksVeri | null>(() => okuEndeksCache()?.bist100 ?? null);
+  const [bist30, setBist30] = useState<EndeksVeri | null>(() => okuEndeksCache()?.bist30 ?? null);
   const [guncellemeSaati, setGuncellemeSaati] = useState<Date | null>(() => {
-    const c = okuCache();
+    const c = okuEndeksCache();
     return c ? new Date(c.ts) : null;
   });
 
   useEffect(() => {
-    const c = okuCache();
+    const c = okuEndeksCache();
     if (c && (Date.now() - c.ts) < CACHE_TTL) return; // cache taze, yeni istek atma
-    fetch(`${API_BASE}/api/gecmis?sembol=${encodeURIComponent("XU100.IS")}`)
-      .then(r => r.ok ? r.json() : null)
+    const semboller: [string, "bist100" | "bist30"][] = [["XU100.IS", "bist100"], ["XU030.IS", "bist30"]];
+    const toplanan: { bist100?: EndeksVeri; bist30?: EndeksVeri } = {};
+    let kalan = semboller.length;
+    semboller.forEach(([sembol, anahtar]) => {
+      fetch(`${API_BASE}/api/gecmis?sembol=${encodeURIComponent(sembol)}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(d => {
+          const noktalar = d?.noktalar || [];
+          const fiyatlar = noktalar.map((n: any) => n.fiyat).filter((f: any) => typeof f === "number");
+          const guncel = d?.guncelFiyat ?? fiyatlar[fiyatlar.length - 1];
+          // BistHisseTarayici'deki AYNI mantık: dünkü kapanış (fiyatlar.length-2),
+          // ayın ilk günü (fiyatlar[0]) DEĞİL — aksi halde "günlük %" ~1 aylık
+          // değişimi gösterir.
+          const onceki = d?.oncekiKapanis ?? fiyatlar[fiyatlar.length - 2];
+          if (guncel != null && onceki) {
+            const yeni = { deger: guncel, degisim: (guncel - onceki) / onceki * 100 };
+            toplanan[anahtar] = yeni;
+            if (anahtar === "bist100") setBist100(yeni); else setBist30(yeni);
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          kalan -= 1;
+          if (kalan === 0) {
+            const ts = Date.now();
+            setGuncellemeSaati(new Date(ts));
+            try { sessionStorage.setItem("kea_bist_endeks", JSON.stringify({ ...toplanan, ts })); } catch {}
+          }
+        });
+    });
+  }, []);
+
+  // ── Yükselen / Düşen hisse sayısı — KatilimEndeksiTopHareketliler'in
+  // KULLANDIĞI AYNI "kea_hisseler" cache anahtarı; o widget zaten dolduruyorsa
+  // burada İKİNCİ bir hisse-proxy isteği atılmaz.
+  const [hisseler, setHisseler] = useState<any[]>(() => {
+    try {
+      const raw = sessionStorage.getItem("kea_hisseler");
+      if (!raw) return [];
+      const { data } = JSON.parse(raw);
+      return Array.isArray(data) ? data : [];
+    } catch { return []; }
+  });
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("kea_hisseler");
+      if (raw) {
+        const { data, ts } = JSON.parse(raw);
+        if (Array.isArray(data) && data.length > 0 && typeof ts === "number" && (Date.now() - ts) < CACHE_TTL) return;
+      }
+    } catch {}
+    fetch(`${API_BASE}/api/hisse-proxy`)
+      .then(r => r.json())
       .then(d => {
-        const noktalar = d?.noktalar || [];
-        const fiyatlar = noktalar.map((n: any) => n.fiyat).filter((f: any) => typeof f === "number");
-        const guncel = d?.guncelFiyat ?? fiyatlar[fiyatlar.length - 1];
-        // BistHisseTarayici'deki AYNI mantık: dünkü kapanış (fiyatlar.length-2),
-        // ayın ilk günü (fiyatlar[0]) DEĞİL — aksi halde "günlük %" ~1 aylık
-        // değişimi gösterir.
-        const onceki = d?.oncekiKapanis ?? fiyatlar[fiyatlar.length - 2];
-        if (guncel != null && onceki) {
-          const yeni = { deger: guncel, degisim: (guncel - onceki) / onceki * 100 };
-          setVeri(yeni);
-          const ts = Date.now();
-          setGuncellemeSaati(new Date(ts));
-          try { sessionStorage.setItem("kea_bist100", JSON.stringify({ ...yeni, ts })); } catch {}
+        if (d.success && (d.data || []).length > 0) {
+          setHisseler(d.data);
+          try { sessionStorage.setItem("kea_hisseler", JSON.stringify({ data: d.data, ts: Date.now() })); } catch {}
         }
       })
       .catch(() => {});
   }, []);
 
-  const yukseliyor = (veri?.degisim ?? 0) >= 0;
+  const { artan, azalan } = useMemo(() => {
+    let a = 0, d = 0;
+    for (const h of hisseler) {
+      if (typeof h.degisim1g !== "number") continue;
+      if (h.degisim1g > 0) a++; else if (h.degisim1g < 0) d++;
+    }
+    return { artan: a, azalan: d };
+  }, [hisseler]);
+
+  const EndeksBlok = ({ etiket, veri }: { etiket: string; veri: EndeksVeri | null }) => {
+    const yukseliyor = (veri?.degisim ?? 0) >= 0;
+    return (
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+          <span style={{ width: 6, height: 6, borderRadius: 3, background: C.green, boxShadow: `0 0 6px ${C.green}`, flexShrink: 0 }} />
+          <span style={{ fontSize: 10, fontWeight: 700, color: WA(0.5), textTransform: "uppercase", letterSpacing: 0.4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{etiket}</span>
+        </div>
+        <div style={{ fontSize: 20, fontWeight: 800, fontFamily: "monospace", letterSpacing: "-0.01em", color: (TEMA === "acik" ? C.label : "#fff") }}>
+          {veri ? veri.deger.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}
+        </div>
+        {veri && (
+          <div style={{
+            display: "inline-flex", alignItems: "center", gap: 4, marginTop: 6,
+            background: yukseliyor ? "rgba(74,222,128,0.15)" : "rgba(248,113,113,0.15)",
+            border: `1px solid ${yukseliyor ? "rgba(74,222,128,0.35)" : "rgba(248,113,113,0.35)"}`,
+            color: yukseliyor ? C.green : C.red, fontSize: 11, fontWeight: 800, padding: "2px 7px", borderRadius: 20,
+          }}>
+            {yukseliyor ? "▲" : "▼"} %{Math.abs(veri.degisim).toFixed(2)}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="press-tile" onClick={() => nav("bistHisseTarayici")} style={{
@@ -3936,30 +4012,22 @@ function AnaSayfaBist100Karti({ nav }: { nav: (sc: string) => void }) {
       borderRadius: 22, padding: "14px 16px",
       background: (TEMA === "acik" ? "#E9EEF4" : WA(0.05)), border: `1px solid ${WA(0.08)}`,
     }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-            <span style={{ width: 6, height: 6, borderRadius: 3, background: C.green, boxShadow: `0 0 6px ${C.green}`, flexShrink: 0 }} />
-            <span style={{ fontSize: 10.5, fontWeight: 700, color: WA(0.5), textTransform: "uppercase", letterSpacing: 0.5 }}>{TR("BIST 100 · GECİKMELİ")}</span>
-          </div>
-          <div style={{ fontSize: 24, fontWeight: 800, fontFamily: "monospace", letterSpacing: "-0.01em", color: (TEMA === "acik" ? C.label : "#fff") }}>
-            {veri ? veri.deger.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}
-          </div>
-          {veri && (
-            <div style={{
-              display: "inline-flex", alignItems: "center", gap: 4, marginTop: 6,
-              background: yukseliyor ? "rgba(74,222,128,0.15)" : "rgba(248,113,113,0.15)",
-              border: `1px solid ${yukseliyor ? "rgba(74,222,128,0.35)" : "rgba(248,113,113,0.35)"}`,
-              color: yukseliyor ? C.green : C.red, fontSize: 12, fontWeight: 800, padding: "3px 8px", borderRadius: 20,
-            }}>
-              {yukseliyor ? "▲" : "▼"} %{Math.abs(veri.degisim).toFixed(2)}
-            </div>
-          )}
-          <div style={{ fontSize: 10, color: WA(0.35), marginTop: 8 }}>
-            {guncellemeSaati ? `${CV("Son güncelleme")}: ${guncellemeSaati.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}` : CV("Veri alınıyor…")}
-          </div>
-        </div>
-        <span style={{ color: WA(0.3), fontSize: 18, flexShrink: 0, marginTop: 2 }}>›</span>
+      <span style={{ position: "absolute", top: 14, right: 14, color: WA(0.3), fontSize: 16 }}>›</span>
+      <div style={{ display: "flex" }}>
+        <EndeksBlok etiket={TR("BIST 100 · GECİKMELİ")} veri={bist100}/>
+        <div style={{ width: 1, background: WA(0.08), margin: "2px 28px 2px 12px" }}/>
+        <EndeksBlok etiket="BİST 30" veri={bist30}/>
+      </div>
+      <div style={{ borderTop: `1px solid ${WA(0.08)}`, marginTop: 12, paddingTop: 8, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}>
+        <span style={{ fontSize: 10, color: WA(0.35) }}>
+          {guncellemeSaati ? `${CV("Son güncelleme")}: ${guncellemeSaati.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}` : CV("Veri alınıyor…")}
+        </span>
+        {(artan > 0 || azalan > 0) && (
+          <span style={{ fontSize: 10.5, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <span style={{ color: C.green }}>{artan} ▲</span>
+            <span style={{ color: C.red }}>{azalan} ▼</span>
+          </span>
+        )}
       </div>
     </div>
   );
