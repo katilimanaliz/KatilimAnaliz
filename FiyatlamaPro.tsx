@@ -3963,6 +3963,147 @@ function UstPiyasaSeridi({kalemler,onTikla}:{kalemler:any[];onTikla:(k:any)=>voi
   );
 }
 
+// ─── SON HABERLER BLOĞU (ana sayfa) ────────────────────────────────────────
+// ⚠️ İKİ GÖRÜNÜM, TEK BİLEŞEN (2026-09-14):
+//   • tekKutu=true  → masaüstü sağ rayı: haberler TEK kutunun içinde ayraçlı
+//     satırlar.
+//   • tekKutu=false → mobil: her haber AYRI kutu (eski görünüm).
+// Bileşene çıkarılmasının sebebi: masaüstünde blok sağ rayda, mobilde ise
+// akışın kendi yerinde duruyor. İki ayrı JSX kopyası tutmak, önceki turda
+// mobil görünümün farkında olmadan bozulmasına yol açtı.
+function SonHaberlerBlok({tekKutu,sonHaberler,sonHaberlerHata,sonHaberlerIlkYuklemeBitti,sonHaberlerGuncelleme,sonHaberlerYenileniyor,anaSayfaHaberGetir,genisEkran,nav}:any){
+  return (
+    <>
+      {/* Son Haberler — ilk bakışta 3 haber, aşağı kaydırınca daha fazlası görünür.
+          Artık veri boş/hatalı olsa bile bölüm tamamen kaybolmuyor; başlık +
+          durum mesajı (hata / boş / yükleniyor) her zaman görünür kalıyor,
+          böylece "veri gelmiyor" durumunda kullanıcı en azından NEDEN
+          gelmediğini görüp "Yenile"yi deneyebiliyor. */}
+      {(sonHaberler.length>0||sonHaberlerHata||sonHaberlerIlkYuklemeBitti)&&(
+        <>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+            <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Son Haberler")}</span>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              {sonHaberlerGuncelleme&&<span style={{fontSize:9.5,color:WA(0.3)}}>{sonHaberlerGuncelleme.toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"})}</span>}
+              <button onClick={()=>anaSayfaHaberGetir(true)} aria-label="Haberleri yenile" style={{background:WA(0.08),border:"none",width:22,height:22,borderRadius:11,fontSize:12,color:WA(0.6),cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"transform 0.6s",transform:sonHaberlerYenileniyor?"rotate(360deg)":"none"}}>↻</button>
+              <span onClick={()=>nav("piyasaHaberleri")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
+            </div>
+          </div>
+          {sonHaberlerHata&&sonHaberler.length===0&&(
+            <div style={{background:"rgba(248,113,113,0.1)",border:"1px solid rgba(248,113,113,0.25)",borderRadius:12,padding:"12px 14px",marginBottom:14}}>
+              <p style={{margin:0,fontSize:11.5,color:C.red,fontWeight:700}}>⚠️ Haberler yüklenemedi</p>
+              <p style={{margin:"3px 0 0",fontSize:10.5,color:WA(0.45)}}>{sonHaberlerHata}</p>
+            </div>
+          )}
+          {!sonHaberlerHata&&sonHaberler.length===0&&sonHaberlerIlkYuklemeBitti&&(
+            <div style={{background:WA(0.04),borderRadius:12,padding:"12px 14px",marginBottom:14}}>
+              <p style={{margin:0,fontSize:11.5,color:WA(0.45)}}>Şu anda gösterilecek haber yok.</p>
+            </div>
+          )}
+          {sonHaberler.length>0&&(
+          <div style={{position:"relative"}}>
+            {/* ⚠️ 2026-09-14 (3. revizyon): masaüstünde SABİT yükseklik
+                (300px) denendi ve geri alındı — içeriği kısa olan kutunun
+                İÇİNDE boşluk bırakıyordu. Masonry akışında her blok kendi
+                doğal yüksekliğinde durmalı; dengelemeyi tarayıcı yapıyor.
+                Masaüstünde liste maxHeight ile sınırlanıyor (çok uzun
+                haber listesi tek sütunu şişirmesin), mobil aynen. */}
+            {/* 2026-09-14 (kullanıcı isteği): haberler AYRI AYRI kutular
+                değil, TEK bir kutunun içinde ayraçlı satırlar. */}
+            <div className="piyasa-scroll" style={{marginBottom:14,maxHeight:genisEkran?420:266,overflowY:"auto",WebkitOverflowScrolling:"touch",
+              ...(tekKutu?{borderRadius:16,background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`}:{})}}>
+              {sonHaberler.map((h,i)=>{
+                const farkDk=Math.round((Date.now()-new Date(h.tarih).getTime())/60000);
+                const zamanEtiket = farkDk<1?"az önce":farkDk<60?`${farkDk} dk önce`:farkDk<1440?`${Math.round(farkDk/60)} sa önce`:new Date(h.tarih).toLocaleDateString("tr-TR",{day:"numeric",month:"short"});
+                return(
+                  <a key={h.link||i} href={h.link} target="_blank" rel="noopener noreferrer" style={{textDecoration:"none"}}>
+                    <div style={{
+                      display:"flex",alignItems:"flex-start",gap:10,
+                      ...(tekKutu
+                        ? {borderTop:i===0?"none":`1px solid ${WA(0.07)}`}
+                        : {background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,borderRadius:12,marginBottom:8}),
+                      borderLeft:"3px solid #FF6B35",padding:"11px 13px",
+                    }}>
+                      {/* Kaynak logosu (2026-09-14). Haber verisinde GÖRSEL
+                          ALANI YOK — api/finans-haberleri yalnızca başlık,
+                          tarih, link ve kaynak döndürüyor. Gerçek haber
+                          fotoğrafı için backend'in RSS enclosure / og:image
+                          alanını da çekmesi gerekir; o yapılana kadar
+                          kaynağın favicon'u link alanından türetiliyor.
+                          Favicon yüklenemezse (ağ hatası, alan adı
+                          çözülemedi) eski 📡 simgesine düşülüyor —
+                          boş kare kalmıyor. */}
+                      <HaberGorseli link={h.link}/>
+                      <div style={{flex:1,minWidth:0}}>
+                        <p style={{margin:0,fontSize:12.5,fontWeight:700,color:C.soft,lineHeight:1.4}}>{h.baslik}</p>
+                        <div style={{display:"flex",alignItems:"center",gap:6,marginTop:4}}>
+                          <p style={{margin:0,fontSize:10,color:WA(0.4)}}>🕐 {zamanEtiket}</p>
+                          {h.kaynak && <span style={{fontSize:9,fontWeight:700,color:"#FF6B35",background:"rgba(255,107,53,0.12)",padding:"2px 7px",borderRadius:20}}>{h.kaynak}</span>}
+                        </div>
+                      </div>
+                    </div>
+                  </a>
+                );
+              })}
+            </div>
+            {sonHaberler.length>3&&(
+              <div style={{position:"absolute",bottom:14,left:0,right:0,height:36,background:(TEMA==="acik"?"linear-gradient(180deg,rgba(242,245,248,0) 0%,#F2F5F8 90%)":"linear-gradient(180deg,rgba(15,25,35,0) 0%,#0F1923 90%)"),pointerEvents:"none",borderRadius:"0 0 12px 12px"}}/>
+            )}
+          </div>
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
+// ─── YAKLAŞAN TAKVİM BLOĞU (ana sayfa) ─────────────────────────────────────
+// tekKutu mantığı SonHaberlerBlok ile aynı (bkz. oradaki not).
+function YaklasanTakvimBlok({tekKutu,yaklasanTakvim,nav}:any){
+  return (
+    <>
+      {yaklasanTakvim.length>0&&(
+        <>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+            <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Yaklaşan Takvim · 7 Gün")}</span>
+            <span onClick={()=>nav("finansalTakvim")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
+          </div>
+          {/* 2026-09-14 (kullanıcı isteği): takvim kayıtları AYRI AYRI
+              kutular değil, TEK bir kutunun içinde ayraçlı satırlar. */}
+          <div style={{marginBottom:14,...(tekKutu?{borderRadius:16,overflow:"hidden",
+            background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`}:{})}}>
+            {yaklasanTakvim.map((e:any,i:number)=>{
+              const d=new Date(e.tarih);
+              const bugun=new Date(); bugun.setHours(0,0,0,0);
+              const gunFark=Math.round((new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime()-bugun.getTime())/86400000);
+              const gunEtiket=gunFark===0?"Bugün":gunFark===1?"Yarın":d.toLocaleDateString("tr-TR",{day:"numeric",month:"short"});
+              return(
+                <div key={i} style={{
+                  display:"flex",alignItems:"center",gap:10,
+                  ...(tekKutu
+                    ? {borderTop:i===0?"none":`1px solid ${WA(0.07)}`}
+                    : {background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,borderRadius:12,marginBottom:8}),
+                  padding:"10px 13px",
+                }}>
+                  <div style={{width:44,flexShrink:0,textAlign:"center"}}>
+                    <div style={{fontSize:10,fontWeight:800,color:gunFark<=1?C.red:C.blue}}>{gunEtiket}</div>
+                    <div style={{fontSize:9,color:WA(0.4),marginTop:1}}>{d.toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"})}</div>
+                  </div>
+                  <div style={{width:1,alignSelf:"stretch",background:WA(0.08),flexShrink:0}}/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <p style={{margin:0,fontSize:12,fontWeight:700,color:C.soft,lineHeight:1.35}}>{e.baslik}</p>
+                  </div>
+                  <span style={{fontSize:9,fontWeight:800,color:e.etkiRenk,background:e.etkiRenk+"22",padding:"3px 7px",borderRadius:6,flexShrink:0}}>{e.etkiAdi}</span>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
 // ─── PİYASA ÖZETİ BLOĞU (ana sayfa) ────────────────────────────────────────
 // ⚠️ İKİ GÖRÜNÜM, TEK BİLEŞEN (2026-09-14):
 //   • MOBİL (dikey=false): yatay kaydırmalı şerit — eski davranış, aynen.
@@ -26959,6 +27100,18 @@ function App(){
                   {endeksBlok}
                   {fonBlok}
                   {gostergelerBlok}
+                  {/* ⚠️ MOBİL SIRA GERİ ALINDI (2026-09-14, kullanıcı raporu):
+                      sağ ray yapısı kurulurken Son Haberler ve Yaklaşan Takvim
+                      kaynak dosyada kısayolların ALTINA düşmüş, mobilde sıra
+                      değişmişti. Artık ikisi de mobilde ESKİ yerinde —
+                      Göstergeler'den hemen sonra, kısayollardan ÖNCE — ve
+                      tekKutu VERİLMİYOR, yani her haber/kayıt eski gibi AYRI
+                      kutu. Masaüstünde bu iki blok sağ rayda (tekKutu ile). */}
+                  <SonHaberlerBlok sonHaberler={sonHaberler} sonHaberlerHata={sonHaberlerHata}
+                    sonHaberlerIlkYuklemeBitti={sonHaberlerIlkYuklemeBitti} sonHaberlerGuncelleme={sonHaberlerGuncelleme}
+                    sonHaberlerYenileniyor={sonHaberlerYenileniyor} anaSayfaHaberGetir={anaSayfaHaberGetir}
+                    genisEkran={genisEkran} nav={nav}/>
+                  <YaklasanTakvimBlok yaklasanTakvim={yaklasanTakvim} nav={nav}/>
                 </>
               );
             })()}
@@ -27031,120 +27184,16 @@ function App(){
               piyasaOzetiSecim={piyasaOzetiSecim} setPiyasaOzetiDuzenleAcik={setPiyasaOzetiDuzenleAcik}
               setSeciliKur={setSeciliKur} nav={nav}/>}
 
-            {/* Son Haberler — ilk bakışta 3 haber, aşağı kaydırınca daha fazlası görünür.
-                Artık veri boş/hatalı olsa bile bölüm tamamen kaybolmuyor; başlık +
-                durum mesajı (hata / boş / yükleniyor) her zaman görünür kalıyor,
-                böylece "veri gelmiyor" durumunda kullanıcı en azından NEDEN
-                gelmediğini görüp "Yenile"yi deneyebiliyor. */}
-            {(sonHaberler.length>0||sonHaberlerHata||sonHaberlerIlkYuklemeBitti)&&(
-              <>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-                  <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Son Haberler")}</span>
-                  <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    {sonHaberlerGuncelleme&&<span style={{fontSize:9.5,color:WA(0.3)}}>{sonHaberlerGuncelleme.toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"})}</span>}
-                    <button onClick={()=>anaSayfaHaberGetir(true)} aria-label="Haberleri yenile" style={{background:WA(0.08),border:"none",width:22,height:22,borderRadius:11,fontSize:12,color:WA(0.6),cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"transform 0.6s",transform:sonHaberlerYenileniyor?"rotate(360deg)":"none"}}>↻</button>
-                    <span onClick={()=>nav("piyasaHaberleri")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
-                  </div>
-                </div>
-                {sonHaberlerHata&&sonHaberler.length===0&&(
-                  <div style={{background:"rgba(248,113,113,0.1)",border:"1px solid rgba(248,113,113,0.25)",borderRadius:12,padding:"12px 14px",marginBottom:14}}>
-                    <p style={{margin:0,fontSize:11.5,color:C.red,fontWeight:700}}>⚠️ Haberler yüklenemedi</p>
-                    <p style={{margin:"3px 0 0",fontSize:10.5,color:WA(0.45)}}>{sonHaberlerHata}</p>
-                  </div>
-                )}
-                {!sonHaberlerHata&&sonHaberler.length===0&&sonHaberlerIlkYuklemeBitti&&(
-                  <div style={{background:WA(0.04),borderRadius:12,padding:"12px 14px",marginBottom:14}}>
-                    <p style={{margin:0,fontSize:11.5,color:WA(0.45)}}>Şu anda gösterilecek haber yok.</p>
-                  </div>
-                )}
-                {sonHaberler.length>0&&(
-                <div style={{position:"relative"}}>
-                  {/* ⚠️ 2026-09-14 (3. revizyon): masaüstünde SABİT yükseklik
-                      (300px) denendi ve geri alındı — içeriği kısa olan kutunun
-                      İÇİNDE boşluk bırakıyordu. Masonry akışında her blok kendi
-                      doğal yüksekliğinde durmalı; dengelemeyi tarayıcı yapıyor.
-                      Masaüstünde liste maxHeight ile sınırlanıyor (çok uzun
-                      haber listesi tek sütunu şişirmesin), mobil aynen. */}
-                  {/* 2026-09-14 (kullanıcı isteği): haberler AYRI AYRI kutular
-                      değil, TEK bir kutunun içinde ayraçlı satırlar. */}
-                  <div className="piyasa-scroll" style={{marginBottom:14,maxHeight:genisEkran?420:266,overflowY:"auto",WebkitOverflowScrolling:"touch",
-                    borderRadius:16,background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`}}>
-                    {sonHaberler.map((h,i)=>{
-                      const farkDk=Math.round((Date.now()-new Date(h.tarih).getTime())/60000);
-                      const zamanEtiket = farkDk<1?"az önce":farkDk<60?`${farkDk} dk önce`:farkDk<1440?`${Math.round(farkDk/60)} sa önce`:new Date(h.tarih).toLocaleDateString("tr-TR",{day:"numeric",month:"short"});
-                      return(
-                        <a key={h.link||i} href={h.link} target="_blank" rel="noopener noreferrer" style={{textDecoration:"none"}}>
-                          <div style={{
-                            display:"flex",alignItems:"flex-start",gap:10,
-                            borderTop:i===0?"none":`1px solid ${WA(0.07)}`,
-                            borderLeft:"3px solid #FF6B35",padding:"11px 13px",
-                          }}>
-                            {/* Kaynak logosu (2026-09-14). Haber verisinde GÖRSEL
-                                ALANI YOK — api/finans-haberleri yalnızca başlık,
-                                tarih, link ve kaynak döndürüyor. Gerçek haber
-                                fotoğrafı için backend'in RSS enclosure / og:image
-                                alanını da çekmesi gerekir; o yapılana kadar
-                                kaynağın favicon'u link alanından türetiliyor.
-                                Favicon yüklenemezse (ağ hatası, alan adı
-                                çözülemedi) eski 📡 simgesine düşülüyor —
-                                boş kare kalmıyor. */}
-                            <HaberGorseli link={h.link}/>
-                            <div style={{flex:1,minWidth:0}}>
-                              <p style={{margin:0,fontSize:12.5,fontWeight:700,color:C.soft,lineHeight:1.4}}>{h.baslik}</p>
-                              <div style={{display:"flex",alignItems:"center",gap:6,marginTop:4}}>
-                                <p style={{margin:0,fontSize:10,color:WA(0.4)}}>🕐 {zamanEtiket}</p>
-                                {h.kaynak && <span style={{fontSize:9,fontWeight:700,color:"#FF6B35",background:"rgba(255,107,53,0.12)",padding:"2px 7px",borderRadius:20}}>{h.kaynak}</span>}
-                              </div>
-                            </div>
-                          </div>
-                        </a>
-                      );
-                    })}
-                  </div>
-                  {sonHaberler.length>3&&(
-                    <div style={{position:"absolute",bottom:14,left:0,right:0,height:36,background:(TEMA==="acik"?"linear-gradient(180deg,rgba(242,245,248,0) 0%,#F2F5F8 90%)":"linear-gradient(180deg,rgba(15,25,35,0) 0%,#0F1923 90%)"),pointerEvents:"none",borderRadius:"0 0 12px 12px"}}/>
-                  )}
-                </div>
-                )}
-              </>
-            )}
-
-            {yaklasanTakvim.length>0&&(
-              <>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-                  <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Yaklaşan Takvim · 7 Gün")}</span>
-                  <span onClick={()=>nav("finansalTakvim")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
-                </div>
-                {/* 2026-09-14 (kullanıcı isteği): takvim kayıtları AYRI AYRI
-                    kutular değil, TEK bir kutunun içinde ayraçlı satırlar. */}
-                <div style={{marginBottom:14,borderRadius:16,overflow:"hidden",
-                  background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`}}>
-                  {yaklasanTakvim.map((e:any,i:number)=>{
-                    const d=new Date(e.tarih);
-                    const bugun=new Date(); bugun.setHours(0,0,0,0);
-                    const gunFark=Math.round((new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime()-bugun.getTime())/86400000);
-                    const gunEtiket=gunFark===0?"Bugün":gunFark===1?"Yarın":d.toLocaleDateString("tr-TR",{day:"numeric",month:"short"});
-                    return(
-                      <div key={i} style={{
-                        display:"flex",alignItems:"center",gap:10,
-                        borderTop:i===0?"none":`1px solid ${WA(0.07)}`,
-                        padding:"10px 13px",
-                      }}>
-                        <div style={{width:44,flexShrink:0,textAlign:"center"}}>
-                          <div style={{fontSize:10,fontWeight:800,color:gunFark<=1?C.red:C.blue}}>{gunEtiket}</div>
-                          <div style={{fontSize:9,color:WA(0.4),marginTop:1}}>{d.toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"})}</div>
-                        </div>
-                        <div style={{width:1,alignSelf:"stretch",background:WA(0.08),flexShrink:0}}/>
-                        <div style={{flex:1,minWidth:0}}>
-                          <p style={{margin:0,fontSize:12,fontWeight:700,color:C.soft,lineHeight:1.35}}>{e.baslik}</p>
-                        </div>
-                        <span style={{fontSize:9,fontWeight:800,color:e.etkiRenk,background:e.etkiRenk+"22",padding:"3px 7px",borderRadius:6,flexShrink:0}}>{e.etkiAdi}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            )}
+            {/* Son Haberler ve Yaklaşan Takvim — MASAÜSTÜNDE sağ rayda, TEK
+                KUTU görünümüyle. Mobilde bu bloklar buraya DEĞİL, yukarıdaki
+                akışın kendi sırasına render ediliyor (bkz. mobil dal) —
+                önceki turda sıra ve görünüm farkında olmadan mobilde de
+                değişmişti, kullanıcı bildirdi. */}
+            {genisEkran && <SonHaberlerBlok tekKutu sonHaberler={sonHaberler} sonHaberlerHata={sonHaberlerHata}
+              sonHaberlerIlkYuklemeBitti={sonHaberlerIlkYuklemeBitti} sonHaberlerGuncelleme={sonHaberlerGuncelleme}
+              sonHaberlerYenileniyor={sonHaberlerYenileniyor} anaSayfaHaberGetir={anaSayfaHaberGetir}
+              genisEkran={genisEkran} nav={nav}/>}
+            {genisEkran && <YaklasanTakvimBlok tekKutu yaklasanTakvim={yaklasanTakvim} nav={nav}/>}
 
 
             </div>{/* /sağ ray */}
