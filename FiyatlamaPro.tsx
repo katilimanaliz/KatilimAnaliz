@@ -3900,6 +3900,69 @@ function HaberGorseli({link}:{link?:string}){
   );
 }
 
+// ─── ÜST KAYAN PİYASA ŞERİDİ (masaüstü, 2026-09-14) ────────────────────────
+// Sayfanın en üstünde tam genişlik, sürekli sola kayan fiyat şeridi.
+// ⚠️ VERİ KAYNAĞI: bu bileşen KENDİ BAŞINA AĞA ÇIKMIYOR. Sağ raydaki
+// PiyasaOzetiKart'ların sessionStorage'a yazdığı `poz_{sembol}` önbelleklerini
+// okuyor. Sebep: şeride ayrı istek attırmak, aynı sembolleri ikinci kez
+// çekmek demekti (Vercel kotası + hız). Bunun bilinen sonucu: sayfa ilk
+// açıldığında kartlar henüz veriyi yazmamışsa şerit BOŞ görünür ve birkaç
+// saniye sonra dolar — bilerek kabul edildi.
+const SERIT_YUKSEKLIK = 34;
+function UstPiyasaSeridi({kalemler,onTikla}:{kalemler:any[];onTikla:(k:any)=>void}){
+  const [tik,setTik]=useState(0);
+  // Kartlar veriyi yazdıkça şerit de tazelensin diye 10 sn'de bir yeniden oku.
+  useEffect(()=>{ const t=setInterval(()=>setTik(x=>x+1),10000); return ()=>clearInterval(t); },[]);
+  const veriler=useMemo(()=>{
+    return kalemler.map((k:any)=>{
+      try{
+        const raw=sessionStorage.getItem(`poz_${k.sembol}`);
+        if(!raw) return null;
+        const {data}=JSON.parse(raw);
+        if(data?.guncelFiyat==null) return null;
+        const nk=data.noktalar||[];
+        const fiyatlar=nk.map((n:any)=>n.fiyat).filter((f:any)=>typeof f==="number");
+        const onceki=data.oncekiKapanis ?? fiyatlar[fiyatlar.length-2];
+        const degisim=onceki?((data.guncelFiyat-onceki)/onceki*100):null;
+        return {ad:k.ad,sembol:k.sembol,fiyat:data.guncelFiyat,dec:k.dec,degisim};
+      }catch{ return null; }
+    }).filter(Boolean);
+  },[kalemler,tik]);
+
+  if(veriler.length===0) return null;
+  // Kesintisiz akış için liste İKİ KEZ basılıyor; animasyon tam yarıda
+  // başa sarınca görsel olarak kopma olmuyor.
+  const sira=[...veriler,...veriler];
+  return (
+    <div style={{height:SERIT_YUKSEKLIK,overflow:"hidden",background:(TEMA==="acik"?"#16222E":"#0A1119"),
+                 borderBottom:`1px solid ${WA(0.09)}`,display:"flex",alignItems:"center"}}>
+      <style>{`@keyframes kpSerit{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+               .kp-serit:hover{animation-play-state:paused}`}</style>
+      <div className="kp-serit" style={{display:"flex",alignItems:"center",gap:26,whiteSpace:"nowrap",
+             animation:`kpSerit ${Math.max(30,veriler.length*5)}s linear infinite`,paddingLeft:20}}>
+        {sira.map((v:any,i:number)=>{
+          const artiMi=(v.degisim??0)>=0;
+          return (
+            <span key={`${v.sembol}-${i}`} onClick={()=>onTikla(v)}
+              style={{display:"inline-flex",alignItems:"center",gap:7,cursor:"pointer",flexShrink:0}}>
+              <span style={{width:5,height:5,borderRadius:3,background:v.degisim==null?WA(0.35):(artiMi?C.green:C.red)}}/>
+              <span style={{fontSize:11.5,fontWeight:800,color:"rgba(255,255,255,0.86)",letterSpacing:0.2}}>{v.ad}</span>
+              <span style={{fontSize:11.5,fontWeight:700,fontFamily:"monospace",color:"#fff"}}>
+                {v.fiyat.toLocaleString("tr-TR",{minimumFractionDigits:v.dec??2,maximumFractionDigits:v.dec??2})}
+              </span>
+              {v.degisim!=null&&(
+                <span style={{fontSize:11,fontWeight:800,color:artiMi?C.green:C.red}}>
+                  {artiMi?"+":""}{v.degisim.toFixed(2)}%
+                </span>
+              )}
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── PİYASA ÖZETİ BLOĞU (ana sayfa) ────────────────────────────────────────
 // ⚠️ İKİ GÖRÜNÜM, TEK BİLEŞEN (2026-09-14):
 //   • MOBİL (dikey=false): yatay kaydırmalı şerit — eski davranış, aynen.
@@ -3921,8 +3984,12 @@ function PiyasaOzetiBlok({dikey,piyasaGorunen,piyasaSurukle,piyasaOzetiSecim,set
           <span onClick={()=>nav("piyasaMenu")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
         </div>
       </div>
+      {/* 2026-09-14 (kullanıcı isteği): masaüstünde kalemler AYRI AYRI kutular
+          değil, TEK bir kutunun içinde ince ayraçlarla ayrılmış satırlar.
+          Mobil (yatay şerit) dalı değişmedi. */}
       <div className="piyasa-scroll" style={dikey
-        ? {display:"grid",gridTemplateColumns:"1fr",gap:8,marginBottom:20}
+        ? {display:"flex",flexDirection:"column",marginBottom:20,borderRadius:16,
+           background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,overflow:"hidden"}
         : {display:"flex",overflowX:"auto",gap:6,marginBottom:26,scrollSnapType:"x mandatory",WebkitOverflowScrolling:"touch",paddingBottom:2}}>
         {piyasaGorunen.map((k:any,i:number)=>{
           const sp:any=piyasaSurukle.kartProps(k.sembol,i);
@@ -3930,8 +3997,8 @@ function PiyasaOzetiBlok({dikey,piyasaGorunen,piyasaSurukle,piyasaOzetiSecim,set
           <div key={k.sembol} ref={sp.ref}
             onTouchStart={sp.onTouchStart} onTouchEnd={sp.onTouchEnd} onTouchCancel={sp.onTouchCancel}
             onMouseDown={sp.onMouseDown} onMouseMove={sp.onMouseMove} onMouseUp={sp.onMouseUp}
-            style={{...(dikey?{minWidth:0}:{flex:"0 0 108px",minWidth:0,scrollSnapAlign:"start"}),position:"relative",...sp.stil}}>
-            <PiyasaOzetiKart ad={k.ad} sembol={k.sembol} dec={k.dec} onTikla={()=>{ if(!sp.tasiniyor) setSeciliKur({kod:k.ad,ad:k.ad,sembol:k.sembol,birim:k.paraOnek}); }}/>
+            style={{...(dikey?{minWidth:0,borderTop:i===0?"none":`1px solid ${WA(0.07)}`}:{flex:"0 0 108px",minWidth:0,scrollSnapAlign:"start"}),position:"relative",...sp.stil}}>
+            <PiyasaOzetiKart ad={k.ad} sembol={k.sembol} dec={k.dec} duz={dikey} onTikla={()=>{ if(!sp.tasiniyor) setSeciliKur({kod:k.ad,ad:k.ad,sembol:k.sembol,birim:k.paraOnek}); }}/>
           </div>
           );})}
         {piyasaOzetiSecim.length===0&&(
@@ -20869,7 +20936,11 @@ function BildirimModal({onClose}){
 // onlarda davranış değişmez.
 const BAYRAK_EMOJI_OK=(()=>{ try{ return !/Windows/i.test(navigator.userAgent); }catch{ return true; } })();
 
-function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla}:{ad:string,sembol:string,paraOnek?:string,dec:number,onTikla:()=>void}){
+// duz=true: kart kendi çerçevesini/köşe yuvarlağını ÇİZMEZ. Ana sayfanın sağ
+// rayında kalemler tek bir kutunun içinde ayraçlı satırlar olarak duruyor
+// (2026-09-14 kullanıcı isteği); orada her satırın ayrıca kutulanması
+// "kutu içinde kutu" görüntüsü veriyordu.
+function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla,duz}:{ad:string,sembol:string,paraOnek?:string,dec:number,onTikla:()=>void,duz?:boolean}){
   const CACHE_KEY = `poz_${sembol}`;
   const [veri,setVeri]=useState<any>(()=>{
     try{
@@ -20981,8 +21052,11 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla}:{ad:string,sembol:stri
 
   return(
     <div className="press-card" onClick={onTikla} style={{
-      background:WA(0.05),border:`1.5px solid ${WA(0.08)}`,
-      borderRadius:14,padding:"11px 10px 9px",cursor:"pointer",minWidth:0,position:"relative",
+      background:duz?"transparent":WA(0.05),
+      border:duz?"none":`1.5px solid ${WA(0.08)}`,
+      borderRadius:duz?0:14,
+      padding:duz?"10px 12px":"11px 10px 9px",
+      cursor:"pointer",minWidth:0,position:"relative",
       transition:"background-color 700ms ease, border-color 700ms ease, box-shadow 700ms ease",
       ...flashStil,
     }}>
@@ -22874,11 +22948,15 @@ function portfoyTryCarpani(k: PortfoyKalemi, usdTry: number|null): number|null {
 const PORTFOY_YAZI   = C.text;
 const PORTFOY_ETIKET = TEMA === "acik" ? "#16222E" : "rgba(255,255,255,0.86)";
 
-// Başlık satırının veri satırlarıyla hizalanabilmesi için fiyat ve değişim
-// sütunları SABİT genişlikte. Bu iki sabit değişirse başlık kendiliğinden uyar
-// — başlık ve satırlar aynı sabitleri okuyor, elle hizalama yok.
-const PORTFOY_SUT_FIYAT   = 88;
-const PORTFOY_SUT_DEGISIM = 62;
+// Başlık satırının veri satırlarıyla hizalanabilmesi için sağdaki iki sütun
+// SABİT genişlikte. Bu iki sabit değişirse başlık kendiliğinden uyar — başlık
+// ve satırlar aynı sabitleri okuyor, elle hizalama yok.
+// 2026-09-14 (kullanıcı isteği, Fintables ekran görüntüsü): satır düzeni ÜÇ
+// SÜTUNA çevrildi — İsim | Fiyat + günlük% | Tutar + miktar. Önceden sağdaki
+// iki sütun Değer ve Günlük % idi; BİRİM fiyat ile TOPLAM tutar aynı anda
+// görünmüyordu.
+const PORTFOY_SUT_FIYAT = 92;   // birim fiyat + günlük %
+const PORTFOY_SUT_TUTAR = 104;  // toplam tutar + miktar
 
 // Aktif alt listedeki (Portföyüm ya da Takip Listem) bir kalemi yeni sıraya
 // taşır ve sonucu TAM listeye geri yazar. Diğer sekmedeki kalemlerin yeri
@@ -23310,20 +23388,45 @@ function PortfoyWidgetSatir({k, gizli, sonSatirMi, onTikla, onSil, onDuzenle, ac
             k.tur!=="emtia" && k.tur!=="altin" && <div style={{fontSize:10.5,color:PORTFOY_YAZI,opacity:0.78,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{k.ad}</div>
           )}
         </div>
-        {/* Fiyat ve değişim SABİT genişlikte — üstteki başlık satırıyla hizalı */}
-        <span style={{width:PORTFOY_SUT_FIYAT,flexShrink:0,textAlign:"right",fontSize:13,fontWeight:700,color:PORTFOY_YAZI,fontVariantNumeric:"tabular-nums"}}>
-          {izlemeModu && k.fiyat==null ? "—" : (gizli?"₺••••":(izlemeModu ? portfoyFmtDeger(k.fiyat||0, k) : portfoyFmtDeger(portfoyGuncelDeger(k), k)))}
-        </span>
-        <span style={{width:PORTFOY_SUT_DEGISIM,flexShrink:0,textAlign:"right"}}>
-          {/* Katılım hesabı/Sukuk'ta piyasa % değişimi kavramı yok (k.g her
-              zaman null) — PortfoyDegisimEtiket "—" gösterirdi, onun yerine
-              MUTLAK tahakkuk tutarı (bugüne kadar birikmiş net kâr payı). */}
-          {(k.tur==="katilim"||k.tur==="sukuk") && !izlemeModu ? (
-            <span style={{fontSize:10,fontWeight:700,color:k.tur==="katilim"?C.purple:C.teal}}>
-              +{portfoyFmtDeger(portfoyGuncelDeger(k)-(k.miktar||0), k)}
-            </span>
+        {/* FİYAT sütunu: BİRİM fiyat (üstte) + günlük % (altta).
+            SABİT genişlikte — üstteki başlık satırıyla hizalı. */}
+        <div style={{width:PORTFOY_SUT_FIYAT,flexShrink:0,textAlign:"right"}}>
+          <div style={{fontSize:13,fontWeight:700,color:PORTFOY_YAZI,fontVariantNumeric:"tabular-nums"}}>
+            {k.fiyat==null ? "—" : (gizli?"••••":portfoyFmtDeger(k.fiyat, k))}
+          </div>
+          <div style={{marginTop:1,display:"flex",justifyContent:"flex-end"}}>
+            {/* Katılım hesabı ve Sukuk için piyasa % değişimi kavramı yok
+                (k.g her zaman null) — orada bu alan boş bırakılıyor; birikmiş
+                kâr payı sağdaki TUTAR sütununun altında gösteriliyor. */}
+            {(k.tur==="katilim"||k.tur==="sukuk") ? null : <PortfoyDegisimEtiket deger={k.g} boyut={11}/>}
+          </div>
+        </div>
+        {/* TUTAR sütunu: toplam değer (üstte) + miktar (altta) */}
+        <span style={{width:PORTFOY_SUT_TUTAR,flexShrink:0,textAlign:"right"}}>
+          {izlemeModu ? (
+            /* Takip kaleminde alış ve miktar yok, dolayısıyla tutar da yok. */
+            <span style={{fontSize:11,color:PORTFOY_ETIKET}}>—</span>
           ) : (
-            <PortfoyDegisimEtiket deger={k.g} boyut={13}/>
+            <>
+              <div style={{fontSize:13,fontWeight:800,color:PORTFOY_YAZI,fontVariantNumeric:"tabular-nums"}}>
+                {gizli?"₺••••":portfoyFmtDeger(portfoyGuncelDeger(k), k)}
+              </div>
+              {(k.tur==="katilim"||k.tur==="sukuk") ? (
+                /* Katılım/Sukuk’ta "miktar" bir adet değil, yatırılan anapara.
+                   Onun yerine bugüne kadar BİRİKMİŞ net kâr payı gösteriliyor
+                   (fiyat sütunundan buraya taşınan eski davranış). */
+                <div style={{fontSize:10,fontWeight:700,color:k.tur==="katilim"?C.purple:C.teal,marginTop:1}}>
+                  +{portfoyFmtDeger(portfoyGuncelDeger(k)-(k.miktar||0), k)}
+                </div>
+              ) : (
+                /* Miktar, kalemin KENDİ birimiyle yazılıyor (k.birim: lot /
+                   gram / adet / ₺ tutar ...). Sabit "lot" yazmak fon ve altın
+                   kalemlerinde yanlış olurdu. */
+                <div style={{fontSize:10,color:PORTFOY_ETIKET,marginTop:1,fontVariantNumeric:"tabular-nums"}}>
+                  {gizli ? "••••" : `${fmtN(k.miktar||0, (k.miktar||0)%1===0?0:2)}${k.birim?" "+k.birim:""}`}
+                </div>
+              )}
+            </>
           )}
         </span>
       </div>
@@ -23616,10 +23719,13 @@ function PortfoyWidget({liste, gizli, onGizliToggle, onDetay, onEkle, onSil, onD
       {aktifListe.length>0 ? (
         <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 16px 6px",borderBottom:`1px solid ${C.border}`}}>
           <span style={{flex:1,minWidth:0,fontSize:9.5,fontWeight:800,color:PORTFOY_ETIKET,textTransform:"uppercase",letterSpacing:0.5}}>Ürünler ({aktifListe.length})</span>
-          <span style={{width:PORTFOY_SUT_FIYAT,flexShrink:0,textAlign:"right",fontSize:9.5,fontWeight:800,color:PORTFOY_ETIKET,textTransform:"uppercase",letterSpacing:0.4}}>
-            {sekme==="portfoy" ? "Değer" : "Fiyat"}
+          {/* 2026-09-14: başlıklar yeni üç sütunlu satır düzenine uyduruldu.
+              Eskiden "Değer | Günlük %" idi; artık sol sütun fiyat+günlük%,
+              sağ sütun tutar+miktar taşıyor. */}
+          <span style={{width:PORTFOY_SUT_FIYAT,flexShrink:0,textAlign:"right",fontSize:9.5,fontWeight:800,color:PORTFOY_ETIKET,textTransform:"uppercase",letterSpacing:0.4}}>Fiyat</span>
+          <span style={{width:PORTFOY_SUT_TUTAR,flexShrink:0,textAlign:"right",fontSize:9.5,fontWeight:800,color:PORTFOY_ETIKET,textTransform:"uppercase",letterSpacing:0.4}}>
+            {sekme==="portfoy" ? "Tutar" : "—"}
           </span>
-          <span style={{width:PORTFOY_SUT_DEGISIM,flexShrink:0,textAlign:"right",fontSize:9.5,fontWeight:800,color:PORTFOY_ETIKET,textTransform:"uppercase",letterSpacing:0.4}}>Günlük %</span>
         </div>
       ) : (
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 16px 0"}}>
@@ -26207,13 +26313,25 @@ function App(){
           </div>
         </div>
       )}
+      {/* ── ÜST KAYAN PİYASA ŞERİDİ (masaüstü) ──────────────────────────────
+          Sayfanın EN ÜSTÜNDE, tam genişlikte — yan menünün de üzerinden geçer.
+          Yan menü ve sabit başlıklar bu yüzden SERIT_YUKSEKLIK kadar aşağıdan
+          başlıyor. Mobilde hiç render edilmiyor (dar ekranda kayan yazı
+          okunmaz, üstelik dikey alan çok değerli). */}
+      {genisEkran&&(
+        <div style={{position:"fixed",top:0,left:0,right:0,zIndex:95}}>
+          <UstPiyasaSeridi kalemler={piyasaGorunen} onTikla={(v:any)=>setSeciliKur({kod:v.ad,ad:v.ad,sembol:v.sembol,birim:""})}/>
+        </div>
+      )}
       {/* ── MASAÜSTÜ YAN MENÜ (sadece geniş ekran web) ── */}
       {genisEkran&&(
-        <div style={{position:"fixed",top:0,left:0,bottom:0,width:SIDEBAR_W,zIndex:80,
+        <div style={{position:"fixed",top:SERIT_YUKSEKLIK,left:0,bottom:0,width:SIDEBAR_W,zIndex:80,
           display:"flex",flexDirection:"column",boxSizing:"border-box",overflowY:"auto",
           background:TEMA==="acik"?"linear-gradient(180deg,#FFFFFF 0%,#EDF1F6 100%)":"linear-gradient(180deg,#101C29 0%,#0C1622 100%)",
           borderRight:`1px solid ${WA(0.07)}`,
-          boxShadow:"4px 0 24px rgba(0,0,0,0.35)",padding:"22px 14px 16px"}}>
+          /* 2026-09-14: üst dolgu 22→10 — kullanıcı "soldaki header en üstten
+             başlasın" dedi; marka artık şeridin hemen altında. */
+          boxShadow:"4px 0 24px rgba(0,0,0,0.35)",padding:"10px 14px 16px"}}>
           {/* Marka */}
           <div onClick={()=>nav("home")} style={{display:"flex",alignItems:"center",gap:11,padding:"2px 8px 18px",cursor:"pointer",borderBottom:`1px solid ${WA(0.07)}`,marginBottom:14}}>
             <div style={{width:42,height:42,borderRadius:21,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,background:"#FFFFFF",boxShadow:"0 1px 4px rgba(0,0,0,0.25)"}}>
@@ -26947,7 +27065,10 @@ function App(){
                       doğal yüksekliğinde durmalı; dengelemeyi tarayıcı yapıyor.
                       Masaüstünde liste maxHeight ile sınırlanıyor (çok uzun
                       haber listesi tek sütunu şişirmesin), mobil aynen. */}
-                  <div className="piyasa-scroll" style={{marginBottom:14,maxHeight:genisEkran?420:266,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
+                  {/* 2026-09-14 (kullanıcı isteği): haberler AYRI AYRI kutular
+                      değil, TEK bir kutunun içinde ayraçlı satırlar. */}
+                  <div className="piyasa-scroll" style={{marginBottom:14,maxHeight:genisEkran?420:266,overflowY:"auto",WebkitOverflowScrolling:"touch",
+                    borderRadius:16,background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`}}>
                     {sonHaberler.map((h,i)=>{
                       const farkDk=Math.round((Date.now()-new Date(h.tarih).getTime())/60000);
                       const zamanEtiket = farkDk<1?"az önce":farkDk<60?`${farkDk} dk önce`:farkDk<1440?`${Math.round(farkDk/60)} sa önce`:new Date(h.tarih).toLocaleDateString("tr-TR",{day:"numeric",month:"short"});
@@ -26955,8 +27076,8 @@ function App(){
                         <a key={h.link||i} href={h.link} target="_blank" rel="noopener noreferrer" style={{textDecoration:"none"}}>
                           <div style={{
                             display:"flex",alignItems:"flex-start",gap:10,
-                            background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,
-                            borderLeft:"3px solid #FF6B35",borderRadius:12,padding:"11px 13px",marginBottom:8,
+                            borderTop:i===0?"none":`1px solid ${WA(0.07)}`,
+                            borderLeft:"3px solid #FF6B35",padding:"11px 13px",
                           }}>
                             {/* Kaynak logosu (2026-09-14). Haber verisinde GÖRSEL
                                 ALANI YOK — api/finans-haberleri yalnızca başlık,
@@ -26994,7 +27115,10 @@ function App(){
                   <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Yaklaşan Takvim · 7 Gün")}</span>
                   <span onClick={()=>nav("finansalTakvim")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
                 </div>
-                <div style={{marginBottom:14}}>
+                {/* 2026-09-14 (kullanıcı isteği): takvim kayıtları AYRI AYRI
+                    kutular değil, TEK bir kutunun içinde ayraçlı satırlar. */}
+                <div style={{marginBottom:14,borderRadius:16,overflow:"hidden",
+                  background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`}}>
                   {yaklasanTakvim.map((e:any,i:number)=>{
                     const d=new Date(e.tarih);
                     const bugun=new Date(); bugun.setHours(0,0,0,0);
@@ -27003,8 +27127,8 @@ function App(){
                     return(
                       <div key={i} style={{
                         display:"flex",alignItems:"center",gap:10,
-                        background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,
-                        borderRadius:12,padding:"10px 13px",marginBottom:8,
+                        borderTop:i===0?"none":`1px solid ${WA(0.07)}`,
+                        padding:"10px 13px",
                       }}>
                         <div style={{width:44,flexShrink:0,textAlign:"center"}}>
                           <div style={{fontSize:10,fontWeight:800,color:gunFark<=1?C.red:C.blue}}>{gunEtiket}</div>
@@ -27942,11 +28066,11 @@ function App(){
           veriliyor, böylece içerik bloğun altına girmiyor. */}
       {screen==="home"&&(
         <div ref={anaSayfaUstBlokRef} style={{
-          position:"fixed",top:0,left:SIDEBAR_W,right:0,zIndex:45,
+          position:"fixed",top:genisEkran?SERIT_YUKSEKLIK:0,left:SIDEBAR_W,right:0,zIndex:45,
           background:C.bg,
         }}>
           <div style={{maxWidth:genisEkran?"none":kolonW,margin:"0 auto",padding:"0 20px"}}>
-            <div style={{background:C.bg,padding:"calc(18px + env(safe-area-inset-top,0px)) 0 6px"}}>
+            <div style={{background:C.bg,padding:genisEkran?"10px 0 6px":"calc(18px + env(safe-area-inset-top,0px)) 0 6px"}}>
             {/* Logo + marka — MASAÜSTÜNDE GİZLİ (2026-09-14, kullanıcı raporu):
                 geniş ekranda sol yan menünün en üstünde zaten aynı logo ve
                 "Katılım Plus / Katılım Finansının Akıllı Asistanı" yazısı
@@ -27955,7 +28079,14 @@ function App(){
                 burası markanın TEK göründüğü yer — orada aynen korunuyor.
                 Marka gizlenince satır sadece sağdaki ikonları taşıyor, bu
                 yüzden masaüstünde içerik sağa yaslanıyor (flex-end). */}
-            <div style={{display:"flex",alignItems:"center",justifyContent:genisEkran?"flex-end":"space-between",gap:10,marginBottom:genisEkran?12:20}}>
+            {/* 2026-09-14 (kullanıcı isteği): MASAÜSTÜNDE arama kutusu ile
+                Portföyüm/bildirim ikonları AYNI SATIRDA. Sarmalayıcı
+                row-reverse çünkü DOM'da ikonlar arama kutusundan ÖNCE geliyor;
+                ters yön sayesinde ekranda arama solda, ikonlar sağda çıkıyor
+                ve JSX'i yeniden sıralamaya gerek kalmıyor. Mobilde sarmalayıcı
+                düz bir div (style {}), ikonlar ve arama eskisi gibi alt alta. */}
+            <div style={genisEkran?{display:"flex",flexDirection:"row-reverse",alignItems:"center",gap:12,marginBottom:10}:{}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:genisEkran?"flex-end":"space-between",gap:10,marginBottom:genisEkran?0:20,flexShrink:0}}>
               {!genisEkran && (
               <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
                 <div style={{width:44,height:44,borderRadius:22,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,background:"#FFFFFF",boxShadow:"0 1px 4px rgba(0,0,0,0.25)"}}>
@@ -28053,7 +28184,7 @@ function App(){
                   })
                 :[];
               return(
-                <div style={{marginBottom:10,position:"relative"}}>
+                <div style={{marginBottom:genisEkran?0:10,position:"relative",...(genisEkran?{flex:1,minWidth:0}:{})}}>
                   <div style={{display:"flex",alignItems:"center",background:WA(0.07),borderRadius:12,border:menuAramaOdakli?`1.5px solid ${C.blue}`:`1px solid ${WA(0.12)}`,padding:"0 12px",boxShadow:menuAramaOdakli?`0 0 0 3px ${C.blueLight}`:"none",transition:"border-color 0.15s, box-shadow 0.15s"}}>
                     <span style={{fontSize:14,color:WA(0.4),marginRight:8}}>🔍</span>
                     {/* ── OTOMATİK DOLDURMA KAPALI (2026-08-01) ────────────────
@@ -28115,6 +28246,7 @@ function App(){
                 </div>
               );
             })()}
+            </div>{/* /masaüstü arama + ikon satırı */}
             </div>
           </div>
         </div>
@@ -28126,7 +28258,7 @@ function App(){
           sabit; diğer üç sekmede yalnızca başlık satırı. */}
       {sekmeEkraniMi&&(
         <div ref={sekmeUstBlokRef} style={{
-          position:"fixed",top:0,left:SIDEBAR_W,right:0,zIndex:45,
+          position:"fixed",top:genisEkran?SERIT_YUKSEKLIK:0,left:SIDEBAR_W,right:0,zIndex:45,
           background:C.bg,
         }}>
           <div style={{maxWidth:genisEkran?"none":kolonW,margin:"0 auto",padding:"calc(44px + env(safe-area-inset-top,0px)) 20px 12px"}}>
