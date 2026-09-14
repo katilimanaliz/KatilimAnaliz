@@ -3879,6 +3879,92 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri 
 }
 
 // ─── ANA SAYFA: KATILIM ENDEKSİ TOP HAREKETLİLER (Hisse + Fon) ──────────────
+// ─── ANA SAYFA: BİST 100 KARTI ──────────────────────────────────────────────
+// Piyasalar bölümündeki "BİST Hisse Veri İzleme" kartına dokunuşla, canlı
+// izleme ekranındaki (BistHisseTarayici) hero kart ile AYNI endeks verisini
+// (XU100.IS, api/gecmis ucu) kullanan küçük bir özet kart. Tıklanınca AYNI
+// BİST Hisse Veri İzleme ekranına götürür (nav("bistHisseTarayici")).
+function AnaSayfaBist100Karti({ nav }: { nav: (sc: string) => void }) {
+  const CACHE_TTL = 5 * 60 * 1000; // 5 dakika — KatilimEndeksiTopHareketliler ile aynı ritim
+  const okuCache = (): { deger: number; degisim: number; ts: number } | null => {
+    try {
+      const raw = sessionStorage.getItem("kea_bist100");
+      if (!raw) return null;
+      const v = JSON.parse(raw);
+      return typeof v?.deger === "number" && typeof v?.ts === "number" ? v : null;
+    } catch { return null; }
+  };
+
+  const [veri, setVeri] = useState<{ deger: number; degisim: number } | null>(() => {
+    const c = okuCache();
+    return c ? { deger: c.deger, degisim: c.degisim } : null;
+  });
+  const [guncellemeSaati, setGuncellemeSaati] = useState<Date | null>(() => {
+    const c = okuCache();
+    return c ? new Date(c.ts) : null;
+  });
+
+  useEffect(() => {
+    const c = okuCache();
+    if (c && (Date.now() - c.ts) < CACHE_TTL) return; // cache taze, yeni istek atma
+    fetch(`${API_BASE}/api/gecmis?sembol=${encodeURIComponent("XU100.IS")}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        const noktalar = d?.noktalar || [];
+        const fiyatlar = noktalar.map((n: any) => n.fiyat).filter((f: any) => typeof f === "number");
+        const guncel = d?.guncelFiyat ?? fiyatlar[fiyatlar.length - 1];
+        // BistHisseTarayici'deki AYNI mantık: dünkü kapanış (fiyatlar.length-2),
+        // ayın ilk günü (fiyatlar[0]) DEĞİL — aksi halde "günlük %" ~1 aylık
+        // değişimi gösterir.
+        const onceki = d?.oncekiKapanis ?? fiyatlar[fiyatlar.length - 2];
+        if (guncel != null && onceki) {
+          const yeni = { deger: guncel, degisim: (guncel - onceki) / onceki * 100 };
+          setVeri(yeni);
+          const ts = Date.now();
+          setGuncellemeSaati(new Date(ts));
+          try { sessionStorage.setItem("kea_bist100", JSON.stringify({ ...yeni, ts })); } catch {}
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const yukseliyor = (veri?.degisim ?? 0) >= 0;
+
+  return (
+    <div className="press-tile" onClick={() => nav("bistHisseTarayici")} style={{
+      position: "relative", overflow: "hidden", cursor: "pointer", marginBottom: 26,
+      borderRadius: 22, padding: "14px 16px",
+      background: (TEMA === "acik" ? "#E9EEF4" : WA(0.05)), border: `1px solid ${WA(0.08)}`,
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+            <span style={{ width: 6, height: 6, borderRadius: 3, background: C.green, boxShadow: `0 0 6px ${C.green}`, flexShrink: 0 }} />
+            <span style={{ fontSize: 10.5, fontWeight: 700, color: WA(0.5), textTransform: "uppercase", letterSpacing: 0.5 }}>{TR("BIST 100 · GECİKMELİ")}</span>
+          </div>
+          <div style={{ fontSize: 24, fontWeight: 800, fontFamily: "monospace", letterSpacing: "-0.01em", color: (TEMA === "acik" ? C.label : "#fff") }}>
+            {veri ? veri.deger.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}
+          </div>
+          {veri && (
+            <div style={{
+              display: "inline-flex", alignItems: "center", gap: 4, marginTop: 6,
+              background: yukseliyor ? "rgba(74,222,128,0.15)" : "rgba(248,113,113,0.15)",
+              border: `1px solid ${yukseliyor ? "rgba(74,222,128,0.35)" : "rgba(248,113,113,0.35)"}`,
+              color: yukseliyor ? C.green : C.red, fontSize: 12, fontWeight: 800, padding: "3px 8px", borderRadius: 20,
+            }}>
+              {yukseliyor ? "▲" : "▼"} %{Math.abs(veri.degisim).toFixed(2)}
+            </div>
+          )}
+          <div style={{ fontSize: 10, color: WA(0.35), marginTop: 8 }}>
+            {guncellemeSaati ? `${CV("Son güncelleme")}: ${guncellemeSaati.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}` : CV("Veri alınıyor…")}
+          </div>
+        </div>
+        <span style={{ color: WA(0.3), fontSize: 18, flexShrink: 0, marginTop: 2 }}>›</span>
+      </div>
+    </div>
+  );
+}
+
 function KatilimEndeksiTopHareketliler({ nav, onSecim }: { nav: (sc: string) => void; onSecim?: (tur: "hisse" | "fon", sembol: string) => void }) {
   const CACHE_TTL = 5 * 60 * 1000; // 5 dakika: bu süre içinde cache'i "taze" say, fetch atma
 
@@ -26398,6 +26484,9 @@ function App(){
               </div>
             </div>
 
+            {/* BİST 100 kartı — AI Finans Asistanı'nın hemen altında (2026-09-14, kullanıcı isteği) */}
+            <AnaSayfaBist100Karti nav={nav}/>
+
             {/* ── PORTFÖYÜM KARTI — GEÇİCİ OLARAK GİZLENDİ (2026-09-08) ──────
                 Kullanıcı isteğiyle ana sayfadan kaldırıldı, yerine header'daki
                 çanta ikonu (bkz. yukarısı, Bell butonunun yanı) kondu. Kod
@@ -27507,6 +27596,22 @@ function App(){
       </KategoriRenkContext.Provider>
       </div>
       </div>{/* /screen-anim */}
+      </div>{/* /zoom-ölçekli içerik kapsayıcısı — kapanış BİLEREK buraya alındı
+          (2026-09-14, masaüstü sabit başlık kayması düzeltmesi): header ve
+          sekme başlığı blokları position:"fixed" kullanıyor ve viewport'a göre
+          konumlanmaları gerekiyor. Daha önce bu kapanış dosyanın en sonundaydı
+          (bkz. "/yan menü sarmalayıcı" yorumunun hemen üstü) — bu da aşağıdaki
+          iki sabit bloğu (ANA SAYFA SABİT ÜST BLOK, SEKME EKRANLARI SABİT ÜST
+          BLOK) YANLIŞLIKLA zoom kapsayıcısının İÇİNDE bırakıyordu. Masaüstünde
+          (genişEkran, icerikOlcek 1.12/1.22) CSS zoom uygulanan bir atadan
+          miras alınan ölçekleme, içindeki position:fixed elemanların gerçek
+          render boyutunu/konumunu viewport'tan sapmaya sokuyor — header
+          olması gerekenden küçük kalıp, altındaki gerçek (kaydırılabilir)
+          sayfa sol kenardan görünür hale geliyordu (kullanıcı raporu,
+          2026-09-14). Alt navigasyon çubuğu zaten bu kapanıştan SONRA
+          (kapsayıcının dışında) render ediliyordu — sorunsuz çalışmasının
+          nedeni de buydu; artık header ve sekme başlığı da AYNI (kapsayıcı
+          dışı) seviyede. */}
 
       {/* ── ANA SAYFA SABİT ÜST BLOK ─────────────────────────────────────
           Alt navigasyon çubuğuyla AYNI seviyede (uygulama kökü) — yani
@@ -27781,7 +27886,6 @@ function App(){
           </div>
         </div>
       )}
-    </div>
     </div>{/* /yan menü sarmalayıcı */}
     </>
   );
