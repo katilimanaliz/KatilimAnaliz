@@ -4023,9 +4023,9 @@ function AnaSayfaBist100Karti({ nav }: { nav: (sc: string) => void }) {
           {guncellemeSaati ? `${CV("Son güncelleme")}: ${guncellemeSaati.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}` : CV("Veri alınıyor…")}
         </span>
         {(artan > 0 || azalan > 0) && (
-          <span style={{ fontSize: 10.5, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <span style={{ color: C.green }}>{artan} ▲</span>
-            <span style={{ color: C.red }}>{azalan} ▼</span>
+          <span style={{ fontSize: 10.5, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 10 }}>
+            <span style={{ color: C.green }}>{artan} {CV("yükselen")} ▲</span>
+            <span style={{ color: C.red }}>{azalan} {CV("düşen")} ▼</span>
           </span>
         )}
       </div>
