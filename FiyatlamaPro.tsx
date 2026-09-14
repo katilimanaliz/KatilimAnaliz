@@ -13395,13 +13395,6 @@ function TaksitKarsilastirma({ s }: { s: any }) {
   );
 }
 
-// Masaüstünde ana sayfadaki "Son Haberler" ve "Yaklaşan Takvim" listeleri
-// yan yana duruyor; içerik uzunlukları farklı olduğu için kutular hizasız
-// bitiyordu (kullanıcı raporu, 2026-09-14). İkisi de bu ORTAK yüksekliği
-// kullanıyor, taşan içerik kendi içinde kayıyor. Tek yerden değiştirilsin
-// diye sabit — iki listeden birini değiştirip diğerini unutmayı önler.
-const HABER_TAKVIM_YUKSEKLIK = 300;
-
 function KatilimSektoruOzet({onAc}:{onAc:()=>void}){
   const [veri,setVeri]=useState<any>(null);
   useEffect(()=>{ kbVeriGetir().then(setVeri); },[]);
@@ -26560,6 +26553,16 @@ function App(){
               )}
             </div>
 
+            {/* ══ MASAÜSTÜ MASONRY KAPSAYICISI (2026-09-14, 3. revizyon) ══
+                Buradan "SİTE ALT BİLGİ"ye kadar olan TÜM bloklar masaüstünde
+                3 sütunlu bir CSS çok sütunlu akışta. Tarayıcı blokları en kısa
+                sütuna yerleştirip yükseklikleri dengeliyor — sabit ızgarada
+                kaçınılmaz olan "sütun altında beyaz boşluk" sorunu böylece
+                yapısal olarak ortadan kalkıyor.
+                MOBİLDE style boş nesne ({}) — düz bir div, akış eskisiyle
+                birebir aynı kalıyor. ══ */}
+            <div style={genisEkran?{columnCount:3,columnGap:18} as any:{}}>
+
             {/* ── PİYASALAR / KATILIM ENDEKSİ / POPÜLER FONLAR ──────────────
                 2026-09-14 MASAÜSTÜ DÜZEN REVİZYONU (kullanıcı raporu, ekran
                 görüntüleriyle): geniş ekranda bu üç blok alt alta ve her biri
@@ -26637,6 +26640,16 @@ function App(){
                 </div>
               );
 
+              // Masonry öğesi: masaüstünde sütun ortasında bölünmeyen bir blok.
+              // Mobilde hiçbir şey sarmalamaz — eski akış birebir korunur.
+              const mOge = (icerik:any) => genisEkran
+                ? <div style={{breakInside:"avoid",WebkitColumnBreakInside:"avoid",pageBreakInside:"avoid",marginBottom:18}}>{icerik}</div>
+                : icerik;
+              // Tüm sütunları kaplayan şerit (yalnızca masaüstünde anlamlı).
+              const ustSerit = (icerik:any) => genisEkran
+                ? <div style={{columnSpan:"all",breakInside:"avoid",marginBottom:18} as any}>{icerik}</div>
+                : icerik;
+
               const gostergelerBlok = (
                 <>
             {/* Finansal Göstergeler — ana sayfa özeti (Seçenek A: ikonlu satırlar) */}
@@ -26707,22 +26720,27 @@ function App(){
               const portfoyModal = portfoyGrafikAcik ? <PortfoyKarZararModal liste={portfoy} onClose={()=>setPortfoyGrafikAcik(false)}/> : null;
 
               if (genisEkran) {
+                // ── MASAÜSTÜ: MASONRY (2026-09-14, 3. revizyon) ────────────
+                // Sabit ızgara (grid) denendi ve BAŞARISIZ oldu: her sütun
+                // kendi içeriği kadar uzuyor, en kısa sütunun altında beyaz
+                // boşluk kalıyordu. Sütunlara blok dağıtarak dengelemeye
+                // çalışmak da işe yaramadı — içerik uzunlukları canlı veriyle
+                // (haber sayısı, takvim kaydı, fon adedi) her gün değiştiği
+                // için elle yapılan her denge bir sonraki gün bozuluyor.
+                // Çözüm: CSS çok sütunlu düzen (column-count) — tarayıcı
+                // blokları sütunlara KENDİSİ dağıtıp yükseklikleri dengeler,
+                // içerik değişse bile altta boşluk kalmaz. Fintables/FVT gibi
+                // panolarda kullanılan desen bu.
+                // Bloklar `breakInside:"avoid"` ile sütun ortasında İKİYE
+                // BÖLÜNMEZ; AI Asistanı `columnSpan:"all"` ile tüm sütunları
+                // kaplayan tek bir şerit olarak üstte durur.
                 return (
                   <>
-                    {/* SOL sütun Piyasalar (4 kart) ile tek başına çok kısa
-                        kalıp altında büyük boşluk bırakıyordu; Finansal
-                        Göstergeler de aynı sütuna alındı — üç sütun artık
-                        yaklaşık aynı yükseklikte bitiyor. */}
-                    <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:16,marginBottom:26,alignItems:"start"}}>
-                      <div style={{minWidth:0}}>
-                        {piyasalarBlok}
-                        <div style={{height:18}}/>
-                        {gostergelerBlok}
-                      </div>
-                      <div style={{minWidth:0}}>{endeksBlok}</div>
-                      <div style={{minWidth:0}}>{fonBlok}</div>
-                    </div>
-                    {asistanBlok}
+                    {ustSerit(asistanBlok)}
+                    {mOge(piyasalarBlok)}
+                    {mOge(endeksBlok)}
+                    {mOge(fonBlok)}
+                    {mOge(gostergelerBlok)}
                     {portfoyModal}
                   </>
                 );
@@ -26753,12 +26771,14 @@ function App(){
 
 
 
-            {/* ── ALT BÖLGE — MASAÜSTÜ 2 KOLON (2026-09-14 düzen revizyonu) ──
-                Son Haberler ve Yaklaşan Takvim geniş ekranda alt alta, her biri
-                tam genişlikte duruyordu (kullanıcı raporu: "yana uzanan boş
-                alan"). Artık masaüstünde yan yana; mobilde sıra aynı. */}
-            <div style={genisEkran?{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:16,alignItems:"stretch",marginBottom:10}:{}}>
-            <div style={genisEkran?{minWidth:0,display:"flex",flexDirection:"column"}:{minWidth:0}}>
+            {/* ── ALT BÖLGE — MASONRY ÖĞELERİ (2026-09-14, 3. revizyon) ────
+                Son Haberler / Yaklaşan Takvim / Sektör / kısayollar artık
+                yukarıdaki masonry AKIŞININ devamı; her biri kendi doğal
+                yüksekliğinde ve tarayıcı bunları en kısa sütuna yerleştiriyor.
+                Sabit yükseklik VERİLMİYOR — 300px'e sabitlemek, içeriği kısa
+                olan kutunun (ör. 4 kayıtlık takvim) içinde boşluk bırakıyordu
+                (kullanıcı raporu). */}
+            <div style={genisEkran?{breakInside:"avoid",WebkitColumnBreakInside:"avoid",marginBottom:18}:{}}>
             {/* Son Haberler — ilk bakışta 3 haber, aşağı kaydırınca daha fazlası görünür.
                 Artık veri boş/hatalı olsa bile bölüm tamamen kaybolmuyor; başlık +
                 durum mesajı (hata / boş / yükleniyor) her zaman görünür kalıyor,
@@ -26787,14 +26807,13 @@ function App(){
                 )}
                 {sonHaberler.length>0&&(
                 <div style={{position:"relative"}}>
-                  {/* 2026-09-14: masaüstünde Son Haberler ve Yaklaşan Takvim
-                      kutuları farklı yüksekliklerde bitip hizasız duruyordu
-                      (kullanıcı raporu). Masaüstünde ikisine de AYNI sabit
-                      yükseklik veriliyor, taşan içerik kendi içinde kayıyor.
-                      Mobilde eski davranış (maxHeight 266) korunuyor. */}
-                  <div className="piyasa-scroll" style={genisEkran
-                    ?{marginBottom:14,height:HABER_TAKVIM_YUKSEKLIK,overflowY:"auto",WebkitOverflowScrolling:"touch"}
-                    :{marginBottom:14,maxHeight:266,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
+                  {/* ⚠️ 2026-09-14 (3. revizyon): masaüstünde SABİT yükseklik
+                      (300px) denendi ve geri alındı — içeriği kısa olan kutunun
+                      İÇİNDE boşluk bırakıyordu. Masonry akışında her blok kendi
+                      doğal yüksekliğinde durmalı; dengelemeyi tarayıcı yapıyor.
+                      Masaüstünde liste maxHeight ile sınırlanıyor (çok uzun
+                      haber listesi tek sütunu şişirmesin), mobil aynen. */}
+                  <div className="piyasa-scroll" style={{marginBottom:14,maxHeight:genisEkran?420:266,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
                     {sonHaberler.map((h,i)=>{
                       const farkDk=Math.round((Date.now()-new Date(h.tarih).getTime())/60000);
                       const zamanEtiket = farkDk<1?"az önce":farkDk<60?`${farkDk} dk önce`:farkDk<1440?`${Math.round(farkDk/60)} sa önce`:new Date(h.tarih).toLocaleDateString("tr-TR",{day:"numeric",month:"short"});
@@ -26827,7 +26846,7 @@ function App(){
             )}
 
             </div>
-            <div style={genisEkran?{minWidth:0,display:"flex",flexDirection:"column"}:{minWidth:0}}>
+            <div style={genisEkran?{breakInside:"avoid",WebkitColumnBreakInside:"avoid",marginBottom:18}:{}}>
             {/* Yaklaşan Takvim — önümüzdeki 7 gün, Türkiye */}
             {yaklasanTakvim.length>0&&(
               <>
@@ -26835,9 +26854,7 @@ function App(){
                   <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Yaklaşan Takvim · 7 Gün")}</span>
                   <span onClick={()=>nav("finansalTakvim")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
                 </div>
-                <div className="piyasa-scroll" style={genisEkran
-                  ?{marginBottom:14,height:HABER_TAKVIM_YUKSEKLIK,overflowY:"auto",WebkitOverflowScrolling:"touch"}
-                  :{marginBottom:14}}>
+                <div style={{marginBottom:14}}>
                   {yaklasanTakvim.map((e:any,i:number)=>{
                     const d=new Date(e.tarih);
                     const bugun=new Date(); bugun.setHours(0,0,0,0);
@@ -26866,16 +26883,16 @@ function App(){
             )}
 
             </div>
-            </div>
 
-            {/* ── ALT SATIR — MASAÜSTÜ 2 KOLON (2026-09-14, 2. revizyon) ────
-                SOL: Katılım Bankacılığı Sektörü özet kartı — tek başına tam
-                genişlikte esneyip yatay olarak uzuyordu (kullanıcı raporu).
-                SAĞ: Haftalık Piyasa Özeti + Getiri Karşılaştırma kısayolları
-                alt alta. İkisi birlikte satırı dengeli dolduruyor. */}
-            <div style={genisEkran?{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:16,alignItems:"start",marginBottom:14}:{}}>
-            {genisEkran && <div style={{minWidth:0}}><KatilimSektoruOzet onAc={()=>nav("katilimSektoru")}/></div>}
-            <div style={{minWidth:0}}>
+            {/* Katılım Bankacılığı Sektörü — masaüstünde masonry öğesi olarak
+                buraya taşındı (aşağıdaki mobil dalda ayrıca duruyor). */}
+            {genisEkran && (
+              <div style={{breakInside:"avoid",WebkitColumnBreakInside:"avoid",marginBottom:18}}>
+                <KatilimSektoruOzet onAc={()=>nav("katilimSektoru")}/>
+              </div>
+            )}
+
+            <div style={genisEkran?{breakInside:"avoid",WebkitColumnBreakInside:"avoid",marginBottom:18}:{}}>
             {/* Haftalık Piyasa Özeti — ana menü alt kısayolu */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
               <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Haftalık Piyasa Özeti")}</span>
@@ -26898,6 +26915,8 @@ function App(){
               <span style={{color:WA(0.3),fontSize:20,flexShrink:0}}>›</span>
             </div>
 
+            </div>
+            <div style={genisEkran?{breakInside:"avoid",WebkitColumnBreakInside:"avoid",marginBottom:18}:{}}>
             {/* Getiri Karşılaştırma — ana menü alt kısayolu */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
               <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Getiri Karşılaştırma")}</span>
@@ -26921,7 +26940,6 @@ function App(){
             </div>
 
             </div>
-            </div>
 
             {/* ── KATILIM BANKACILIĞI SEKTÖRÜ — ana sayfa özet tablosu ──────────
                 Kullanıcı ekrana girmeden de resmi görsün diye dört satırlık özet.
@@ -26930,6 +26948,8 @@ function App(){
                 taşındı, o yüzden burada yalnızca mobilde gösteriliyor —
                 aksi halde ekranda iki kez görünürdü. ── */}
             {!genisEkran && <KatilimSektoruOzet onAc={()=>nav("katilimSektoru")}/>}
+
+            </div>{/* /masaüstü masonry kapsayıcısı */}
 
             {/* Alt bilgi. Native'de SiteAltBilgi null döner; o durumda eski
                 sade copyright satırı gösteriliyor. */}
