@@ -3879,12 +3879,77 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri 
 }
 
 // ─── ANA SAYFA: KATILIM ENDEKSİ TOP HAREKETLİLER (Hisse + Fon) ──────────────
+// Haber satırındaki küçük kaynak görseli. Gerçek haber fotoğrafı yerine
+// kaynağın favicon'unu gösterir (bkz. kullanım yerindeki not). Ayrı bileşen
+// olmasının sebebi: her satırın kendi "yüklenemedi" durumunu tutması gerekiyor,
+// bunu liste içinde tek bir state ile yapmak mümkün değil.
+function HaberGorseli({link}:{link?:string}){
+  const [hata,setHata]=useState(false);
+  const alan=useMemo(()=>{
+    try{ return new URL(link||"").hostname; }catch{ return ""; }
+  },[link]);
+  if(!alan || hata) return <span style={{fontSize:15,flexShrink:0,marginTop:1}}>📡</span>;
+  return (
+    <img
+      src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(alan)}&sz=64`}
+      alt=""
+      onError={()=>setHata(true)}
+      style={{width:26,height:26,borderRadius:7,flexShrink:0,marginTop:1,objectFit:"cover",
+              background:WA(0.06),border:`1px solid ${WA(0.08)}`}}
+    />
+  );
+}
+
+// ─── PİYASA ÖZETİ BLOĞU (ana sayfa) ────────────────────────────────────────
+// ⚠️ İKİ GÖRÜNÜM, TEK BİLEŞEN (2026-09-14):
+//   • MOBİL (dikey=false): yatay kaydırmalı şerit — eski davranış, aynen.
+//   • MASAÜSTÜ (dikey=true): sağ rayda ALT ALTA liste. Geniş ekranda yan yana
+//     14 kutu zaten okunmuyordu ve kaydırma gerektiriyordu.
+// Tek bileşende tutuldu ki iki kopya zamanla birbirinden ayrışmasın — bu
+// dosyada masaüstü/mobil ayrı dalların sayısı arttıkça en sık yapılan hata
+// "birini güncelleyip diğerini unutmak" oluyor.
+function PiyasaOzetiBlok({dikey,piyasaGorunen,piyasaSurukle,piyasaOzetiSecim,setPiyasaOzetiDuzenleAcik,setSeciliKur,nav}:{
+  dikey:boolean; piyasaGorunen:any[]; piyasaSurukle:any; piyasaOzetiSecim:any[];
+  setPiyasaOzetiDuzenleAcik:(v:boolean)=>void; setSeciliKur:(v:any)=>void; nav:(sc:string)=>void;
+}){
+  return (
+    <>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+        <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Piyasa Özeti")}</span>
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          <span onClick={()=>setPiyasaOzetiDuzenleAcik(true)} style={{fontSize:11,fontWeight:700,color:WA(0.4),cursor:"pointer"}}>Düzenle</span>
+          <span onClick={()=>nav("piyasaMenu")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
+        </div>
+      </div>
+      <div className="piyasa-scroll" style={dikey
+        ? {display:"grid",gridTemplateColumns:"1fr",gap:8,marginBottom:20}
+        : {display:"flex",overflowX:"auto",gap:6,marginBottom:26,scrollSnapType:"x mandatory",WebkitOverflowScrolling:"touch",paddingBottom:2}}>
+        {piyasaGorunen.map((k:any,i:number)=>{
+          const sp:any=piyasaSurukle.kartProps(k.sembol,i);
+          return (
+          <div key={k.sembol} ref={sp.ref}
+            onTouchStart={sp.onTouchStart} onTouchEnd={sp.onTouchEnd} onTouchCancel={sp.onTouchCancel}
+            onMouseDown={sp.onMouseDown} onMouseMove={sp.onMouseMove} onMouseUp={sp.onMouseUp}
+            style={{...(dikey?{minWidth:0}:{flex:"0 0 108px",minWidth:0,scrollSnapAlign:"start"}),position:"relative",...sp.stil}}>
+            <PiyasaOzetiKart ad={k.ad} sembol={k.sembol} dec={k.dec} onTikla={()=>{ if(!sp.tasiniyor) setSeciliKur({kod:k.ad,ad:k.ad,sembol:k.sembol,birim:k.paraOnek}); }}/>
+          </div>
+          );})}
+        {piyasaOzetiSecim.length===0&&(
+          <div onClick={()=>setPiyasaOzetiDuzenleAcik(true)} style={{...(dikey?{}:{flex:"0 0 108px"}),display:"flex",alignItems:"center",justifyContent:"center",height:88,borderRadius:14,border:`1.5px dashed ${WA(0.2)}`,cursor:"pointer"}}>
+            <span style={{fontSize:11,color:WA(0.4),textAlign:"center",padding:"0 8px"}}>+ Kart Ekle</span>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
 // ── ANA SAYFA MASAÜSTÜ SATIR DÜZENİ SABİTLERİ (2026-09-14) ─────────────────
 // Üç satırın da AYNI ızgara/hücre kuralını kullanması için tek yerde. Satır
 // yükseklikleri burada; bir satırın yüksekliğini değiştirmek, o satırdaki üç
 // kartı birden değiştirir — kartlardan birini elle büyütüp diğerlerini unutma
 // (bu düzende hizasızlığın ana kaynağı) böylece mümkün olmuyor.
-const SATIR_STIL: any = {display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:16,marginBottom:18,alignItems:"stretch"};
+const IKILI_SATIR: any = {display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:16,marginBottom:18,alignItems:"stretch"};
 // Hücre: taşan içerik kartın KENDİ içinde kayar, satırı uzatmaz.
 const HUCRE_STIL: any = {minWidth:0,overflowY:"auto",overflowX:"hidden"};
 const SATIR1_YUKSEKLIK = 470;   // Katılım Endeksi / Popüler Fonlar / Göstergeler
@@ -26529,33 +26594,28 @@ function App(){
                 sol/sağ kenarlar hizasız duruyordu (kullanıcı raporu). Mobilde
                 12px AYNEN korundu. */}
 
-            {/* Piyasa Özeti */}
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-              <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Piyasa Özeti")}</span>
-              <div style={{display:"flex",alignItems:"center",gap:12}}>
-                <span onClick={()=>setPiyasaOzetiDuzenleAcik(true)} style={{fontSize:11,fontWeight:700,color:WA(0.4),cursor:"pointer"}}>Düzenle</span>
-                <span onClick={()=>nav("piyasaMenu")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
-              </div>
-            </div>
-            <div className="piyasa-scroll" style={{display:"flex",overflowX:"auto",gap:6,marginBottom:26,scrollSnapType:"x mandatory",WebkitOverflowScrolling:"touch",paddingBottom:2}}>
-              {piyasaGorunen.map((k:any,i:number)=>{
-                const sp:any=piyasaSurukle.kartProps(k.sembol,i);
-                return (
-                <div key={k.sembol} ref={sp.ref}
-                  onTouchStart={sp.onTouchStart} onTouchEnd={sp.onTouchEnd} onTouchCancel={sp.onTouchCancel}
-                  onMouseDown={sp.onMouseDown} onMouseMove={sp.onMouseMove} onMouseUp={sp.onMouseUp}
-                  style={{flex:"0 0 108px",minWidth:0,scrollSnapAlign:"start",position:"relative",...sp.stil}}>
-                  <PiyasaOzetiKart ad={k.ad} sembol={k.sembol} dec={k.dec} onTikla={()=>{ if(!sp.tasiniyor) setSeciliKur({kod:k.ad,ad:k.ad,sembol:k.sembol,birim:k.paraOnek}); }}/>
-                </div>
-                );})}
-              {piyasaOzetiSecim.length===0&&(
-                <div onClick={()=>setPiyasaOzetiDuzenleAcik(true)} style={{flex:"0 0 108px",display:"flex",alignItems:"center",justifyContent:"center",height:88,borderRadius:14,border:`1.5px dashed ${WA(0.2)}`,cursor:"pointer"}}>
-                  <span style={{fontSize:11,color:WA(0.4),textAlign:"center",padding:"0 8px"}}>+ Kart Ekle</span>
-                </div>
-              )}
-            </div>
+            {/* Piyasa Özeti — MOBİLDE burada (yatay şerit).
+                MASAÜSTÜNDE sağ rayda, dikey liste olarak render ediliyor. */}
+            {!genisEkran && <PiyasaOzetiBlok dikey={false} piyasaGorunen={piyasaGorunen} piyasaSurukle={piyasaSurukle}
+              piyasaOzetiSecim={piyasaOzetiSecim} setPiyasaOzetiDuzenleAcik={setPiyasaOzetiDuzenleAcik}
+              setSeciliKur={setSeciliKur} nav={nav}/>}
 
+            {/* ══ MASAÜSTÜ: ANA KOLON + SAĞ RAY (2026-09-14, 5. revizyon) ══
+                Önceki denemeler ve neden bırakıldıkları:
+                • Sabit 3 kolonlu ızgara → en kısa sütunun altında beyaz boşluk.
+                • Masonry (column-count) → boşluk kapandı ama sıra okunaksız oldu.
+                • 3'lü eşit satırlar → düzeldi ama her satırın yüksekliğini elle
+                  ayarlamak gerekiyordu, içerik değişince yine bozuluyordu.
+                ŞİMDİKİ: geniş ANA KOLON + dar SAĞ RAY. Rayda yalnızca doğası
+                gereği UZUN ve DİKEY olan listeler var (piyasa özeti, haberler,
+                takvim); bunlar kendiliğinden ana kolon boyunda gidiyor, bu
+                yüzden yükseklik eşitlemeye gerek kalmıyor. Ana kolonda ise
+                satırlar 3 değil 2 kart — dengelemesi çok daha kolay.
+                MOBİLDE style boş nesne ({}) → düz div, akış bozulmuyor. ══ */}
+            <div style={genisEkran?{display:"grid",gridTemplateColumns:"minmax(0,1fr) 320px",gap:20,alignItems:"start"}:{}}>
 
+            {/* ── ANA KOLON ── */}
+            <div style={{minWidth:0}}>
 
             {/* Favorilerim */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
@@ -26746,11 +26806,16 @@ function App(){
                         2×2 kompakt kart olarak bir sütuna sıkışmıyor. */}
                     {piyasalarBlok}
 
-                    {/* SATIR 1 — üç eşit kart, ortak yükseklik, içi kaydırmalı */}
-                    <div style={SATIR_STIL}>
+                    {/* Ana kolon artık sağ rayla paylaşıldığı için satırlar
+                        ÜÇ değil İKİ kart; iki kartı dengelemek üçü dengelemekten
+                        çok daha kolay. */}
+                    <div style={IKILI_SATIR}>
                       <div style={{...HUCRE_STIL,height:SATIR1_YUKSEKLIK}}>{endeksBlok}</div>
                       <div style={{...HUCRE_STIL,height:SATIR1_YUKSEKLIK}}>{fonBlok}</div>
-                      <div style={{...HUCRE_STIL,height:SATIR1_YUKSEKLIK}}>{gostergelerBlok}</div>
+                    </div>
+                    <div style={IKILI_SATIR}>
+                      <div style={{...HUCRE_STIL,height:SATIR2_YUKSEKLIK}}>{gostergelerBlok}</div>
+                      <div style={{...HUCRE_STIL,height:SATIR2_YUKSEKLIK}}><KatilimSektoruOzet onAc={()=>nav("katilimSektoru")}/></div>
                     </div>
                     {portfoyModal}
                   </>
@@ -26780,13 +26845,74 @@ function App(){
               );
             })()}
 
+            {/* ── SATIR — Haftalık Özet | Getiri Karşılaştırma | Asistan ──── */}
+            <div style={genisEkran?{...IKILI_SATIR,gridTemplateColumns:"repeat(3,minmax(0,1fr))"}:{}}>
+            <div style={genisEkran?{minWidth:0}:{}}>
+{/* Haftalık Piyasa Özeti — ana menü alt kısayolu */}
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+              <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Haftalık Piyasa Özeti")}</span>
+              <span onClick={()=>nav("haftalikOzet")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Aç")} ›</span>
+            </div>
+            <div className="press-card" onClick={()=>nav("haftalikOzet")} style={{
+              display:"flex",alignItems:"center",gap:14,marginBottom:14,cursor:"pointer",
+              background:(TEMA==="acik"?"linear-gradient(135deg,#E9EEF4 0%,#E3E9F1 100%)":"linear-gradient(135deg,#16222E 0%,#131C27 100%)"),
+              border:`1px solid ${WA(0.08)}`,borderRadius:16,padding:"14px 16px",
+              position:"relative",overflow:"hidden",
+            }}>
+              <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:"linear-gradient(90deg,transparent,#5B9BD8,transparent)"}}/>
+              <div style={{width:46,height:46,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                <Icon k="haftalikOzet" size={28} color={C.blue} style={{filter:"drop-shadow(0 0 6px rgba(91,155,216,0.4))"}}/>
+              </div>
+              <div style={{flex:1,minWidth:0}}>
+                <p style={{margin:0,fontSize:14,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff")}}>Haftalık Piyasa Özeti</p>
+                <p style={{margin:"2px 0 0",fontSize:11,color:WA(0.45)}}>{(()=>{const b=new Date();const g=b.getDay();const geri=g===6?5:(g===0?6:(g-1)+7);const pzt=new Date(b);pzt.setDate(b.getDate()-geri);const cum=new Date(pzt);cum.setDate(pzt.getDate()+4);const f=(d:Date)=>d.toLocaleDateString("tr-TR",{day:"numeric",month:"long"});return `${f(pzt)} – ${f(cum)} · ${CV("tablo ve haftalık yorum")}`;})()}</p>
+              </div>
+              <span style={{color:WA(0.3),fontSize:20,flexShrink:0}}>›</span>
+            </div>
+            </div>
+            <div style={genisEkran?{minWidth:0}:{}}>
+            {/* Getiri Karşılaştırma — ana menü alt kısayolu */}
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+              <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Getiri Karşılaştırma")}</span>
+              <span onClick={()=>nav("getiriKarsilastirma")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Aç")} ›</span>
+            </div>
+            <div className="press-card" onClick={()=>nav("getiriKarsilastirma")} style={{
+              display:"flex",alignItems:"center",gap:14,marginBottom:14,cursor:"pointer",
+              background:(TEMA==="acik"?"linear-gradient(135deg,#E9EEF4 0%,#E3E9F1 100%)":"linear-gradient(135deg,#16222E 0%,#131C27 100%)"),
+              border:`1px solid ${WA(0.08)}`,borderRadius:16,padding:"14px 16px",
+              position:"relative",overflow:"hidden",
+            }}>
+              <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:"linear-gradient(90deg,transparent,#F59E0B,transparent)"}}/>
+              <div style={{width:46,height:46,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                <Icon k="getiriKarsilastirma" size={28} color="#F59E0B" style={{filter:"drop-shadow(0 0 6px rgba(245,158,11,0.4))"}}/>
+              </div>
+              <div style={{flex:1,minWidth:0}}>
+                <p style={{margin:0,fontSize:14,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff")}}>Getiri Karşılaştırma</p>
+                <p style={{margin:"2px 0 0",fontSize:11,color:WA(0.45)}}>Dolar, altın, gümüş, BIST, fonlar — dönemsel getiri kıyası</p>
+              </div>
+              <span style={{color:WA(0.3),fontSize:20,flexShrink:0}}>›</span>
+            </div>
+            </div>
+            {/* Asistan — masaüstünde bu satırın üçüncü kartı. Mobilde yukarıda,
+                Piyasalar'ın hemen altında duruyor. */}
+            {genisEkran && <div style={{minWidth:0}}><AsistanKarti nav={nav} genisEkran={genisEkran}/></div>}
+            </div>
 
+            {/* Katılım Bankacılığı Sektörü — MASAÜSTÜNDE yukarıdaki ikili
+                satırda (Göstergeler'in yanında). Burada yalnızca mobilde. */}
+            {!genisEkran && <KatilimSektoruOzet onAc={()=>nav("katilimSektoru")}/>}
 
-            {/* ── SATIR 2 — Son Haberler | Yaklaşan Takvim | Sektör ─────────
-                Üçü de aynı yüksekliği paylaşıyor; içeriği uzun olan kendi
-                içinde kayıyor, kısa olan satırı bozmuyor. */}
-            <div style={genisEkran?SATIR_STIL:{}}>
-            <div style={genisEkran?{...HUCRE_STIL,height:SATIR2_YUKSEKLIK}:{}}>
+            </div>{/* /ana kolon */}
+
+            {/* ── SAĞ RAY — yalnızca dikey listeler ────────────────────────── */}
+            <div style={{minWidth:0}}>
+
+            {/* Piyasa Özeti — MASAÜSTÜNDE burada, DİKEY liste olarak.
+                Mobilde yukarıda yatay şerit olarak render ediliyor. */}
+            {genisEkran && <PiyasaOzetiBlok dikey piyasaGorunen={piyasaGorunen} piyasaSurukle={piyasaSurukle}
+              piyasaOzetiSecim={piyasaOzetiSecim} setPiyasaOzetiDuzenleAcik={setPiyasaOzetiDuzenleAcik}
+              setSeciliKur={setSeciliKur} nav={nav}/>}
+
             {/* Son Haberler — ilk bakışta 3 haber, aşağı kaydırınca daha fazlası görünür.
                 Artık veri boş/hatalı olsa bile bölüm tamamen kaybolmuyor; başlık +
                 durum mesajı (hata / boş / yükleniyor) her zaman görünür kalıyor,
@@ -26832,7 +26958,16 @@ function App(){
                             background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,
                             borderLeft:"3px solid #FF6B35",borderRadius:12,padding:"11px 13px",marginBottom:8,
                           }}>
-                            <span style={{fontSize:15,flexShrink:0,marginTop:1}}>📡</span>
+                            {/* Kaynak logosu (2026-09-14). Haber verisinde GÖRSEL
+                                ALANI YOK — api/finans-haberleri yalnızca başlık,
+                                tarih, link ve kaynak döndürüyor. Gerçek haber
+                                fotoğrafı için backend'in RSS enclosure / og:image
+                                alanını da çekmesi gerekir; o yapılana kadar
+                                kaynağın favicon'u link alanından türetiliyor.
+                                Favicon yüklenemezse (ağ hatası, alan adı
+                                çözülemedi) eski 📡 simgesine düşülüyor —
+                                boş kare kalmıyor. */}
+                            <HaberGorseli link={h.link}/>
                             <div style={{flex:1,minWidth:0}}>
                               <p style={{margin:0,fontSize:12.5,fontWeight:700,color:C.soft,lineHeight:1.4}}>{h.baslik}</p>
                               <div style={{display:"flex",alignItems:"center",gap:6,marginTop:4}}>
@@ -26853,9 +26988,6 @@ function App(){
               </>
             )}
 
-            </div>
-            <div style={genisEkran?{...HUCRE_STIL,height:SATIR2_YUKSEKLIK}:{}}>
-            {/* Yaklaşan Takvim — önümüzdeki 7 gün, Türkiye */}
             {yaklasanTakvim.length>0&&(
               <>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
@@ -26890,80 +27022,12 @@ function App(){
               </>
             )}
 
-            </div>
 
-            {/* Katılım Bankacılığı Sektörü — masaüstünde SATIR 2'nin üçüncü
-                kartı (aşağıdaki mobil dalda kendi sırasında duruyor). */}
-            {genisEkran && (
-              <div style={{...HUCRE_STIL,height:SATIR2_YUKSEKLIK}}>
-                <KatilimSektoruOzet onAc={()=>nav("katilimSektoru")}/>
-              </div>
-            )}
-            </div>{/* /satır 2 */}
+            </div>{/* /sağ ray */}
+            </div>{/* /ana kolon + sağ ray */}
 
-            {/* ── SATIR 3 — Haftalık Özet | Getiri Karşılaştırma | Asistan ── */}
-            <div style={genisEkran?{...SATIR_STIL,marginBottom:14}:{}}>
-            <div style={genisEkran?{minWidth:0}:{}}>
-            {/* Haftalık Piyasa Özeti — ana menü alt kısayolu */}
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-              <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Haftalık Piyasa Özeti")}</span>
-              <span onClick={()=>nav("haftalikOzet")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Aç")} ›</span>
-            </div>
-            <div className="press-card" onClick={()=>nav("haftalikOzet")} style={{
-              display:"flex",alignItems:"center",gap:14,marginBottom:14,cursor:"pointer",
-              background:(TEMA==="acik"?"linear-gradient(135deg,#E9EEF4 0%,#E3E9F1 100%)":"linear-gradient(135deg,#16222E 0%,#131C27 100%)"),
-              border:`1px solid ${WA(0.08)}`,borderRadius:16,padding:"14px 16px",
-              position:"relative",overflow:"hidden",
-            }}>
-              <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:"linear-gradient(90deg,transparent,#5B9BD8,transparent)"}}/>
-              <div style={{width:46,height:46,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                <Icon k="haftalikOzet" size={28} color={C.blue} style={{filter:"drop-shadow(0 0 6px rgba(91,155,216,0.4))"}}/>
-              </div>
-              <div style={{flex:1,minWidth:0}}>
-                <p style={{margin:0,fontSize:14,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff")}}>Haftalık Piyasa Özeti</p>
-                <p style={{margin:"2px 0 0",fontSize:11,color:WA(0.45)}}>{(()=>{const b=new Date();const g=b.getDay();const geri=g===6?5:(g===0?6:(g-1)+7);const pzt=new Date(b);pzt.setDate(b.getDate()-geri);const cum=new Date(pzt);cum.setDate(pzt.getDate()+4);const f=(d:Date)=>d.toLocaleDateString("tr-TR",{day:"numeric",month:"long"});return `${f(pzt)} – ${f(cum)} · ${CV("tablo ve haftalık yorum")}`;})()}</p>
-              </div>
-              <span style={{color:WA(0.3),fontSize:20,flexShrink:0}}>›</span>
-            </div>
 
-            </div>
-            <div style={genisEkran?{minWidth:0}:{}}>
-            {/* Getiri Karşılaştırma — ana menü alt kısayolu */}
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-              <span style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5}}>{TR("Getiri Karşılaştırma")}</span>
-              <span onClick={()=>nav("getiriKarsilastirma")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Aç")} ›</span>
-            </div>
-            <div className="press-card" onClick={()=>nav("getiriKarsilastirma")} style={{
-              display:"flex",alignItems:"center",gap:14,marginBottom:14,cursor:"pointer",
-              background:(TEMA==="acik"?"linear-gradient(135deg,#E9EEF4 0%,#E3E9F1 100%)":"linear-gradient(135deg,#16222E 0%,#131C27 100%)"),
-              border:`1px solid ${WA(0.08)}`,borderRadius:16,padding:"14px 16px",
-              position:"relative",overflow:"hidden",
-            }}>
-              <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:"linear-gradient(90deg,transparent,#F59E0B,transparent)"}}/>
-              <div style={{width:46,height:46,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                <Icon k="getiriKarsilastirma" size={28} color="#F59E0B" style={{filter:"drop-shadow(0 0 6px rgba(245,158,11,0.4))"}}/>
-              </div>
-              <div style={{flex:1,minWidth:0}}>
-                <p style={{margin:0,fontSize:14,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff")}}>Getiri Karşılaştırma</p>
-                <p style={{margin:"2px 0 0",fontSize:11,color:WA(0.45)}}>Dolar, altın, gümüş, BIST, fonlar — dönemsel getiri kıyası</p>
-              </div>
-              <span style={{color:WA(0.3),fontSize:20,flexShrink:0}}>›</span>
-            </div>
 
-            </div>
-
-            {/* ── KATILIM BANKACILIĞI SEKTÖRÜ — ana sayfa özet tablosu ──────────
-                Kullanıcı ekrana girmeden de resmi görsün diye dört satırlık özet.
-                Veri gelmezse blok hiç render edilmiyor (sessiz gizlenme).
-                MASAÜSTÜNDE bu kart yukarıdaki 2 kolonlu satırın SOL sütununa
-                taşındı, o yüzden burada yalnızca mobilde gösteriliyor —
-                aksi halde ekranda iki kez görünürdü. ── */}
-            {!genisEkran && <KatilimSektoruOzet onAc={()=>nav("katilimSektoru")}/>}
-
-            {/* Asistan — masaüstünde SATIR 3'ün üçüncü kartı. Mobilde
-                yukarıdaki akışta, Piyasalar'ın hemen altında duruyor. */}
-            {genisEkran && <div style={{minWidth:0}}><AsistanKarti nav={nav} genisEkran={genisEkran}/></div>}
-            </div>{/* /satır 3 */}
 
             {/* Alt bilgi. Native'de SiteAltBilgi null döner; o durumda eski
                 sade copyright satırı gösteriliyor. */}
@@ -27883,9 +27947,16 @@ function App(){
         }}>
           <div style={{maxWidth:genisEkran?"none":kolonW,margin:"0 auto",padding:"0 20px"}}>
             <div style={{background:C.bg,padding:"calc(18px + env(safe-area-inset-top,0px)) 0 6px"}}>
-            {/* Logo + marka — dikeyde tam ortalanmış, net hiyerarşi (marka adı
-                büyütülüp kalınlaştırıldı, slogan küçültülüp soluklaştırıldı) */}
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:20}}>
+            {/* Logo + marka — MASAÜSTÜNDE GİZLİ (2026-09-14, kullanıcı raporu):
+                geniş ekranda sol yan menünün en üstünde zaten aynı logo ve
+                "Katılım Plus / Katılım Finansının Akıllı Asistanı" yazısı
+                duruyordu; header'daki ikinci kopya gereksiz yer kaplayıp
+                markayı iki kez tekrar ediyordu. Mobilde yan menü OLMADIĞI için
+                burası markanın TEK göründüğü yer — orada aynen korunuyor.
+                Marka gizlenince satır sadece sağdaki ikonları taşıyor, bu
+                yüzden masaüstünde içerik sağa yaslanıyor (flex-end). */}
+            <div style={{display:"flex",alignItems:"center",justifyContent:genisEkran?"flex-end":"space-between",gap:10,marginBottom:genisEkran?12:20}}>
+              {!genisEkran && (
               <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
                 <div style={{width:44,height:44,borderRadius:22,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,background:"#FFFFFF",boxShadow:"0 1px 4px rgba(0,0,0,0.25)"}}>
                   <img src={KATILIM_LOGO_B64} alt="" style={{height:30,width:"auto",display:"block"}}/>
@@ -27895,6 +27966,7 @@ function App(){
                   <span style={{fontSize:10.5,fontWeight:600,color:(TEMA==="acik"?"#2E4256":"rgba(255,255,255,0.62)"),letterSpacing:"0.01em",marginTop:1}}>{CV("Katılım Finansının Akıllı Asistanı")}</span>
                 </div>
               </div>
+              )}
               {/* ── PORTFÖYÜM KISAYOLU (2026-09-08 eklendi, 2. turda tasarım
                   gözden geçirildi, 3. turda masaüstü grup düzeltmesi) ──────
                   Ana sayfadaki Portföyüm kartı (PortfoyWidget) kaldırılıp
