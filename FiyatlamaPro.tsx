@@ -4146,6 +4146,9 @@ function PiyasaOzetiBlok({dikey,piyasaGorunen,piyasaSurukle,piyasaOzetiSecim,set
         {dikey && (
           <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px 7px",
             borderBottom:`1px solid ${WA(0.07)}`}}>
+            {/* Logo sütunu için boş, satırla AYNI genişlikte (22px) boşluk —
+                yoksa "Varlık" başlığı satırdaki isimle hizasız duracaktı. */}
+            <span style={{width:22,flexShrink:0}}/>
             <span style={{width:92,flexShrink:0,fontSize:9.5,fontWeight:800,color:WA(0.42),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Varlık")}</span>
             <span style={{flex:1,minWidth:0,textAlign:"right",fontSize:9.5,fontWeight:800,color:WA(0.42),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Fiyat / Değişim")}</span>
             <span style={{width:60,flexShrink:0,textAlign:"right",fontSize:9.5,fontWeight:800,color:WA(0.42),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Grafik")}</span>
@@ -4190,65 +4193,9 @@ const IKILI_SATIR: any = {display:"grid",gridTemplateColumns:"repeat(2,minmax(0,
 // EŞİT bir kart. Mobilde eski görünüm (geniş, 56px ikon) aynen korunuyor.
 // Modül seviyesine alındı ki ana sayfanın hem mobil akışında hem masaüstü
 // satır düzeninde aynı bileşen kullanılsın — iki ayrı kopya tutulmasın.
-// ─── ANA SAYFA FOTO HERO (masaüstü, 2026-09-15) ────────────────────────────
-// Tasarım kapsamı: sabit başlık + alt açıklama + iki buton, sağda hafif bir
-// mimari atmosfer. MEVCUT karusel hero'nun (taksit karşılaştırma, zekât vb.)
-// ÜSTÜNE EKLENİYOR — onu değiştirmiyor, kaldırmıyor (kullanıcı kararı).
-// ⚠️ GERÇEK FOTOĞRAF KULLANILMADI: "çok büyük fotoğraf kullanma, minimal ve
-// premium olsun" talimatına uyuluyor VE üçüncü taraf bir fotoğrafı indirip
-// yeniden yayınlamak telif riski taşır. Bunun yerine kendi çizdiğimiz, hiçbir
-// gerçek yapıya ait olmayan jenerik bir cami silüeti (kubbe + minare) SVG
-// olarak kullanılıyor — dekoratif, marka yeşiliyle uyumlu, çok düşük opaklık.
-function AnaSayfaFotoHero({nav}:{nav:(sc:string)=>void}){
-  return (
-    <div style={{
-      position:"relative",overflow:"hidden",borderRadius:20,marginBottom:14,
-      padding:"28px 32px",minHeight:150,
-      background:(TEMA==="acik"
-        ?"linear-gradient(135deg,#0F2A20 0%,#153A2C 60%,#1B9E7A 140%)"
-        :"linear-gradient(135deg,#0B1F18 0%,#123024 60%,#175C43 140%)"),
-    }}>
-      {/* Dekoratif silüet — sağda, hafif, dekoratif amaçlı (aria-hidden). */}
-      <svg aria-hidden="true" width="340" height="150" viewBox="0 0 340 150"
-        style={{position:"absolute",right:0,bottom:0,opacity:0.16,pointerEvents:"none"}}>
-        <rect x="0" y="110" width="340" height="40" fill="#fff"/>
-        <path d="M40 110 Q40 60 80 60 Q120 60 120 110 Z" fill="#fff"/>
-        <rect x="30" y="30" width="8" height="82" fill="#fff"/>
-        <circle cx="34" cy="26" r="5" fill="#fff"/>
-        <rect x="122" y="20" width="8" height="92" fill="#fff"/>
-        <circle cx="126" cy="16" r="5" fill="#fff"/>
-        <path d="M160 110 Q160 45 210 45 Q260 45 260 110 Z" fill="#fff"/>
-        <rect x="150" y="10" width="7" height="102" fill="#fff"/>
-        <circle cx="153.5" cy="6" r="4.5" fill="#fff"/>
-        <rect x="264" y="10" width="7" height="102" fill="#fff"/>
-        <circle cx="267.5" cy="6" r="4.5" fill="#fff"/>
-        <rect x="290" y="70" width="8" height="42" fill="#fff"/>
-        <circle cx="294" cy="66" r="4" fill="#fff"/>
-      </svg>
-      <div style={{position:"relative",maxWidth:520}}>
-        <div style={{fontSize:11,fontWeight:800,color:"#7BE0BE",textTransform:"uppercase",letterSpacing:0.6,marginBottom:8}}>Katılım Plus</div>
-        <h2 style={{margin:0,fontSize:26,fontWeight:800,color:"#fff",lineHeight:1.28}}>
-          Katılım finansını<br/>tek bir platformda keşfedin.
-        </h2>
-        <p style={{margin:"10px 0 20px",fontSize:13.5,color:"rgba(255,255,255,0.78)",lineHeight:1.5}}>
-          Hesaplamalar, piyasa verileri, yatırım fonları ve katılım finansı araçları artık tek yerde.
-        </p>
-        <div style={{display:"flex",gap:10}}>
-          <button className="press-card" onClick={()=>nav("hesaplaMenu")} style={{
-            display:"flex",alignItems:"center",gap:6,border:"none",cursor:"pointer",
-            background:"linear-gradient(90deg,#1B9E7A,#2CCB9A)",color:"#fff",
-            fontSize:13,fontWeight:700,padding:"10px 18px",borderRadius:12,
-          }}>{CV("Hesaplama Yap")} <span>→</span></button>
-          <button className="press-card" onClick={()=>nav("piyasaMenu")} style={{
-            display:"flex",alignItems:"center",gap:6,cursor:"pointer",
-            background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.25)",color:"#fff",
-            fontSize:13,fontWeight:700,padding:"10px 18px",borderRadius:12,
-          }}>{CV("Piyasayı İncele")}</button>
-        </div>
-      </div>
-    </div>
-  );
-}
+// ─── ANA SAYFA FOTO HERO KALDIRILDI (2026-09-15, kullanıcı kararı) ────────
+// Karuselin üstüne eklenen sabit hero, kullanıcı isteğiyle GERİ ALINDI.
+// Karusel hero AYNEN duruyor (dokunulmadı).
 
 function AsistanKarti({nav,genisEkran}:{nav:(sc:string)=>void;genisEkran:boolean}){
   return (
@@ -4556,11 +4503,20 @@ function KatilimEndeksiTopHareketliler({ nav, onSecim, adet }: { nav: (sc: strin
           <div style={{ fontSize: 11, fontWeight: 600, color: (TEMA==="acik"?"#000000":"#FFFFFF"), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ad}</div>
         </div>
         <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 4 }}>
-          {isHisse ? (
-            <div style={{ fontSize: 13, fontWeight: 700, color: (TEMA==="acik"?"#000000":"#FFFFFF"), marginBottom: 2, whiteSpace: "nowrap" }}>{fiyat ?? "—"}</div>
-          ) : (
-            <div style={{ fontSize: 9.5, color: WA(0.3), marginBottom: 2, whiteSpace: "nowrap" }}>Günlük</div>
-          )}
+          {/* ⚠️ 2026-09-15 (kullanıcı raporu: "Yatırım Fonları seçince alan
+              uzunluğu, BİST Hisse seçince farklı"): kök neden bu üst satırın
+              punto farkıydı — Hisse'de fiyat 13px, Fon'da "Günlük" etiketi
+              9.5px; 10 satır boyunca bu fark birikip panel yüksekliğini
+              gözle görülür şekilde değiştiriyordu. Artık İKİSİ DE aynı SABİT
+              16px'lik bir kutunun içinde ortalanıyor — punto ne olursa
+              olsun satır yüksekliği iki sekmede de BİREBİR aynı. */}
+          <div style={{ height: 16, marginBottom: 2, display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
+            {isHisse ? (
+              <span style={{ fontSize: 13, fontWeight: 700, color: (TEMA==="acik"?"#000000":"#FFFFFF"), whiteSpace: "nowrap" }}>{fiyat ?? "—"}</span>
+            ) : (
+              <span style={{ fontSize: 9.5, color: WA(0.3), whiteSpace: "nowrap" }}>Günlük</span>
+            )}
+          </div>
           <div style={{
             display: "inline-flex", alignItems: "center", gap: 1, padding: "1.5px 5px", borderRadius: 6,
             fontSize: 11, fontWeight: 700, color: up ? C.green : C.red,
@@ -21283,7 +21239,11 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla,duz}:{ad:string,sembol:
       transition:"background-color 700ms ease, border-color 700ms ease, box-shadow 700ms ease",
       ...flashStil,
     }}>
-      {kucukIkon&&(
+      {/* ⚠️ 2026-09-15 (kullanıcı isteği — referans tasarım): DÜZ (ray)
+          görünümünde rozet artık sağ üstte MUTLAK KONUMLU değil, satırın EN
+          BAŞINDA satır-içi bir logo. Kart (mobil) görünümünde ESKİ hâli
+          (sağ üstte mutlak konumlu rozet) AYNEN duruyor — dokunulmadı. */}
+      {!duz && kucukIkon&&(
         kucukIkon.tip==="bayrak" ? (
           <span style={{position:"absolute",top:7,right:8,fontSize:15,lineHeight:1,borderRadius:3,overflow:"hidden",boxShadow:"0 1px 2px rgba(0,0,0,0.25)"}}>{kucukIkon.deger}</span>
         ) : (
@@ -21310,6 +21270,25 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla,duz}:{ad:string,sembol:
           "önce USD/TRY, yanında fiyat ve değişim yüzdesi, yanında grafik").
           Önceki hâlinde ad ÜSTTE, fiyat/değişim ALTTA idi; grafik sağda tek
           başına kalınca arada boş bir alan oluşuyordu. */}
+      {/* Satır içi logo — SADECE düz (ray) görünümde, satırın EN BAŞINDA
+          (2026-09-15, kullanıcı isteği: "en başta logo yanında varlık adı").
+          Tüm rozet tipleri (bayrak/renkli daire/ikon) burada AYNI boyutta
+          (22px) bir dairenin içine alınıyor — flag emoji çıplak bırakılsaydı
+          diğer tiplerle hizası/boyutu tutarsız görünürdü. */}
+      {duz && kucukIkon && (
+        <div style={{
+          width:22,height:22,borderRadius:"50%",flexShrink:0,overflow:"hidden",
+          display:"flex",alignItems:"center",justifyContent:"center",
+          background:kucukIkon.tip==="bayrak"?WA(0.08):kucukIkon.bg,
+          boxShadow:"0 1px 3px rgba(0,0,0,0.18)",
+        }}>
+          {kucukIkon.tip==="bayrak"
+            ? <span style={{fontSize:13,lineHeight:1}}>{kucukIkon.deger}</span>
+            : kucukIkon.tip==="ikon"
+            ? <kucukIkon.Comp size={11} color="#fff" strokeWidth={2.5}/>
+            : <span style={{fontSize:kucukIkon.deger.length>1?8:10,fontWeight:800,color:"#fff",lineHeight:1}}>{kucukIkon.deger}</span>}
+        </div>
+      )}
       <div style={duz?{width:92,flexShrink:0,minWidth:0}:undefined}>
       {/* ⚠️ PUNTO STANDARDI (2026-09-15, kullanıcı raporu: "yazı fontları
           büyüklükleri, kalın-ince ayrımı hepsi farklı"): kart (mobil) modunda
@@ -26712,8 +26691,12 @@ function App(){
       {genisEkran&&(
         <div style={{position:"fixed",top:SERIT_YUKSEKLIK,left:0,bottom:0,width:SIDEBAR_W,zIndex:80,
           display:"flex",flexDirection:"column",boxSizing:"border-box",overflowY:"auto",
-          background:TEMA==="acik"?"linear-gradient(180deg,#FFFFFF 0%,#EDF1F6 100%)":"linear-gradient(180deg,#101C29 0%,#0C1622 100%)",
-          borderRight:`1px solid ${WA(0.07)}`,
+          // ⚠️ 2026-09-15 (kullanıcı isteği: "rengini koyu yapabiliriz, açık
+          // temada da koyu, koyu temada da buna uygun"): yan menü artık HER
+          // İKİ TEMADA da AYNI koyu lacivert zemin. Bu satırdan sonraki TÜM
+          // metin/ikon renkleri de koyu temanın değerlerine SABİTLENDİ.
+          background:"linear-gradient(180deg,#101C29 0%,#0C1622 100%)",
+          borderRight:"1px solid rgba(255,255,255,0.07)",
           /* 2026-09-14: üst dolgu 22→10 — kullanıcı "soldaki header en üstten
              başlasın" dedi; marka artık şeridin hemen altında. */
           boxShadow:"4px 0 24px rgba(0,0,0,0.35)",padding:"10px 14px 16px"}}>
@@ -26723,8 +26706,8 @@ function App(){
               <img src={KATILIM_LOGO_B64} alt="" style={{height:28,width:"auto",display:"block"}}/>
             </div>
             <div style={{display:"flex",flexDirection:"column",minWidth:0}}>
-              <span style={{fontSize:16,fontWeight:800,letterSpacing:"-0.01em",color:(TEMA==="acik"?"#16222E":"#EAF1FA")}}>Katılım <span style={{background:"linear-gradient(90deg,#1B9E7A,#2CCB9A)",WebkitBackgroundClip:"text",backgroundClip:"text",color:"transparent"}}>Plus</span></span>
-              <span style={{fontSize:10,fontWeight:600,color:(TEMA==="acik"?"#274762":"rgba(255,255,255,0.72)"),marginTop:1,whiteSpace:"nowrap"}}>{CV("Katılım Finansının Akıllı Asistanı")}</span>
+              <span style={{fontSize:16,fontWeight:800,letterSpacing:"-0.01em",color:"#EAF1FA"}}>Katılım <span style={{background:"linear-gradient(90deg,#1B9E7A,#2CCB9A)",WebkitBackgroundClip:"text",backgroundClip:"text",color:"transparent"}}>Plus</span></span>
+              <span style={{fontSize:10,fontWeight:600,color:"rgba(255,255,255,0.72)",marginTop:1,whiteSpace:"nowrap"}}>{CV("Katılım Finansının Akıllı Asistanı")}</span>
             </div>
           </div>
           {/* Ana gezinme (alt bar sekmelerinin masaüstü karşılığı) */}
@@ -26746,9 +26729,7 @@ function App(){
                     // rgba(255,255,255,0.85), açık temada aynı #16222E ile
                     // yazılıyordu ve gradyan arka planda siliniyordu. Artık
                     // iki temada da tam opak renk + daha kalın punto.
-                    color:aktif
-                      ? (TEMA==="acik"?"#0F3B66":"#FFFFFF")
-                      : (TEMA==="acik"?"#1B2C3D":"#E4EDF8"),
+                    color:aktif ? "#FFFFFF" : "#E4EDF8",
                   }}>{CV(t.label)}</span>
                 </div>
               );
@@ -26759,36 +26740,46 @@ function App(){
             {/* 2026-07-30: Başlık 9,5 → 11 punto, harf aralığı 1 → 0,8
                 (büyüyünce 1 fazla dağıtıyordu) ve renk iki temada da
                 belirgin hale getirildi. */}
-            <div style={{fontSize:11,fontWeight:800,letterSpacing:0.8,color:TEMA==="acik"?"#274762":"rgba(255,255,255,0.62)",padding:"0 12px 9px"}}>{CV("HIZLI ERİŞİM")}</div>
+            {/* GRUPLAMA (2026-09-15, kullanici istegi: "sol menude gruplama
+                olsun"): onceden 13 madde TEK duz liste halindeydi. Uc gruba
+                bolundu -- hepsi AYNI mevcut ekran anahtarlarini kullaniyor,
+                hicbiri degismedi/kaldirilmadi. */}
             {[
-              {key:"getiriKarsilastirma",label:"Getiri Karşılaştırma"},
-              {key:"haftalikOzet",label:"Haftalık Piyasa Özeti"},
-              {key:"finansalTakvim",label:"Finansal Takvim"},
-              {key:"fiyatAlarmlarim",label:"Fiyat Alarmlarım"},
-              // 2026-07-30 eklenenler — masaüstünde yalnızca menü içinden
-              // zor bulunan, sık kullanılan ekranlar.
-              {key:"portfoyum",label:"Portföyüm"},
-              {key:"kiraSertifikasi",label:"Kira Sertifikası İhraçları"},
-              {key:"katilimBankalari",label:"Katılım Bankaları"},
-              {key:"kfkNedir",label:"Katılım Finans Kefalet (KFK) Nedir?"},
-              {key:"katilimSektoru",label:"Katılım Bankacılığı Sektörü"},
-              {key:"ekonomiSozluk",label:"Ekonomi Sözlüğü"},
-              {key:"zekatHesabi",label:"Zekât Hesaplayıcı"},
-              {key:"piyasaHaberleri",label:"Piyasa Haberleri"},
-              {key:"sozluk",label:"Finans Sözlüğü"},
-            ].map(m=>(
-              <div key={m.key} className="kp-side-item" onClick={()=>nav(m.key)} style={{
-                display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderRadius:10,
-                background:screen===m.key?"rgba(91,155,216,0.14)":"transparent",
-              }}>
-                <span style={{width:20,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon k={m.key} size={16}/></span>
-                <span style={{
-                  fontSize:13.5,
-                  fontWeight:screen===m.key?800:600,
-                  color:screen===m.key
-                    ? (TEMA==="acik"?"#0F3B66":"#FFFFFF")
-                    : (TEMA==="acik"?"#1B2C3D":"#E4EDF8"),
-                }}>{CV(m.label)}</span>
+              {baslik:"PİYASA & TAKİP", ogeler:[
+                {key:"getiriKarsilastirma",label:"Getiri Karşılaştırma"},
+                {key:"haftalikOzet",label:"Haftalık Piyasa Özeti"},
+                {key:"finansalTakvim",label:"Finansal Takvim"},
+                {key:"fiyatAlarmlarim",label:"Fiyat Alarmlarım"},
+                {key:"piyasaHaberleri",label:"Piyasa Haberleri"},
+              ]},
+              {baslik:"PORTFÖY", ogeler:[
+                {key:"portfoyum",label:"Portföyüm"},
+                {key:"kiraSertifikasi",label:"Kira Sertifikası İhraçları"},
+              ]},
+              {baslik:"BİLGİ", ogeler:[
+                {key:"katilimBankalari",label:"Katılım Bankaları"},
+                {key:"kfkNedir",label:"Katılım Finans Kefalet (KFK) Nedir?"},
+                {key:"katilimSektoru",label:"Katılım Bankacılığı Sektörü"},
+                {key:"ekonomiSozluk",label:"Ekonomi Sözlüğü"},
+                {key:"zekatHesabi",label:"Zekât Hesaplayıcı"},
+                {key:"sozluk",label:"Finans Sözlüğü"},
+              ]},
+            ].map((grup,gi)=>(
+              <div key={grup.baslik} style={{marginTop:gi===0?0:10}}>
+                <div style={{fontSize:11,fontWeight:800,letterSpacing:0.8,color:"rgba(255,255,255,0.62)",padding:"0 12px 9px"}}>{CV(grup.baslik)}</div>
+                {grup.ogeler.map(m=>(
+                  <div key={m.key} className="kp-side-item" onClick={()=>nav(m.key)} style={{
+                    display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderRadius:10,
+                    background:screen===m.key?"rgba(91,155,216,0.14)":"transparent",
+                  }}>
+                    <span style={{width:20,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon k={m.key} size={16}/></span>
+                    <span style={{
+                      fontSize:13.5,
+                      fontWeight:screen===m.key?800:600,
+                      color:screen===m.key ? "#FFFFFF" : "#E4EDF8",
+                    }}>{CV(m.label)}</span>
+                  </div>
+                ))}
               </div>
             ))}
           </div>
@@ -26796,9 +26787,9 @@ function App(){
           <div style={{marginTop:"auto",paddingTop:12,borderTop:`1px solid ${WA(0.07)}`}}>
             <div className="kp-side-item" onClick={()=>nav("ayarlar")} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:10,background:screen==="ayarlar"?"rgba(91,155,216,0.14)":"transparent"}}>
               <span style={{width:20,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon k="ayarlar" size={16}/></span>
-              <span style={{fontSize:13.5,fontWeight:screen==="ayarlar"?800:600,color:screen==="ayarlar"?(TEMA==="acik"?"#0F3B66":"#FFFFFF"):(TEMA==="acik"?"#1B2C3D":"#E4EDF8")}}>{CV("Ayarlar")}</span>
+              <span style={{fontSize:13.5,fontWeight:screen==="ayarlar"?800:600,color:screen==="ayarlar"?"#FFFFFF":"#E4EDF8"}}>{CV("Ayarlar")}</span>
             </div>
-            <div style={{fontSize:10,color:TEMA==="acik"?"#5A7189":"rgba(255,255,255,0.45)",padding:"10px 12px 0",lineHeight:1.5}}>© {new Date().getFullYear()} Katılım Plus</div>
+            <div style={{fontSize:10,color:"rgba(255,255,255,0.45)",padding:"10px 12px 0",lineHeight:1.5}}>© {new Date().getFullYear()} Katılım Plus</div>
           </div>
         </div>
       )}
@@ -27101,12 +27092,6 @@ function App(){
                 SONRA başlayabiliyordu. Ana kolona alınınca ray sayfanın en
                 üstünden, başlıktaki ikonların hemen altından başlıyor.
                 Mobilde ızgara düz div olduğu için akış değişmiyor. */}
-
-            {/* Foto hero — YALNIZCA MASAÜSTÜ (2026-09-15, tasarım kapsamı).
-                Karusel hero'nun ÜSTÜNDE, ayrı bir blok; karusel AYNEN duruyor.
-                Mobilde hiç render edilmiyor — mobil tasarım bu turun kapsamı
-                DIŞINDA (prompt "MASAÜSTÜ WEB UI/UX REDESIGN" başlıklı). */}
-            {genisEkran && <AnaSayfaFotoHero nav={nav}/>}
 
             {/* ── HERO + BİST KARTI (2026-09-14, masaüstü düzen revizyonu) ──
                 MASAÜSTÜ: hero şeridi geniş ekranda tek başına 1000px'e
