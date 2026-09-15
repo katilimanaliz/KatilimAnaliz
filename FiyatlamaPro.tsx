@@ -4235,7 +4235,11 @@ function AsistanKarti({nav,genisEkran}:{nav:(sc:string)=>void;genisEkran:boolean
 // 2026-09-14 (kullanıcı isteği): sağ taraftaki boşluğa BİST 30 eklendi, alt
 // satıra yükselen/düşen hisse sayısı (hisse-proxy, KatilimEndeksiTopHareketliler
 // ile AYNI "kea_hisseler" cache'i paylaşılarak — ekstra istek YOK).
-function AnaSayfaBist100Karti({ nav, doluYukseklik }: { nav: (sc: string) => void; doluYukseklik?: boolean }) {
+// ⚠️ 2026-09-15: `doluYukseklik` prop'u KALDIRILDI. Kart hero'nun yanındayken
+// onun sabit 158px yüksekliğine eşitlenmesi gerekiyordu; kart sağ raya
+// taşınınca böyle bir eş yükseklik kısıtı kalmadı ve prop'u geçen tek çağrı
+// da kalktı. Ölü kod bırakmamak için silindi.
+function AnaSayfaBist100Karti({ nav }: { nav: (sc: string) => void }) {
   const CACHE_TTL = 5 * 60 * 1000; // 5 dakika — KatilimEndeksiTopHareketliler ile aynı ritim
 
   // ── Endeksler (BİST 100 + BİST 30) — tek cache anahtarında birlikte ──
@@ -4357,15 +4361,8 @@ function AnaSayfaBist100Karti({ nav, doluYukseklik }: { nav: (sc: string) => voi
   return (
     <div className="press-tile" onClick={() => nav("bistHisseTarayici")} style={{
       position: "relative", overflow: "hidden", cursor: "pointer",
-      marginBottom: doluYukseklik ? 0 : 26,
-      // doluYukseklik: masaüstünde hero şeridinin YANINDA duruyor. Hero
-      // kutusunun yüksekliği SABİT 158px (bkz. AnaSayfaHeroSerit) — kart da
-      // birebir o yüksekliğe sabitleniyor ki ALT KENARLARI hizalı olsun.
-      // (Önceden ızgara "stretch" ile kartı hero'nun ALTINDAKİ karusel
-      // noktalarına kadar uzatıyordu, kart hero'dan uzun görünüyordu —
-      // kullanıcı raporu, 2026-09-14.)
-      ...(doluYukseklik ? { height: 158, boxSizing: "border-box" as const, display: "flex", flexDirection: "column" as const, justifyContent: "center" } : {}),
-      borderRadius: doluYukseklik ? 22 : 22, padding: "14px 16px",
+      marginBottom: 20,
+      borderRadius: 22, padding: "14px 16px",
       background: (TEMA === "acik" ? "#E9EEF4" : WA(0.05)), border: `1px solid ${WA(0.08)}`,
     }}>
       <span style={{ position: "absolute", top: 14, right: 14, color: WA(0.3), fontSize: 16 }}>›</span>
@@ -27050,15 +27047,14 @@ function App(){
                   else if (hedef === "sozluk") { nav("sozluk"); }
                 }} />
               );
-              if (!genisEkran) return hero;
-              return (
-                <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:14,alignItems:"start"}}>
-                  <div style={{minWidth:0}}>{hero}</div>
-                  <div style={{minWidth:0,display:"flex",flexDirection:"column"}}>
-                    <AnaSayfaBist100Karti nav={nav} doluYukseklik/>
-                  </div>
-                </div>
-              );
+              // ⚠️ 2026-09-15 (kullanıcı isteği): BİST 100/30 kartı buradan
+              // ÇIKARILDI, sağ rayın en üstüne (Piyasa Özeti'nin üstüne)
+              // taşındı. Hero artık ana kolonda tek başına — ana kolon zaten
+              // rayın solunda daraldığı için eskisi gibi boş yayılmıyor.
+              // NOT: BIST 100 hem bu kartta hem Piyasa Özeti listesinde
+              // görünüyor; kullanıcı "ikisi de kalsın" dedi (2026-09-15),
+              // bilinçli bir tekrar — yanlışlıkla eklenmiş sanılmasın.
+              return hero;
             })()}
 
             {/* Piyasa Özeti — MOBİLDE burada (yatay şerit), hero'nun hemen
@@ -27434,6 +27430,13 @@ function App(){
 
             {/* ── SAĞ RAY — yalnızca dikey listeler ────────────────────────── */}
             <div style={{minWidth:0}}>
+
+            {/* BİST 100 / BİST 30 — sağ rayın EN ÜSTÜNDE (2026-09-15,
+                kullanıcı isteği). Önceden hero'nun yanındaydı. doluYukseklik
+                VERİLMİYOR: o prop, kartı hero'nun sabit 158px yüksekliğine
+                sabitliyordu; rayda böyle bir eş yükseklik kısıtı yok, kart
+                kendi doğal boyunda duruyor. */}
+            {genisEkran && <AnaSayfaBist100Karti nav={nav}/>}
 
             {/* Piyasa Özeti — MASAÜSTÜNDE burada, DİKEY liste olarak.
                 Mobilde yukarıda yatay şerit olarak render ediliyor. */}
