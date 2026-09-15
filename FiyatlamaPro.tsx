@@ -13729,7 +13729,11 @@ function TaksitKarsilastirma({ s }: { s: any }) {
   );
 }
 
-function KatilimSektoruOzet({onAc}:{onAc:()=>void}){
+// dar=true: MASAÜSTÜ SAĞ RAYI (≈222px). Kartın tablosunda normalde dört sütun
+// var (Kalem / Tutar / Pay / Değişim); bu genişlikte dördü sığmıyor, sayılar
+// kırpılıyordu. Dar modda yalnızca Kalem + Tutar gösteriliyor, Pay ve Değişim
+// "Tümünü gör" ekranına bırakılıyor (2026-09-15, kullanıcı ile kararlaştırıldı).
+function KatilimSektoruOzet({onAc,dar}:{onAc:()=>void;dar?:boolean}){
   const [veri,setVeri]=useState<any>(null);
   useEffect(()=>{ kbVeriGetir().then(setVeri); },[]);
   const h=useMemo(()=>kbHesapla(veri),[veri]);
@@ -13751,9 +13755,9 @@ function KatilimSektoruOzet({onAc}:{onAc:()=>void}){
                     overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ad}</span>
       <span style={{fontSize:12,fontWeight:800,fontFamily:"monospace",marginRight:9,
                     color:(TEMA==="acik"?C.label:"#fff")}}>{deger}</span>
-      <span style={{fontSize:10.5,fontWeight:700,fontFamily:"monospace",width:50,
-                    textAlign:"right",marginRight:9,color:C.blue}}>{payMetin}</span>
-      <span style={{fontSize:10.5,fontWeight:700,width:62,textAlign:"right",color:renk}}>{sag}</span>
+      {!dar && <span style={{fontSize:10.5,fontWeight:700,fontFamily:"monospace",width:50,
+                    textAlign:"right",marginRight:9,color:C.blue}}>{payMetin}</span>}
+      {!dar && <span style={{fontSize:10.5,fontWeight:700,width:62,textAlign:"right",color:renk}}>{sag}</span>}
     </div>
   );
   // Sütun başlıkları — hangi sayının ne olduğu belirsiz kalmasındı
@@ -13761,8 +13765,8 @@ function KatilimSektoruOzet({onAc}:{onAc:()=>void}){
     <div style={{display:"flex",alignItems:"center",padding:"0 0 6px"}}>
       <span style={{flex:1,fontSize:9.5,fontWeight:700,color:WA(0.42),textTransform:"uppercase",letterSpacing:.4}}>Kalem</span>
       <span style={{fontSize:9.5,fontWeight:700,color:WA(0.42),marginRight:9,textTransform:"uppercase",letterSpacing:.4}}>Tutar</span>
-      <span style={{fontSize:9.5,fontWeight:700,color:WA(0.42),width:50,textAlign:"right",marginRight:9,textTransform:"uppercase",letterSpacing:.4}}>Pay</span>
-      <span style={{fontSize:9.5,fontWeight:700,color:WA(0.42),width:62,textAlign:"right",textTransform:"uppercase",letterSpacing:.4}}>Değişim</span>
+      {!dar && <span style={{fontSize:9.5,fontWeight:700,color:WA(0.42),width:50,textAlign:"right",marginRight:9,textTransform:"uppercase",letterSpacing:.4}}>Pay</span>}
+      {!dar && <span style={{fontSize:9.5,fontWeight:700,color:WA(0.42),width:62,textAlign:"right",textTransform:"uppercase",letterSpacing:.4}}>Değişim</span>}
     </div>
   );
   // Sektör toplamı eksikse h.pay() null döner ve "—" yazılır — uydurma yapılmaz.
@@ -27168,11 +27172,23 @@ function App(){
                     dar sütunda alt alta kutucuklar dağınık duruyordu. Artık
                     tek bir kutunun içinde ayraçlı satırlar — Katılım Sektörü
                     kartıyla da aynı görsel dilde. */}
+                {/* ② MASAÜSTÜNDE YATAY (2026-09-15, kullanıcı isteği): Katılım
+                    Sektörü kartı sağ raya taşınınca bu blok ana kolonun TAM
+                    genişliğini aldı; 11 gösterge tek sütunda alt alta çok
+                    uzuyordu. Artık 3 sütunlu ızgara.
+                    ⚠️ Ayraçlar: tek sütunda satırlar arası çizgi `borderTop`
+                    ile veriliyordu; ızgarada bu her sütunun İLK satırında da
+                    çizgi demek olurdu. Bu yüzden masaüstünde çizgi yerine
+                    hücreler arası boşluk (gap) kullanılıyor.
+                    MOBİLDE tek sütun + ayraçlı satırlar AYNEN kalıyor. */}
                 <div onClick={()=>{setPiyasaTabloFiltre("gostergeler");nav("piyasaMenu");}} style={{
-                  marginBottom:14,cursor:"pointer",borderRadius:16,overflow:"hidden",
-                  ...(TEMA==="acik"
-                    ? {background:"#E9EEF4",border:"1px solid rgba(22,34,46,0.08)"}
-                    : {background:"#16222E",border:`1px solid ${WA(0.07)}`}),
+                  marginBottom:14,cursor:"pointer",
+                  ...(genisEkran
+                    ? {display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:10}
+                    : {borderRadius:16,overflow:"hidden",
+                       ...(TEMA==="acik"
+                         ? {background:"#E9EEF4",border:"1px solid rgba(22,34,46,0.08)"}
+                         : {background:"#16222E",border:`1px solid ${WA(0.07)}`})}),
                 }}>
                   {[
                     {ad:"TCMB Politika Faizi", deger:"%37,00", tarih:"Haziran 2026 · PPK", ikon:Landmark, renk:C.blue},
@@ -27211,8 +27227,13 @@ function App(){
                         setGostergeUyari("Veri henüz yüklenmedi, birkaç saniye sonra tekrar dene.");
                         setTimeout(()=>setGostergeUyari(null),2200);
                       }
-                    }} style={{display:"flex",alignItems:"center",gap:11,padding:"11px 16px",cursor:gecmisDestekli?"pointer":"default",
-                      borderTop:i===0?"none":`1px solid ${WA(0.07)}`}}>
+                    }} style={{display:"flex",alignItems:"center",gap:11,padding:"11px 14px",cursor:gecmisDestekli?"pointer":"default",
+                      ...(genisEkran
+                        ? {borderRadius:12,minWidth:0,
+                           ...(TEMA==="acik"
+                             ? {background:"#E9EEF4",border:"1px solid rgba(22,34,46,0.08)"}
+                             : {background:"#16222E",border:`1px solid ${WA(0.07)}`})}
+                        : {borderTop:i===0?"none":`1px solid ${WA(0.07)}`})}}>
                       <div style={{width:32,height:32,borderRadius:9,background:`${g.renk}26`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                         <IkonBileseni size={16} color={g.renk} strokeWidth={2}/>
                       </div>
@@ -27255,17 +27276,18 @@ function App(){
                         kartın altında kesik görünüyordu. Artık bloklar kendi
                         doğal yüksekliklerinde tam uzuyor, satır da en uzun
                         karta göre yükseliyor (alignItems:"stretch"). */}
-                    <div style={IKILI_SATIR}>
+                    {/* ③ Piyasalar ile bu satır arasındaki boşluk açıldı
+                        (2026-09-15, kullanıcı isteği): 8 → 26px. */}
+                    <div style={{...IKILI_SATIR,marginTop:26}}>
                       <div style={{minWidth:0}}>{endeksBlok}</div>
                       <div style={{minWidth:0}}>{fonBlok}</div>
                     </div>
-                    {/* Finansal Göstergeler + Sektör: üstteki satırdan sonra
-                        geldiği için doğal olarak aşağıda; ikisi de kendi doğal
-                        yüksekliğinde ve ÜSTTEN hizalı. */}
-                    <div style={{...IKILI_SATIR,marginTop:8}}>
-                      <div style={{minWidth:0}}>{gostergelerBlok}</div>
-                      <div style={{minWidth:0}}><KatilimSektoruOzet onAc={()=>nav("katilimSektoru")}/></div>
-                    </div>
+                    {/* ② Finansal Göstergeler artık TAM GENİŞLİKTE ve YATAY
+                        (kendi içinde 3 sütunlu ızgara — bkz. gostergelerBlok).
+                        ① Katılım Sektörü kartı buradan ÇIKARILIP sağ raya,
+                        sözlüklerin altına taşındı; boşalan genişliği
+                        göstergeler alıyor. */}
+                    {gostergelerBlok}
                     {portfoyModal}
                   </>
                 );
@@ -27424,6 +27446,12 @@ function App(){
                 </div>
               </div>
             )}
+
+            {/* ① Katılım Bankacılığı Sektörü — MASAÜSTÜNDE sağ rayın en
+                altında, sözlüklerin hemen ardında (2026-09-15, kullanıcı
+                isteği). Önceden ana kolonda Göstergeler'in yanındaydı.
+                Mobilde bu kart yukarıdaki akışta kendi sırasında duruyor. */}
+            {genisEkran && <KatilimSektoruOzet onAc={()=>nav("katilimSektoru")} dar/>}
 
 
             </div>{/* /sağ ray */}
