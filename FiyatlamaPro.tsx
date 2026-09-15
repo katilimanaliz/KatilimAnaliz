@@ -21226,14 +21226,20 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla,duz}:{ad:string,sembol:
       {/* Etiket alanı sağdaki ikon için 28px daralıyor; "GRAM ALTIN" gibi uzun
           adlar kesiliyordu. Punto ada göre kademelendi — kısa kodlar (USD/TRY)
           eski boyutunda kalıyor, uzunlar sığacak kadar küçülüyor. */}
-      <p style={{margin:0,fontSize:ad.length>=12?7.8:ad.length>=10?8.3:ad.length>=8?9.2:10,fontWeight:700,color:WA(0.45),textTransform:"uppercase",letterSpacing:ad.length>=10?-0.1:0.2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingRight:24}}>{TR(ad)}</p>
+      {/* ⚠️ DÜZ (sağ ray) GÖRÜNÜMÜ İKİ SÜTUNLU (2026-09-15, kullanıcı raporu:
+          "grafik çok büyük, onu rakamların sağına alalım"): solda ad + fiyat +
+          değişim, sağda mini grafik. Kart görünümünde (mobil yatay şerit) her
+          şey ALT ALTA kalıyor — orada kart zaten dar, yan yana sığmaz. */}
+      <div style={duz?{display:"flex",alignItems:"center",gap:10}:undefined}>
+      <div style={duz?{flex:1,minWidth:0}:undefined}>
+      <p style={{margin:0,fontSize:ad.length>=12?7.8:ad.length>=10?8.3:ad.length>=8?9.2:10,fontWeight:700,color:WA(0.45),textTransform:"uppercase",letterSpacing:ad.length>=10?-0.1:0.2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingRight:duz?0:24}}>{TR(ad)}</p>
       {guncel!=null ? (
         <>
           <p className="spark-in" style={{margin:"4px 0 2px",fontSize:15,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:4}}>
             {`${paraOnek||""}${fmtDeger(guncel)}`}
             <span style={{fontSize:11,opacity:flash?1:0,transition:"opacity 700ms ease",color:flash==="up"?C.green:C.red}}>{flash==="up"?"▲":flash==="down"?"▼":""}</span>
           </p>
-          <p className="spark-in" style={{margin:"0 0 6px",fontSize:11,fontWeight:700,color:degisim!=null?renk:WA(0.3)}}>
+          <p className="spark-in" style={{margin:duz?"0":"0 0 6px",fontSize:11,fontWeight:700,color:degisim!=null?renk:WA(0.3)}}>
             {degisim!=null?`${pozitif?"+":""}${degisim.toFixed(2).replace(".",",")}%`:"—"}
           </p>
         </>
@@ -21243,11 +21249,15 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla,duz}:{ad:string,sembol:
           <div className="skeleton" style={{height:11,width:"45%",marginBottom:8}}/>
         </>
       )}
+      </div>
+      <div style={duz?{width:78,flexShrink:0}:undefined}>
       {(guncel==null&&yukleniyor)
-        ? <div className="skeleton" style={{height:24,borderRadius:6}}/>
-        : <svg width="100%" height="24" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{display:"block"}}>
+        ? <div className="skeleton" style={{height:duz?20:24,borderRadius:6}}/>
+        : <svg width="100%" height={duz?20:24} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{display:"block"}}>
             {pathD&&<path className="spark-in" d={pathD} fill="none" stroke={renk} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/>}
           </svg>}
+      </div>
+      </div>
     </div>
   );
 }
@@ -26486,6 +26496,15 @@ function App(){
         }
         .piyasa-scroll::-webkit-scrollbar { display:none; }
         .piyasa-scroll { scrollbar-width: none; -ms-overflow-style: none; }
+        /* MOBİLDE kaydırma çubuğu gizli (2026-09-15, kullanıcı raporu: ana
+           menüde sağda çubuk görünüyordu). Dokunmatik cihazda çubuk zaten
+           gereksiz — parmakla kaydırılıyor — ve içeriğin sağını kırpıyor.
+           Masaüstü (pointer:fine) dalı AŞAĞIDA ayrıca tanımlı, orada ince
+           çubuk GÖRÜNMEYE devam ediyor: fare ile kaydırma göstergesi gerekli. */
+        @media (pointer:coarse) {
+          *::-webkit-scrollbar { width:0; height:0; display:none; }
+          * { scrollbar-width: none; -ms-overflow-style: none; }
+        }
         /* Masaüstü: yatay şeritlerde kaba beyaz scrollbar yerine ince/koyu görünüm */
         @media (pointer:fine) {
           *::-webkit-scrollbar { width:8px; height:6px; }
@@ -26771,36 +26790,15 @@ function App(){
                 seviyeye taşındı (dosyanın sonunda, alt barın hemen
                 yanında). Burada sadece onun kapladığı yer kadar boşluk
                 bırakılıyor. */}
-            <div style={{height:anaSayfaUstBlokYukseklik}}/>
-
-            {/* ── HERO + BİST KARTI (2026-09-14, masaüstü düzen revizyonu) ──
-                MASAÜSTÜ: hero şeridi geniş ekranda tek başına 1000px'e
-                yayılıp içi boş kalıyordu (kullanıcı raporu, ekran
-                görüntüsüyle). Artık hero 2 birim / BİST kartı 1 birim
-                olacak şekilde YAN YANA — sağdaki boşluk dolduruluyor.
-                MOBİL: hero AYNEN eskisi gibi tek başına; BİST kartı mobilde
-                aşağıda, AI Asistanı'nın altındaki KENDİ yerinde kalıyor
-                (iki ayrı dal — biri değişirse diğeri etkilenmesin). */}
-            {(()=>{
-              const hero = (
-                <AnaSayfaHeroSerit selamlama={TR(selamlama)} bugunMetni={kisaTarihStr} kullaniciAdi={kullaniciAdi} genisEkran={genisEkran} git={(hedef) => {
-                  if (hedef === "altin") { setPiyasaTabloFiltre("altin"); nav("piyasaMenu"); }
-                  else if (hedef === "gostergeler") { setPiyasaTabloFiltre("gostergeler"); nav("piyasaMenu"); }
-                  else if (hedef === "zekat") { nav("zekatHesabi"); }
-                  else if (hedef === "taksitKarsilastirma") { nav("taksitKarsilastirma"); }
-                  else if (hedef === "sozluk") { nav("sozluk"); }
-                }} />
-              );
-              if (!genisEkran) return hero;
-              return (
-                <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:14,alignItems:"start"}}>
-                  <div style={{minWidth:0}}>{hero}</div>
-                  <div style={{minWidth:0,display:"flex",flexDirection:"column"}}>
-                    <AnaSayfaBist100Karti nav={nav} doluYukseklik/>
-                  </div>
-                </div>
-              );
-            })()}
+            {/* ⚠️ ŞERİT PAYI (2026-09-15, kullanıcı raporu: "kayan bant
+                ekleyince sabit menü aşağı kaydığı için menü üstü kısmen
+                görünmüyor"): sabit başlık artık top:SERIT_YUKSEKLIK'ten
+                başlıyor, yani ekranda kapladığı toplam dikey alan
+                SERIT_YUKSEKLIK + kendi yüksekliği. Boşluk ise ResizeObserver
+                ile SADECE başlığın kendi offsetHeight'ını ölçüyordu; aradaki
+                fark kadar içerik başlığın altında kalıyordu. Mobilde şerit
+                render edilmediği için pay da eklenmiyor. */}
+            <div style={{height:anaSayfaUstBlokYukseklik + (genisEkran?SERIT_YUKSEKLIK:0)}}/>
 
             {/* ── APP STORE BANNER — yalnızca MOBİL tarayıcıda; native'de gizli.
                 Masaüstünde de gizli (2026-07-13): sağ alttaki QR kartı aynı işi
@@ -26923,7 +26921,8 @@ function App(){
         ):(
           /* Başlık artık kök seviyedeki sabit blokta (aşağıda) — burada
              sadece onun kapladığı yer kadar boşluk bırakılıyor. */
-          <div style={{height:sekmeUstBlokYukseklik}}/>
+          /* Şerit payı — bkz. ana sayfadaki aynı düzeltmenin notu. */
+          <div style={{height:sekmeUstBlokYukseklik + (genisEkran?SERIT_YUKSEKLIK:0)}}/>
         )}
       </div>
 
@@ -26996,6 +26995,42 @@ function App(){
 
             {/* ── ANA KOLON ── */}
             <div style={{minWidth:0}}>
+
+            {/* ⚠️ HERO ARTIK ANA KOLONUN İÇİNDE (2026-09-15, kullanıcı isteği:
+                "Piyasa özeti alanı, portföy ve bildirim tuşlarının hemen
+                altından başlayacak"). Önceden hero, gövdenin ÜSTÜNDEKİ ayrı
+                blokta ve tam genişlikteydi; sağ ray ancak hero bittikten
+                SONRA başlayabiliyordu. Ana kolona alınınca ray sayfanın en
+                üstünden, başlıktaki ikonların hemen altından başlıyor.
+                Mobilde ızgara düz div olduğu için akış değişmiyor. */}
+            {/* ── HERO + BİST KARTI (2026-09-14, masaüstü düzen revizyonu) ──
+                MASAÜSTÜ: hero şeridi geniş ekranda tek başına 1000px'e
+                yayılıp içi boş kalıyordu (kullanıcı raporu, ekran
+                görüntüsüyle). Artık hero 2 birim / BİST kartı 1 birim
+                olacak şekilde YAN YANA — sağdaki boşluk dolduruluyor.
+                MOBİL: hero AYNEN eskisi gibi tek başına; BİST kartı mobilde
+                aşağıda, AI Asistanı'nın altındaki KENDİ yerinde kalıyor
+                (iki ayrı dal — biri değişirse diğeri etkilenmesin). */}
+            {(()=>{
+              const hero = (
+                <AnaSayfaHeroSerit selamlama={TR(selamlama)} bugunMetni={kisaTarihStr} kullaniciAdi={kullaniciAdi} genisEkran={genisEkran} git={(hedef) => {
+                  if (hedef === "altin") { setPiyasaTabloFiltre("altin"); nav("piyasaMenu"); }
+                  else if (hedef === "gostergeler") { setPiyasaTabloFiltre("gostergeler"); nav("piyasaMenu"); }
+                  else if (hedef === "zekat") { nav("zekatHesabi"); }
+                  else if (hedef === "taksitKarsilastirma") { nav("taksitKarsilastirma"); }
+                  else if (hedef === "sozluk") { nav("sozluk"); }
+                }} />
+              );
+              if (!genisEkran) return hero;
+              return (
+                <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:14,alignItems:"start"}}>
+                  <div style={{minWidth:0}}>{hero}</div>
+                  <div style={{minWidth:0,display:"flex",flexDirection:"column"}}>
+                    <AnaSayfaBist100Karti nav={nav} doluYukseklik/>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Favorilerim */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
@@ -27294,6 +27329,15 @@ function App(){
                 satırda (Göstergeler'in yanında). Burada yalnızca mobilde. */}
             {!genisEkran && <KatilimSektoruOzet onAc={()=>nav("katilimSektoru")}/>}
 
+            {/* Son Haberler — MASAÜSTÜNDE ana kolonun en altında, TAM
+                GENİŞLİKTE. tekKutu veriliyor: burada da tek bir kutunun içinde
+                ayraçlı satırlar (mobildeki ayrı kartlar görünümü değil).
+                Mobilde bu blok yukarıdaki akışta kendi sırasında. */}
+            {genisEkran && <SonHaberlerBlok tekKutu sonHaberler={sonHaberler} sonHaberlerHata={sonHaberlerHata}
+              sonHaberlerIlkYuklemeBitti={sonHaberlerIlkYuklemeBitti} sonHaberlerGuncelleme={sonHaberlerGuncelleme}
+              sonHaberlerYenileniyor={sonHaberlerYenileniyor} anaSayfaHaberGetir={anaSayfaHaberGetir}
+              genisEkran={genisEkran} nav={nav}/>}
+
             </div>{/* /ana kolon */}
 
             {/* ── SAĞ RAY — yalnızca dikey listeler ────────────────────────── */}
@@ -27310,10 +27354,10 @@ function App(){
                 akışın kendi sırasına render ediliyor (bkz. mobil dal) —
                 önceki turda sıra ve görünüm farkında olmadan mobilde de
                 değişmişti, kullanıcı bildirdi. */}
-            {genisEkran && <SonHaberlerBlok tekKutu sonHaberler={sonHaberler} sonHaberlerHata={sonHaberlerHata}
-              sonHaberlerIlkYuklemeBitti={sonHaberlerIlkYuklemeBitti} sonHaberlerGuncelleme={sonHaberlerGuncelleme}
-              sonHaberlerYenileniyor={sonHaberlerYenileniyor} anaSayfaHaberGetir={anaSayfaHaberGetir}
-              genisEkran={genisEkran} nav={nav}/>}
+            {/* Yaklaşan Takvim, piyasa verilerinin HEMEN ALTINDA (2026-09-15,
+                kullanıcı isteği). Son Haberler ise raydan ÇIKARILIP ana kolonun
+                en altına, tam genişlikte YATAY bir blok olarak alındı — orada
+                kısayol satırının altında büyük bir beyaz alan kalıyordu. */}
             {genisEkran && <YaklasanTakvimBlok tekKutu yaklasanTakvim={yaklasanTakvim} nav={nav}/>}
 
 
