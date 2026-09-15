@@ -4010,7 +4010,7 @@ function SonHaberlerBlok({tekKutu,sonHaberler,sonHaberlerHata,sonHaberlerIlkYukl
                 haber listesi tek sütunu şişirmesin), mobil aynen. */}
             {/* 2026-09-14 (kullanıcı isteği): haberler AYRI AYRI kutular
                 değil, TEK bir kutunun içinde ayraçlı satırlar. */}
-            <div className="piyasa-scroll" style={{marginBottom:14,maxHeight:genisEkran?420:266,overflowY:"auto",WebkitOverflowScrolling:"touch",
+            <div className="piyasa-scroll" style={{marginBottom:14,maxHeight:genisEkran?420:400,overflowY:"auto",WebkitOverflowScrolling:"touch",
               ...(tekKutu?{borderRadius:16,background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`}:{})}}>
               {sonHaberler.map((h,i)=>{
                 const farkDk=Math.round((Date.now()-new Date(h.tarih).getTime())/60000);
@@ -27219,9 +27219,16 @@ function App(){
                       seri:tlrefkSeriTahmini(evdsMakro), seriAd:"TLREFK (Katılım)",
                     };})(),
                     {ad:"TCMB Brüt Rezerv", deger:evdsMakro?.["REZERV_TOPLAM"]?.deger!=null?`$${(evdsMakro["REZERV_TOPLAM"].deger/1000).toFixed(2).replace(".",",")} Mr`:"—", tarih:evdsMakro?.["REZERV_TOPLAM"]?.tarih?`${evdsMakro["REZERV_TOPLAM"].tarih} · canlı`:"", ikon:Wallet, renk:C.green, seri:evdsMakro?.["REZERV_TOPLAM_SERI"], seriAd:"TCMB Brüt Rezerv (Milyon $)", seriBirim:"milyon$"},
-                    // ── EK GÖSTERGELER (2026-09-15) ────────────────────────
+                    // ── EK GÖSTERGELER — YALNIZCA MASAÜSTÜ ────────────────
                     // Hepsi ZATEN çekilen evdsMakro verisinden geliyor; yeni
                     // bir istek/uç eklenmedi. Veri gelmemişse satır "—" gösterir.
+                    // ⚠️ 2026-09-15 (kullanıcı raporu: "mobilde finansal
+                    // göstergeler ekleme yapmışsın"): bu 6 kalem masaüstündeki
+                    // 3 SÜTUNLU ızgarayı doldurmak için eklenmişti. Mobilde
+                    // ızgara yok, liste TEK SÜTUN — 6 kalem daha eklenince
+                    // ana sayfa gereksiz uzuyor ve altındaki bloklar aşağı
+                    // itiliyordu. Bu yüzden mobilde eski 6 gösterge kalıyor.
+                    ...(genisEkran ? [
                     {ad:"TCMB Net Rezerv", deger:evdsMakro?.["REZERV_NET"]?.deger!=null?`$${(evdsMakro["REZERV_NET"].deger/1000).toFixed(2).replace(".",",")} Mr`:"—", tarih:evdsMakro?.["REZERV_NET"]?.tarih?`${evdsMakro["REZERV_NET"].tarih} · canlı`:"", ikon:Wallet, renk:C.teal, seri:evdsMakro?.["REZERV_NET_SERI"], seriAd:"TCMB Net Rezerv (Milyon $)", seriBirim:"milyon$"},
                     {ad:"TCMB Ağırlıklı Fonlama (AOFM)", deger:evdsMakro?.["TP.APIFON4"]?.deger!=null?`%${parseFloat(evdsMakro["TP.APIFON4"].deger).toFixed(2).replace(".",",")}`:"—", tarih:evdsMakro?.["TP.APIFON4"]?.tarih?`${evdsMakro["TP.APIFON4"].tarih} · canlı`:"", ikon:Landmark, renk:C.blue, seri:evdsMakro?.["TP.APIFON4_SERI"], seriAd:"TCMB Ağırlıklı Fonlama Oranı"},
                     // ZK nema oranı: ayrı EVDS serisi YOK; AOFM × %86 ile
@@ -27234,6 +27241,7 @@ function App(){
                     // ekleyelim eşitlensin"). ECB politika faizi ZATEN çekilen
                     // evdsMakro verisinde mevcut — yeni istek eklenmedi.
                     {ad:"ECB Politika Faizi", deger:evdsMakro?.["FRED_ECB"]?.deger!=null?`%${evdsMakro["FRED_ECB"].deger.toFixed(2).replace(".",",")}`:"—", tarih:evdsMakro?.["FRED_ECB"]?.tarih||"", ikon:Landmark, renk:"#60A5FA", seri:evdsMakro?.["FRED_ECB_SERI"], seriAd:"ECB Politika Faizi"},
+                    ] : []),
                   ].map((g:any,i,arr)=>{
                     const IkonBileseni=g.ikon;
                     const gecmisDestekli = !!g.seriAd; // bu gösterge kavramsal olarak geçmiş veri sunuyor mu
