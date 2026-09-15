@@ -21258,9 +21258,9 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla,duz}:{ad:string,sembol:
           bu kademelendirme satırdan satıra farklı punto üretiyordu; orada
           SABİT 11px/700 kullanılıyor. */}
       <p style={{margin:0,
-        fontSize:duz?13:(ad.length>=12?7.8:ad.length>=10?8.3:ad.length>=8?9.2:10),
-        fontWeight:duz?800:700,
-        color:duz?(TEMA==="acik"?C.label:"#fff"):WA(0.45),
+        fontSize:duz?11:(ad.length>=12?7.8:ad.length>=10?8.3:ad.length>=8?9.2:10),
+        fontWeight:700,
+        color:duz?WA(0.6):WA(0.45),
         textTransform:"uppercase",letterSpacing:duz?0.2:(ad.length>=10?-0.1:0.2),
         overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingRight:duz?0:24}}>{TR(ad)}</p>
       </div>
