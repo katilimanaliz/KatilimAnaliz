@@ -1175,13 +1175,46 @@ async function fonTahminSnapshotCalistir(req, res) {
       // Artık cron zamanlamasından TAMAMEN bağımsız: fiyat serisinde o
       // tarihe ait nokta yayınlanır yayınlanmaz (hangi saatte olursa olsun)
       // bir sonraki gerceklestir çağrısında dolduruluyor.
+      // ⚠️ DÜZELTME (2026-09-15, kullanıcı raporu: "bazılarında hiç gelmiyor,
+      // boş kalıyor" — PBR'de 11.09 kaydı kalıcı olarak boş kalmıştı):
+      // ÖNCEDEN burada SADECE `kayitlar[kayitlar.length - 1]` (son kayıt)
+      // kontrol ediliyordu. Bir günün gerçek getirisi o gün kapatılamazsa
+      // (TEFAS o fiyatı henüz yayınlamamışsa) ertesi gün YENİ bir kayıt
+      // eklendiği anda o kayıt artık "son" olmaktan çıkıyor ve BİR DAHA HİÇ
+      // denenmiyordu — kalıcı olarak "—" kalıyordu. Teşhis bunu doğruladı:
+      // PBR/11.09 için gerçek getiri kalıcı seride VARDI (-16,5598) ama
+      // fonTahmin:gecmis kaydı null'du.
+      // Artık gercek'i boş olan TÜM kayıtlar (bugün hariç — bugünün kapanışı
+      // henüz yok) seriden doldurulmaya çalışılıyor.
+      // Seri TEK KEZ çekiliyor: eski kod her kayıt için ayrı ayrı
+      // fonGunlukGercekGetiriDahili çağırsaydı aynı seri defalarca okunurdu.
       if (gerceklestirMi) {
-        const son = kayitlar[kayitlar.length - 1];
-        if (son && son.gercek == null && son.tarih !== bugun) {
-          const gercek = await fonGunlukGercekGetiriDahili(kod, son.tarih);
-          if (typeof gercek === "number") {
-            son.gercek = gercek;
-            son.isabet = isabetHesapla(son.tahmin, gercek);
+        const bekleyenler = kayitlar.filter((kayit) => kayit && kayit.gercek == null && kayit.tarih !== bugun);
+        if (bekleyenler.length > 0) {
+          // Kalıcı seri penceresi FON_GUNLUK_GETIRI_PENCERE_GUN (28 gün) —
+          // bundan eskisi zaten kurtarılamaz, ama seride ZATEN varsa (ilk
+          // tam zincir çekiminden kalma) buradan yine de doldurulur.
+          // ── "ÇOK GEÇ DOLUYOR" AYAĞI ────────────────────────────────────
+          // Kalıcı seri günde EN FAZLA bir kez tazeleniyor
+          // (sonKontrolTarihiTR). gerceklestir sabah, TEFAS o fiyatı
+          // yayınlamadan ÖNCE çalışırsa seri "bugün kontrol edildi" diye
+          // işaretleniyor ve aynı gün içindeki sonraki çağrılar ağa hiç
+          // gitmiyor — kayıt ertesi güne kalıyordu.
+          // Bekleyen kayıt YAKIN TARİHLİYSE (son 4 gün) bu korumayı atlayıp
+          // seriyi tazeliyoruz. Eski bekleyenler için zorlamıyoruz: TEFAS'ta
+          // gerçekten olmayan bir tarih için her çağrıda ağa gitmek sonsuz
+          // boşa istek demek olurdu.
+          const dortGunOnce = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000)
+            .toISOString().slice(0, 10);
+          const yakinBekleyenVar = bekleyenler.some((kayit) => String(kayit.tarih) >= dortGunOnce);
+          const { kayitlar: seri } = await gunlukGetiriSerisiGetirVeGuncelle(kod, { zorlaKontrol: yakinBekleyenVar });
+          const seriMap = new Map((seri || []).map((s) => [s.tarih, s.getiri]));
+          for (const kayit of bekleyenler) {
+            const gercek = seriMap.get(kayit.tarih);
+            if (typeof gercek === "number") {
+              kayit.gercek = gercek;
+              kayit.isabet = isabetHesapla(kayit.tahmin, gercek);
+            }
           }
         }
       }
