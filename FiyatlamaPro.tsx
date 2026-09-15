@@ -4495,12 +4495,18 @@ function KatilimEndeksiTopHareketliler({ nav, onSecim, adet }: { nav: (sc: strin
     return (
       <div
         onClick={() => onSecim?.(sekme, sembol)}
-        style={{ display: "flex", alignItems: "center", padding: "8px 2px", borderBottom: index === 4 ? "none" : `1px solid ${WA(0.06)}`, minWidth: 0, cursor: onSecim ? "pointer" : "default" }}
+        // ⚠️ 2026-09-15 (kullanıcı isteği: "Popüler Fonlar ile Katılım
+        // Endeksi bitiş alanları arasındaki farkı istemiyorum, BİST Hisse
+        // alanındaki rakamları biraz küçülterek aynı hizaya getir"):
+        // iç dolgu 8px → 6px. Hem hisse hem fon sekmesinde AYNI oranda
+        // küçültüldü — bu yüzden bir önceki turdaki hisse/fon PARİTESİ
+        // (bkz. yukarıdaki not) BOZULMUYOR, panel sadece bütünüyle kısalıyor.
+        style={{ display: "flex", alignItems: "center", padding: "6px 2px", borderBottom: index === 4 ? "none" : `1px solid ${WA(0.06)}`, minWidth: 0, cursor: onSecim ? "pointer" : "default" }}
       >
-        <div style={{ width: 14, flexShrink: 0, fontSize: 10.5, color: WA(0.3) }}>{index + 1}</div>
+        <div style={{ width: 14, flexShrink: 0, fontSize: 10, color: WA(0.3) }}>{index + 1}</div>
         <div style={{ flex: "1 1 auto", minWidth: 0 }}>
-          <div style={{ fontSize: 13.5, fontWeight: 700, color: C.soft }}>{sembol}</div>
-          <div style={{ fontSize: 11, fontWeight: 600, color: (TEMA==="acik"?"#000000":"#FFFFFF"), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ad}</div>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: C.soft }}>{sembol}</div>
+          <div style={{ fontSize: 10.5, fontWeight: 600, color: (TEMA==="acik"?"#000000":"#FFFFFF"), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ad}</div>
         </div>
         <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 4 }}>
           {/* ⚠️ 2026-09-15 (kullanıcı raporu: "Yatırım Fonları seçince alan
@@ -4508,21 +4514,21 @@ function KatilimEndeksiTopHareketliler({ nav, onSecim, adet }: { nav: (sc: strin
               punto farkıydı — Hisse'de fiyat 13px, Fon'da "Günlük" etiketi
               9.5px; 10 satır boyunca bu fark birikip panel yüksekliğini
               gözle görülür şekilde değiştiriyordu. Artık İKİSİ DE aynı SABİT
-              16px'lik bir kutunun içinde ortalanıyor — punto ne olursa
+              yükseklikte bir kutunun içinde ortalanıyor — punto ne olursa
               olsun satır yüksekliği iki sekmede de BİREBİR aynı. */}
-          <div style={{ height: 16, marginBottom: 2, display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
+          <div style={{ height: 14, marginBottom: 2, display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
             {isHisse ? (
-              <span style={{ fontSize: 13, fontWeight: 700, color: (TEMA==="acik"?"#000000":"#FFFFFF"), whiteSpace: "nowrap" }}>{fiyat ?? "—"}</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: (TEMA==="acik"?"#000000":"#FFFFFF"), whiteSpace: "nowrap" }}>{fiyat ?? "—"}</span>
             ) : (
-              <span style={{ fontSize: 9.5, color: WA(0.3), whiteSpace: "nowrap" }}>Günlük</span>
+              <span style={{ fontSize: 9, color: WA(0.3), whiteSpace: "nowrap" }}>Günlük</span>
             )}
           </div>
           <div style={{
-            display: "inline-flex", alignItems: "center", gap: 1, padding: "1.5px 5px", borderRadius: 6,
-            fontSize: 11, fontWeight: 700, color: up ? C.green : C.red,
+            display: "inline-flex", alignItems: "center", gap: 1, padding: "1px 4px", borderRadius: 6,
+            fontSize: 10, fontWeight: 700, color: up ? C.green : C.red,
             background: up ? C.greenLight : "rgba(248,113,113,0.15)", whiteSpace: "nowrap",
           }}>
-            {up ? <ArrowUp size={9} strokeWidth={3} /> : <ArrowDown size={9} strokeWidth={3} />}
+            {up ? <ArrowUp size={8} strokeWidth={3} /> : <ArrowDown size={8} strokeWidth={3} />}
             {Math.abs(deg).toFixed(2)}%
           </div>
         </div>
@@ -21218,11 +21224,15 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla,duz}:{ad:string,sembol:
     if(a.includes("USD")||a.includes("DOLAR")) return bayrak("🇺🇸","$","#2E7D32");
     if(a.includes("EUR")) return bayrak("🇪🇺","€","#24479E");
     if(a.includes("GBP")||a.includes("STERLİN")) return bayrak("🇬🇧","£","#5B3A8E");
-    if(a.includes("ALTIN")||a.includes("ALTİN")) return {tip:"metin",deger:"Au",bg:"#B8912E"};
-    if(a.includes("GÜMÜŞ")||a.includes("GUMUS")) return {tip:"metin",deger:"Ag",bg:"#7A8591"};
+    // ⚠️ 2026-09-15 (kullanıcı isteği — referans tasarım): BİST/Altın/Gümüş
+    // artık BAYRAK/HARF rozeti DEĞİL, referans görseldeki gibi TEMATİK bir
+    // ikon (BİST → yükseliş grafiği, Altın/Gümüş → madeni para). Zemin
+    // renkleri AYNEN korundu — sadece rozetin içeriği değişti.
+    if(a.includes("ALTIN")||a.includes("ALTİN")) return {tip:"ikon",Comp:Coins,bg:"#B8912E"};
+    if(a.includes("GÜMÜŞ")||a.includes("GUMUS")) return {tip:"ikon",Comp:Gem,bg:"#7A8591"};
     if(a.includes("BITCOIN")||a.includes("BTC")) return {tip:"ikon",Comp:Bitcoin,bg:"#D9820A"};
     if(a.includes("ETHEREUM")||a.includes("ETH")) return {tip:"metin",deger:"Ξ",bg:"#4A5FC1"};
-    if(a.includes("BIST")) return bayrak("🇹🇷","₺","#C0392B");
+    if(a.includes("BIST")) return {tip:"ikon",Comp:BarChart3,bg:"#1A8F5C"};
     if(a.includes("BRENT")||a.includes("PETROL")||a.includes("WTI")) return {tip:"ikon",Comp:Droplets,bg:"#1E3A5F"};
     if(a.includes("DAX")) return bayrak("🇩🇪","DE","#3A3A3A");
     if(a.includes("S&P")||a.includes("NASDAQ")||a.includes("DOW")) return bayrak("🇺🇸","US","#1A3A6E");
@@ -21305,15 +21315,31 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla,duz}:{ad:string,sembol:
       </div>
       <div style={duz?{flex:1,minWidth:0,textAlign:"right"}:undefined}>
       {guncel!=null ? (
+        duz ? (
+          /* ⚠️ 2026-09-15 (kullanıcı isteği — referans tasarım): fiyat ve
+             değişim yüzdesi artık ALT ALTA değil, TEK SATIRDA yan yana
+             (fiyat solda, değişim rozeti sağda) — referans görseldeki
+             "48,64 ▲%0,07" düzenine uygun. Kart (mobil) görünümü dokunulmadı,
+             hâlâ iki ayrı satır. */
+          <p className="spark-in" style={{margin:0,display:"flex",alignItems:"baseline",justifyContent:"flex-end",gap:6,whiteSpace:"nowrap"}}>
+            <span style={{fontSize:13,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace"}}>
+              {`${paraOnek||""}${fmtDeger(guncel)}`}
+            </span>
+            <span style={{fontSize:11,fontWeight:700,color:degisim!=null?renk:WA(0.3)}}>
+              {degisim!=null?`${pozitif?"+":""}${degisim.toFixed(2).replace(".",",")}%`:"—"}
+            </span>
+          </p>
+        ) : (
         <>
-          <p className="spark-in" style={{margin:duz?"0":"4px 0 2px",fontSize:duz?13:15,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"flex",alignItems:"center",justifyContent:duz?"flex-end":"flex-start",gap:4}}>
+          <p className="spark-in" style={{margin:"4px 0 2px",fontSize:15,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"flex",alignItems:"center",justifyContent:"flex-start",gap:4}}>
             {`${paraOnek||""}${fmtDeger(guncel)}`}
             <span style={{fontSize:11,opacity:flash?1:0,transition:"opacity 700ms ease",color:flash==="up"?C.green:C.red}}>{flash==="up"?"▲":flash==="down"?"▼":""}</span>
           </p>
-          <p className="spark-in" style={{margin:duz?"1px 0 0":"0 0 6px",fontSize:11,fontWeight:700,color:degisim!=null?renk:WA(0.3),textAlign:duz?"right":"left"}}>
+          <p className="spark-in" style={{margin:"0 0 6px",fontSize:11,fontWeight:700,color:degisim!=null?renk:WA(0.3),textAlign:"left"}}>
             {degisim!=null?`${pozitif?"+":""}${degisim.toFixed(2).replace(".",",")}%`:"—"}
           </p>
         </>
+        )
       ) : (
         <>
           <div className="skeleton" style={{height:15,width:"75%",margin:"5px 0 4px"}}/>
@@ -26567,23 +26593,14 @@ function App(){
         }
         .piyasa-scroll::-webkit-scrollbar { display:none; }
         .piyasa-scroll { scrollbar-width: none; -ms-overflow-style: none; }
-        /* MOBİLDE kaydırma çubuğu gizli (2026-09-15, kullanıcı raporu: ana
-           menüde sağda çubuk görünüyordu). Dokunmatik cihazda çubuk zaten
-           gereksiz — parmakla kaydırılıyor — ve içeriğin sağını kırpıyor.
-           Masaüstü (pointer:fine) dalı AŞAĞIDA ayrıca tanımlı, orada ince
-           çubuk GÖRÜNMEYE devam ediyor: fare ile kaydırma göstergesi gerekli. */
-        @media (pointer:coarse) {
-          *::-webkit-scrollbar { width:0; height:0; display:none; }
-          * { scrollbar-width: none; -ms-overflow-style: none; }
-        }
-        /* Masaüstü: yatay şeritlerde kaba beyaz scrollbar yerine ince/koyu görünüm */
-        @media (pointer:fine) {
-          *::-webkit-scrollbar { width:8px; height:6px; }
-          *::-webkit-scrollbar-track { background:transparent; }
-          *::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.14); border-radius:4px; }
-          *::-webkit-scrollbar-thumb:hover { background:rgba(255,255,255,0.25); }
-          * { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.14) transparent; }
-        }
+        /* KAYDIRMA ÇUBUĞU HER YERDE GİZLİ (2026-09-15, kullanıcı isteği:
+           "tüm menülerdeki kaydırma çubuğu görüntüsünü kaldıralım"). Önceden
+           masaüstünde (pointer:fine) ince/koyu bir çubuk BİLEREK GÖSTERİLİYORDU
+           (fare ile kaydırma göstergesi olsun diye); kullanıcı bunu da
+           istemedi. Artık pointer tipinden BAĞIMSIZ, her yerde gizli —
+           kaydırma İŞLEVİ aynen çalışıyor, sadece görsel çubuk yok. */
+        *::-webkit-scrollbar { width:0; height:0; display:none; }
+        * { scrollbar-width: none; -ms-overflow-style: none; }
         .press-card { transition: transform 120ms ease, opacity 120ms ease; -webkit-tap-highlight-color: transparent; }
         .press-card:active { transform: scale(0.98); opacity: 0.92; }
         .press-tile { transition: transform 140ms cubic-bezier(0.34,1.56,0.64,1), box-shadow 140ms ease; -webkit-tap-highlight-color: transparent; }
@@ -26691,12 +26708,13 @@ function App(){
       {genisEkran&&(
         <div style={{position:"fixed",top:SERIT_YUKSEKLIK,left:0,bottom:0,width:SIDEBAR_W,zIndex:80,
           display:"flex",flexDirection:"column",boxSizing:"border-box",overflowY:"auto",
-          // ⚠️ 2026-09-15 (kullanıcı isteği: "rengini koyu yapabiliriz, açık
-          // temada da koyu, koyu temada da buna uygun"): yan menü artık HER
-          // İKİ TEMADA da AYNI koyu lacivert zemin. Bu satırdan sonraki TÜM
-          // metin/ikon renkleri de koyu temanın değerlerine SABİTLENDİ.
-          background:"linear-gradient(180deg,#101C29 0%,#0C1622 100%)",
-          borderRight:"1px solid rgba(255,255,255,0.07)",
+          // ⚠️ 2026-09-15 (kullanıcı kararı: "sol menü rengi eski haline
+          // getirelim"): bir önceki turda TEK RENK (her iki temada koyu)
+          // yapılmıştı, kullanıcı denedi ve TEMA'ya göre değişen ESKİ
+          // davranışa dönülmesini istedi. Gruplama (Piyasa & Takip / Portföy
+          // / Bilgi) KALDI — yalnızca renk geri alındı.
+          background:TEMA==="acik"?"linear-gradient(180deg,#FFFFFF 0%,#EDF1F6 100%)":"linear-gradient(180deg,#101C29 0%,#0C1622 100%)",
+          borderRight:`1px solid ${WA(0.07)}`,
           /* 2026-09-14: üst dolgu 22→10 — kullanıcı "soldaki header en üstten
              başlasın" dedi; marka artık şeridin hemen altında. */
           boxShadow:"4px 0 24px rgba(0,0,0,0.35)",padding:"10px 14px 16px"}}>
@@ -26706,8 +26724,8 @@ function App(){
               <img src={KATILIM_LOGO_B64} alt="" style={{height:28,width:"auto",display:"block"}}/>
             </div>
             <div style={{display:"flex",flexDirection:"column",minWidth:0}}>
-              <span style={{fontSize:16,fontWeight:800,letterSpacing:"-0.01em",color:"#EAF1FA"}}>Katılım <span style={{background:"linear-gradient(90deg,#1B9E7A,#2CCB9A)",WebkitBackgroundClip:"text",backgroundClip:"text",color:"transparent"}}>Plus</span></span>
-              <span style={{fontSize:10,fontWeight:600,color:"rgba(255,255,255,0.72)",marginTop:1,whiteSpace:"nowrap"}}>{CV("Katılım Finansının Akıllı Asistanı")}</span>
+              <span style={{fontSize:16,fontWeight:800,letterSpacing:"-0.01em",color:(TEMA==="acik"?"#16222E":"#EAF1FA")}}>Katılım <span style={{background:"linear-gradient(90deg,#1B9E7A,#2CCB9A)",WebkitBackgroundClip:"text",backgroundClip:"text",color:"transparent"}}>Plus</span></span>
+              <span style={{fontSize:10,fontWeight:600,color:(TEMA==="acik"?"#274762":"rgba(255,255,255,0.72)"),marginTop:1,whiteSpace:"nowrap"}}>{CV("Katılım Finansının Akıllı Asistanı")}</span>
             </div>
           </div>
           {/* Ana gezinme (alt bar sekmelerinin masaüstü karşılığı) */}
@@ -26729,7 +26747,9 @@ function App(){
                     // rgba(255,255,255,0.85), açık temada aynı #16222E ile
                     // yazılıyordu ve gradyan arka planda siliniyordu. Artık
                     // iki temada da tam opak renk + daha kalın punto.
-                    color:aktif ? "#FFFFFF" : "#E4EDF8",
+                    color:aktif
+                      ? (TEMA==="acik"?"#0F3B66":"#FFFFFF")
+                      : (TEMA==="acik"?"#1B2C3D":"#E4EDF8"),
                   }}>{CV(t.label)}</span>
                 </div>
               );
@@ -26754,9 +26774,9 @@ function App(){
               ]},
               {baslik:"PORTFÖY", ogeler:[
                 {key:"portfoyum",label:"Portföyüm"},
-                {key:"kiraSertifikasi",label:"Kira Sertifikası İhraçları"},
               ]},
               {baslik:"BİLGİ", ogeler:[
+                {key:"kiraSertifikasi",label:"Kira Sertifikası İhraçları"},
                 {key:"katilimBankalari",label:"Katılım Bankaları"},
                 {key:"kfkNedir",label:"Katılım Finans Kefalet (KFK) Nedir?"},
                 {key:"katilimSektoru",label:"Katılım Bankacılığı Sektörü"},
@@ -26766,7 +26786,7 @@ function App(){
               ]},
             ].map((grup,gi)=>(
               <div key={grup.baslik} style={{marginTop:gi===0?0:10}}>
-                <div style={{fontSize:11,fontWeight:800,letterSpacing:0.8,color:"rgba(255,255,255,0.62)",padding:"0 12px 9px"}}>{CV(grup.baslik)}</div>
+                <div style={{fontSize:11,fontWeight:800,letterSpacing:0.8,color:TEMA==="acik"?"#274762":"rgba(255,255,255,0.62)",padding:"0 12px 9px"}}>{CV(grup.baslik)}</div>
                 {grup.ogeler.map(m=>(
                   <div key={m.key} className="kp-side-item" onClick={()=>nav(m.key)} style={{
                     display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderRadius:10,
@@ -26776,7 +26796,9 @@ function App(){
                     <span style={{
                       fontSize:13.5,
                       fontWeight:screen===m.key?800:600,
-                      color:screen===m.key ? "#FFFFFF" : "#E4EDF8",
+                      color:screen===m.key
+                        ? (TEMA==="acik"?"#0F3B66":"#FFFFFF")
+                        : (TEMA==="acik"?"#1B2C3D":"#E4EDF8"),
                     }}>{CV(m.label)}</span>
                   </div>
                 ))}
@@ -26787,9 +26809,9 @@ function App(){
           <div style={{marginTop:"auto",paddingTop:12,borderTop:`1px solid ${WA(0.07)}`}}>
             <div className="kp-side-item" onClick={()=>nav("ayarlar")} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:10,background:screen==="ayarlar"?"rgba(91,155,216,0.14)":"transparent"}}>
               <span style={{width:20,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon k="ayarlar" size={16}/></span>
-              <span style={{fontSize:13.5,fontWeight:screen==="ayarlar"?800:600,color:screen==="ayarlar"?"#FFFFFF":"#E4EDF8"}}>{CV("Ayarlar")}</span>
+              <span style={{fontSize:13.5,fontWeight:screen==="ayarlar"?800:600,color:screen==="ayarlar"?(TEMA==="acik"?"#0F3B66":"#FFFFFF"):(TEMA==="acik"?"#1B2C3D":"#E4EDF8")}}>{CV("Ayarlar")}</span>
             </div>
-            <div style={{fontSize:10,color:"rgba(255,255,255,0.45)",padding:"10px 12px 0",lineHeight:1.5}}>© {new Date().getFullYear()} Katılım Plus</div>
+            <div style={{fontSize:10,color:TEMA==="acik"?"#5A7189":"rgba(255,255,255,0.45)",padding:"10px 12px 0",lineHeight:1.5}}>© {new Date().getFullYear()} Katılım Plus</div>
           </div>
         </div>
       )}
@@ -27424,8 +27446,12 @@ function App(){
               );
             })()}
 
-            {/* ── SATIR — Haftalık Özet | Getiri Karşılaştırma | Asistan ──── */}
-            <div style={genisEkran?{...IKILI_SATIR,gridTemplateColumns:"repeat(3,minmax(0,1fr))"}:{}}>
+            {/* ── SATIR — Haftalık Özet | Getiri Karşılaştırma ────────────
+                ⚠️ 2026-09-15 (kullanıcı isteği: "AI Finans Asistanı sağ
+                menü en alta alalım"): bu satır ÜÇ değil İKİ karta düştü;
+                Asistan kartı sağ rayın EN ALTINA taşındı (aşağıda,
+                Katılım Sektörü'nden sonra). */}
+            <div style={genisEkran?IKILI_SATIR:{}}>
             <div style={genisEkran?{minWidth:0}:{}}>
 {/* Haftalık Piyasa Özeti — ana menü alt kısayolu */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
@@ -27472,9 +27498,6 @@ function App(){
               <span style={{color:WA(0.3),fontSize:20,flexShrink:0}}>›</span>
             </div>
             </div>
-            {/* Asistan — masaüstünde bu satırın üçüncü kartı. Mobilde yukarıda,
-                Piyasalar'ın hemen altında duruyor. */}
-            {genisEkran && <div style={{minWidth:0}}><AsistanKarti nav={nav} genisEkran={genisEkran}/></div>}
             </div>
 
             {/* Katılım Bankacılığı Sektörü — MASAÜSTÜNDE yukarıdaki ikili
@@ -27555,6 +27578,12 @@ function App(){
                 isteği). Önceden ana kolonda Göstergeler'in yanındaydı.
                 Mobilde bu kart yukarıdaki akışta kendi sırasında duruyor. */}
             {genisEkran && <KatilimSektoruOzet onAc={()=>nav("katilimSektoru")} dar/>}
+
+            {/* AI Finans Asistanı — sağ rayın EN ALTINDA (2026-09-15,
+                kullanıcı isteği: "AI Finans Asistanı sağ menü en alta
+                alalım"). Önceden ana kolonda Haftalık Özet/Getiri
+                Karşılaştırma ile aynı satırdaydı. */}
+            {genisEkran && <div style={{marginTop:14}}><AsistanKarti nav={nav} genisEkran={genisEkran}/></div>}
 
 
             </div>{/* /sağ ray */}
