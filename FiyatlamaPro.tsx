@@ -4146,9 +4146,9 @@ function PiyasaOzetiBlok({dikey,piyasaGorunen,piyasaSurukle,piyasaOzetiSecim,set
         {dikey && (
           <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px 7px",
             borderBottom:`1px solid ${WA(0.07)}`}}>
-            <span style={{width:74,flexShrink:0,fontSize:9.5,fontWeight:800,color:WA(0.42),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Varlık")}</span>
+            <span style={{width:92,flexShrink:0,fontSize:9.5,fontWeight:800,color:WA(0.42),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Varlık")}</span>
             <span style={{flex:1,minWidth:0,textAlign:"right",fontSize:9.5,fontWeight:800,color:WA(0.42),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Fiyat / Değişim")}</span>
-            <span style={{width:70,flexShrink:0,textAlign:"right",fontSize:9.5,fontWeight:800,color:WA(0.42),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Grafik")}</span>
+            <span style={{width:60,flexShrink:0,textAlign:"right",fontSize:9.5,fontWeight:800,color:WA(0.42),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Grafik")}</span>
           </div>
         )}
         {piyasaGorunen.map((k:any,i:number)=>{
@@ -21253,14 +21253,19 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla,duz}:{ad:string,sembol:
           "önce USD/TRY, yanında fiyat ve değişim yüzdesi, yanında grafik").
           Önceki hâlinde ad ÜSTTE, fiyat/değişim ALTTA idi; grafik sağda tek
           başına kalınca arada boş bir alan oluşuyordu. */}
-      <div style={duz?{width:74,flexShrink:0,minWidth:0}:undefined}>
+      <div style={duz?{width:92,flexShrink:0,minWidth:0}:undefined}>
       {/* ⚠️ PUNTO STANDARDI (2026-09-15, kullanıcı raporu: "yazı fontları
           büyüklükleri, kalın-ince ayrımı hepsi farklı"): kart (mobil) modunda
           punto ADIN UZUNLUĞUNA göre kademeleniyor — dar kartta "GRAM ALTIN"
           gibi uzun adlar sığsın diye. Ray modunda genişlik yeterli olduğu için
           bu kademelendirme satırdan satıra farklı punto üretiyordu; orada
           SABİT 11px/700 kullanılıyor. */}
-      <p style={{margin:0,fontSize:duz?11:(ad.length>=12?7.8:ad.length>=10?8.3:ad.length>=8?9.2:10),fontWeight:700,color:WA(0.45),textTransform:"uppercase",letterSpacing:duz?0.3:(ad.length>=10?-0.1:0.2),overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingRight:duz?0:24}}>{TR(ad)}</p>
+      <p style={{margin:0,
+        fontSize:duz?13:(ad.length>=12?7.8:ad.length>=10?8.3:ad.length>=8?9.2:10),
+        fontWeight:duz?800:700,
+        color:duz?(TEMA==="acik"?C.label:"#fff"):WA(0.45),
+        textTransform:"uppercase",letterSpacing:duz?0.2:(ad.length>=10?-0.1:0.2),
+        overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingRight:duz?0:24}}>{TR(ad)}</p>
       </div>
       <div style={duz?{flex:1,minWidth:0,textAlign:"right"}:undefined}>
       {guncel!=null ? (
@@ -21280,7 +21285,7 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla,duz}:{ad:string,sembol:
         </>
       )}
       </div>
-      <div style={duz?{width:70,flexShrink:0}:undefined}>
+      <div style={duz?{width:60,flexShrink:0}:undefined}>
       {(guncel==null&&yukleniyor)
         ? <div className="skeleton" style={{height:duz?20:24,borderRadius:6}}/>
         : <svg width="100%" height={duz?20:24} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{display:"block"}}>
@@ -26285,17 +26290,17 @@ function App(){
   // aralarında beğendiği birini öne çekmek isteyebilir. Bu yüzden onlar da
   // sürüklenebiliyor ve öne çekilen kart KAYITLI LİSTEYE EKLENİYOR (örtük
   // "bunu istiyorum" jesti). Dokunulmayan otomatik kartlar kayda geçmez.
+  // ⚠️ 2026-09-15 (kullanıcı raporu: "düzenle ile aşağıdaki varlıklar
+  // tutarsız, işaretsiz olup listede olanlar var"):
+  // ÖNCEDEN masaüstünde liste, ekran genişliğine göre hesaplanan bir hedefe
+  // kadar SEÇİLMEMİŞ varlıklarla DOLDURULUYORDU. Bu, Piyasa Özeti tam
+  // genişlikte YATAY bir şeritken mantıklıydı — şerit yarım kalmasın diye.
+  // Artık blok masaüstünde dar bir DİKEY liste (sağ ray); doldurma hem
+  // gereksiz hem de Düzenle'de işaretli olmayan varlıkların listede
+  // görünmesine yol açıyordu. Liste artık TAM OLARAK kullanıcının seçimi.
   const piyasaGorunen = useMemo(()=>{
-    let liste=piyasaOzetiSecim.map(sembol=>PIYASA_OZETI_KATALOG[sembol]).filter(Boolean);
-    if(genisEkran){
-      const hedef=Math.max(liste.length, Math.ceil((ekranW-SIDEBAR_W-40)/(114*icerikOlcek)));
-      for(const sembol of Object.keys(PIYASA_OZETI_KATALOG)){
-        if(liste.length>=hedef) break;
-        if(!piyasaOzetiSecim.includes(sembol)) liste=[...liste,PIYASA_OZETI_KATALOG[sembol]];
-      }
-    }
-    return liste;
-  },[piyasaOzetiSecim,genisEkran,ekranW,icerikOlcek]);
+    return piyasaOzetiSecim.map(sembol=>PIYASA_OZETI_KATALOG[sembol]).filter(Boolean);
+  },[piyasaOzetiSecim]);
 
   const piyasaOzetiSirala=(yeniTam:string[],tasinan:string)=>{
     // Yeni kayıtlı liste: görünen sıradaki kartlardan yalnızca kullanıcının
