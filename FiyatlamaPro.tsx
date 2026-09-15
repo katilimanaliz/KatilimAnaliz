@@ -4165,10 +4165,10 @@ function PiyasaOzetiBlok({dikey,piyasaGorunen,piyasaSurukle,piyasaOzetiSecim,set
 // kartı birden değiştirir — kartlardan birini elle büyütüp diğerlerini unutma
 // (bu düzende hizasızlığın ana kaynağı) böylece mümkün olmuyor.
 const IKILI_SATIR: any = {display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:16,marginBottom:18,alignItems:"stretch"};
-// Hücre: taşan içerik kartın KENDİ içinde kayar, satırı uzatmaz.
-const HUCRE_STIL: any = {minWidth:0,overflowY:"auto",overflowX:"hidden"};
-const SATIR1_YUKSEKLIK = 470;   // Katılım Endeksi / Popüler Fonlar / Göstergeler
-const SATIR2_YUKSEKLIK = 330;   // Son Haberler / Yaklaşan Takvim / Sektör
+// ⚠️ 2026-09-15: HUCRE_STIL ve SATIR1/SATIR2_YUKSEKLIK KALDIRILDI. Hücrelere
+// sabit yükseklik + overflow vermek, Katılım Endeksi ve Popüler Fonlar
+// listelerini kartın altında KESİYORDU (kullanıcı raporu). Bloklar artık kendi
+// doğal yüksekliğinde; satır en uzun karta göre uzuyor.
 
 // AI Finans Asistanı kartı. 2026-09-14 (4. revizyon): masaüstünde eskiden
 // tam genişlik bir ŞERİTTİ; çevresindeki her şey kart olunca yabancı duruyordu
@@ -21231,11 +21231,17 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla,duz}:{ad:string,sembol:
           değişim, sağda mini grafik. Kart görünümünde (mobil yatay şerit) her
           şey ALT ALTA kalıyor — orada kart zaten dar, yan yana sığmaz. */}
       <div style={duz?{display:"flex",alignItems:"center",gap:10}:undefined}>
-      <div style={duz?{flex:1,minWidth:0}:undefined}>
+      {/* ⚠️ DÜZ (sağ ray) GÖRÜNÜMÜ TEK SATIR (2026-09-15, kullanıcı isteği:
+          "önce USD/TRY, yanında fiyat ve değişim yüzdesi, yanında grafik").
+          Önceki hâlinde ad ÜSTTE, fiyat/değişim ALTTA idi; grafik sağda tek
+          başına kalınca arada boş bir alan oluşuyordu. */}
+      <div style={duz?{width:74,flexShrink:0,minWidth:0}:undefined}>
       <p style={{margin:0,fontSize:ad.length>=12?7.8:ad.length>=10?8.3:ad.length>=8?9.2:10,fontWeight:700,color:WA(0.45),textTransform:"uppercase",letterSpacing:ad.length>=10?-0.1:0.2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingRight:duz?0:24}}>{TR(ad)}</p>
+      </div>
+      <div style={duz?{flex:1,minWidth:0,textAlign:"right"}:undefined}>
       {guncel!=null ? (
         <>
-          <p className="spark-in" style={{margin:"4px 0 2px",fontSize:15,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:4}}>
+          <p className="spark-in" style={{margin:duz?"0":"4px 0 2px",fontSize:duz?13:15,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:4}}>
             {`${paraOnek||""}${fmtDeger(guncel)}`}
             <span style={{fontSize:11,opacity:flash?1:0,transition:"opacity 700ms ease",color:flash==="up"?C.green:C.red}}>{flash==="up"?"▲":flash==="down"?"▼":""}</span>
           </p>
@@ -21250,7 +21256,7 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla,duz}:{ad:string,sembol:
         </>
       )}
       </div>
-      <div style={duz?{width:78,flexShrink:0}:undefined}>
+      <div style={duz?{width:70,flexShrink:0}:undefined}>
       {(guncel==null&&yukleniyor)
         ? <div className="skeleton" style={{height:duz?20:24,borderRadius:6}}/>
         : <svg width="100%" height={duz?20:24} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{display:"block"}}>
@@ -26973,12 +26979,6 @@ function App(){
                 sol/sağ kenarlar hizasız duruyordu (kullanıcı raporu). Mobilde
                 12px AYNEN korundu. */}
 
-            {/* Piyasa Özeti — MOBİLDE burada (yatay şerit).
-                MASAÜSTÜNDE sağ rayda, dikey liste olarak render ediliyor. */}
-            {!genisEkran && <PiyasaOzetiBlok dikey={false} piyasaGorunen={piyasaGorunen} piyasaSurukle={piyasaSurukle}
-              piyasaOzetiSecim={piyasaOzetiSecim} setPiyasaOzetiDuzenleAcik={setPiyasaOzetiDuzenleAcik}
-              setSeciliKur={setSeciliKur} nav={nav}/>}
-
             {/* ══ MASAÜSTÜ: ANA KOLON + SAĞ RAY (2026-09-14, 5. revizyon) ══
                 Önceki denemeler ve neden bırakıldıkları:
                 • Sabit 3 kolonlu ızgara → en kısa sütunun altında beyaz boşluk.
@@ -27031,6 +27031,16 @@ function App(){
                 </div>
               );
             })()}
+
+            {/* Piyasa Özeti — MOBİLDE burada (yatay şerit), hero'nun hemen
+                ALTINDA. ⚠️ 2026-09-15: hero ana kolona taşınınca bu çağrı
+                kaynak dosyada hero'nun ÜSTÜNDE kalmıştı ve mobilde Piyasa
+                Özeti hero'dan önce görünüyordu (kullanıcı raporu). Çağrı da
+                hero ile birlikte ana kolona alındı; masaüstünde zaten
+                render edilmiyor (sağ rayda dikey liste olarak duruyor). */}
+            {!genisEkran && <PiyasaOzetiBlok dikey={false} piyasaGorunen={piyasaGorunen} piyasaSurukle={piyasaSurukle}
+              piyasaOzetiSecim={piyasaOzetiSecim} setPiyasaOzetiDuzenleAcik={setPiyasaOzetiDuzenleAcik}
+              setSeciliKur={setSeciliKur} nav={nav}/>}
 
             {/* Favorilerim */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
@@ -27152,11 +27162,17 @@ function App(){
                 {/* 2026-09-14 masaüstü düzen revizyonu: geniş ekranda 6 gösterge
                     alt alta uzayıp her satır ~900px'e yayılıyordu; artık 3 kolonlu
                     ızgara. Mobilde AYNEN eskisi gibi tek kolon. */}
+                {/* ⚠️ TEK TABLO (2026-09-15, kullanıcı isteği: "finansal
+                    göstergeler tek tablo yapıp içindeki veriyi
+                    çeşitlendirelim"). Önceden her gösterge AYRI bir kartti;
+                    dar sütunda alt alta kutucuklar dağınık duruyordu. Artık
+                    tek bir kutunun içinde ayraçlı satırlar — Katılım Sektörü
+                    kartıyla da aynı görsel dilde. */}
                 <div onClick={()=>{setPiyasaTabloFiltre("gostergeler");nav("piyasaMenu");}} style={{
-                  marginBottom:14,cursor:"pointer",
-                  // 2026-09-14: masaüstünde bu blok artık SOL SÜTUNUN İÇİNDE
-                  // (Piyasalar'ın altında) — dar bir kolonda olduğu için satırlar
-                  // alt alta kalıyor, ayrıca bir ızgaraya gerek yok.
+                  marginBottom:14,cursor:"pointer",borderRadius:16,overflow:"hidden",
+                  ...(TEMA==="acik"
+                    ? {background:"#E9EEF4",border:"1px solid rgba(22,34,46,0.08)"}
+                    : {background:"#16222E",border:`1px solid ${WA(0.07)}`}),
                 }}>
                   {[
                     {ad:"TCMB Politika Faizi", deger:"%37,00", tarih:"Haziran 2026 · PPK", ikon:Landmark, renk:C.blue},
@@ -27171,6 +27187,16 @@ function App(){
                       seri:tlrefkSeriTahmini(evdsMakro), seriAd:"TLREFK (Katılım)",
                     };})(),
                     {ad:"TCMB Brüt Rezerv", deger:evdsMakro?.["REZERV_TOPLAM"]?.deger!=null?`$${(evdsMakro["REZERV_TOPLAM"].deger/1000).toFixed(2).replace(".",",")} Mr`:"—", tarih:evdsMakro?.["REZERV_TOPLAM"]?.tarih?`${evdsMakro["REZERV_TOPLAM"].tarih} · canlı`:"", ikon:Wallet, renk:C.green, seri:evdsMakro?.["REZERV_TOPLAM_SERI"], seriAd:"TCMB Brüt Rezerv (Milyon $)", seriBirim:"milyon$"},
+                    // ── EK GÖSTERGELER (2026-09-15) ────────────────────────
+                    // Hepsi ZATEN çekilen evdsMakro verisinden geliyor; yeni
+                    // bir istek/uç eklenmedi. Veri gelmemişse satır "—" gösterir.
+                    {ad:"TCMB Net Rezerv", deger:evdsMakro?.["REZERV_NET"]?.deger!=null?`$${(evdsMakro["REZERV_NET"].deger/1000).toFixed(2).replace(".",",")} Mr`:"—", tarih:evdsMakro?.["REZERV_NET"]?.tarih?`${evdsMakro["REZERV_NET"].tarih} · canlı`:"", ikon:Wallet, renk:C.teal, seri:evdsMakro?.["REZERV_NET_SERI"], seriAd:"TCMB Net Rezerv (Milyon $)", seriBirim:"milyon$"},
+                    {ad:"TCMB Ağırlıklı Fonlama (AOFM)", deger:evdsMakro?.["TP.APIFON4"]?.deger!=null?`%${parseFloat(evdsMakro["TP.APIFON4"].deger).toFixed(2).replace(".",",")}`:"—", tarih:evdsMakro?.["TP.APIFON4"]?.tarih?`${evdsMakro["TP.APIFON4"].tarih} · canlı`:"", ikon:Landmark, renk:C.blue, seri:evdsMakro?.["TP.APIFON4_SERI"], seriAd:"TCMB Ağırlıklı Fonlama Oranı"},
+                    // ZK nema oranı: ayrı EVDS serisi YOK; AOFM × %86 ile
+                    // türetiliyor (TCMB Basın Duyurusu 2025-30).
+                    {ad:"ZK Nema Oranı (AOFM × %86)", deger:evdsMakro?.["TP.APIFON4"]?.deger!=null?`%${(parseFloat(evdsMakro["TP.APIFON4"].deger)*0.86).toFixed(2).replace(".",",")}`:"—", tarih:"AOFM × 0,86", ikon:Percent, renk:"#FBBF24", seri:(evdsMakro?.["TP.APIFON4_SERI"]||[]).map((n:any)=>({tarih:n.tarih, deger:n.deger*0.86})), seriAd:"ZK Nema Oranı (AOFM × %86)"},
+                    {ad:"FED Politika Faizi", deger:evdsMakro?.["FRED_FEDFUNDS"]?.deger!=null?`%${evdsMakro["FRED_FEDFUNDS"].deger.toFixed(2).replace(".",",")}`:"—", tarih:evdsMakro?.["FRED_FEDFUNDS"]?.tarih||"", ikon:Landmark, renk:"#60A5FA", seri:evdsMakro?.["FRED_FEDFUNDS_SERI"], seriAd:"FED Politika Faizi"},
+                    {ad:"ABD 10 Yıllık Tahvil", deger:evdsMakro?.["FRED_US10Y"]?.deger!=null?`%${evdsMakro["FRED_US10Y"].deger.toFixed(2).replace(".",",")}`:"—", tarih:evdsMakro?.["FRED_US10Y"]?.tarih||"", ikon:TrendingUp, renk:"#60A5FA", seri:evdsMakro?.["FRED_US10Y_SERI"], seriAd:"ABD 10 Yıllık Tahvil Faizi"},
                   ].map((g:any,i,arr)=>{
                     const IkonBileseni=g.ikon;
                     const gecmisDestekli = !!g.seriAd; // bu gösterge kavramsal olarak geçmiş veri sunuyor mu
@@ -27185,10 +27211,8 @@ function App(){
                         setGostergeUyari("Veri henüz yüklenmedi, birkaç saniye sonra tekrar dene.");
                         setTimeout(()=>setGostergeUyari(null),2200);
                       }
-                    }} style={{display:"flex",alignItems:"center",gap:11,padding:"12px 16px",borderRadius:12,marginBottom:8,cursor:gecmisDestekli?"pointer":"default",
-                      ...(TEMA==="acik"
-                        ? {background:"#E9EEF4",border:"1px solid rgba(22,34,46,0.08)"}
-                        : {background:"#16222E",border:`1px solid ${WA(0.07)}`})}}>
+                    }} style={{display:"flex",alignItems:"center",gap:11,padding:"11px 16px",cursor:gecmisDestekli?"pointer":"default",
+                      borderTop:i===0?"none":`1px solid ${WA(0.07)}`}}>
                       <div style={{width:32,height:32,borderRadius:9,background:`${g.renk}26`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                         <IkonBileseni size={16} color={g.renk} strokeWidth={2}/>
                       </div>
@@ -27224,13 +27248,23 @@ function App(){
                     {/* Ana kolon artık sağ rayla paylaşıldığı için satırlar
                         ÜÇ değil İKİ kart; iki kartı dengelemek üçü dengelemekten
                         çok daha kolay. */}
+                    {/* ⚠️ SABİT YÜKSEKLİK KALDIRILDI (2026-09-15, kullanıcı
+                        raporu: "katılım endeksi ve popüler fonlar altı yarıda
+                        kesilmiş"). Hücrelere SATIR1/SATIR2_YUKSEKLIK veriliyor
+                        ve taşan içerik overflowY ile kırpılıyordu; listeler
+                        kartın altında kesik görünüyordu. Artık bloklar kendi
+                        doğal yüksekliklerinde tam uzuyor, satır da en uzun
+                        karta göre yükseliyor (alignItems:"stretch"). */}
                     <div style={IKILI_SATIR}>
-                      <div style={{...HUCRE_STIL,height:SATIR1_YUKSEKLIK}}>{endeksBlok}</div>
-                      <div style={{...HUCRE_STIL,height:SATIR1_YUKSEKLIK}}>{fonBlok}</div>
+                      <div style={{minWidth:0}}>{endeksBlok}</div>
+                      <div style={{minWidth:0}}>{fonBlok}</div>
                     </div>
-                    <div style={IKILI_SATIR}>
-                      <div style={{...HUCRE_STIL,height:SATIR2_YUKSEKLIK}}>{gostergelerBlok}</div>
-                      <div style={{...HUCRE_STIL,height:SATIR2_YUKSEKLIK}}><KatilimSektoruOzet onAc={()=>nav("katilimSektoru")}/></div>
+                    {/* Finansal Göstergeler + Sektör: üstteki satırdan sonra
+                        geldiği için doğal olarak aşağıda; ikisi de kendi doğal
+                        yüksekliğinde ve ÜSTTEN hizalı. */}
+                    <div style={{...IKILI_SATIR,marginTop:8}}>
+                      <div style={{minWidth:0}}>{gostergelerBlok}</div>
+                      <div style={{minWidth:0}}><KatilimSektoruOzet onAc={()=>nav("katilimSektoru")}/></div>
                     </div>
                     {portfoyModal}
                   </>
@@ -27359,6 +27393,37 @@ function App(){
                 en altına, tam genişlikte YATAY bir blok olarak alındı — orada
                 kısayol satırının altında büyük bir beyaz alan kalıyordu. */}
             {genisEkran && <YaklasanTakvimBlok tekKutu yaklasanTakvim={yaklasanTakvim} nav={nav}/>}
+
+            {/* ── SÖZLÜK KISAYOLLARI (2026-09-15, kullanıcı isteği) ─────────
+                Yaklaşan Takvim'in altında, rayın en sonunda iki kısayol.
+                Ekran anahtarları mevcut: "sozluk" = Katılım Bankacılığı
+                Sözlüğü, "ekonomiSozluk" = Ekonomi Sözlüğü (yeni ekran
+                YAZILMADI, var olanlara bağlanıyor). */}
+            {genisEkran && (
+              <div style={{marginBottom:18}}>
+                <div style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}}>{TR("Sözlükler")}</div>
+                <div style={{borderRadius:16,overflow:"hidden",
+                  ...(TEMA==="acik"
+                    ? {background:"#E9EEF4",border:"1px solid rgba(22,34,46,0.08)"}
+                    : {background:"#16222E",border:`1px solid ${WA(0.07)}`})}}>
+                  {[
+                    {ekran:"sozluk",        ad:"Katılım Bankacılığı Sözlüğü", alt:"Murabaha, mudarebe, sukuk…", ikon:"📖", renk:C.green},
+                    {ekran:"ekonomiSozluk", ad:"Ekonomi Sözlüğü",             alt:"196 terim — enflasyondan rezervlere", ikon:"📚", renk:"#A78BFA"},
+                  ].map((s,i)=>(
+                    <div key={s.ekran} className="press-card" onClick={()=>nav(s.ekran)} style={{
+                      display:"flex",alignItems:"center",gap:11,padding:"12px 14px",cursor:"pointer",
+                      borderTop:i===0?"none":`1px solid ${WA(0.07)}`}}>
+                      <div style={{width:32,height:32,borderRadius:9,background:`${s.renk}26`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:16}}>{s.ikon}</div>
+                      <div style={{minWidth:0,flex:1}}>
+                        <div style={{color:WA(0.85),fontSize:12.5,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.ad}</div>
+                        <div style={{color:(TEMA==="acik"?"#4A6178":"rgba(255,255,255,0.55)"),fontSize:10,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.alt}</div>
+                      </div>
+                      <span style={{fontSize:12,color:WA(0.25),flexShrink:0}}>›</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
 
             </div>{/* /sağ ray */}
