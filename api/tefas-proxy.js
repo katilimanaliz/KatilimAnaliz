@@ -1021,6 +1021,83 @@ async function tahminGecmisGetir(req, res) {
   }
 }
 
+// ── TAHMİN SAPMA ANALİZİ (2026-09-15) ───────────────────────────────────────
+// SORU (kullanıcı tespiti): "Fon, ay içinde hisselerini değiştiriyor; biz eski
+// KAP dağılımıyla hesapladığımız için tahmin sapıyor." Bu DOĞRU görünüyor ama
+// ÖLÇÜLMEDEN bir çözüm geliştirmek (ör. TEFAS'ın günlük varlık dağılımıyla
+// ölçekleme) boşa iş olabilir — 7 Eylül'de KAP bildirimleri konusunda tam da
+// bu hataya düşmek üzereydik, gerçek örneği görünce kullanılamaz çıkmıştı.
+// Bu uç, ELDEKİ kayıtlarla hipotezi test eder; yeni veri toplamaz.
+//
+// YÖNTEM: her kayıt için "dağılım kaç gün eski" hesaplanıp isabet ortalaması
+// yaş kovalarına göre raporlanır.
+//   • Kayıtta `donem` VARSA (2026-09-15 sonrası kayıtlar): yaş =
+//     tahmin tarihi − dönem son günü. Kesin ölçüm.
+//   • Kayıtta `donem` YOKSA (eski kayıtlar): ayrı bir kovada toplanır ve
+//     "donemsiz" olarak raporlanır — tahminle doldurulmaz.
+// HİPOTEZ DOĞRUYSA: yaş arttıkça ortalama isabet DÜŞER.
+async function tahminSapmaAnalizi(req, res) {
+  try {
+    const { liste } = await fonTahminListesiOku();
+    const kodlar = String(req.query?.kod || "").trim()
+      ? [String(req.query.kod).toUpperCase().trim()]
+      : liste;
+
+    const kovaEtiket = (gun) => {
+      if (gun == null) return "donem-bilinmiyor";
+      if (gun <= 15) return "0-15 gun";
+      if (gun <= 30) return "16-30 gun";
+      if (gun <= 45) return "31-45 gun";
+      return "46+ gun";
+    };
+    const kovalar = {};
+    const fonOzet = [];
+
+    for (const kod of kodlar) {
+      const kayitlar = (await kv.get(`fonTahmin:gecmis:${kod}`).catch(() => null)) || [];
+      let olculen = 0, donemsiz = 0;
+      for (const k of kayitlar) {
+        // İsabet hesaplanmamış kayıt (gerçek getiri henüz gelmemiş) analiz dışı.
+        if (typeof k.isabet !== "number") continue;
+        let yas = null;
+        const sonGun = k.donem ? donemSonGunuISO(k.donem) : null;
+        if (sonGun && k.tarih) {
+          yas = Math.round((Date.parse(k.tarih) - Date.parse(sonGun)) / 86400000);
+          if (yas < 0) yas = 0;
+          olculen++;
+        } else {
+          donemsiz++;
+        }
+        const etiket = kovaEtiket(yas);
+        if (!kovalar[etiket]) kovalar[etiket] = { adet: 0, isabetToplam: 0, sapmaToplam: 0 };
+        kovalar[etiket].adet++;
+        kovalar[etiket].isabetToplam += k.isabet;
+        if (typeof k.tahmin === "number" && typeof k.gercek === "number") {
+          kovalar[etiket].sapmaToplam += Math.abs(k.tahmin - k.gercek);
+        }
+      }
+      fonOzet.push({ kod, kayit: kayitlar.length, olculen, donemsiz });
+    }
+
+    const sonuc = Object.entries(kovalar).map(([etiket, v]) => ({
+      yasKovasi: etiket,
+      kayitSayisi: v.adet,
+      ortalamaIsabet: Number((v.isabetToplam / v.adet).toFixed(2)),
+      ortalamaMutlakSapmaPuan: Number((v.sapmaToplam / v.adet).toFixed(3)),
+    }));
+
+    res.setHeader("Cache-Control", "no-store");
+    return res.status(200).json({
+      success: true,
+      not: "ortalamaIsabet yuksek = iyi. Hipotez dogruysa yas arttikca isabet DUSER, mutlak sapma ARTAR. 'donem-bilinmiyor' kovasi 2026-09-15 oncesi kayitlardir; olculemez.",
+      kovalar: sonuc,
+      fonlar: fonOzet,
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: String(e.message || e) });
+  }
+}
+
 // ── FON TAHMİNİ GEÇMİŞİ TEMİZLEME (2026-09-06 eklendi) ──────────────────────
 // Hafta sonu koruması eklenmeden ÖNCE Cumartesi/Pazar günleri de sessizce
 // tahmin kaydı biriktiriliyordu (gerçek getiri hiç yayınlanmadığı için
@@ -1139,9 +1216,18 @@ async function fonTahminSnapshotCalistir(req, res) {
   for (const kod of takipListesi) {
     try {
       let tahmin = null, kapsam = 0;
+      // ⚠️ 2026-09-15: tahminin HANGİ KAP portföy dönemine dayandığı da
+      // kaydediliyor. Sebep (kullanıcı tespiti): hisse kırılımı KAP'ın AYLIK
+      // portföy raporundan geliyor; fon ay içinde hisselerini değiştirince
+      // biz eski dağılımla hesaplamaya devam ediyoruz ve tahmin sapıyor.
+      // Sapmanın gerçekten "dağılım eskidikçe" büyüyüp büyümediğini ÖLÇMEK
+      // için her kayıtta o günkü dönem etiketi gerekiyor — eski kayıtlarda
+      // bu alan yok, analiz onları "dönem bilinmiyor" diye ayırıyor.
+      let donem = null;
       if (kaydetMi) {
         const holdings = await holdingsGetirDahili(kod);
         if (holdings) {
+          donem = holdings.dagilimDonemi ?? null;
           let t = 0, k = 0;
           for (const kalem of holdings.kalemler) {
             if (kalem.tur === "stock") {
@@ -1224,13 +1310,14 @@ async function fonTahminSnapshotCalistir(req, res) {
         const son2 = kayitlar[kayitlar.length - 1];
         if (!son2 || son2.tarih !== bugun) {
           if (tahmin != null) {
-            kayitlar.push({ tarih: bugun, tahmin, gercek: null, isabet: null, kapsam });
+            kayitlar.push({ tarih: bugun, tahmin, gercek: null, isabet: null, kapsam, donem });
           }
         } else if (tahmin != null) {
           // Aynı gün içinde cron birden fazla kez çalışırsa (manuel test vb.)
           // en güncel tahminle üzerine yaz — kapsam artmış olabilir.
           son2.tahmin = tahmin;
           son2.kapsam = kapsam;
+          son2.donem = donem;
         }
       }
 
@@ -2538,6 +2625,7 @@ export default async function handler(req, res) {
   if (req.query?.manuelHoldingsYaz === "1") return manuelHoldingsYaz(req, res);
   if (req.query?.holdingsGunlukYenile === "1") return holdingsGunlukYenile(req, res);
   if (req.query?.tahminGecmis === "1") return tahminGecmisGetir(req, res);
+  if (req.query?.tahminSapmaAnalizi === "1") return tahminSapmaAnalizi(req, res);
   if (req.query?.fonTahminGecmisTemizle === "1") return fonTahminGecmisTemizle(req, res);
   if (req.query?.fonTahminListesi === "1") return fonTahminListesiGetir(req, res);
   if (req.query?.fonTahminEkle === "1") return fonTahminEkle(req, res);
