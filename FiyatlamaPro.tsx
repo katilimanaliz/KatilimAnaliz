@@ -25225,10 +25225,17 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onDuzen
       )}
 
       {/* ── SÜTUN BAŞLIKLARI (kart listesi için) ─────────────────────────────
-          Kartların iç padding'i 12, sağdaki çöp kutusu ikonu 13px + 10px boşluk
-          → başlığın sağ boşluğu 12+23 = 35px olacak şekilde ayarlandı. */}
+          Sağ boşluk, kartın sağındaki İKONLARIN kapladığı yere göre hesaplanır;
+          aksi halde başlıklar veri sütunlarıyla hizasız kalır.
+          Kart iç padding'i 12, ikonlar 13px, aralarındaki flex gap 10:
+            • Takip Listem  → yalnız ÇÖP ikonu      = 12 + 13 + 10       = 35
+            • Portföyüm     → KALEM + ÇÖP ikonu     = 12 + 13 + 10 + 13 + 10 = 58
+          ⚠️ 2026-09-15 (kullanıcı raporu: "başlık ile veriler aynı hizada
+          değil"): burada sabit 35 yazılıydı — bu değer TEK ikonlu Takip
+          görünümüne göre hesaplanmıştı. Portföyüm'de kalem (düzenle) ikonu da
+          olduğu için başlıklar 23px sağa kayıyordu. */}
       {filtreliListe.length>0 && (
-        <div style={{display:"flex",alignItems:"center",gap:10,padding:"0 35px 7px 12px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,padding:`0 ${sekme==="takip"?35:58}px 7px 12px`}}>
           <span style={{flex:1,minWidth:0,fontSize:9.5,fontWeight:800,color:PORTFOY_ETIKET,textTransform:"uppercase",letterSpacing:0.4}}>Ürünler ({filtreliListe.length})</span>
           {/* FİYAT başlığı: Portföyüm sekmesinde kartta ayrı bir birim fiyat
               sütunu var, Takip'te yok (orada sağdaki rakam zaten fiyat). */}
