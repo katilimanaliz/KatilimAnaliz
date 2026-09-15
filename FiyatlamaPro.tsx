@@ -23011,6 +23011,51 @@ function portfoyFmtTL(n: number, dec: number = 0): string {
 // fon pay fiyatları binde/on binde mertebesinde oynuyor. Bu yüzden birim
 // fiyat gösterimi 6 haneye kadar açılıyor; TOPLAM değer (portfoyFmtDeger)
 // eskisi gibi 2 hane kalıyor, orada 6 hane gereksiz gürültü olurdu.
+// Portföyüm/Takip kart listesinde FİYAT ve DEĞER sütunlarının SABİT
+// genişlikleri. Başlık şeridi ("ÜRÜNLER (N) · FİYAT · GÜNCEL DEĞER") ve kart
+// satırları AYNI sabitleri okuyor — başlık kart içeriğine göre kaymıyor.
+// Kullanıcı isteği (2026-09-14): sütun başlığı kartın İÇİNDE değil, üstteki
+// başlık şeridinde olacak. Bunun için genişliklerin sabitlenmesi ŞART; içerik
+// genişliğine bırakılsaydı uzun/kısa fiyatlarda başlık hizası bozulurdu.
+const PORTFOY_KART_SUT_FIYAT = 96;
+const PORTFOY_KART_SUT_DEGER = 124;
+
+// ── FON LOT SAYISI (2026-09-14) ────────────────────────────────────────────
+// Kullanıcı fon eklerken LOT ve alış fiyatı giriyor; kod bunları çarpıp
+// `miktar` alanına ₺ TUTAR olarak yazıyor (birim: "₺ tutar"). Yani lot ayrı
+// bir alanda saklanmıyor.
+// ⚠️ NEDEN AYRI BİR `lot` ALANI EKLENMEDİ: lot, alış partilerinden zaten
+// KAYIPSIZ geri hesaplanabiliyor (her partide kendi tutarı ve kendi fiyatı
+// var). Ayrı bir alan eklemek, parti düzenlendiğinde/birleştiğinde iki
+// kaynağın birbirinden sapması riskini getirirdi — üstelik mevcut kayıtlar
+// için bir geçiş (migration) gerekirdi. Türetmek tek doğruluk kaynağı
+// bırakıyor.
+// ⚠️ ORTALAMA FİYATLA HESAPLANMIYOR: `k.alis.fiyat` çok partili kalemde
+// AĞIRLIKLI ORTALAMA'dır; toplam tutarı ona bölmek doğru sonucu verir ama
+// yuvarlama hatası biriktirir. Bunun yerine HER PARTİ kendi fiyatına bölünüp
+// toplanıyor — matematiksel olarak kullanıcının girdiği lotların toplamı.
+function portfoyFonLot(k: PortfoyKalemi): number | null {
+  if (k.tur !== "fon") return null;
+  const partiler = portfoyPartileriCikar(k);
+  if (!partiler.length) return null;
+  let toplam = 0;
+  for (const p of partiler) {
+    if (!(typeof p.miktar === "number" && typeof p.fiyat === "number" && p.fiyat > 0)) return null;
+    toplam += p.miktar / p.fiyat;
+  }
+  return toplam > 0 ? toplam : null;
+}
+
+// TUTAR sütununun altındaki miktar metni. Fonda lot, diğerlerinde kalemin
+// kendi birimi (lot/gram/adet). Lot hesaplanamıyorsa (alış fiyatı yok)
+// uydurma bir sayı yazmak yerine eski tutar metnine düşülüyor.
+function portfoyMiktarMetni(k: PortfoyKalemi): string {
+  const lot = portfoyFonLot(k);
+  if (lot != null) {
+    return lot.toLocaleString("tr-TR", { minimumFractionDigits: 0, maximumFractionDigits: 3 }) + " lot";
+  }
+  return `${(k.miktar ?? 0).toLocaleString("tr-TR")} ${k.birim ?? ""}`.trim();
+}
 function portfoyFmtBirimFiyat(n: number, k: PortfoyKalemi): string {
   if (k.tur === "fon") return n.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 6 }) + " ₺";
   return portfoyFmtDeger(n, k);
@@ -23978,9 +24023,19 @@ function PortfoyDuzenleModal({kalem, onKapat, onKaydet}:{
   // olan kalemlerde etiket "TUTAR" yapıldı, veri modeli DEĞİŞMEDİ (hâlâ tek
   // bir ₺ tutarı olarak saklanıyor).
   const tutarTipiMi = kalem.birim === "₺ tutar";
-  const miktarEtiket = tutarTipiMi ? "TUTAR" : "MİKTAR";
+  // ⚠️ FON'DA ARTIK LOT SORULUYOR (2026-09-14, kullanıcı raporu: "ben lot ve
+  // fiyat giriyorum"). Önceden EKLEME formu LOT, DÜZENLEME formu TUTAR
+  // soruyordu — aynı pozisyon iki farklı birimle giriliyordu ve kullanıcı
+  // düzenlemeye girdiğinde lot yerine tutar görüyordu. Depolama DEĞİŞMEDİ:
+  // girilen lot, kaydederken fiyatla çarpılıp yine ₺ tutar olarak yazılıyor
+  // (bkz. kaydet). Katılım Hesabı / Sukuk'ta "miktar" gerçekten ANAPARA
+  // olduğu için oralarda TUTAR etiketi duruyor.
+  const lotTipiMi = kalem.tur === "fon";
+  const miktarEtiket = lotTipiMi ? "LOT" : (tutarTipiMi ? "TUTAR" : "MİKTAR");
+  // Formda gösterilen değer: fonda lot (tutar ÷ fiyat), diğerlerinde miktar.
+  const partiGoster = (p:any) => (lotTipiMi && p && p.fiyat>0) ? String(p.miktar/p.fiyat) : String(p?.miktar ?? "");
 
-  const [miktarInput,setMiktarInput] = useState(son ? String(son.miktar) : "");
+  const [miktarInput,setMiktarInput] = useState(son ? partiGoster(son) : "");
   const [fiyatInput,setFiyatInput]   = useState(son ? String(son.fiyat) : "");
   const [tarihInput,setTarihInput]   = useState(son ? String(son.tarih).slice(0,10) : "");
   const [hata,setHata] = useState<string|null>(null);
@@ -23989,7 +24044,7 @@ function PortfoyDuzenleModal({kalem, onKapat, onKaydet}:{
   useEffect(() => {
     const p = partiler[secilenIndex];
     if (!p) return;
-    setMiktarInput(String(p.miktar));
+    setMiktarInput(partiGoster(p));
     setFiyatInput(String(p.fiyat));
     setTarihInput(String(p.tarih).slice(0,10));
     setHata(null);
@@ -24000,15 +24055,18 @@ function PortfoyDuzenleModal({kalem, onKapat, onKaydet}:{
 
   // Yeni ortalamayı KAYDETMEDEN önce gösteriyoruz — çok partili kalemde
   // kullanıcı neyi değiştirdiğini görmeden onaylamak zorunda kalmasın.
+  // Fonda girilen sayı LOT — saklanan/hesaplanan değer ₺ tutar olduğu için
+  // fiyatla çarpılıyor. Tek yerde çevrilsin diye bu değişken kullanılıyor.
+  const miTutar = lotTipiMi ? (mi*fi) : mi;
   const onizleme = (isFinite(mi)&&mi>0&&isFinite(fi)&&fi>0)
-    ? portfoyPartiOzet(partiler.map((p,i)=> i===secilenIndex ? {fiyat:fi, miktar:mi} : p))
+    ? portfoyPartiOzet(partiler.map((p,i)=> i===secilenIndex ? {fiyat:fi, miktar:miTutar} : p))
     : null;
 
   const kaydet=()=>{
-    if (!isFinite(mi) || mi<=0) { setHata(`${tutarTipiMi?"Tutar":"Miktar"} sıfırdan büyük olmalı.`); return; }
+    if (!isFinite(mi) || mi<=0) { setHata(`${lotTipiMi?"Lot":(tutarTipiMi?"Tutar":"Miktar")} sıfırdan büyük olmalı.`); return; }
     if (!isFinite(fi) || fi<=0) { setHata("Alış fiyatı sıfırdan büyük olmalı."); return; }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(tarihInput)) { setHata("Tarih GG bilgisi eksik (YYYY-AA-GG)."); return; }
-    onKaydet({miktar:mi, fiyat:fi, tarih:tarihInput, partiIndex:secilenIndex});
+    onKaydet({miktar:miTutar, fiyat:fi, tarih:tarihInput, partiIndex:secilenIndex});
   };
 
   const alanStil:any = {
@@ -25172,7 +25230,12 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onDuzen
       {filtreliListe.length>0 && (
         <div style={{display:"flex",alignItems:"center",gap:10,padding:"0 35px 7px 12px"}}>
           <span style={{flex:1,minWidth:0,fontSize:9.5,fontWeight:800,color:PORTFOY_ETIKET,textTransform:"uppercase",letterSpacing:0.4}}>Ürünler ({filtreliListe.length})</span>
-          <span style={{flexShrink:0,fontSize:9.5,fontWeight:800,color:PORTFOY_ETIKET,textTransform:"uppercase",letterSpacing:0.4}}>
+          {/* FİYAT başlığı: Portföyüm sekmesinde kartta ayrı bir birim fiyat
+              sütunu var, Takip'te yok (orada sağdaki rakam zaten fiyat). */}
+          {sekme!=="takip" && (
+            <span style={{width:PORTFOY_KART_SUT_FIYAT,flexShrink:0,textAlign:"right",fontSize:9.5,fontWeight:800,color:PORTFOY_ETIKET,textTransform:"uppercase",letterSpacing:0.4}}>Fiyat</span>
+          )}
+          <span style={{width:sekme==="takip"?"auto":PORTFOY_KART_SUT_DEGER,flexShrink:0,textAlign:"right",fontSize:9.5,fontWeight:800,color:PORTFOY_ETIKET,textTransform:"uppercase",letterSpacing:0.4}}>
             {sekme==="takip" ? "Güncel Fiyat" : "Güncel Değer"}
           </span>
         </div>
@@ -25214,8 +25277,11 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onDuzen
                   şeridindeydi; kullanıcı isteğiyle o şerit kaldırılıp günlük
                   değişim fiyatın altına alındı. Takip sekmesinde toplam değer
                   kavramı yok, orada bu sütun gösterilmiyor. */}
+              {/* Sütun başlığı ARTIK kartın içinde değil, üstteki başlık
+                  şeridinde (2026-09-14, kullanıcı isteği). Hizanın tutması için
+                  genişlik PORTFOY_KART_SUT_FIYAT ile SABİT. */}
               {sekme!=="takip" && k.tur!=="katilim" && k.tur!=="sukuk" && (
-                <div style={{flexShrink:0,textAlign:"right",whiteSpace:"nowrap"}}>
+                <div style={{width:PORTFOY_KART_SUT_FIYAT,flexShrink:0,textAlign:"right",whiteSpace:"nowrap"}}>
                   <div style={{fontSize:12,fontWeight:700,color:PORTFOY_YAZI,fontVariantNumeric:"tabular-nums"}}>
                     {k.fiyat==null ? "—" : (gizli?"••••":portfoyFmtBirimFiyat(k.fiyat, k))}
                   </div>
@@ -25224,8 +25290,10 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onDuzen
                   </div>
                 </div>
               )}
-              {/* ── TUTAR sütunu: toplam değer + miktar ── */}
-              <div style={{flexShrink:0,textAlign:"right",whiteSpace:"nowrap"}}>
+              {/* ── DEĞER sütunu: toplam değer + lot/miktar ──
+                  Genişlik başlık şeridiyle AYNI sabitten. Takip sekmesinde
+                  fiyat sütunu olmadığı için orada genişlik serbest. */}
+              <div style={{...(sekme==="takip"?{}:{width:PORTFOY_KART_SUT_DEGER}),flexShrink:0,textAlign:"right",whiteSpace:"nowrap"}}>
                 <div style={{fontSize:13,fontWeight:700,color:PORTFOY_YAZI,fontVariantNumeric:"tabular-nums"}}>
                   {sekme==="takip"
                     ? (k.fiyat==null ? "—" : (gizli?"₺••••":portfoyFmtDeger(k.fiyat||0, k)))
@@ -25233,7 +25301,7 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onDuzen
                 </div>
                 {sekme!=="takip" && k.tur!=="katilim" && k.tur!=="sukuk" && (
                   <div style={{fontSize:10,color:PORTFOY_ETIKET,marginTop:2,fontVariantNumeric:"tabular-nums"}}>
-                    {gizli?"••••":`${k.miktar!.toLocaleString("tr-TR")} ${k.birim}`}
+                    {gizli?"••••":portfoyMiktarMetni(k)}
                   </div>
                 )}
               </div>
