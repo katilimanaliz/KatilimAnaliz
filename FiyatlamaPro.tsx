@@ -23007,6 +23007,14 @@ function portfoyFmtTL(n: number, dec: number = 0): string {
 // Fon birim pay fiyatları genelde küçük ondalıklı sayılar (örn. 2,816142 ₺) —
 // portfoyFmtTL'nin 0 ondalıklı formatı bunları "₺0"/"₺3" gibi anlamsız
 // yuvarlıyordu. Fon fiyatı gösterilirken bunun yerine bu kullanılmalı.
+// Fon BİRİM fiyatı 2 haneye yuvarlanınca anlamsızlaşıyor (2,923281 → 2,92) —
+// fon pay fiyatları binde/on binde mertebesinde oynuyor. Bu yüzden birim
+// fiyat gösterimi 6 haneye kadar açılıyor; TOPLAM değer (portfoyFmtDeger)
+// eskisi gibi 2 hane kalıyor, orada 6 hane gereksiz gürültü olurdu.
+function portfoyFmtBirimFiyat(n: number, k: PortfoyKalemi): string {
+  if (k.tur === "fon") return n.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 6 }) + " ₺";
+  return portfoyFmtDeger(n, k);
+}
 function portfoyFmtFiyat(n: number, tur: PortfoyKalemi["tur"]): string {
   if (tur === "fon") return n.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " ₺";
   return portfoyFmtTL(n);
@@ -25194,30 +25202,38 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onDuzen
                     {ilerleme && (ilerleme.vadeDoldu ? " · vade doldu" : ` · ${ilerleme.kalanGun} gün kaldı`)}
                   </div>
                   );
-                })() : sekme!=="takip" && (
-                  <div style={{fontSize:10.5,color:PORTFOY_YAZI,opacity:0.8,marginTop:1}}>
-                    {gizli?"••":k.miktar!.toLocaleString("tr-TR")} {k.birim}
-                  </div>
-                )}
+                })() : null}
+                {/* Miktar artık burada DEĞİL, sağdaki TUTAR sütununun altında
+                    (2026-09-14, üç sütunlu düzen). */}
               </div>
               {/* Fiyat artık isim bloğunun İÇİNDE değil, çöp kutusunun kardeşi —
                   ikisi de dikeyde ortalanıyor, böylece aynı hizaya geliyor.
                   (Önceden fiyat ilk satırda, çöp kutusu iki satırın ortasındaydı.) */}
+              {/* ── FİYAT sütunu: birim fiyat + günlük % (2026-09-14) ──
+                  Günlük değişim eskiden alttaki Günlük/Haftalık/Aylık/Yıllık
+                  şeridindeydi; kullanıcı isteğiyle o şerit kaldırılıp günlük
+                  değişim fiyatın altına alındı. Takip sekmesinde toplam değer
+                  kavramı yok, orada bu sütun gösterilmiyor. */}
+              {sekme!=="takip" && k.tur!=="katilim" && k.tur!=="sukuk" && (
+                <div style={{flexShrink:0,textAlign:"right",whiteSpace:"nowrap"}}>
+                  <div style={{fontSize:12,fontWeight:700,color:PORTFOY_YAZI,fontVariantNumeric:"tabular-nums"}}>
+                    {k.fiyat==null ? "—" : (gizli?"••••":portfoyFmtBirimFiyat(k.fiyat, k))}
+                  </div>
+                  <div style={{marginTop:2,display:"flex",justifyContent:"flex-end"}}>
+                    <PortfoyDegisimEtiket deger={k.g} boyut={11}/>
+                  </div>
+                </div>
+              )}
+              {/* ── TUTAR sütunu: toplam değer + miktar ── */}
               <div style={{flexShrink:0,textAlign:"right",whiteSpace:"nowrap"}}>
                 <div style={{fontSize:13,fontWeight:700,color:PORTFOY_YAZI,fontVariantNumeric:"tabular-nums"}}>
                   {sekme==="takip"
                     ? (k.fiyat==null ? "—" : (gizli?"₺••••":portfoyFmtDeger(k.fiyat||0, k)))
                     : (gizli?"₺••••":portfoyFmtDeger(portfoyGuncelDeger(k), k))}
                 </div>
-                {/* BİRİM FİYAT (2026-09-14, kullanıcı isteği — Fintables
-                    ekran görüntüsü): Portföyüm sekmesinde bu kart yalnızca
-                    TOPLAM değeri gösteriyordu, ürünün birim fiyatı ekranda
-                    hiç yoktu. Takip sekmesinde üstteki rakam ZATEN birim
-                    fiyat olduğu için orada tekrar edilmiyor. Katılım/Sukuk
-                    kaleminde "birim fiyat" kavramı yok — onlarda da yok. */}
-                {sekme!=="takip" && k.tur!=="katilim" && k.tur!=="sukuk" && k.fiyat!=null && (
+                {sekme!=="takip" && k.tur!=="katilim" && k.tur!=="sukuk" && (
                   <div style={{fontSize:10,color:PORTFOY_ETIKET,marginTop:2,fontVariantNumeric:"tabular-nums"}}>
-                    {gizli?"••••":portfoyFmtDeger(k.fiyat, k)}
+                    {gizli?"••••":`${k.miktar!.toLocaleString("tr-TR")} ${k.birim}`}
                   </div>
                 )}
               </div>
@@ -25234,6 +25250,12 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onDuzen
               <Trash2 size={13} color={PORTFOY_ETIKET} style={{cursor:"pointer",flexShrink:0}} onClick={(e)=>{e.stopPropagation();onSil(k.id);}}/>
             </div>
 
+            {/* ⚠️ Bu şerit artık HER ZAMAN render EDİLMİYOR: Portföyüm
+                sekmesinde normal kalemlerde içeriği kaldırıldı (günlük %
+                yukarıdaki FİYAT sütununa taşındı). Koşul olmadan bırakılsaydı
+                boş bir div + 10px boşluk kalırdı. Katılım/Sukuk kutuları ve
+                Takip sekmesinin dönem şeridi duruyor. */}
+            {(k.tur==="katilim"||k.tur==="sukuk"||sekme==="takip") && (
             <div style={{display:"flex",justifyContent:"space-between",marginBottom:sekme==="takip"?0:10}}>
               {(k.tur==="katilim"||k.tur==="sukuk") ? (()=>{ const ilerleme = portfoyKatilimIlerleme(k);
                 const kutular:[string,string][] = [
@@ -25248,13 +25270,17 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onDuzen
                     <span style={{fontSize:12,fontWeight:700,color:PORTFOY_YAZI,fontFamily:"ui-monospace,monospace"}}>{val}</span>
                   </div>
                 ));
-              })() : [["Günlük",k.g],["Haftalık",k.h],["Aylık",k.a],["Yıllık",k.y]].map(([lbl,val]:any)=>(
+              })() : sekme==="takip" ? [["Günlük",k.g],["Haftalık",k.h],["Aylık",k.a],["Yıllık",k.y]].map(([lbl,val]:any)=>(
+                /* Takip sekmesinde kart üç sütunlu düzene GEÇMEDİ (orada
+                   tutar/miktar yok), dönemsel getiri şeridi orada anlamını
+                   koruyor ve duruyor. */
                 <div key={lbl} style={{textAlign:"center"}}>
                   <div style={{fontSize:9.5,fontWeight:700,color:PORTFOY_ETIKET,marginBottom:3}}>{lbl}</div>
                   <PortfoyDegisimEtiket deger={val} boyut={12}/>
                 </div>
-              ))}
+              )) : null}
             </div>
+            )}
             {(k.tur==="katilim"||k.tur==="sukuk") && (
               <div style={{display:"flex",alignItems:"center",gap:5,fontSize:10,color:PORTFOY_ETIKET,marginBottom:8}}>
                 <Info size={11} style={{flexShrink:0}}/>
