@@ -4046,16 +4046,13 @@ function SonHaberlerBlok({tekKutu,sonHaberler,sonHaberlerHata,sonHaberlerIlkYukl
                 );
               })}
             </div>
-            {/* ⚠️ "Devamı var" solma katmanı YALNIZCA tekKutu (masaüstü sağ
-                ray) görünümünde. Sebep: katman sayfa arka planı rengini
-                (#0F1923) boyuyor; mobilde haberler AYRI kartlar hâlinde ve
-                kart zemini sayfadan AÇIK olduğu için bu katman son kartın
-                üzerine KOYU bir iz olarak düşüyordu (kullanıcı raporu,
-                2026-09-14, ekran görüntüsüyle). Tek kutuda kutunun kendi
-                zemini var, orada doğru çalışıyor. */}
-            {tekKutu && sonHaberler.length>3&&(
-              <div style={{position:"absolute",bottom:14,left:0,right:0,height:36,background:(TEMA==="acik"?"linear-gradient(180deg,rgba(242,245,248,0) 0%,#F2F5F8 90%)":"linear-gradient(180deg,rgba(15,25,35,0) 0%,#0F1923 90%)"),pointerEvents:"none",borderRadius:"0 0 12px 12px"}}/>
-            )}
+            {/* ⚠️ "Devamı var" SOLMA KATMANI TAMAMEN KALDIRILDI (2026-09-15,
+                kullanıcı raporu: "son haberler alanında gölge var onu
+                kaldıralım"). Katman, sayfa arka planı rengini liste zeminine
+                doğru boyayarak "gölge/leke" gibi görünüyordu — önce mobilde
+                (14 Eylül), sonra masaüstünde de. Listenin kaydırılabildiği
+                zaten kaydırma çubuğundan ve kesilen son satırdan anlaşılıyor;
+                bu görsel ipucuna değmiyor. GERİ EKLENMESİN. */}
           </div>
           )}
         </>
@@ -4139,12 +4136,29 @@ function PiyasaOzetiBlok({dikey,piyasaGorunen,piyasaSurukle,piyasaOzetiSecim,set
         ? {display:"flex",flexDirection:"column",marginBottom:20,borderRadius:16,
            background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,overflow:"hidden"}
         : {display:"flex",overflowX:"auto",gap:6,marginBottom:26,scrollSnapType:"x mandatory",WebkitOverflowScrolling:"touch",paddingBottom:2}}>
+        {/* ⚠️ SÜTUN BAŞLIĞI (2026-09-15, kullanıcı isteği: "en üste başlık
+            ekle") — yalnızca RAY (dikey) görünümünde. Genişlikler satırdaki
+            sütunlarla AYNI sabitlerden gelmeli ki hizalı dursun:
+            ad 74px · fiyat esnek · grafik 70px. Satır iç dolgusu "10px 12px"
+            olduğu için başlık da aynı yatay dolguyu kullanıyor.
+            Mobil yatay şeritte başlık YOK — orada kartlar yan yana kayıyor,
+            tek bir başlık satırı anlamsız olurdu. */}
+        {dikey && (
+          <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px 7px",
+            borderBottom:`1px solid ${WA(0.07)}`}}>
+            <span style={{width:74,flexShrink:0,fontSize:9.5,fontWeight:800,color:WA(0.42),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Varlık")}</span>
+            <span style={{flex:1,minWidth:0,textAlign:"right",fontSize:9.5,fontWeight:800,color:WA(0.42),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Fiyat / Değişim")}</span>
+            <span style={{width:70,flexShrink:0,textAlign:"right",fontSize:9.5,fontWeight:800,color:WA(0.42),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Grafik")}</span>
+          </div>
+        )}
         {piyasaGorunen.map((k:any,i:number)=>{
           const sp:any=piyasaSurukle.kartProps(k.sembol,i);
           return (
           <div key={k.sembol} ref={sp.ref}
             onTouchStart={sp.onTouchStart} onTouchEnd={sp.onTouchEnd} onTouchCancel={sp.onTouchCancel}
             onMouseDown={sp.onMouseDown} onMouseMove={sp.onMouseMove} onMouseUp={sp.onMouseUp}
+            /* Başlık satırı kendi alt çizgisini çiziyor; ilk verinin üstünde
+               ayrıca çizgi olursa çift çizgi görünürdü. */
             style={{...(dikey?{minWidth:0,borderTop:i===0?"none":`1px solid ${WA(0.07)}`}:{flex:"0 0 108px",minWidth:0,scrollSnapAlign:"start"}),position:"relative",...sp.stil}}>
             <PiyasaOzetiKart ad={k.ad} sembol={k.sembol} dec={k.dec} duz={dikey} onTikla={()=>{ if(!sp.tasiniyor) setSeciliKur({kod:k.ad,ad:k.ad,sembol:k.sembol,birim:k.paraOnek}); }}/>
           </div>
@@ -21240,16 +21254,22 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla,duz}:{ad:string,sembol:
           Önceki hâlinde ad ÜSTTE, fiyat/değişim ALTTA idi; grafik sağda tek
           başına kalınca arada boş bir alan oluşuyordu. */}
       <div style={duz?{width:74,flexShrink:0,minWidth:0}:undefined}>
-      <p style={{margin:0,fontSize:ad.length>=12?7.8:ad.length>=10?8.3:ad.length>=8?9.2:10,fontWeight:700,color:WA(0.45),textTransform:"uppercase",letterSpacing:ad.length>=10?-0.1:0.2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingRight:duz?0:24}}>{TR(ad)}</p>
+      {/* ⚠️ PUNTO STANDARDI (2026-09-15, kullanıcı raporu: "yazı fontları
+          büyüklükleri, kalın-ince ayrımı hepsi farklı"): kart (mobil) modunda
+          punto ADIN UZUNLUĞUNA göre kademeleniyor — dar kartta "GRAM ALTIN"
+          gibi uzun adlar sığsın diye. Ray modunda genişlik yeterli olduğu için
+          bu kademelendirme satırdan satıra farklı punto üretiyordu; orada
+          SABİT 11px/700 kullanılıyor. */}
+      <p style={{margin:0,fontSize:duz?11:(ad.length>=12?7.8:ad.length>=10?8.3:ad.length>=8?9.2:10),fontWeight:700,color:WA(0.45),textTransform:"uppercase",letterSpacing:duz?0.3:(ad.length>=10?-0.1:0.2),overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingRight:duz?0:24}}>{TR(ad)}</p>
       </div>
       <div style={duz?{flex:1,minWidth:0,textAlign:"right"}:undefined}>
       {guncel!=null ? (
         <>
-          <p className="spark-in" style={{margin:duz?"0":"4px 0 2px",fontSize:duz?13:15,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:4}}>
+          <p className="spark-in" style={{margin:duz?"0":"4px 0 2px",fontSize:duz?13:15,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"flex",alignItems:"center",justifyContent:duz?"flex-end":"flex-start",gap:4}}>
             {`${paraOnek||""}${fmtDeger(guncel)}`}
             <span style={{fontSize:11,opacity:flash?1:0,transition:"opacity 700ms ease",color:flash==="up"?C.green:C.red}}>{flash==="up"?"▲":flash==="down"?"▼":""}</span>
           </p>
-          <p className="spark-in" style={{margin:duz?"0":"0 0 6px",fontSize:11,fontWeight:700,color:degisim!=null?renk:WA(0.3)}}>
+          <p className="spark-in" style={{margin:duz?"1px 0 0":"0 0 6px",fontSize:11,fontWeight:700,color:degisim!=null?renk:WA(0.3),textAlign:duz?"right":"left"}}>
             {degisim!=null?`${pozitif?"+":""}${degisim.toFixed(2).replace(".",",")}%`:"—"}
           </p>
         </>
@@ -27166,29 +27186,25 @@ function App(){
                 {/* 2026-09-14 masaüstü düzen revizyonu: geniş ekranda 6 gösterge
                     alt alta uzayıp her satır ~900px'e yayılıyordu; artık 3 kolonlu
                     ızgara. Mobilde AYNEN eskisi gibi tek kolon. */}
-                {/* ⚠️ TEK TABLO (2026-09-15, kullanıcı isteği: "finansal
-                    göstergeler tek tablo yapıp içindeki veriyi
-                    çeşitlendirelim"). Önceden her gösterge AYRI bir kartti;
-                    dar sütunda alt alta kutucuklar dağınık duruyordu. Artık
-                    tek bir kutunun içinde ayraçlı satırlar — Katılım Sektörü
-                    kartıyla da aynı görsel dilde. */}
-                {/* ② MASAÜSTÜNDE YATAY (2026-09-15, kullanıcı isteği): Katılım
-                    Sektörü kartı sağ raya taşınınca bu blok ana kolonun TAM
-                    genişliğini aldı; 11 gösterge tek sütunda alt alta çok
-                    uzuyordu. Artık 3 sütunlu ızgara.
-                    ⚠️ Ayraçlar: tek sütunda satırlar arası çizgi `borderTop`
-                    ile veriliyordu; ızgarada bu her sütunun İLK satırında da
-                    çizgi demek olurdu. Bu yüzden masaüstünde çizgi yerine
-                    hücreler arası boşluk (gap) kullanılıyor.
-                    MOBİLDE tek sütun + ayraçlı satırlar AYNEN kalıyor. */}
+                {/* ⚠️ TEK TABLO (2026-09-15, kullanıcı raporu: "parça parça
+                    görünmesin"): önceki halde her gösterge AYRI çerçeveli bir
+                    kutuydu ve aralarında 10px boşluk vardı — 11 ayrı kutu gibi
+                    duruyordu. Artık TEK bir kutu; hücreler kendi çerçevesini
+                    çizmiyor, aralarındaki ayrım ızgara çizgileriyle veriliyor.
+                    ⚠️ Ayrım yöntemi: `gap` YERİNE 1px boşluk + kapsayıcı
+                    zemininden farklı hücre zemini KULLANILMIYOR; bunun yerine
+                    her hücreye borderLeft/borderTop veriliyor ve ilk sütun/ilk
+                    satırda bastırılıyor. Böylece dış kenarlarda çift çizgi
+                    oluşmuyor.
+                    marginBottom 14 → 26: Haftalık Piyasa Özeti / Getiri
+                    Karşılaştırma satırıyla arasına boşluk kondu (aynı turdaki
+                    kullanıcı isteği). */}
                 <div onClick={()=>{setPiyasaTabloFiltre("gostergeler");nav("piyasaMenu");}} style={{
-                  marginBottom:14,cursor:"pointer",
-                  ...(genisEkran
-                    ? {display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:10}
-                    : {borderRadius:16,overflow:"hidden",
-                       ...(TEMA==="acik"
-                         ? {background:"#E9EEF4",border:"1px solid rgba(22,34,46,0.08)"}
-                         : {background:"#16222E",border:`1px solid ${WA(0.07)}`})}),
+                  marginBottom:genisEkran?26:14,cursor:"pointer",borderRadius:16,overflow:"hidden",
+                  ...(TEMA==="acik"
+                    ? {background:"#E9EEF4",border:"1px solid rgba(22,34,46,0.08)"}
+                    : {background:"#16222E",border:`1px solid ${WA(0.07)}`}),
+                  ...(genisEkran ? {display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))"} : {}),
                 }}>
                   {[
                     {ad:"TCMB Politika Faizi", deger:"%37,00", tarih:"Haziran 2026 · PPK", ikon:Landmark, renk:C.blue},
@@ -27213,6 +27229,11 @@ function App(){
                     {ad:"ZK Nema Oranı (AOFM × %86)", deger:evdsMakro?.["TP.APIFON4"]?.deger!=null?`%${(parseFloat(evdsMakro["TP.APIFON4"].deger)*0.86).toFixed(2).replace(".",",")}`:"—", tarih:"AOFM × 0,86", ikon:Percent, renk:"#FBBF24", seri:(evdsMakro?.["TP.APIFON4_SERI"]||[]).map((n:any)=>({tarih:n.tarih, deger:n.deger*0.86})), seriAd:"ZK Nema Oranı (AOFM × %86)"},
                     {ad:"FED Politika Faizi", deger:evdsMakro?.["FRED_FEDFUNDS"]?.deger!=null?`%${evdsMakro["FRED_FEDFUNDS"].deger.toFixed(2).replace(".",",")}`:"—", tarih:evdsMakro?.["FRED_FEDFUNDS"]?.tarih||"", ikon:Landmark, renk:"#60A5FA", seri:evdsMakro?.["FRED_FEDFUNDS_SERI"], seriAd:"FED Politika Faizi"},
                     {ad:"ABD 10 Yıllık Tahvil", deger:evdsMakro?.["FRED_US10Y"]?.deger!=null?`%${evdsMakro["FRED_US10Y"].deger.toFixed(2).replace(".",",")}`:"—", tarih:evdsMakro?.["FRED_US10Y"]?.tarih||"", ikon:TrendingUp, renk:"#60A5FA", seri:evdsMakro?.["FRED_US10Y_SERI"], seriAd:"ABD 10 Yıllık Tahvil Faizi"},
+                    // 12. gösterge (2026-09-15): 3 sütunlu ızgara 11 kalemle
+                    // son satırda yarım kalıyordu (kullanıcı: "1 tane daha
+                    // ekleyelim eşitlensin"). ECB politika faizi ZATEN çekilen
+                    // evdsMakro verisinde mevcut — yeni istek eklenmedi.
+                    {ad:"ECB Politika Faizi", deger:evdsMakro?.["FRED_ECB"]?.deger!=null?`%${evdsMakro["FRED_ECB"].deger.toFixed(2).replace(".",",")}`:"—", tarih:evdsMakro?.["FRED_ECB"]?.tarih||"", ikon:Landmark, renk:"#60A5FA", seri:evdsMakro?.["FRED_ECB_SERI"], seriAd:"ECB Politika Faizi"},
                   ].map((g:any,i,arr)=>{
                     const IkonBileseni=g.ikon;
                     const gecmisDestekli = !!g.seriAd; // bu gösterge kavramsal olarak geçmiş veri sunuyor mu
@@ -27229,10 +27250,12 @@ function App(){
                       }
                     }} style={{display:"flex",alignItems:"center",gap:11,padding:"11px 14px",cursor:gecmisDestekli?"pointer":"default",
                       ...(genisEkran
-                        ? {borderRadius:12,minWidth:0,
-                           ...(TEMA==="acik"
-                             ? {background:"#E9EEF4",border:"1px solid rgba(22,34,46,0.08)"}
-                             : {background:"#16222E",border:`1px solid ${WA(0.07)}`})}
+                        ? {minWidth:0,
+                           // 3 sütunlu ızgarada hücrenin satır/sütun konumu:
+                           // ilk satırda üst çizgi, ilk sütunda sol çizgi YOK —
+                           // kutunun kendi kenarlığıyla çakışmasın.
+                           borderTop:i<3?"none":`1px solid ${WA(0.07)}`,
+                           borderLeft:(i%3)===0?"none":`1px solid ${WA(0.07)}`}
                         : {borderTop:i===0?"none":`1px solid ${WA(0.07)}`})}}>
                       <div style={{width:32,height:32,borderRadius:9,background:`${g.renk}26`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                         <IkonBileseni size={16} color={g.renk} strokeWidth={2}/>
