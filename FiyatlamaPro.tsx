@@ -4190,6 +4190,66 @@ const IKILI_SATIR: any = {display:"grid",gridTemplateColumns:"repeat(2,minmax(0,
 // EŞİT bir kart. Mobilde eski görünüm (geniş, 56px ikon) aynen korunuyor.
 // Modül seviyesine alındı ki ana sayfanın hem mobil akışında hem masaüstü
 // satır düzeninde aynı bileşen kullanılsın — iki ayrı kopya tutulmasın.
+// ─── ANA SAYFA FOTO HERO (masaüstü, 2026-09-15) ────────────────────────────
+// Tasarım kapsamı: sabit başlık + alt açıklama + iki buton, sağda hafif bir
+// mimari atmosfer. MEVCUT karusel hero'nun (taksit karşılaştırma, zekât vb.)
+// ÜSTÜNE EKLENİYOR — onu değiştirmiyor, kaldırmıyor (kullanıcı kararı).
+// ⚠️ GERÇEK FOTOĞRAF KULLANILMADI: "çok büyük fotoğraf kullanma, minimal ve
+// premium olsun" talimatına uyuluyor VE üçüncü taraf bir fotoğrafı indirip
+// yeniden yayınlamak telif riski taşır. Bunun yerine kendi çizdiğimiz, hiçbir
+// gerçek yapıya ait olmayan jenerik bir cami silüeti (kubbe + minare) SVG
+// olarak kullanılıyor — dekoratif, marka yeşiliyle uyumlu, çok düşük opaklık.
+function AnaSayfaFotoHero({nav}:{nav:(sc:string)=>void}){
+  return (
+    <div style={{
+      position:"relative",overflow:"hidden",borderRadius:20,marginBottom:14,
+      padding:"28px 32px",minHeight:150,
+      background:(TEMA==="acik"
+        ?"linear-gradient(135deg,#0F2A20 0%,#153A2C 60%,#1B9E7A 140%)"
+        :"linear-gradient(135deg,#0B1F18 0%,#123024 60%,#175C43 140%)"),
+    }}>
+      {/* Dekoratif silüet — sağda, hafif, dekoratif amaçlı (aria-hidden). */}
+      <svg aria-hidden="true" width="340" height="150" viewBox="0 0 340 150"
+        style={{position:"absolute",right:0,bottom:0,opacity:0.16,pointerEvents:"none"}}>
+        <rect x="0" y="110" width="340" height="40" fill="#fff"/>
+        <path d="M40 110 Q40 60 80 60 Q120 60 120 110 Z" fill="#fff"/>
+        <rect x="30" y="30" width="8" height="82" fill="#fff"/>
+        <circle cx="34" cy="26" r="5" fill="#fff"/>
+        <rect x="122" y="20" width="8" height="92" fill="#fff"/>
+        <circle cx="126" cy="16" r="5" fill="#fff"/>
+        <path d="M160 110 Q160 45 210 45 Q260 45 260 110 Z" fill="#fff"/>
+        <rect x="150" y="10" width="7" height="102" fill="#fff"/>
+        <circle cx="153.5" cy="6" r="4.5" fill="#fff"/>
+        <rect x="264" y="10" width="7" height="102" fill="#fff"/>
+        <circle cx="267.5" cy="6" r="4.5" fill="#fff"/>
+        <rect x="290" y="70" width="8" height="42" fill="#fff"/>
+        <circle cx="294" cy="66" r="4" fill="#fff"/>
+      </svg>
+      <div style={{position:"relative",maxWidth:520}}>
+        <div style={{fontSize:11,fontWeight:800,color:"#7BE0BE",textTransform:"uppercase",letterSpacing:0.6,marginBottom:8}}>Katılım Plus</div>
+        <h2 style={{margin:0,fontSize:26,fontWeight:800,color:"#fff",lineHeight:1.28}}>
+          Katılım finansını<br/>tek bir platformda keşfedin.
+        </h2>
+        <p style={{margin:"10px 0 20px",fontSize:13.5,color:"rgba(255,255,255,0.78)",lineHeight:1.5}}>
+          Hesaplamalar, piyasa verileri, yatırım fonları ve katılım finansı araçları artık tek yerde.
+        </p>
+        <div style={{display:"flex",gap:10}}>
+          <button className="press-card" onClick={()=>nav("hesaplaMenu")} style={{
+            display:"flex",alignItems:"center",gap:6,border:"none",cursor:"pointer",
+            background:"linear-gradient(90deg,#1B9E7A,#2CCB9A)",color:"#fff",
+            fontSize:13,fontWeight:700,padding:"10px 18px",borderRadius:12,
+          }}>{CV("Hesaplama Yap")} <span>→</span></button>
+          <button className="press-card" onClick={()=>nav("piyasaMenu")} style={{
+            display:"flex",alignItems:"center",gap:6,cursor:"pointer",
+            background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.25)",color:"#fff",
+            fontSize:13,fontWeight:700,padding:"10px 18px",borderRadius:12,
+          }}>{CV("Piyasayı İncele")}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AsistanKarti({nav,genisEkran}:{nav:(sc:string)=>void;genisEkran:boolean}){
   return (
                 <div className="press-tile" onClick={()=>nav("asistan")} style={{
@@ -26549,6 +26609,18 @@ function App(){
         .press-card:active { transform: scale(0.98); opacity: 0.92; }
         .press-tile { transition: transform 140ms cubic-bezier(0.34,1.56,0.64,1), box-shadow 140ms ease; -webkit-tap-highlight-color: transparent; }
         .press-tile:active { transform: scale(1.03); box-shadow: 0 10px 28px rgba(91,155,216,0.28), 0 3px 10px rgba(0,0,0,0.35); }
+        /* ── MASAÜSTÜ HOVER — KART İNCELTMESİ (2026-09-15, tasarım kapsamı) ──
+           Prompt: "Hover: çok hafif yükselme, transition 150-200ms". SADECE
+           fare/imleç cihazlarda (pointer:fine) — dokunmatikte hover kavramı
+           yok, mobilde bu kural hiç ÇALIŞMAZ, mevcut :active (dokunma) tepkisi
+           dokunmatikte AYNEN duruyor. .press-card ve .press-tile'ı kullanan
+           TÜM kartlar (favoriler, piyasalar, BİST kartı, Piyasa Özeti
+           satırları, göstergeler, haberler, sözlükler, sektör) otomatik
+           kapsanıyor — tek tek her kart stiline dokunmadan. */
+        @media (pointer:fine) {
+          .press-tile, .press-card { transition: transform 180ms ease, box-shadow 180ms ease; }
+          .press-tile:hover, .press-card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.12); }
+        }
         /* ⚠️ DÜZELTME (2026-09-10, kullanıcı raporu — sticky header
            kaydırınca kayboluyordu/bozuk görünüyordu): bu animasyon ÖNCEDEN
            transform kullanıyordu — CSS kuralına göre bir üst elemanda
@@ -27029,6 +27101,13 @@ function App(){
                 SONRA başlayabiliyordu. Ana kolona alınınca ray sayfanın en
                 üstünden, başlıktaki ikonların hemen altından başlıyor.
                 Mobilde ızgara düz div olduğu için akış değişmiyor. */}
+
+            {/* Foto hero — YALNIZCA MASAÜSTÜ (2026-09-15, tasarım kapsamı).
+                Karusel hero'nun ÜSTÜNDE, ayrı bir blok; karusel AYNEN duruyor.
+                Mobilde hiç render edilmiyor — mobil tasarım bu turun kapsamı
+                DIŞINDA (prompt "MASAÜSTÜ WEB UI/UX REDESIGN" başlıklı). */}
+            {genisEkran && <AnaSayfaFotoHero nav={nav}/>}
+
             {/* ── HERO + BİST KARTI (2026-09-14, masaüstü düzen revizyonu) ──
                 MASAÜSTÜ: hero şeridi geniş ekranda tek başına 1000px'e
                 yayılıp içi boş kalıyordu (kullanıcı raporu, ekran
