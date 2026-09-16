@@ -3839,7 +3839,11 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri 
                 flex:"0 0 auto",minWidth:104,background:C.card,border:`1px solid ${C.border}`,
                 borderRadius:12,padding:"10px 12px",cursor:"pointer",
               }}>
-                <div style={{fontSize:12,fontWeight:800,color:h.katilimEndeksi?C.green:C.blue}}>{h.ticker}</div>
+                {/* 2026-09-15 (kullanıcı isteği: "burada da boşluk var, ikon
+                    koyalım") — HisseAvatar zaten ana listede kullanılıyor,
+                    burada da AYNI bileşen, küçük boyutta. */}
+                <HisseAvatar ticker={h.ticker} sirket={h.sirket} boyut={22}/>
+                <div style={{fontSize:12,fontWeight:800,color:h.katilimEndeksi?C.green:C.blue,marginTop:6}}>{h.ticker}</div>
                 <div style={{fontSize:13,fontWeight:700,color:C.text,marginTop:2,fontVariantNumeric:"tabular-nums"}}>
                   {h.fiyat ? h.fiyat.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}) : "—"}
                 </div>
@@ -23012,6 +23016,87 @@ async function portfoyTarihselFiyat(k: PortfoyKalemi, hedefIso: string): Promise
   } catch { return null; }
 }
 
+// ── PORTFÖY TAKVİMİ (2026-09-16) ────────────────────────────────────────────
+// Fonların geçmiş NAV serisi — Getiri Karşılaştırma ekranının ZATEN kullandığı
+// UCU (?gecmis=1&kod=X&donem=Y) yeniden kullanılıyor, yeni bir backend YOK.
+// ⚠️ portfoyTarihselFiyat'a DOKUNULMADI (fon için hâlâ null dönüyor) — o,
+// ZATEN ÇALIŞAN dönem kâr/zarar özelliğinin (PortfoyKarZararModal) parçası;
+// onu değiştirmek istenmeyen bir yan etki riski taşırdı. Bunun yerine AYRI,
+// katkı amaçlı bir fonksiyon (portfoyTarihselDeger) eklendi — SADECE takvim
+// bunu kullanıyor.
+const fonGecmisOnbellek = new Map<string, {tarih:string;fiyat:number}[]>();
+async function portfoyFonGecmisVeri(kod: string): Promise<{tarih:string;fiyat:number}[]> {
+  // "3a" (3 ay): ay gezinme oku bir-iki ay geriye gidince de bir şans olsun
+  // diye "1a" değil daha geniş pencere seçildi. Yine de veri, TEFAS'ın o an
+  // sunduğu aralıkla sınırlı — daha eski aylar boş çıkabilir (kullanıcıya
+  // bildirildi, kabul edildi).
+  if (fonGecmisOnbellek.has(kod)) return fonGecmisOnbellek.get(kod)!;
+  try {
+    const r = await fetch(`${API_BASE}/api/tefas-proxy?gecmis=1&kod=${encodeURIComponent(kod)}&donem=3a`);
+    const d = await r.json();
+    const noktalar = ((d?.noktalar || []) as {tarih:string;fiyat:number}[]).filter(p=>p.fiyat>0);
+    fonGecmisOnbellek.set(kod, noktalar);
+    return noktalar;
+  } catch { return []; }
+}
+// Bir kalemin belirli bir GEÇMİŞ TARİHTEKİ ₺ DEĞERİ (fiyat değil, tür-özel
+// formülle hesaplanmış tam değer). portfoyGuncelDeger'deki AYNI formüller,
+// "bugün" yerine verilen tarih kullanılarak tekrarlanıyor — iki fonksiyon
+// aynı sonucu FARKLI tarihler için üretmeli, tutarsızlık olmamalı.
+async function portfoyTarihselDeger(k: PortfoyKalemi, hedefIso: string): Promise<number|null> {
+  if (k.alis == null) return 0;
+  if (k.tur === "fon") {
+    const alisFiyat = k.alis!.fiyat;
+    if (typeof alisFiyat !== "number" || alisFiyat <= 0) return null;
+    const noktalar = await portfoyFonGecmisVeri(k.kod);
+    const fiyat = portfoyTariheEnYakinFiyat(noktalar, hedefIso);
+    if (fiyat == null) return null;
+    return k.miktar! * (fiyat / alisFiyat);
+  }
+  if (k.tur === "katilim") {
+    if (!k.katilimAcilisTarihi || !k.katilimOran || !k.katilimVadeGun) return null;
+    const acilisMs = new Date(k.katilimAcilisTarihi + "T00:00:00").getTime();
+    const hedefMs = new Date(hedefIso + "T00:00:00").getTime();
+    if (!isFinite(acilisMs) || hedefMs < acilisMs) return null;
+    const anapara = k.miktar || 0;
+    const gecenGunHam = Math.floor((hedefMs - acilisMs) / 86400000);
+    const gecenGun = Math.max(0, Math.min(gecenGunHam, k.katilimVadeGun));
+    const gunlukOran = k.katilimOran / 100 / 365;
+    const brut = anapara * gunlukOran * gecenGun;
+    const stopajOrani = k.katilimStopajOrani ?? 17.5;
+    const net = brut * (1 - stopajOrani / 100);
+    return anapara + net;
+  }
+  if (k.tur === "sukuk") {
+    if (!k.sukukAcilisTarihi || !k.sukukOran || !k.sukukVadeGun) return null;
+    const acilisMs = new Date(k.sukukAcilisTarihi + "T00:00:00").getTime();
+    const hedefMs = new Date(hedefIso + "T00:00:00").getTime();
+    if (!isFinite(acilisMs) || hedefMs < acilisMs) return null;
+    const anapara = k.miktar || 0;
+    const gecenGunHam = Math.floor((hedefMs - acilisMs) / 86400000);
+    const gecenGun = Math.max(0, Math.min(gecenGunHam, k.sukukVadeGun));
+    const donemselOran = (k.sukukOran / 100 / 365) * gecenGun;
+    const brutGetiri = anapara * donemselOran;
+    const stopajOrani = k.sukukStopajOrani ?? 15;
+    const netGetiri = brutGetiri * (1 - stopajOrani / 100);
+    return anapara + netGetiri;
+  }
+  // hisse / altın / diğer — mevcut portfoyTarihselFiyat (fiyat) burada
+  // değere çevriliyor. Fiyat bulunamazsa (veri penceresi dışı vb.) dürüstçe
+  // null — o gün için "veri yok" sayılır, sessizce yanlış bir sayı
+  // üretilmez.
+  const fiyat = await portfoyTarihselFiyat(k, hedefIso);
+  if (fiyat == null) return null;
+  return k.miktar! * fiyat;
+}
+// Bir sonraki/önceki İŞ GÜNÜ (hafta sonu atlanır) — takvim, bir günün K/Z'sini
+// "bir önceki İŞ GÜNÜNE göre" hesaplıyor (Pazartesi'nin öncesi Cuma'dır).
+function oncekiIsGunu(iso: string): string {
+  const d = new Date(iso + "T00:00:00");
+  do { d.setDate(d.getDate() - 1); } while (d.getDay() === 0 || d.getDay() === 6);
+  return d.toISOString().slice(0, 10);
+}
+
 // Bazı eski kayıtlarda (bir önceki sürümdeki hatadan dolayı) alış tarihi
 // ISO (YYYY-MM-DD) yerine "GG.AA.YYYY" olarak saklanmış olabilir — bu, tarih
 // karşılaştırmalarını (sıralama, "N gün önce" vb.) bozar. Nerede tarih
@@ -23087,6 +23172,245 @@ async function portfoyKarZararHesapla(liste: PortfoyKalemi[], periyot: PortfoyKZ
 
   const karZarar = guncelDeger - oncekiDeger;
   return { mod:"donem", dustuBaslangica:false, baslangicTarih:hedefIso, guncelDeger, oncekiDeger, karZarar, karZararYuzde: oncekiDeger>0?(karZarar/oncekiDeger)*100:0 };
+}
+
+// ── PORTFÖY TAKVİMİ MODALI (2026-09-16, kullanıcı isteği: "günlük performans
+// takvimi ekleyelim") ────────────────────────────────────────────────────
+// Her hafta içi gün için portföyün o günkü toplam değeri, bir ÖNCEKİ iş
+// gününe göre hesaplanıp yeşil/kırmızı renklendiriliyor. Hafta sonları
+// "kapalı" (gri, çizgili) gösteriliyor. Gelecek günler düz metin.
+// ⚠️ DÜRÜSTLÜK (kullanıcıya söylendi, kabul edildi): geçmiş fiyat verisi
+// TEFAS/hisse kaynaklarının sunduğu pencereyle sınırlı — ay gezinme oku ile
+// birkaç ay geriye gidildiğinde bazı/tüm günler "veri yok" (boş) çıkabilir.
+function PortfoyTakvimModal({liste, onClose}:{liste: PortfoyKalemi[]; onClose: ()=>void}){
+  const [ayGosterilen, setAyGosterilen] = useState(()=>{ const d=new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; });
+  const [gunlukPnl, setGunlukPnl] = useState<Record<string, number|null>>({});
+  // 2026-09-16 (kullanıcı isteği: "resimdeki tüm özellikleri ekle"): %
+  // görünümü için her günün ÖNCEKİ İŞ GÜNÜ değeri de saklanıyor
+  // (yüzde = pnl / onceki × 100). Ay toplamı % için de aynı veri kullanılıyor.
+  const [gunlukOnceki, setGunlukOnceki] = useState<Record<string, number|null>>({});
+  const [yukleniyor, setYukleniyor] = useState(true);
+  const [gorunum, setGorunum] = useState<"izgara"|"liste">("izgara");
+  const [degerTip, setDegerTip] = useState<"tutar"|"yuzde">("tutar");
+  const [renkTip, setRenkTip] = useState<"duz"|"yogunluk">("duz");
+
+  const sahipler = useMemo(()=>liste.filter(k=>k.alis!=null && k.miktar!=null && k.miktar>0), [liste]);
+
+  useEffect(() => {
+    let aktif = true;
+    setYukleniyor(true);
+    setGunlukPnl({});
+    setGunlukOnceki({});
+    (async () => {
+      const yil = ayGosterilen.getFullYear();
+      const ay0 = ayGosterilen.getMonth();
+      const sonGunSayisi = new Date(yil, ay0+1, 0).getDate();
+      const bugunIso = new Date().toISOString().slice(0,10);
+      const sonucPnl: Record<string, number|null> = {};
+      const sonucOnceki: Record<string, number|null> = {};
+      // Aynı gün birden fazla kez hesaplanmasın (bir günün "önceki iş günü"
+      // değeri, bir sonraki günün hesaplamasında da lazım oluyor).
+      const degerOnbellek = new Map<string, Promise<number|null>>();
+      const gunDegeri = (iso: string): Promise<number|null> => {
+        if (!degerOnbellek.has(iso)) {
+          degerOnbellek.set(iso, (async () => {
+            let toplam = 0;
+            for (const k of sahipler) {
+              if (portfoyKalemIlkAlisTarihi(k) > iso) continue; // o gün henüz portföyde yoktu
+              const deger = await portfoyTarihselDeger(k, iso);
+              if (deger == null) return null; // bir kalem bile eksikse gün "veri yok" sayılır
+              toplam += deger;
+            }
+            return toplam;
+          })());
+        }
+        return degerOnbellek.get(iso)!;
+      };
+      for (let g=1; g<=sonGunSayisi; g++) {
+        const tarihObj = new Date(yil, ay0, g);
+        const haftaGunu = tarihObj.getDay();
+        if (haftaGunu===0 || haftaGunu===6) continue; // hafta sonu — ayrıca "kapalı" render ediliyor
+        const iso = `${yil}-${String(ay0+1).padStart(2,"0")}-${String(g).padStart(2,"0")}`;
+        if (iso > bugunIso) continue; // henüz yaşanmamış gün
+        const oncekiIso = oncekiIsGunu(iso);
+        const [bugunDeger, onceki] = await Promise.all([gunDegeri(iso), gunDegeri(oncekiIso)]);
+        if (!aktif) return;
+        sonucPnl[iso] = (bugunDeger!=null && onceki!=null) ? bugunDeger-onceki : null;
+        sonucOnceki[iso] = onceki;
+      }
+      if (aktif) { setGunlukPnl(sonucPnl); setGunlukOnceki(sonucOnceki); setYukleniyor(false); }
+    })();
+    return () => { aktif = false; };
+  }, [ayGosterilen, sahipler]);
+
+  const yil = ayGosterilen.getFullYear();
+  const ay0 = ayGosterilen.getMonth();
+  const ilkGun = new Date(yil, ay0, 1);
+  const sonGunSayisi = new Date(yil, ay0+1, 0).getDate();
+  const pztOfset = (ilkGun.getDay()+6)%7; // Pazartesi=0 olacak şekilde kaydır
+  const hucreler: (number|null)[] = [];
+  for (let i=0;i<pztOfset;i++) hucreler.push(null);
+  for (let g=1; g<=sonGunSayisi; g++) hucreler.push(g);
+  while (hucreler.length % 7 !== 0) hucreler.push(null);
+
+  const ayToplami = Object.values(gunlukPnl).reduce((t:number,v)=> t + (v||0), 0);
+  const veriliGunlerSirali = Object.keys(gunlukPnl).filter(iso=>gunlukPnl[iso]!=null).sort();
+  const veriliGunSayisi = veriliGunlerSirali.length;
+  const ayPozitif = ayToplami >= 0;
+  const bugunIso = new Date().toISOString().slice(0,10);
+  // Ay toplamı % — ayın İLK verili gününün "önceki" (ay başlangıcı) değerine
+  // göre. Bu değer olmadan (ör. hiç veri yoksa) % gösterilemez.
+  const ayBaslangicDegeri = veriliGunlerSirali.length>0 ? gunlukOnceki[veriliGunlerSirali[0]] : null;
+  const ayToplamiYuzde = (ayBaslangicDegeri!=null && ayBaslangicDegeri>0) ? (ayToplami/ayBaslangicDegeri)*100 : null;
+  // Yoğunluk modu: hücre rengi, o ayın en büyük mutlak günlük değişimine göre
+  // ORANLANIYOR — en sert gün en koyu, ufak değişimler soluk.
+  const maxMutlakPnl = Math.max(1, ...Object.values(gunlukPnl).map(v=>Math.abs(v||0)));
+  const yogunlukOran = (pnl: number) => Math.min(1, Math.max(0.18, Math.abs(pnl)/maxMutlakPnl));
+
+  return (
+    <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.7)",zIndex:600,display:"flex",alignItems:"flex-end",...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}}>
+      <div style={{background:C.card,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",maxHeight:"88vh",display:"flex",flexDirection:"column"}}>
+        <div style={{padding:"16px 20px 12px",borderBottom:`1px solid ${WA(0.1)}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+          <div>
+            <p style={{margin:0,fontSize:16,fontWeight:800,color:C.label}}>Günlük Performans Takvimi</p>
+            <p style={{margin:"2px 0 0",fontSize:11,color:WA(0.55)}}>Portföyünüzün hafta içi günlük değişimi</p>
+          </div>
+          <div onClick={onClose} style={{cursor:"pointer",padding:6}}><span style={{fontSize:20,color:WA(0.5)}}>✕</span></div>
+        </div>
+        {/* Görünüm kontrolleri — Izgara/Liste, %/₺, Yoğunluk/Düz
+            (2026-09-16, kullanıcı isteği: "resimdeki tüm özellikleri ekle") */}
+        <div style={{display:"flex",gap:10,padding:"12px 20px 0",flexWrap:"wrap",flexShrink:0}}>
+          {([
+            {deger:gorunum, setDeger:setGorunum, secenekler:[["izgara","Izgara"],["liste","Liste"]] as const},
+            {deger:degerTip, setDeger:setDegerTip, secenekler:[["yuzde","%"],["tutar","₺"]] as const},
+            {deger:renkTip, setDeger:setRenkTip, secenekler:[["yogunluk","Yoğunluk"],["duz","Düz"]] as const},
+          ]).map((grup,gi)=>(
+            <div key={gi} style={{display:"flex",background:WA(0.05),borderRadius:10,padding:2}}>
+              {grup.secenekler.map(([key,lbl])=>{
+                const aktif = grup.deger===key;
+                return (
+                  <div key={key} onClick={()=>(grup.setDeger as any)(key)} style={{
+                    padding:"6px 11px",borderRadius:8,fontSize:11.5,fontWeight:700,cursor:"pointer",
+                    background:aktif?C.card:"transparent",
+                    color:aktif?C.label:WA(0.5),
+                    boxShadow:aktif?"0 1px 3px rgba(0,0,0,0.15)":"none",
+                  }}>{lbl}</div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+        <div style={{overflowY:"auto",padding:"16px 20px 24px"}}>
+          {/* Ay gezinme — kullanıcı isteğiyle bilerek AÇIK bırakıldı; geçmiş
+              aylarda veri boş çıkabilir, bu kabul edilen bir sınırlama. */}
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:WA(0.05),borderRadius:14,padding:"10px 14px",marginBottom:14}}>
+            <div onClick={()=>setAyGosterilen(d=>{const n=new Date(d);n.setMonth(n.getMonth()-1);return n;})} style={{cursor:"pointer",padding:4,fontSize:16,color:C.label}}>‹</div>
+            <div style={{textAlign:"center"}}>
+              <div style={{fontSize:15,fontWeight:800,color:C.label}}>{ayGosterilen.toLocaleDateString("tr-TR",{month:"long",year:"numeric"})}</div>
+              <div style={{fontSize:11,fontWeight:700,marginTop:2,color:veriliGunSayisi>0?(ayPozitif?C.green:C.red):WA(0.4)}}>
+                {veriliGunSayisi>0
+                  ? `Ay toplamı · ${ayPozitif?"+":""}${portfoyFmtTL(ayToplami,0)}${ayToplamiYuzde!=null?` · %${ayToplamiYuzde>=0?"+":""}${ayToplamiYuzde.toFixed(2).replace(".",",")}`:""}`
+                  : (yukleniyor?"Hesaplanıyor…":"Bu ay için veri yok")}
+              </div>
+            </div>
+            <div onClick={()=>setAyGosterilen(d=>{const n=new Date(d);n.setMonth(n.getMonth()+1);return n;})} style={{cursor:"pointer",padding:4,fontSize:16,color:C.label}}>›</div>
+          </div>
+
+          {gorunum==="izgara" ? (
+          <>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:6,marginBottom:4}}>
+            {["Pzt","Sal","Çar","Per","Cum","Cmt","Paz"].map(g=>(
+              <div key={g} style={{textAlign:"center",fontSize:10.5,fontWeight:700,color:WA(0.4)}}>{g}</div>
+            ))}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:6}}>
+            {hucreler.map((gun,i)=>{
+              if (gun==null) return <div key={i}/>;
+              const iso = `${yil}-${String(ay0+1).padStart(2,"0")}-${String(gun).padStart(2,"0")}`;
+              const haftaSonuMu = [0,6].includes(new Date(yil,ay0,gun).getDay());
+              const gelecekMi = iso > bugunIso;
+              const pnl = gunlukPnl[iso];
+              const onceki = gunlukOnceki[iso];
+              const yuzde = (pnl!=null && onceki!=null && onceki>0) ? (pnl/onceki)*100 : null;
+              const renk = pnl==null ? null : (pnl>=0 ? C.green : C.red);
+              // Yoğunluk modu: aynı renk tonu, opaklığı o günün büyüklüğüne
+              // göre değişiyor. Düz modda opaklık sabit (mevcut davranış).
+              const opaklik = (renkTip==="yogunluk" && pnl!=null) ? yogunlukOran(pnl) : 1;
+              const cellBg = renk==null ? null : (renk===C.green ? `rgba(52,199,89,${0.16*opaklik+0.02})` : `rgba(248,113,113,${0.20*opaklik+0.02})`);
+              return (
+                <div key={i} style={{
+                  minHeight:52,borderRadius:10,padding:"6px 7px",
+                  ...(haftaSonuMu
+                    ? {background:`repeating-linear-gradient(45deg, ${WA(0.03)}, ${WA(0.03)} 4px, ${WA(0.06)} 4px, ${WA(0.06)} 8px)`}
+                    : cellBg
+                      ? {background:cellBg}
+                      : {background:WA(0.04)}),
+                }}>
+                  <div style={{fontSize:12,fontWeight:700,color:(renk && !gelecekMi)?renk:(gelecekMi?C.label:WA(0.4))}}>{gun}</div>
+                  {!haftaSonuMu && !gelecekMi && pnl!=null && (
+                    <div style={{fontSize:9.5,fontWeight:800,color:renk||WA(0.4),marginTop:2}}>
+                      {degerTip==="tutar"
+                        ? <>{pnl>=0?"+":""}{portfoyFmtTL(pnl,0)}</>
+                        : yuzde!=null ? <>{yuzde>=0?"+":""}{yuzde.toFixed(2).replace(".",",")}%</> : "—"}
+                    </div>
+                  )}
+                  {!haftaSonuMu && !gelecekMi && pnl==null && !yukleniyor && (
+                    <div style={{fontSize:9,color:WA(0.3),marginTop:2}}>—</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          </>
+          ) : (
+          /* Liste görünümü — her hafta içi gün ayrı bir satır, en yeni en üstte. */
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            {(()=>{
+              const satirlar: {gun:number; iso:string; haftaSonuMu:boolean; gelecekMi:boolean}[] = [];
+              for (let g=1; g<=sonGunSayisi; g++) {
+                const haftaSonuMu = [0,6].includes(new Date(yil,ay0,g).getDay());
+                const iso = `${yil}-${String(ay0+1).padStart(2,"0")}-${String(g).padStart(2,"0")}`;
+                satirlar.push({gun:g, iso, haftaSonuMu, gelecekMi: iso>bugunIso});
+              }
+              return satirlar.filter(s=>!s.haftaSonuMu && !s.gelecekMi).reverse().map(s=>{
+                const pnl = gunlukPnl[s.iso];
+                const onceki = gunlukOnceki[s.iso];
+                const yuzde = (pnl!=null && onceki!=null && onceki>0) ? (pnl/onceki)*100 : null;
+                const renk = pnl==null ? null : (pnl>=0 ? C.green : C.red);
+                return (
+                  <div key={s.iso} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 12px",borderRadius:10,background:WA(0.04)}}>
+                    <div>
+                      <div style={{fontSize:12.5,fontWeight:700,color:C.label}}>{new Date(yil,ay0,s.gun).toLocaleDateString("tr-TR",{day:"2-digit",month:"long",weekday:"long"})}</div>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      {renk && <div style={{width:8,height:8,borderRadius:4,background:renk}}/>}
+                      <span style={{fontSize:13,fontWeight:800,color:renk||WA(0.35)}}>
+                        {pnl==null ? "—" : degerTip==="tutar"
+                          ? <>{pnl>=0?"+":""}{portfoyFmtTL(pnl,0)}</>
+                          : yuzde!=null ? <>{yuzde>=0?"+":""}{yuzde.toFixed(2).replace(".",",")}%</> : "—"}
+                      </span>
+                    </div>
+                  </div>
+                );
+              });
+            })()}
+          </div>
+          )}
+
+          <div style={{display:"flex",gap:14,marginTop:16,flexWrap:"wrap"}}>
+            <div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:12,height:12,borderRadius:4,background:C.greenLight}}/><span style={{fontSize:11,color:WA(0.55)}}>Kazanç</span></div>
+            <div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:12,height:12,borderRadius:4,background:"rgba(248,113,113,0.15)"}}/><span style={{fontSize:11,color:WA(0.55)}}>Kayıp</span></div>
+            <div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:12,height:12,borderRadius:4,background:`repeating-linear-gradient(45deg, ${WA(0.03)}, ${WA(0.03)} 4px, ${WA(0.06)} 4px, ${WA(0.06)} 8px)`}}/><span style={{fontSize:11,color:WA(0.55)}}>Piyasa kapalı</span></div>
+          </div>
+          {sahipler.some(k=>k.tur==="fon") && (
+            <p style={{margin:"12px 0 0",fontSize:10.5,color:WA(0.4),lineHeight:1.5}}>
+              ℹ️ Fon fiyat geçmişi TEFAS'ın sunduğu pencereyle sınırlıdır; eski aylarda bazı günler "veri yok" görünebilir.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function PortfoyKarZararModal({liste, onClose}:{liste: PortfoyKalemi[]; onClose: ()=>void}){
@@ -25204,6 +25528,7 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onDuzen
   });
   const [filtre, setFiltre] = useState<"tumu"|PortfoyKalemi["tur"]>("tumu");
   const [grafikAcik, setGrafikAcik] = useState(false);
+  const [takvimAcik, setTakvimAcik] = useState(false);
 
   // Ayrım artık ALIŞ BİLGİSİNE göre: fiyat/tarih girilmişse Portföyüm,
   // girilmemişse (miktar girilmiş olsa bile) Takip Listem.
@@ -25333,8 +25658,16 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onDuzen
         <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:16,marginBottom:14}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
             <span style={{fontSize:10.5,fontWeight:700,color:PORTFOY_ETIKET}}>Toplam Değer</span>
-            <div onClick={onGizliToggle} style={{cursor:"pointer",padding:2}}>
-              {gizli ? <EyeOff size={15} color={PORTFOY_ETIKET}/> : <Eye size={15} color={PORTFOY_ETIKET}/>}
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              {/* 2026-09-16 (kullanıcı isteği: "günlük performans takvimi
+                  ekleyelim") — Calendar zaten lucide-react'ten import edilmiş
+                  (bkz. dosya başı), yeni bir import gerekmedi. */}
+              <div onClick={()=>setTakvimAcik(true)} style={{cursor:"pointer",padding:2}}>
+                <Calendar size={15} color={PORTFOY_ETIKET}/>
+              </div>
+              <div onClick={onGizliToggle} style={{cursor:"pointer",padding:2}}>
+                {gizli ? <EyeOff size={15} color={PORTFOY_ETIKET}/> : <Eye size={15} color={PORTFOY_ETIKET}/>}
+              </div>
             </div>
           </div>
           <div onClick={()=>setGrafikAcik(true)} style={{cursor:"pointer",fontSize:26,fontWeight:800,color:PORTFOY_YAZI,marginBottom:10,fontVariantNumeric:"tabular-nums"}}>
@@ -25678,6 +26011,7 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onDuzen
         <span style={{fontSize:12.5,fontWeight:700,whiteSpace:"nowrap"}}>Pozisyon ekle</span>
       </div>
       {grafikAcik && <PortfoyKarZararModal liste={liste} onClose={()=>setGrafikAcik(false)}/>}
+      {takvimAcik && <PortfoyTakvimModal liste={portfoyListesi} onClose={()=>setTakvimAcik(false)}/>}
     </div>
   );
 }
