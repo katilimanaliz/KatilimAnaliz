@@ -23043,13 +23043,26 @@ async function portfoyFonGecmisVeri(kod: string): Promise<{tarih:string;fiyat:nu
 // formülle hesaplanmış tam değer). portfoyGuncelDeger'deki AYNI formüller,
 // "bugün" yerine verilen tarih kullanılarak tekrarlanıyor — iki fonksiyon
 // aynı sonucu FARKLI tarihler için üretmeli, tutarsızlık olmamalı.
+// ⚠️ 2026-09-16 (kullanıcı raporu: "ayın 15. verisi yanlış görünüyor"):
+// fon NAV'ı için ÖNCEDEN paylaşımlı portfoyTariheEnYakinFiyat (±4 GÜN
+// tolerans) kullanılıyordu. Bu tolerans, ardışık iki günün "en yakın"
+// eşleşmesi FARKLI (gerçekte olmayan) tarihlere düşerse YAPAY bir sıçrama
+// üretebilir — ki günlük K/Z tam olarak bunu ölçtüğü için TAKVİM'de bu
+// hata büyük ve yanlış bir rakam olarak görünür. portfoyTariheEnYakinFiyat'ın
+// KENDİSİNE dokunulmadı (başka bir özellik onu kullanıyor) — SADECE takvim
+// için AYRI, SIKI (aynı gün ZORUNLU) bir eşleştirici eklendi. Eşleşme yoksa
+// dürüstçe null — yanlış bir sayı yerine "veri yok".
+function portfoyFonAyniGunFiyat(noktalar: {tarih:string;fiyat:number}[], hedefIso: string): number | null {
+  const nokta = noktalar.find(n => n.tarih.slice(0,10) === hedefIso);
+  return nokta ? nokta.fiyat : null;
+}
 async function portfoyTarihselDeger(k: PortfoyKalemi, hedefIso: string): Promise<number|null> {
   if (k.alis == null) return 0;
   if (k.tur === "fon") {
     const alisFiyat = k.alis!.fiyat;
     if (typeof alisFiyat !== "number" || alisFiyat <= 0) return null;
     const noktalar = await portfoyFonGecmisVeri(k.kod);
-    const fiyat = portfoyTariheEnYakinFiyat(noktalar, hedefIso);
+    const fiyat = portfoyFonAyniGunFiyat(noktalar, hedefIso);
     if (fiyat == null) return null;
     return k.miktar! * (fiyat / alisFiyat);
   }
@@ -23195,6 +23208,20 @@ function PortfoyTakvimModal({liste, onClose}:{liste: PortfoyKalemi[]; onClose: (
   const [renkTip, setRenkTip] = useState<"duz"|"yogunluk">("duz");
 
   const sahipler = useMemo(()=>liste.filter(k=>k.alis!=null && k.miktar!=null && k.miktar>0), [liste]);
+  // ⚠️ 2026-09-16 (kullanıcı raporu: "ekran sürekli titriyor"): KÖK NEDEN —
+  // bu modale geçirilen `liste` prop'u üst bileşende (PortfoyDetayEkrani)
+  // MEMOIZE EDİLMEMİŞ; her render'da yeni bir dizi referansı oluşuyordu. Bu
+  // yüzden `sahipler` de her seferinde yeni bir referans alıyordu, aşağıdaki
+  // useEffect SÜREKLİ yeniden tetikleniyordu (fetch → state güncelle → render
+  // → yeni referans → tekrar fetch...) — görsel titremenin sebebi buydu.
+  // ÇÖZÜM: useEffect artık dizi REFERANSINA değil, içeriğin SABİT bir
+  // özetine (anahtar dizesi) bağlı. İçerik gerçekten değişmediği sürece
+  // (aynı hisseler/fonlar/miktarlar) referans değişse bile efekt TEKRAR
+  // ÇALIŞMIYOR.
+  const sahiplerAnahtar = useMemo(
+    () => JSON.stringify(sahipler.map(k=>[k.tur,k.kod,k.miktar,k.alis?.fiyat,k.alis?.tarih])),
+    [sahipler]
+  );
 
   useEffect(() => {
     let aktif = true;
@@ -23231,7 +23258,17 @@ function PortfoyTakvimModal({liste, onClose}:{liste: PortfoyKalemi[]; onClose: (
         const haftaGunu = tarihObj.getDay();
         if (haftaGunu===0 || haftaGunu===6) continue; // hafta sonu — ayrıca "kapalı" render ediliyor
         const iso = `${yil}-${String(ay0+1).padStart(2,"0")}-${String(g).padStart(2,"0")}`;
-        if (iso > bugunIso) continue; // henüz yaşanmamış gün
+        // ⚠️ 2026-09-16 (kullanıcı raporu: "16. Verisi bugün ancak orda da
+        // pozitif gösteriyor boş olması lazım"): ÖNCEDEN sadece SIKI GELECEK
+        // günler (iso > bugunIso) hariç tutuluyordu — BUGÜNÜN KENDİSİ dahil
+        // ediliyordu. Ancak fonların NAV'ı TEFAS'ta GECİKMELİ yayınlanır;
+        // "bugün" için gecmis verisinde henüz gerçek bir nokta yoktur,
+        // `portfoyTariheEnYakinFiyat` en yakın (genelde DÜNÜN) noktasına
+        // düşer — bu da "bugün" ile "dün" neredeyse aynı çıkıp anlamsız,
+        // küçük/yanıltıcı bir fark üretir (kullanıcının gördüğü "+₺41" gibi).
+        // ARTIK BUGÜN DE HARİÇ — sadece kesinleşmiş (dünkü ve öncesi) günler
+        // hesaplanıyor.
+        if (iso >= bugunIso) continue;
         const oncekiIso = oncekiIsGunu(iso);
         const [bugunDeger, onceki] = await Promise.all([gunDegeri(iso), gunDegeri(oncekiIso)]);
         if (!aktif) return;
@@ -23241,7 +23278,7 @@ function PortfoyTakvimModal({liste, onClose}:{liste: PortfoyKalemi[]; onClose: (
       if (aktif) { setGunlukPnl(sonucPnl); setGunlukOnceki(sonucOnceki); setYukleniyor(false); }
     })();
     return () => { aktif = false; };
-  }, [ayGosterilen, sahipler]);
+  }, [ayGosterilen, sahiplerAnahtar]);
 
   const yil = ayGosterilen.getFullYear();
   const ay0 = ayGosterilen.getMonth();
@@ -23344,7 +23381,13 @@ function PortfoyTakvimModal({liste, onClose}:{liste: PortfoyKalemi[]; onClose: (
                     ? {background:`repeating-linear-gradient(45deg, ${WA(0.03)}, ${WA(0.03)} 4px, ${WA(0.06)} 4px, ${WA(0.06)} 8px)`}
                     : cellBg
                       ? {background:cellBg}
-                      : {background:WA(0.04)}),
+                      // ⚠️ 2026-09-16 (kullanıcı raporu: "veri olmayanları
+                      // yeşil gösterme"): ÖNCEDEN burada WA(0.04) (hafif
+                      // beyaz katman) kullanılıyordu — koyu, yeşile çalan
+                      // kart zemininin üzerinde bu da yeşilimsi okunuyordu.
+                      // Veri yok/gelecek günler artık TAMAMEN DÜZ (renk
+                      // katmanı yok) — "kazanç" ile karıştırılmasın diye.
+                      : {background:"transparent"}),
                 }}>
                   <div style={{fontSize:12,fontWeight:700,color:(renk && !gelecekMi)?renk:(gelecekMi?C.label:WA(0.4))}}>{gun}</div>
                   {!haftaSonuMu && !gelecekMi && pnl!=null && (
