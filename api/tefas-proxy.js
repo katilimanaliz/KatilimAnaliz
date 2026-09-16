@@ -1147,8 +1147,20 @@ async function bistEndeksUyeligiCronYaz(req, res) {
 async function bistEndeksUyeligiOku(req, res) {
   try {
     const kayit = await kv.get(BIST_UYELIK_KV_ANAHTAR).catch(() => null);
+    // ⚠️ 2026-09-15 (canlı ortamda bulundu): ÖNCEDEN "veri yok" cevabı da
+    // "başarılı" cevapla AYNI CDN önbellek süresini (s-maxage=3600)
+    // kullanıyordu. Cron çalışmadan ÖNCE biri bu ucu bir kez çağırırsa,
+    // Vercel'in CDN'i "henüz veri yok" cevabını 1 SAAT boyunca
+    // önbelleklemiş oluyordu — cron sonradan başarılı olsa bile o süre
+    // boyunca TÜM kullanıcılara eski "veri yok" cevabı gidiyordu (tam da
+    // bu davranış canlıda gözlendi). Artık "veri yok" cevabı HİÇ
+    // önbelleklenmiyor (no-store); sadece GERÇEK veri döndüğünde
+    // önbellekleniyor.
+    if (!kayit) {
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(200).json({ success: false, error: "henüz veri yok" });
+    }
     res.setHeader("Cache-Control", "max-age=0, s-maxage=3600, stale-while-revalidate=86400");
-    if (!kayit) return res.status(200).json({ success: false, error: "henüz veri yok" });
     return res.status(200).json({ success: true, ...kayit });
   } catch (e) {
     return res.status(500).json({ success: false, error: String(e.message || e) });
