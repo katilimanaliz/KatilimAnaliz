@@ -23124,10 +23124,25 @@ async function portfoyTarihselDeger(k: PortfoyKalemi, hedefIso: string): Promise
 }
 // Bir sonraki/önceki İŞ GÜNÜ (hafta sonu atlanır) — takvim, bir günün K/Z'sini
 // "bir önceki İŞ GÜNÜNE göre" hesaplıyor (Pazartesi'nin öncesi Cuma'dır).
+// ⚠️ 2026-09-16 (KÖK NEDEN, gerçek zamanlı çalışma-anı verisiyle bulundu):
+// ÖNCEKİ hâli `new Date(iso+"T00:00:00")` ile kuruyordu (saat dilimi eki
+// YOK → YEREL saate göre yorumlanır) ama `.toISOString()` ile geri
+// döndürüyordu (HER ZAMAN UTC). Türkiye UTC+3 olduğu için yerel gece yarısı,
+// UTC'de BİR ÖNCEKİ günün akşamına denk geliyor — bu da fonksiyonun bir gün
+// ERKEN bir tarih döndürmesine yol açıyordu (15 Eylül'ün "önceki iş günü"
+// 14 değil 13 çıkıyordu, ki bu da 14'ün getirisini yanlışlıkla zincire
+// katıp Takvim'de yanlış bir rakam üretiyordu). Bu hata SADECE 15. günü
+// değil, TÜM takvimi etkiliyordu — 1 Eylül'ün bile "önceki günü" yanlış
+// çıkıyordu (test: eski kod "30 Ağustos" — bir PAZAR — derken doğrusu
+// "31 Ağustos" Pazartesi'ydi). DÜZELTME: tarih artık HİÇBİR yerel saat
+// dilimine bağlı olmadan, sadece YIL/AY/GÜN tam sayılarıyla ve UTC
+// metotlarıyla (Date.UTC, getUTCDay, getUTCDate) hesaplanıyor — inşa ve
+// geri okuma AYNI (UTC) saat diliminde, tutarsızlık yok.
 function oncekiIsGunu(iso: string): string {
-  const d = new Date(iso + "T00:00:00");
-  do { d.setDate(d.getDate() - 1); } while (d.getDay() === 0 || d.getDay() === 6);
-  return d.toISOString().slice(0, 10);
+  const [yil, ay, gun] = iso.split("-").map(Number);
+  const d = new Date(Date.UTC(yil, ay - 1, gun));
+  do { d.setUTCDate(d.getUTCDate() - 1); } while (d.getUTCDay() === 0 || d.getUTCDay() === 6);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,"0")}-${String(d.getUTCDate()).padStart(2,"0")}`;
 }
 
 // Bazı eski kayıtlarda (bir önceki sürümdeki hatadan dolayı) alış tarihi
@@ -23226,13 +23241,6 @@ function PortfoyTakvimModal({liste, onClose}:{liste: PortfoyKalemi[]; onClose: (
   const [gorunum, setGorunum] = useState<"izgara"|"liste">("izgara");
   const [degerTip, setDegerTip] = useState<"tutar"|"yuzde">("tutar");
   const [renkTip, setRenkTip] = useState<"duz"|"yogunluk">("duz");
-  // ⚠️ GEÇİCİ TEŞHİS (2026-09-16) — kullanıcı raporu: gerçek getiri serisi
-  // (%-0,35, 15. gün) doğru olduğu halde takvim -%0,01 gibi bambaşka bir
-  // değer gösteriyor. Kod incelemesiyle üç kez doğrulandı ki mantık DOĞRU
-  // sonuç üretmesi gerekiyor — bu yüzden körlemesine dördüncü bir "düzeltme"
-  // yapmak yerine, ÇALIŞMA ANINDA gerçekte ne çekildiğini/hesaplandığını
-  // GÖRÜNÜR kılan bu geçici blok eklendi. Kök neden bulununca KALDIRILACAK.
-  const [debugBilgi, setDebugBilgi] = useState<string>("");
   const sahipler = useMemo(()=>liste.filter(k=>k.alis!=null && k.miktar!=null && k.miktar>0), [liste]);
   // ⚠️ 2026-09-16 (kullanıcı raporu: "ekran sürekli titriyor"): KÖK NEDEN —
   // bu modale geçirilen `liste` prop'u üst bileşende (PortfoyDetayEkrani)
@@ -23301,27 +23309,6 @@ function PortfoyTakvimModal({liste, onClose}:{liste: PortfoyKalemi[]; onClose: (
         sonucPnl[iso] = (bugunDeger!=null && onceki!=null) ? bugunDeger-onceki : null;
         sonucOnceki[iso] = onceki;
       }
-      // ⚠️ GEÇİCİ TEŞHİS — ilk fon kalemi için gerçek zamanlı, adım adım
-      // hesaplama izini yakala (yukarıdaki normal akıştan TAMAMEN BAĞIMSIZ,
-      // sadece OKUMA amaçlı ayrı bir çağrı — mevcut hesaplamayı etkilemez).
-      // 2. TUR: bir önceki debug'da izole çağrı DOĞRU (-5270,43) çıktı ama
-      // takvim hücresi hâlâ YANLIŞTI — demek ki hata fonksiyonda değil, ANA
-      // DÖNGÜNÜN ürettiği sonucPnl'de. Bu yüzden ANA DÖNGÜNÜN kendi ürettiği
-      // ham değeri (sonucPnl["2026-09-15"], state'e YAZILMADAN hemen önceki
-      // hali) de debug satırına eklendi — ikisi FARKLI mı, AYNI mı görelim.
-      try {
-        const ilkFon = sahipler.find(k => k.tur === "fon");
-        if (ilkFon) {
-          const seri = await portfoyFonGunlukGetiriSerisi(ilkFon.kod);
-          const guncelDeger = portfoyGuncelDeger(ilkFon);
-          const son3 = seri.slice(-3).map(s => `${s.tarih}:${s.getiri?.toFixed(4)}`).join(" | ");
-          const d15 = await portfoyFonTarihselDeger(ilkFon, "2026-09-15");
-          const d14 = await portfoyFonTarihselDeger(ilkFon, "2026-09-14");
-          const anaDongu15 = sonucPnl["2026-09-15"];
-          const anaDonguOnceki15 = sonucOnceki["2026-09-15"];
-          setDebugBilgi(`kod=${ilkFon.kod} seri.length=${seri.length} son3=[${son3}] guncelDeger=${guncelDeger.toFixed(2)} deger(15)=${d15?.toFixed(2)} deger(14)=${d14?.toFixed(2)} fark=${(d15!=null&&d14!=null)?(d15-d14).toFixed(2):"?"} || ANA_DONGU: sonucPnl[15]=${anaDongu15?.toFixed?.(2)??anaDongu15} sonucOnceki[15]=${anaDonguOnceki15?.toFixed?.(2)??anaDonguOnceki15}`);
-        }
-      } catch (e) { setDebugBilgi(`HATA: ${String(e)}`); }
       if (aktif) { setGunlukPnl(sonucPnl); setGunlukOnceki(sonucOnceki); setYukleniyor(false); }
     })();
     return () => { aktif = false; };
@@ -23508,12 +23495,6 @@ function PortfoyTakvimModal({liste, onClose}:{liste: PortfoyKalemi[]; onClose: (
           {sahipler.some(k=>k.tur==="fon") && (
             <p style={{margin:"12px 0 0",fontSize:10.5,color:WA(0.4),lineHeight:1.5}}>
               ℹ️ Fon fiyat geçmişi TEFAS'ın sunduğu pencereyle sınırlıdır; eski aylarda bazı günler "veri yok" görünebilir.
-            </p>
-          )}
-          {/* ⚠️ GEÇİCİ TEŞHİS BLOĞU — kök neden bulununca KALDIRILACAK. */}
-          {debugBilgi && (
-            <p style={{margin:"12px 0 0",fontSize:9,color:"#F59E0B",lineHeight:1.5,fontFamily:"monospace",wordBreak:"break-all"}}>
-              🔧 DEBUG: {debugBilgi}
             </p>
           )}
         </div>
@@ -27930,7 +27911,15 @@ function App(){
               // Masaüstünde 10 yükselen / 10 düşen — üç kolonlu düzende bu
               // sütun 5'er satırla çok kısa kalıyordu (kullanıcı raporu).
               const endeksBlok = <KatilimEndeksiTopHareketliler nav={nav} onSecim={irHisseFonDetay} adet={genisEkran?10:5}/>;
-              const fonBlok = <FonTahminleriWidget nav={nav} onSecim={irHisseFonDetay} onFonDetayAc={(fon:any)=>{setPendingFonDetay(fon); nav("fonDetay","home");}}/>;
+              // ⚠️ 2026-09-16 (kullanıcı isteği: "Popüler fonlar alanını
+              // uygulamadan ve masaüstünden kaldır"): fonBlok kaldırıldı,
+              // hem MOBİL hem MASAÜSTÜ render'larından çıkarıldı. Bileşenin
+              // kendisi (FonTahminleriWidget, satır ~4733) SİLİNMEDİ — geri
+              // getirmek gerekirse `const fonBlok = <FonTahminleriWidget
+              // nav={nav} onSecim={irHisseFonDetay} onFonDetayAc={(fon:any)
+              // =>{setPendingFonDetay(fon); nav("fonDetay","home");}}/>;`
+              // satırını geri eklemek ve aşağıdaki iki render noktasına
+              // {fonBlok} olarak koymak yeterli.
               const portfoyModal = portfoyGrafikAcik ? <PortfoyKarZararModal liste={portfoy} onClose={()=>setPortfoyGrafikAcik(false)}/> : null;
 
               if (genisEkran) {
@@ -27955,10 +27944,12 @@ function App(){
                         karta göre yükseliyor (alignItems:"stretch"). */}
                     {/* ③ Piyasalar ile bu satır arasındaki boşluk açıldı
                         (2026-09-15, kullanıcı isteği): 8 → 26px. */}
-                    <div style={{...IKILI_SATIR,marginTop:26}}>
-                      <div style={{minWidth:0}}>{endeksBlok}</div>
-                      <div style={{minWidth:0}}>{fonBlok}</div>
-                    </div>
+                    {/* ⚠️ 2026-09-16 (kullanıcı isteği: "Popüler fonlar
+                        alanını kaldır"): önceden bu ikili ızgarada endeksBlok
+                        ile fonBlok yan yanaydı; fonBlok kalkınca endeksBlok
+                        TEK BAŞINA, TAM GENİŞLİKTE render ediliyor — ızgara
+                        sarmalayıcısına gerek kalmadı. */}
+                    <div style={{marginTop:26}}>{endeksBlok}</div>
                     {/* ② Finansal Göstergeler artık TAM GENİŞLİKTE ve YATAY
                         (kendi içinde 3 sütunlu ızgara — bkz. gostergelerBlok).
                         ① Katılım Sektörü kartı buradan ÇIKARILIP sağ raya,
@@ -27987,7 +27978,6 @@ function App(){
                       onDuzenle/onGrafik/onSirala). */}
                   {portfoyModal}
                   {endeksBlok}
-                  {fonBlok}
                   {gostergelerBlok}
                   {/* ⚠️ MOBİL SIRA GERİ ALINDI (2026-09-14, kullanıcı raporu):
                       sağ ray yapısı kurulurken Son Haberler ve Yaklaşan Takvim
