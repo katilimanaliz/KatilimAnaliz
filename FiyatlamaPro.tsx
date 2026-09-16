@@ -3276,28 +3276,67 @@ function fmtByk(n: number): string {
   return n.toLocaleString("tr-TR") + " ₺";
 }
 
-// KAP kaynaklı, ücretsiz BIST logo deposu (jsDelivr CDN) — bulunamazsa TradingView
-// denenir, o da bulunamazsa renkli baş harf rozetine düşülür.
+// KAP kaynaklı, ücretsiz BIST logo deposu (jsDelivr CDN) — bulunamazsa şirket
+// adından domain aranıp o domain'in favicon'u denenir, o da bulunamazsa
+// renkli baş harf rozetine düşülür.
+// ⚠️ 2026-09-15: TradingView'in logo CDN'ini bir ara kaynak olarak denemiştik,
+// ama kullanıcı testinde (DSTKF örneği) işe yaramadığı görüldü — araştırınca
+// nedeni bulundu: TradingView'in CDN'i ŞİRKET ADINDAN türetilmiş bir "slug"
+// kullanıyor (ör. Tesla → "tesla.svg", "TSLA" değil), TICKER İLE DEĞİL. Bu
+// slug'ı ticker'dan güvenilir şekilde türetmenin yolu yok, kaldırıldı.
+//
+// YENİ DENEME (2026-09-15, kullanıcı "başka kaynak bul" dedi): Clearbit'in
+// ÜCRETSİZ, anahtarsız "Autocomplete" API'si (autocomplete.clearbit.com) hâlâ
+// çalışıyor ve ŞİRKET ADINDAN domain buluyor — TICKER TAHMİNİ YOK, gerçek bir
+// isim araması. Bulunan domain, bu projenin FON logoları için ZATEN
+// kullandığı Google favicon servisine besleniyor (aynı desen, kanıtlanmış).
+// ⚠️ DÜRÜSTLÜK: Clearbit'in Türkçe şirket adlarını (ör. "Destek Finans
+// Faktoring A.Ş.") ne kadar doğru eşleştirdiği bu ortamdan TAM DOĞRULANAMADI
+// (test sırasında bir URL önbellekleme kısıtına çarpıldı — İngilizce bir
+// isimle mekanizmanın çalıştığı doğrulandı, Türkçe isimle doğrulanamadı).
+// RİSKSİZ: yanlış/boş domain dönerse favicon da başarısız olur, yine baş
+// harfe düşülür. Kullanıcı canlıda test edip sonucu bildirecek.
 const bistLogoUrl = (ticker: string) => `https://cdn.jsdelivr.net/gh/ahmeterenodaci/Istanbul-Stock-Exchange--BIST--including-symbols-and-logos/logos/${ticker}.png`;
-// ⚠️ 2026-09-15 (kullanıcı isteği: "amblemler tam ve eksiksiz olsun"): İKİNCİ
-// bir kaynak eklendi — TradingView'in kendi sembol logosu CDN'i. Format birçok
-// açık kaynak projede kullanılıyor ama BU PROJEDE BİST tickerlarıyla GERÇEKTEN
-// TEK TEK DOĞRULANMADI (bu ortamda 750 hisseyi tek tek test edecek bir araç
-// yok). RİSKSİZ bir ekleme: bulamazsa aynen eskisi gibi baş harfe düşer, hiçbir
-// şeyi BOZMAZ. Kullanıcı canlıda deneyip sonucu bildirecek.
-const bistLogoUrlYedek = (ticker: string) => `https://s3-symbol-logo.tradingview.com/${ticker.toLowerCase()}--big.svg`;
 const AVATAR_RENKLER = ["#C0392B","#1E7FE0","#166534","#7C3AED","#B45309","#0F766E","#9D174D","#374151","#1D4ED8","#B91C1C"];
 const avatarRenk = (ticker: string) => AVATAR_RENKLER[ticker.charCodeAt(0) % AVATAR_RENKLER.length];
+// Şirket adı -> domain aramasının sonucu bellek-içi önbellekleniyor; aynı
+// şirket için (liste kayarken tekrar render olduğunda) Clearbit'e tekrar
+// tekrar istek atılmasın.
+const domainOnbellek = new Map<string, string|null>();
 
-function HisseAvatar({ticker, boyut=42}:{ticker:string, boyut?:number}){
-  // 0: birincil kaynak deneniyor · 1: yedek kaynak deneniyor · 2: ikisi de
-  // başarısız, baş harf rozetine düşüldü.
+function HisseAvatar({ticker, sirket, boyut=42}:{ticker:string, sirket?:string, boyut?:number}){
+  // 0: birincil kaynak (jsDelivr) deneniyor · 1: domain-favicon deneniyor ·
+  // 2: ikisi de başarısız, baş harf rozetine düşüldü.
   const [asama, setAsama] = useState<0|1|2>(0);
+  const [faviconUrl, setFaviconUrl] = useState<string|null>(null);
+
+  useEffect(() => {
+    if (asama !== 1 || !sirket) { if (asama===1 && !sirket) setAsama(2); return; }
+    const onbellekli = domainOnbellek.get(sirket);
+    if (onbellekli !== undefined) {
+      if (onbellekli) setFaviconUrl(`https://www.google.com/s2/favicons?domain=${encodeURIComponent(onbellekli)}&sz=128`);
+      else setAsama(2);
+      return;
+    }
+    let aktif = true;
+    fetch(`https://autocomplete.clearbit.com/v1/companies/suggest?query=${encodeURIComponent(sirket)}`)
+      .then(r => r.ok ? r.json() : [])
+      .then((sonuclar: any[]) => {
+        if (!aktif) return;
+        const domain = sonuclar?.[0]?.domain || null;
+        domainOnbellek.set(sirket, domain);
+        if (domain) setFaviconUrl(`https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=128`);
+        else setAsama(2);
+      })
+      .catch(() => { if (aktif) setAsama(2); });
+    return () => { aktif = false; };
+  }, [asama, sirket]);
+
   // ⚠️ 2026-09-15 (kullanıcı isteği: "kutu içinde değil, sadece amblem
   // olsun"): logo yüklendiğinde artık ÇERÇEVE/ZEMİN/İÇ BOŞLUK YOK — görsel
   // kendi şekliyle, çıplak gösteriliyor. Çerçeve ve renkli zemin SADECE baş
-  // harfe düşüldüğünde (asama===2) kullanılıyor — çıplak metin okunaksız
-  // kalırdı, o yüzden orada bir zemin şart.
+  // harfe düşüldüğünde kullanılıyor — çıplak metin okunaksız kalırdı, o
+  // yüzden orada bir zemin şart.
   if (asama === 2) {
     return (
       <div style={{
@@ -3310,10 +3349,21 @@ function HisseAvatar({ticker, boyut=42}:{ticker:string, boyut?:number}){
       </div>
     );
   }
+  if (asama === 1) {
+    if (!faviconUrl) return <div style={{width:boyut,height:boyut,flexShrink:0}}/>; // domain aranırken kısa bir boşluk
+    return (
+      <img
+        src={faviconUrl}
+        onError={()=>setAsama(2)}
+        alt=""
+        style={{width:boyut,height:boyut,objectFit:"contain",flexShrink:0}}
+      />
+    );
+  }
   return (
     <img
-      src={asama===0 ? bistLogoUrl(ticker) : bistLogoUrlYedek(ticker)}
-      onError={()=>setAsama(a=>a===0?1:2)}
+      src={bistLogoUrl(ticker)}
+      onError={()=>setAsama(1)}
       alt=""
       style={{width:boyut,height:boyut,objectFit:"contain",flexShrink:0}}
     />
@@ -3840,7 +3890,7 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri 
                   border:`1px solid ${C.border}`,
                   transition:"background-color 700ms ease",
                 }}>
-                <HisseAvatar ticker={h.ticker}/>
+                <HisseAvatar ticker={h.ticker} sirket={h.sirket}/>
 
                 {/* Ticker + Şirket adı */}
                 <div style={{flex:1,minWidth:0}}>
