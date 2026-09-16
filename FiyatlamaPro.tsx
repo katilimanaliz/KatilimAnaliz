@@ -23304,6 +23304,11 @@ function PortfoyTakvimModal({liste, onClose}:{liste: PortfoyKalemi[]; onClose: (
       // ⚠️ GEÇİCİ TEŞHİS — ilk fon kalemi için gerçek zamanlı, adım adım
       // hesaplama izini yakala (yukarıdaki normal akıştan TAMAMEN BAĞIMSIZ,
       // sadece OKUMA amaçlı ayrı bir çağrı — mevcut hesaplamayı etkilemez).
+      // 2. TUR: bir önceki debug'da izole çağrı DOĞRU (-5270,43) çıktı ama
+      // takvim hücresi hâlâ YANLIŞTI — demek ki hata fonksiyonda değil, ANA
+      // DÖNGÜNÜN ürettiği sonucPnl'de. Bu yüzden ANA DÖNGÜNÜN kendi ürettiği
+      // ham değeri (sonucPnl["2026-09-15"], state'e YAZILMADAN hemen önceki
+      // hali) de debug satırına eklendi — ikisi FARKLI mı, AYNI mı görelim.
       try {
         const ilkFon = sahipler.find(k => k.tur === "fon");
         if (ilkFon) {
@@ -23312,7 +23317,9 @@ function PortfoyTakvimModal({liste, onClose}:{liste: PortfoyKalemi[]; onClose: (
           const son3 = seri.slice(-3).map(s => `${s.tarih}:${s.getiri?.toFixed(4)}`).join(" | ");
           const d15 = await portfoyFonTarihselDeger(ilkFon, "2026-09-15");
           const d14 = await portfoyFonTarihselDeger(ilkFon, "2026-09-14");
-          setDebugBilgi(`kod=${ilkFon.kod} seri.length=${seri.length} son3=[${son3}] guncelDeger=${guncelDeger.toFixed(2)} deger(15)=${d15?.toFixed(2)} deger(14)=${d14?.toFixed(2)} fark=${(d15!=null&&d14!=null)?(d15-d14).toFixed(2):"?"}`);
+          const anaDongu15 = sonucPnl["2026-09-15"];
+          const anaDonguOnceki15 = sonucOnceki["2026-09-15"];
+          setDebugBilgi(`kod=${ilkFon.kod} seri.length=${seri.length} son3=[${son3}] guncelDeger=${guncelDeger.toFixed(2)} deger(15)=${d15?.toFixed(2)} deger(14)=${d14?.toFixed(2)} fark=${(d15!=null&&d14!=null)?(d15-d14).toFixed(2):"?"} || ANA_DONGU: sonucPnl[15]=${anaDongu15?.toFixed?.(2)??anaDongu15} sonucOnceki[15]=${anaDonguOnceki15?.toFixed?.(2)??anaDonguOnceki15}`);
         }
       } catch (e) { setDebugBilgi(`HATA: ${String(e)}`); }
       if (aktif) { setGunlukPnl(sonucPnl); setGunlukOnceki(sonucOnceki); setYukleniyor(false); }
