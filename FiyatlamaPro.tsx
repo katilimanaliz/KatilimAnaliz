@@ -3276,34 +3276,47 @@ function fmtByk(n: number): string {
   return n.toLocaleString("tr-TR") + " ₺";
 }
 
-// KAP kaynaklı, ücretsiz BIST logo deposu (jsDelivr CDN) — bulunamazsa renkli baş harf rozetine düşer
+// KAP kaynaklı, ücretsiz BIST logo deposu (jsDelivr CDN) — bulunamazsa TradingView
+// denenir, o da bulunamazsa renkli baş harf rozetine düşülür.
 const bistLogoUrl = (ticker: string) => `https://cdn.jsdelivr.net/gh/ahmeterenodaci/Istanbul-Stock-Exchange--BIST--including-symbols-and-logos/logos/${ticker}.png`;
+// ⚠️ 2026-09-15 (kullanıcı isteği: "amblemler tam ve eksiksiz olsun"): İKİNCİ
+// bir kaynak eklendi — TradingView'in kendi sembol logosu CDN'i. Format birçok
+// açık kaynak projede kullanılıyor ama BU PROJEDE BİST tickerlarıyla GERÇEKTEN
+// TEK TEK DOĞRULANMADI (bu ortamda 750 hisseyi tek tek test edecek bir araç
+// yok). RİSKSİZ bir ekleme: bulamazsa aynen eskisi gibi baş harfe düşer, hiçbir
+// şeyi BOZMAZ. Kullanıcı canlıda deneyip sonucu bildirecek.
+const bistLogoUrlYedek = (ticker: string) => `https://s3-symbol-logo.tradingview.com/${ticker.toLowerCase()}--big.svg`;
 const AVATAR_RENKLER = ["#C0392B","#1E7FE0","#166534","#7C3AED","#B45309","#0F766E","#9D174D","#374151","#1D4ED8","#B91C1C"];
 const avatarRenk = (ticker: string) => AVATAR_RENKLER[ticker.charCodeAt(0) % AVATAR_RENKLER.length];
 
 function HisseAvatar({ticker, boyut=42}:{ticker:string, boyut?:number}){
-  const [hata, setHata] = useState(false);
-  // ARKA PLAN MANTIĞI (2026-07-28 düzeltildi): Önceden kutunun zemini HER ZAMAN
-  // avatarRenk(ticker) idi. Logo görseli %9 iç boşlukla yerleştirildiği için bu
-  // renk logonun çevresinde halka gibi görünüyor, çoğu BİST logosu beyaz zemin
-  // için tasarlandığından mor/turuncu çerçeveler çirkin duruyordu.
-  // Artık renkli zemin YALNIZCA logo yüklenemediğinde (baş harf gösterilirken)
-  // kullanılıyor; logo varken nötr açık zemin veriliyor.
-  const logoVar = !hata;
+  // 0: birincil kaynak deneniyor · 1: yedek kaynak deneniyor · 2: ikisi de
+  // başarısız, baş harf rozetine düşüldü.
+  const [asama, setAsama] = useState<0|1|2>(0);
+  // ⚠️ 2026-09-15 (kullanıcı isteği: "kutu içinde değil, sadece amblem
+  // olsun"): logo yüklendiğinde artık ÇERÇEVE/ZEMİN/İÇ BOŞLUK YOK — görsel
+  // kendi şekliyle, çıplak gösteriliyor. Çerçeve ve renkli zemin SADECE baş
+  // harfe düşüldüğünde (asama===2) kullanılıyor — çıplak metin okunaksız
+  // kalırdı, o yüzden orada bir zemin şart.
+  if (asama === 2) {
+    return (
+      <div style={{
+        width:boyut,height:boyut,borderRadius:boyut*0.28,flexShrink:0,
+        background:avatarRenk(ticker),
+        display:"flex",alignItems:"center",justifyContent:"center",
+        color:"#fff",fontSize:boyut*0.34,fontWeight:800,
+      }}>
+        {ticker.slice(0,2)}
+      </div>
+    );
+  }
   return (
-    <div style={{
-      width:boyut,height:boyut,borderRadius:boyut*0.28,flexShrink:0,overflow:"hidden",
-      background: logoVar ? "#FFFFFF" : avatarRenk(ticker),
-      border:`1px solid ${WA(0.12)}`,
-    }}>
-      {logoVar ? (
-        <img src={bistLogoUrl(ticker)} onError={()=>setHata(true)} alt="" style={{width:"100%",height:"100%",objectFit:"contain",padding:boyut*0.09,boxSizing:"border-box"}}/>
-      ) : (
-        <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:boyut*0.34,fontWeight:800}}>
-          {ticker.slice(0,2)}
-        </div>
-      )}
-    </div>
+    <img
+      src={asama===0 ? bistLogoUrl(ticker) : bistLogoUrlYedek(ticker)}
+      onError={()=>setAsama(a=>a===0?1:2)}
+      alt=""
+      style={{width:boyut,height:boyut,objectFit:"contain",flexShrink:0}}
+    />
   );
 }
 
