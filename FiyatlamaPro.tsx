@@ -3277,25 +3277,36 @@ function fmtByk(n: number): string {
 }
 
 // KAP kaynaklı, ücretsiz BIST logo deposu (jsDelivr CDN) — bulunamazsa şirket
-// adından domain aranıp o domain'in favicon'u denenir, o da bulunamazsa
-// renkli baş harf rozetine düşülür.
+// adından domain aranıp o domain'in görseli denenir, o da bulunamazsa renkli
+// baş harf rozetine düşülür.
 // ⚠️ 2026-09-15: TradingView'in logo CDN'ini bir ara kaynak olarak denemiştik,
 // ama kullanıcı testinde (DSTKF örneği) işe yaramadığı görüldü — araştırınca
 // nedeni bulundu: TradingView'in CDN'i ŞİRKET ADINDAN türetilmiş bir "slug"
 // kullanıyor (ör. Tesla → "tesla.svg", "TSLA" değil), TICKER İLE DEĞİL. Bu
 // slug'ı ticker'dan güvenilir şekilde türetmenin yolu yok, kaldırıldı.
 //
-// YENİ DENEME (2026-09-15, kullanıcı "başka kaynak bul" dedi): Clearbit'in
+// İSİM→DOMAIN (2026-09-15, kullanıcı "başka kaynak bul" dedi): Clearbit'in
 // ÜCRETSİZ, anahtarsız "Autocomplete" API'si (autocomplete.clearbit.com) hâlâ
 // çalışıyor ve ŞİRKET ADINDAN domain buluyor — TICKER TAHMİNİ YOK, gerçek bir
-// isim araması. Bulunan domain, bu projenin FON logoları için ZATEN
-// kullandığı Google favicon servisine besleniyor (aynı desen, kanıtlanmış).
+// isim araması. ⚠️ Kullanıcı "ikinci kaynak da koddan sorgulasak" diye sordu —
+// araştırıldı: ticker-tabanlı logo servisleri (LogoKit, logo.dev,
+// AllInvestView) TAMAMI büyük borsalara (NYSE/NASDAQ/LSE/Euronext/XETRA/TSE/
+// HKEX) odaklı, HİÇBİRİ Borsa İstanbul'u listelemiyor — bu yüzden Clearbit'in
+// İSİM tabanlı araması, BIST için bulduğumuz TEK çalışan orta katman olarak
+// kaldı.
 // ⚠️ DÜRÜSTLÜK: Clearbit'in Türkçe şirket adlarını (ör. "Destek Finans
 // Faktoring A.Ş.") ne kadar doğru eşleştirdiği bu ortamdan TAM DOĞRULANAMADI
 // (test sırasında bir URL önbellekleme kısıtına çarpıldı — İngilizce bir
 // isimle mekanizmanın çalıştığı doğrulandı, Türkçe isimle doğrulanamadı).
-// RİSKSİZ: yanlış/boş domain dönerse favicon da başarısız olur, yine baş
-// harfe düşülür. Kullanıcı canlıda test edip sonucu bildirecek.
+//
+// DOMAIN BULUNDUKTAN SONRA GÖRSEL (2026-09-15, kalite artırma): önce
+// AllInvestView'in ücretsiz "Ticker Logos" CDN'i deneniyor (cdn.tickerlogos.
+// com/{domain}) — yüksek çözünürlüklü gerçek logo, 512px'e kadar. O
+// bulamazsa (kendi kapsamı da BIST'i içermiyor) bu projenin FON logoları
+// için ZATEN kullandığı Google favicon servisine düşülüyor (daha evrensel
+// ama düşük çözünürlüklü site simgesi — gerçek logo değil).
+// RİSKSİZ: hiçbiri bulamazsa baş harfe düşülür. Kullanıcı canlıda test edip
+// sonucu bildirecek.
 const bistLogoUrl = (ticker: string) => `https://cdn.jsdelivr.net/gh/ahmeterenodaci/Istanbul-Stock-Exchange--BIST--including-symbols-and-logos/logos/${ticker}.png`;
 const AVATAR_RENKLER = ["#C0392B","#1E7FE0","#166534","#7C3AED","#B45309","#0F766E","#9D174D","#374151","#1D4ED8","#B91C1C"];
 const avatarRenk = (ticker: string) => AVATAR_RENKLER[ticker.charCodeAt(0) % AVATAR_RENKLER.length];
@@ -3303,18 +3314,29 @@ const avatarRenk = (ticker: string) => AVATAR_RENKLER[ticker.charCodeAt(0) % AVA
 // şirket için (liste kayarken tekrar render olduğunda) Clearbit'e tekrar
 // tekrar istek atılmasın.
 const domainOnbellek = new Map<string, string|null>();
+// Bir domain bulunduktan sonra ondan gösterilecek görsel: önce AllInvestView'in
+// ücretsiz, yüksek çözünürlüklü ("512px'e kadar") logo CDN'i denenir — Google
+// favicon servisinden (genelde 16-32px, gerçek logo değil site simgesi) daha
+// kaliteli. O da bulamazsa Google favicon denenir (daha evrensel — herhangi
+// bir web sitesi için çalışır, AllInvestView'in kendi "50+ borsa" listesi
+// Borsa İstanbul'u içermiyor). İkisi de başarısız olursa baş harfe düşülür.
+const domainGorselUrl = (domain: string, deneme: 0|1) =>
+  deneme === 0
+    ? `https://cdn.tickerlogos.com/${encodeURIComponent(domain)}`
+    : `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=128`;
 
 function HisseAvatar({ticker, sirket, boyut=42}:{ticker:string, sirket?:string, boyut?:number}){
-  // 0: birincil kaynak (jsDelivr) deneniyor · 1: domain-favicon deneniyor ·
-  // 2: ikisi de başarısız, baş harf rozetine düşüldü.
+  // 0: birincil kaynak (jsDelivr) deneniyor · 1: domain bulunup görsel
+  // deneniyor · 2: hepsi başarısız, baş harf rozetine düşüldü.
   const [asama, setAsama] = useState<0|1|2>(0);
-  const [faviconUrl, setFaviconUrl] = useState<string|null>(null);
+  const [domain, setDomain] = useState<string|null>(null);
+  const [domainDeneme, setDomainDeneme] = useState<0|1>(0);
 
   useEffect(() => {
     if (asama !== 1 || !sirket) { if (asama===1 && !sirket) setAsama(2); return; }
     const onbellekli = domainOnbellek.get(sirket);
     if (onbellekli !== undefined) {
-      if (onbellekli) setFaviconUrl(`https://www.google.com/s2/favicons?domain=${encodeURIComponent(onbellekli)}&sz=128`);
+      if (onbellekli) setDomain(onbellekli);
       else setAsama(2);
       return;
     }
@@ -3323,9 +3345,9 @@ function HisseAvatar({ticker, sirket, boyut=42}:{ticker:string, sirket?:string, 
       .then(r => r.ok ? r.json() : [])
       .then((sonuclar: any[]) => {
         if (!aktif) return;
-        const domain = sonuclar?.[0]?.domain || null;
-        domainOnbellek.set(sirket, domain);
-        if (domain) setFaviconUrl(`https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=128`);
+        const bulunanDomain = sonuclar?.[0]?.domain || null;
+        domainOnbellek.set(sirket, bulunanDomain);
+        if (bulunanDomain) setDomain(bulunanDomain);
         else setAsama(2);
       })
       .catch(() => { if (aktif) setAsama(2); });
@@ -3350,11 +3372,11 @@ function HisseAvatar({ticker, sirket, boyut=42}:{ticker:string, sirket?:string, 
     );
   }
   if (asama === 1) {
-    if (!faviconUrl) return <div style={{width:boyut,height:boyut,flexShrink:0}}/>; // domain aranırken kısa bir boşluk
+    if (!domain) return <div style={{width:boyut,height:boyut,flexShrink:0}}/>; // domain aranırken kısa bir boşluk
     return (
       <img
-        src={faviconUrl}
-        onError={()=>setAsama(2)}
+        src={domainGorselUrl(domain, domainDeneme)}
+        onError={()=>{ if (domainDeneme===0) setDomainDeneme(1); else setAsama(2); }}
         alt=""
         style={{width:boyut,height:boyut,objectFit:"contain",flexShrink:0}}
       />
