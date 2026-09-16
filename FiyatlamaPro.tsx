@@ -4271,7 +4271,13 @@ function PiyasaOzetiBlok({dikey,piyasaGorunen,piyasaSurukle,piyasaOzetiSecim,set
                 yoksa "Varlık" başlığı satırdaki isimle hizasız duracaktı. */}
             <span style={{width:22,flexShrink:0}}/>
             <span style={{width:92,flexShrink:0,fontSize:9.5,fontWeight:800,color:WA(0.42),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Varlık")}</span>
-            <span style={{flex:1,minWidth:0,textAlign:"right",fontSize:9.5,fontWeight:800,color:WA(0.42),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Fiyat / Değişim")}</span>
+            {/* ⚠️ 2026-09-16 (kullanıcı isteği: "fiyat ayrı, değişim % ayrı
+                yazsın"): önceden tek bir "Fiyat / Değişim" başlığı altında
+                ikisi BİRLİKTE gösteriliyordu. Artık İKİ AYRI sütun — genişlik
+                ve hizalar aşağıdaki satırlarla (Fiyat 66px, Değişim 56px)
+                BİREBİR aynı olmalı, yoksa başlık/satır hizası bozulur. */}
+            <span style={{width:66,flexShrink:0,textAlign:"right",fontSize:9.5,fontWeight:800,color:WA(0.42),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Fiyat")}</span>
+            <span style={{width:56,flexShrink:0,textAlign:"right",fontSize:9.5,fontWeight:800,color:WA(0.42),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Değişim")}</span>
             <span style={{width:60,flexShrink:0,textAlign:"right",fontSize:9.5,fontWeight:800,color:WA(0.42),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Grafik")}</span>
           </div>
         )}
@@ -21433,40 +21439,48 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla,duz}:{ad:string,sembol:
         textTransform:"uppercase",letterSpacing:duz?0.2:(ad.length>=10?-0.1:0.2),
         overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingRight:duz?0:24}}>{TR(ad)}</p>
       </div>
-      <div style={duz?{flex:1,minWidth:0,textAlign:"right"}:undefined}>
-      {guncel!=null ? (
-        duz ? (
-          /* ⚠️ 2026-09-15 (kullanıcı isteği — referans tasarım): fiyat ve
-             değişim yüzdesi artık ALT ALTA değil, TEK SATIRDA yan yana
-             (fiyat solda, değişim rozeti sağda) — referans görseldeki
-             "48,64 ▲%0,07" düzenine uygun. Kart (mobil) görünümü dokunulmadı,
-             hâlâ iki ayrı satır. */
-          <p className="spark-in" style={{margin:0,display:"flex",alignItems:"baseline",justifyContent:"flex-end",gap:6,whiteSpace:"nowrap"}}>
-            <span style={{fontSize:13,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace"}}>
-              {`${paraOnek||""}${fmtDeger(guncel)}`}
-            </span>
-            <span style={{fontSize:11,fontWeight:700,color:degisim!=null?renk:WA(0.3)}}>
-              {degisim!=null?`${pozitif?"+":""}${degisim.toFixed(2).replace(".",",")}%`:"—"}
-            </span>
-          </p>
-        ) : (
+      {/* ⚠️ 2026-09-16 (kullanıcı isteği: "fiyat ayrı, değişim % ayrı
+          yazsın"): DÜZ modda önceden TEK sütunda (fiyat+değişim yan yana)
+          gösteriliyordu; artık İKİ AYRI sütun (Fiyat 66px, Değişim 56px) —
+          genişlikler yukarıdaki başlık satırıyla BİREBİR aynı olmalı. Kart
+          (mobil) görünümü DOKUNULMADI, hâlâ tek sütunda alt alta. */}
+      {duz ? (
         <>
-          <p className="spark-in" style={{margin:"4px 0 2px",fontSize:15,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"flex",alignItems:"center",justifyContent:"flex-start",gap:4}}>
-            {`${paraOnek||""}${fmtDeger(guncel)}`}
-            <span style={{fontSize:11,opacity:flash?1:0,transition:"opacity 700ms ease",color:flash==="up"?C.green:C.red}}>{flash==="up"?"▲":flash==="down"?"▼":""}</span>
-          </p>
-          <p className="spark-in" style={{margin:"0 0 6px",fontSize:11,fontWeight:700,color:degisim!=null?renk:WA(0.3),textAlign:"left"}}>
-            {degisim!=null?`${pozitif?"+":""}${degisim.toFixed(2).replace(".",",")}%`:"—"}
-          </p>
+          <div style={{width:66,flexShrink:0,textAlign:"right"}}>
+            {guncel!=null ? (
+              <span style={{fontSize:13,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace",whiteSpace:"nowrap"}}>
+                {`${paraOnek||""}${fmtDeger(guncel)}`}
+              </span>
+            ) : <div className="skeleton" style={{height:13,width:"80%",marginLeft:"auto",borderRadius:4}}/>}
+          </div>
+          <div style={{width:56,flexShrink:0,textAlign:"right"}}>
+            {guncel!=null ? (
+              <span style={{fontSize:11,fontWeight:700,color:degisim!=null?renk:WA(0.3),whiteSpace:"nowrap"}}>
+                {degisim!=null?`${pozitif?"+":""}${degisim.toFixed(2).replace(".",",")}%`:"—"}
+              </span>
+            ) : <div className="skeleton" style={{height:11,width:"70%",marginLeft:"auto",borderRadius:4}}/>}
+          </div>
         </>
-        )
       ) : (
-        <>
-          <div className="skeleton" style={{height:15,width:"75%",margin:"5px 0 4px"}}/>
-          <div className="skeleton" style={{height:11,width:"45%",marginBottom:8}}/>
-        </>
+        <div>
+          {guncel!=null ? (
+            <>
+              <p className="spark-in" style={{margin:"4px 0 2px",fontSize:15,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"flex",alignItems:"center",justifyContent:"flex-start",gap:4}}>
+                {`${paraOnek||""}${fmtDeger(guncel)}`}
+                <span style={{fontSize:11,opacity:flash?1:0,transition:"opacity 700ms ease",color:flash==="up"?C.green:C.red}}>{flash==="up"?"▲":flash==="down"?"▼":""}</span>
+              </p>
+              <p className="spark-in" style={{margin:"0 0 6px",fontSize:11,fontWeight:700,color:degisim!=null?renk:WA(0.3),textAlign:"left"}}>
+                {degisim!=null?`${pozitif?"+":""}${degisim.toFixed(2).replace(".",",")}%`:"—"}
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="skeleton" style={{height:15,width:"75%",margin:"5px 0 4px"}}/>
+              <div className="skeleton" style={{height:11,width:"45%",marginBottom:8}}/>
+            </>
+          )}
+        </div>
       )}
-      </div>
       <div style={duz?{width:60,flexShrink:0}:undefined}>
       {(guncel==null&&yukleniyor)
         ? <div className="skeleton" style={{height:duz?20:24,borderRadius:6}}/>
@@ -23212,7 +23226,13 @@ function PortfoyTakvimModal({liste, onClose}:{liste: PortfoyKalemi[]; onClose: (
   const [gorunum, setGorunum] = useState<"izgara"|"liste">("izgara");
   const [degerTip, setDegerTip] = useState<"tutar"|"yuzde">("tutar");
   const [renkTip, setRenkTip] = useState<"duz"|"yogunluk">("duz");
-
+  // ⚠️ GEÇİCİ TEŞHİS (2026-09-16) — kullanıcı raporu: gerçek getiri serisi
+  // (%-0,35, 15. gün) doğru olduğu halde takvim -%0,01 gibi bambaşka bir
+  // değer gösteriyor. Kod incelemesiyle üç kez doğrulandı ki mantık DOĞRU
+  // sonuç üretmesi gerekiyor — bu yüzden körlemesine dördüncü bir "düzeltme"
+  // yapmak yerine, ÇALIŞMA ANINDA gerçekte ne çekildiğini/hesaplandığını
+  // GÖRÜNÜR kılan bu geçici blok eklendi. Kök neden bulununca KALDIRILACAK.
+  const [debugBilgi, setDebugBilgi] = useState<string>("");
   const sahipler = useMemo(()=>liste.filter(k=>k.alis!=null && k.miktar!=null && k.miktar>0), [liste]);
   // ⚠️ 2026-09-16 (kullanıcı raporu: "ekran sürekli titriyor"): KÖK NEDEN —
   // bu modale geçirilen `liste` prop'u üst bileşende (PortfoyDetayEkrani)
@@ -23281,6 +23301,20 @@ function PortfoyTakvimModal({liste, onClose}:{liste: PortfoyKalemi[]; onClose: (
         sonucPnl[iso] = (bugunDeger!=null && onceki!=null) ? bugunDeger-onceki : null;
         sonucOnceki[iso] = onceki;
       }
+      // ⚠️ GEÇİCİ TEŞHİS — ilk fon kalemi için gerçek zamanlı, adım adım
+      // hesaplama izini yakala (yukarıdaki normal akıştan TAMAMEN BAĞIMSIZ,
+      // sadece OKUMA amaçlı ayrı bir çağrı — mevcut hesaplamayı etkilemez).
+      try {
+        const ilkFon = sahipler.find(k => k.tur === "fon");
+        if (ilkFon) {
+          const seri = await portfoyFonGunlukGetiriSerisi(ilkFon.kod);
+          const guncelDeger = portfoyGuncelDeger(ilkFon);
+          const son3 = seri.slice(-3).map(s => `${s.tarih}:${s.getiri?.toFixed(4)}`).join(" | ");
+          const d15 = await portfoyFonTarihselDeger(ilkFon, "2026-09-15");
+          const d14 = await portfoyFonTarihselDeger(ilkFon, "2026-09-14");
+          setDebugBilgi(`kod=${ilkFon.kod} seri.length=${seri.length} son3=[${son3}] guncelDeger=${guncelDeger.toFixed(2)} deger(15)=${d15?.toFixed(2)} deger(14)=${d14?.toFixed(2)} fark=${(d15!=null&&d14!=null)?(d15-d14).toFixed(2):"?"}`);
+        }
+      } catch (e) { setDebugBilgi(`HATA: ${String(e)}`); }
       if (aktif) { setGunlukPnl(sonucPnl); setGunlukOnceki(sonucOnceki); setYukleniyor(false); }
     })();
     return () => { aktif = false; };
@@ -23320,7 +23354,13 @@ function PortfoyTakvimModal({liste, onClose}:{liste: PortfoyKalemi[]; onClose: (
     // BİLİNÇLİ olarak farklı.
     <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:C.bg,zIndex:600,display:"flex",flexDirection:"column",...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}}>
       <div style={{background:C.card,width:"100%",maxWidth:680,margin:"0 auto",height:"100%",display:"flex",flexDirection:"column"}}>
-        <div style={{padding:"16px 20px 12px",borderBottom:`1px solid ${WA(0.1)}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+        {/* ⚠️ 2026-09-16 (kullanıcı raporu: "üst taraf güvenli alanda değil"):
+            tam ekran olunca başlık artık saat/pil ikonlarının ALTINDA
+            kalıyordu — modal önceden ALTTAN AÇILAN bir sheet'ti, üstte hiç
+            güvenli alan payı yoktu; TAM EKRANA geçince bu pay eksikliği ilk
+            kez görünür oldu. Uygulamanın başka yerlerinde ZATEN kullanılan
+            AYNI desen (calc(16px + env(safe-area-inset-top,0px))) uygulandı. */}
+        <div style={{padding:"calc(16px + env(safe-area-inset-top,0px)) 20px 12px",borderBottom:`1px solid ${WA(0.1)}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
           <div>
             <p style={{margin:0,fontSize:16,fontWeight:800,color:C.label}}>Günlük Performans Takvimi</p>
             <p style={{margin:"2px 0 0",fontSize:11,color:WA(0.55)}}>Portföyünüzün hafta içi günlük değişimi</p>
@@ -23461,6 +23501,12 @@ function PortfoyTakvimModal({liste, onClose}:{liste: PortfoyKalemi[]; onClose: (
           {sahipler.some(k=>k.tur==="fon") && (
             <p style={{margin:"12px 0 0",fontSize:10.5,color:WA(0.4),lineHeight:1.5}}>
               ℹ️ Fon fiyat geçmişi TEFAS'ın sunduğu pencereyle sınırlıdır; eski aylarda bazı günler "veri yok" görünebilir.
+            </p>
+          )}
+          {/* ⚠️ GEÇİCİ TEŞHİS BLOĞU — kök neden bulununca KALDIRILACAK. */}
+          {debugBilgi && (
+            <p style={{margin:"12px 0 0",fontSize:9,color:"#F59E0B",lineHeight:1.5,fontFamily:"monospace",wordBreak:"break-all"}}>
+              🔧 DEBUG: {debugBilgi}
             </p>
           )}
         </div>
