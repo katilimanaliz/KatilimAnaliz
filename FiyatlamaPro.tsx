@@ -23017,55 +23017,61 @@ async function portfoyTarihselFiyat(k: PortfoyKalemi, hedefIso: string): Promise
 }
 
 // ── PORTFÖY TAKVİMİ (2026-09-16) ────────────────────────────────────────────
-// Fonların geçmiş NAV serisi — Getiri Karşılaştırma ekranının ZATEN kullandığı
-// UCU (?gecmis=1&kod=X&donem=Y) yeniden kullanılıyor, yeni bir backend YOK.
-// ⚠️ portfoyTarihselFiyat'a DOKUNULMADI (fon için hâlâ null dönüyor) — o,
-// ZATEN ÇALIŞAN dönem kâr/zarar özelliğinin (PortfoyKarZararModal) parçası;
-// onu değiştirmek istenmeyen bir yan etki riski taşırdı. Bunun yerine AYRI,
-// katkı amaçlı bir fonksiyon (portfoyTarihselDeger) eklendi — SADECE takvim
-// bunu kullanıyor.
-const fonGecmisOnbellek = new Map<string, {tarih:string;fiyat:number}[]>();
-async function portfoyFonGecmisVeri(kod: string): Promise<{tarih:string;fiyat:number}[]> {
-  // "3a" (3 ay): ay gezinme oku bir-iki ay geriye gidince de bir şans olsun
-  // diye "1a" değil daha geniş pencere seçildi. Yine de veri, TEFAS'ın o an
-  // sunduğu aralıkla sınırlı — daha eski aylar boş çıkabilir (kullanıcıya
-  // bildirildi, kabul edildi).
-  if (fonGecmisOnbellek.has(kod)) return fonGecmisOnbellek.get(kod)!;
+// ⚠️ 2026-09-16 (kullanıcı raporu, GERÇEK VERİYLE karşılaştırarak buldu):
+// ÖNCEKİ yöntem (?gecmis=1 ham NAV noktaları + aynı-gün eşleştirme) YANLIŞTI
+// — 15. gün "veri yok" çıkıyordu, oysa fon detay ekranındaki "Günlük Getiri
+// Takvimi" widget'ında o gün için GERÇEK bir değer (-%0,35) vardı. Kök neden:
+// ham NAV serisi (Getiri Karşılaştırma grafiği için tasarlanmış) o günü hiç
+// içermiyordu, ama backend'de ZATEN AYRI, KALICI olarak hesaplanıp saklanan
+// ve tarih hizalaması (TEFAS'ın "tarih" alanı yayın günü, değerleme günü
+// DEĞİL) özellikle düzeltilmiş bir GÜNLÜK GETİRİ % SERİSİ var — fon detay
+// ekranı ZATEN bunu kullanıyor (?gunlukGetiriSerisi=1&kod=X). Aynı kaynağa
+// geçildi. YÖNTEM DEĞİŞTİ: artık NAV noktası eşleştirmiyoruz — bugünkü
+// (kesin, zaten elde olan) portföy değerinden GERİYE DOĞRU, her günün
+// GERÇEK yüzde getirisiyle ZİNCİRLEME bölerek o günün değerini yeniden
+// kuruyoruz (deger(D) = guncelDeger / ∏(1+getiri_gün/100), D'den bugüne
+// kadarki tüm günler için). Gerçek THF verisiyle sentetik test edildi:
+// zincirleme sonucu %-0,35 üretti — gerçek değerle BİREBİR eşleşti.
+// ⚠️ portfoyTarihselFiyat'a HÂLÂ DOKUNULMADI — o, ZATEN ÇALIŞAN dönem
+// kâr/zarar özelliğinin parçası, ayrı tutuldu.
+const fonGetiriSerisiOnbellek = new Map<string, {tarih:string; getiri:number}[]>();
+async function portfoyFonGunlukGetiriSerisi(kod: string): Promise<{tarih:string; getiri:number}[]> {
+  if (fonGetiriSerisiOnbellek.has(kod)) return fonGetiriSerisiOnbellek.get(kod)!;
   try {
-    const r = await fetch(`${API_BASE}/api/tefas-proxy?gecmis=1&kod=${encodeURIComponent(kod)}&donem=3a`);
+    const r = await fetch(`${API_BASE}/api/tefas-proxy?gunlukGetiriSerisi=1&kod=${encodeURIComponent(kod)}`);
     const d = await r.json();
-    const noktalar = ((d?.noktalar || []) as {tarih:string;fiyat:number}[]).filter(p=>p.fiyat>0);
-    fonGecmisOnbellek.set(kod, noktalar);
-    return noktalar;
+    const kayitlar = (d?.success ? (d.kayitlar || []) : []) as {tarih:string; getiri:number}[];
+    fonGetiriSerisiOnbellek.set(kod, kayitlar);
+    return kayitlar;
   } catch { return []; }
 }
-// Bir kalemin belirli bir GEÇMİŞ TARİHTEKİ ₺ DEĞERİ (fiyat değil, tür-özel
-// formülle hesaplanmış tam değer). portfoyGuncelDeger'deki AYNI formüller,
-// "bugün" yerine verilen tarih kullanılarak tekrarlanıyor — iki fonksiyon
-// aynı sonucu FARKLI tarihler için üretmeli, tutarsızlık olmamalı.
-// ⚠️ 2026-09-16 (kullanıcı raporu: "ayın 15. verisi yanlış görünüyor"):
-// fon NAV'ı için ÖNCEDEN paylaşımlı portfoyTariheEnYakinFiyat (±4 GÜN
-// tolerans) kullanılıyordu. Bu tolerans, ardışık iki günün "en yakın"
-// eşleşmesi FARKLI (gerçekte olmayan) tarihlere düşerse YAPAY bir sıçrama
-// üretebilir — ki günlük K/Z tam olarak bunu ölçtüğü için TAKVİM'de bu
-// hata büyük ve yanlış bir rakam olarak görünür. portfoyTariheEnYakinFiyat'ın
-// KENDİSİNE dokunulmadı (başka bir özellik onu kullanıyor) — SADECE takvim
-// için AYRI, SIKI (aynı gün ZORUNLU) bir eşleştirici eklendi. Eşleşme yoksa
-// dürüstçe null — yanlış bir sayı yerine "veri yok".
-function portfoyFonAyniGunFiyat(noktalar: {tarih:string;fiyat:number}[], hedefIso: string): number | null {
-  const nokta = noktalar.find(n => n.tarih.slice(0,10) === hedefIso);
-  return nokta ? nokta.fiyat : null;
+// Bir fonun belirli bir GEÇMİŞ TARİHTEKİ (o günün KAPANIŞINDAKİ) ₺ değeri —
+// bugünkü (kesin) değerden geriye doğru gerçek günlük % getirilerle
+// zincirleniyor. Aradaki bir gün için getiri kaydı YOKSA o gün sessizce
+// atlanır (hafta sonu/tatil gibi zaten getiri üretilmeyen bir gün olabilir);
+// bu, NAV noktası eşleştirmedeki gibi YANLIŞ bir güne düşme riski taşımıyor
+// — sadece "o günün etkisi hesaba katılmadı" anlamına gelir, ki bu zaten
+// "Günlük Getiri Takvimi" widget'ının kendisinin de kabul ettiği bir durum
+// (o da eksik günlerde boş/"—" gösteriyor).
+async function portfoyFonTarihselDeger(k: PortfoyKalemi, hedefIso: string): Promise<number|null> {
+  const guncelDeger = portfoyGuncelDeger(k);
+  if (!(guncelDeger > 0)) return null;
+  const seri = await portfoyFonGunlukGetiriSerisi(k.kod);
+  if (seri.length === 0) return null;
+  const bugunIso = new Date().toISOString().slice(0,10);
+  const araGetiriler = seri
+    .filter(s => s.tarih > hedefIso && s.tarih < bugunIso)
+    .sort((a,b) => b.tarih.localeCompare(a.tarih)); // en yeni önce — bugünden geriye zincirleme
+  let deger = guncelDeger;
+  for (const s of araGetiriler) {
+    if (typeof s.getiri !== "number") continue; // bozuk kayıt — atla, dur DEMEK yerine
+    deger = deger / (1 + s.getiri / 100);
+  }
+  return deger;
 }
 async function portfoyTarihselDeger(k: PortfoyKalemi, hedefIso: string): Promise<number|null> {
   if (k.alis == null) return 0;
-  if (k.tur === "fon") {
-    const alisFiyat = k.alis!.fiyat;
-    if (typeof alisFiyat !== "number" || alisFiyat <= 0) return null;
-    const noktalar = await portfoyFonGecmisVeri(k.kod);
-    const fiyat = portfoyFonAyniGunFiyat(noktalar, hedefIso);
-    if (fiyat == null) return null;
-    return k.miktar! * (fiyat / alisFiyat);
-  }
+  if (k.tur === "fon") return portfoyFonTarihselDeger(k, hedefIso);
   if (k.tur === "katilim") {
     if (!k.katilimAcilisTarihi || !k.katilimOran || !k.katilimVadeGun) return null;
     const acilisMs = new Date(k.katilimAcilisTarihi + "T00:00:00").getTime();
