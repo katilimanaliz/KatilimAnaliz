@@ -1021,6 +1021,140 @@ async function tahminGecmisGetir(req, res) {
   }
 }
 
+// ── BİST 100/50/30 RESMİ(-YE YAKIN) ENDEKS ÜYELİĞİ (2026-09-15) ────────────
+// SORUN (kullanıcı raporu): "BİST 100/50/30 alanlarına tıklayınca gelen hisse
+// listesi resmi BİST 100 ile uyuşmuyor." KÖK NEDEN: bu listeler önceden
+// UYGULAMANIN KENDİ elindeki TÜM BİST hisselerini (hisse-proxy.js kaynaklı,
+// ~750 hisse) piyasa değerine göre sıralayıp ilk N'i almakla üretiliyordu
+// (bkz. BistHisseTarayici → hisselerPiyasaDegerineGore). Bu SADECE piyasa
+// değerini kullanır; Borsa İstanbul'un gerçek endeks üyeliği kriterleri
+// SERBEST DOLAŞIM ORANI ve LİKİDİTE'yi de içerir, üç ayda bir (Oca/Nis/
+// Tem/Eki) gözden geçirilir — bu yüzden "en büyük N" ile "resmi liste"
+// zaman zaman ayrışır.
+//
+// KAYNAK ARAŞTIRMASI (2026-09-15, kullanıcı isteğiyle): önce borsafolio.com
+// denendi, SONRA kullanıcı "internetten araştır doğrula" dedi:
+//   - investing.com/indices/ise-100-components: ELENDİ — listede Netaş,
+//     GS Sportif, Cvk Maden gibi BİST 100'ün büyük şirketleri OLMAYAN
+//     onlarca küçük/orta ölçekli şirket çıktı. Güvenilmez.
+//   - borsaistanbul.com'un kendi resmi, üç ayda bir güncellenen dosyası VAR
+//     (bkz. borsaistanbul.com/tr/sayfa/44/bist-pay-endeksleri) ama JS ile
+//     render edildiği için indirme linkinin gerçek adresi bulunamadı.
+//   - getmidas.com (kullanıcının bulduğu kaynak) SEÇİLDİ: Foreks A.Ş.
+//     kaynaklı veri (ciddi bir B2B finansal veri sağlayıcı — aynı kaynağı
+//     milliyet.com.tr da kullanıyor), SPK lisanslı gerçek bir aracı kurum
+//     (Midas Menkul Değerler A.Ş.) tarafından yayınlanıyor — yanlış üyelik
+//     göstermeleri itibar riski taşır. EN ÖNEMLİSİ: BİST 100/50/30 için
+//     AYRI, doğrulanmış üç sayfası var (borsafolio'daki "ilk 30/50 satır
+//     varsayımı" burada YOK). Doğrulama: çekilen BİST 30 listesindeki 30
+//     hissenin TAMAMI BİST 100 listesinde de çıktı (alt küme ilişkisi
+//     tutarlı) — bkz. sohbet geçmişi, 2026-09-15.
+// ⚠️ DÜRÜSTLÜK NOTU: yine de BİREBİR resmi Borsa İstanbul kaynağı DEĞİL —
+// üçüncü taraf (Foreks/Midas) bir veri sağlayıcı. Ama üç ayrı doğrulanmış
+// sayfa + tanınmış kurumsal kaynak, önceki iki seçenekten (ham piyasa
+// değeri sıralaması, borsafolio varsayımı) daha güvenilir.
+//
+// YÖNTEM: her üç sayfadan (xu100/xu050/xu030) "/canli-borsa/TICKER-hisse/"
+// bağlantıları DOKÜMAN SIRASINDA çıkarılıyor (tablo piyasa değerine göre
+// sıralı olduğu için bu sıra aynı zamanda ilgili endeks içindeki rütbe).
+//
+// GÜVENLİK FRENİ (7 Eylül'deki fiyat kayması düzeltmesiyle AYNI desen): her
+// sayfa için BEKLENEN sayının (100/50/30) en az %90'ı çıkmazsa O SAYFANIN
+// verisi YAZILMAZ — KV'de zaten varsa eski (bayat ama güvenilir) liste
+// korunur. Üç sayfa birbirinden BAĞIMSIZ değerlendirilir; biri bozulursa
+// diğer ikisi etkilenmez.
+const BIST_UYELIK_KV_ANAHTAR = "bist:endeksUyeligi";
+const BIST_UYELIK_SAYFALAR = [
+  { anahtar: "bist100", url: "https://www.getmidas.com/canli-borsa/xu100-bist-100-hisseleri", beklenen: 100 },
+  { anahtar: "bist50",  url: "https://www.getmidas.com/canli-borsa/xu050-bist-50-hisseleri",  beklenen: 50 },
+  { anahtar: "bist30",  url: "https://www.getmidas.com/canli-borsa/xu030-bist-30-hisseleri",  beklenen: 30 },
+];
+
+function bistTickerListesiCikar(html) {
+  // "/canli-borsa/ticker-hisse/" bağlantıları DOKÜMAN SIRASINDA (= piyasa
+  // değerine göre azalan sırada) çıkarılıyor. ⚠️ URL path'inde ticker KÜÇÜK
+  // harf (ör. "/canli-borsa/aefes-hisse/"), gösterim metninde büyük (AEFES)
+  // — bu yüzden küçük harfle eşleştirip UPPERCASE'e çeviriyoruz. (İlk
+  // yazımda büyük harf beklenmişti, gerçek örnekle test edilince hiç
+  // eşleşme bulunmadığı fark edildi.)
+  const bulunanlar = [];
+  const gorulmus = new Set();
+  const desen = /\/canli-borsa\/([a-z0-9]{3,6})-hisse\//g;
+  let m;
+  while ((m = desen.exec(html)) !== null) {
+    const t = m[1].toUpperCase();
+    if (!gorulmus.has(t)) { gorulmus.add(t); bulunanlar.push(t); }
+  }
+  return bulunanlar;
+}
+
+async function bistEndeksUyeligiGetirVeGuncelle() {
+  const eski = (await kv.get(BIST_UYELIK_KV_ANAHTAR).catch(() => null)) || {};
+  const kayit = { ...eski };
+  const sonuclar = {};
+  let hicBasariliYokMu = true;
+
+  for (const sayfa of BIST_UYELIK_SAYFALAR) {
+    try {
+      const yanit = await fetch(sayfa.url, {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; KatilimPlusBot/1.0)" },
+      });
+      if (!yanit.ok) throw new Error(`HTTP ${yanit.status}`);
+      const html = await yanit.text();
+      const tickerlar = bistTickerListesiCikar(html);
+      const esik = Math.floor(sayfa.beklenen * 0.9);
+
+      if (tickerlar.length < esik) {
+        // Güvenlik freni: bu SAYFA için eski veri korunuyor, diğer sayfalar etkilenmiyor.
+        sonuclar[sayfa.anahtar] = { basarili: false, bulunanSayisi: tickerlar.length, beklenen: sayfa.beklenen };
+      } else {
+        kayit[sayfa.anahtar] = tickerlar.slice(0, sayfa.beklenen);
+        sonuclar[sayfa.anahtar] = { basarili: true, bulunanSayisi: tickerlar.length };
+        hicBasariliYokMu = false;
+      }
+    } catch (e) {
+      sonuclar[sayfa.anahtar] = { basarili: false, hata: String(e.message || e) };
+    }
+  }
+
+  if (hicBasariliYokMu) {
+    // Üç sayfanın hiçbiri çekilemedi — KV'ye HİÇ yazma, eskiyi aynen döndür.
+    return { basarili: false, kaynak: "eski-korunuyor", detay: sonuclar, ...eski };
+  }
+
+  kayit.guncellemeTarihi = new Date().toISOString();
+  kayit.kaynak = "getmidas.com";
+  await kv.set(BIST_UYELIK_KV_ANAHTAR, kayit, { ex: 60 * 60 * 24 * 3 }); // 3 gün TTL — cron aksarsa bile bayat veri "sonsuza dek" KV'de kalmasın
+  return { basarili: true, detay: sonuclar, ...kayit };
+}
+
+// Cron ucu — günde bir kez tazeler (endeks üyeliği üç ayda bir değiştiği
+// için günlük tazeleme fazlasıyla yeterli, sık çağrı getmidas.com'a
+// gereksiz yük bindirmesin diye tercih edilmedi).
+async function bistEndeksUyeligiCronYaz(req, res) {
+  if (req.query?.gizliAnahtar !== process.env.FON_TAHMIN_CRON_SECRET) {
+    return res.status(401).json({ success: false, error: "yetkisiz" });
+  }
+  const sonuc = await bistEndeksUyeligiGetirVeGuncelle();
+  res.setHeader("Cache-Control", "no-store");
+  return res.status(sonuc.basarili ? 200 : 500).json(sonuc);
+}
+
+// Okuma ucu — frontend BistHisseTarayici bunu çağırıp resmi(-ye yakın)
+// üyelik setini alıyor. Hiç veri yoksa (ilk deploy, cron henüz çalışmadı)
+// `basarili:false` dönüyor — frontend bu durumda ESKİ (piyasa değeri
+// sıralamalı) yaklaşıma düşüyor, boş/yanlış bir liste göstermiyor.
+async function bistEndeksUyeligiOku(req, res) {
+  try {
+    const kayit = await kv.get(BIST_UYELIK_KV_ANAHTAR).catch(() => null);
+    res.setHeader("Cache-Control", "max-age=0, s-maxage=3600, stale-while-revalidate=86400");
+    if (!kayit) return res.status(200).json({ success: false, error: "henüz veri yok" });
+    return res.status(200).json({ success: true, ...kayit });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: String(e.message || e) });
+  }
+}
+
 // ── TAHMİN SAPMA ANALİZİ (2026-09-15) ───────────────────────────────────────
 // SORU (kullanıcı tespiti): "Fon, ay içinde hisselerini değiştiriyor; biz eski
 // KAP dağılımıyla hesapladığımız için tahmin sapıyor." Bu DOĞRU görünüyor ama
@@ -2626,6 +2760,8 @@ export default async function handler(req, res) {
   if (req.query?.holdingsGunlukYenile === "1") return holdingsGunlukYenile(req, res);
   if (req.query?.tahminGecmis === "1") return tahminGecmisGetir(req, res);
   if (req.query?.tahminSapmaAnalizi === "1") return tahminSapmaAnalizi(req, res);
+  if (req.query?.bistEndeksUyeligiCron === "1") return bistEndeksUyeligiCronYaz(req, res);
+  if (req.query?.bistEndeksUyeligi === "1") return bistEndeksUyeligiOku(req, res);
   if (req.query?.fonTahminGecmisTemizle === "1") return fonTahminGecmisTemizle(req, res);
   if (req.query?.fonTahminListesi === "1") return fonTahminListesiGetir(req, res);
   if (req.query?.fonTahminEkle === "1") return fonTahminEkle(req, res);
