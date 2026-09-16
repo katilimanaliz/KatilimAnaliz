@@ -3370,6 +3370,27 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri 
   const [hareketlilerTip, setHareketlilerTip] = useState<"yukselen"|"dusen">("yukselen");
   const [endeksVeri, setEndeksVeri]     = useState<{[k:string]:{deger:number,degisim:number}}>({});
   const [endeksFiltre, setEndeksFiltre] = useState<"tumu"|"100"|"30"|"50">("tumu");
+  // ── BİST 100/50/30 RESMİ(-YE YAKIN) ÜYELİK (2026-09-15) ─────────────────
+  // ⚠️ Kullanıcı raporu: "tıklayınca gelen hisseler resmi BİST 100 ile
+  // uyuşmuyor" — önceki yöntem (aşağıdaki hisselerPiyasaDegerineGore) SADECE
+  // piyasa değerine bakıyordu, serbest dolaşım/likidite kriterlerini
+  // görmezden geliyordu. Artık backend'den (api/tefas-proxy?bistEndeksUyeligi=1)
+  // getmidas.com'un (Foreks A.Ş. kaynaklı, SPK lisanslı bir aracı kurumun
+  // sitesi) BİST 100/50/30 için AYRI ve doğrulanmış üç sayfasından çekilen
+  // bir liste geliyor — borsafolio.com denemesinden farklı olarak burada
+  // "ilk 30/50 satır" varsayımı YOK, üçü de gerçekten ayrı kaynaktan.
+  // ⚠️ Yine de BİREBİR resmi Borsa İstanbul kaynağı DEĞİL (bkz. backend'deki
+  // not) — ESKİ yaklaşımdan daha yakın ama yine de garanti değil. Backend
+  // hiç veri döndürmezse (ilk deploy, kaynak erişilemez) `null` kalır ve kod
+  // aşağıda ESKİ piyasa-değeri sıralamasına düşer — boş/kırık bir liste
+  // göstermek yerine.
+  const [resmiUyelik, setResmiUyelik] = useState<{bist100:string[];bist50:string[];bist30:string[]}|null>(null);
+  useEffect(() => {
+    fetch(`${API_BASE}/api/tefas-proxy?bistEndeksUyeligi=1`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.success && Array.isArray(d.bist100) && d.bist100.length > 0) setResmiUyelik({ bist100: d.bist100, bist50: d.bist50||[], bist30: d.bist30||[] }); })
+      .catch(() => {});
+  }, []);
 
   // ── Fiyat güncellenince yanıp sönme efekti ──────────────────────────────
   // Liste 5 dakikada bir topluca yenilendiği için (tek tek satır bileşeni değil),
@@ -3509,19 +3530,24 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri 
     return { toplam: hisseler.length, artan, azalan, hacimToplam };
   }, [hisseler]);
 
-  // Borsa İstanbul'un resmi BIST 30/50/100 bileşen listesini gerçek zamanlı veren ücretsiz bir
-  // kaynak yok (bu liste 3 ayda bir manuel olarak revize ediliyor, sabit kod olarak gömmek
-  // güncelliğini kaybedince yanlış bilgi verir). Bunun yerine endeksin kendi tanımına en yakın
-  // objektif ölçütü kullanıyoruz: piyasa değerine göre büyükten küçüğe sıralayıp ilk N hisse.
+  // ⚠️ 2026-09-15 (kullanıcı kararı): eski yorum ("gerçek zamanlı ücretsiz
+  // kaynak yok") artık GEÇERSİZ — getmidas.com kaynaklı bir liste bulundu
+  // ve yukarıda resmiUyelik state'iyle çekiliyor. Bu ESKİ piyasa-değeri
+  // sıralaması artık yalnızca YEDEK: resmiUyelik henüz gelmemişse (ilk
+  // yükleme anı, backend erişilemez) devreye giriyor.
   const hisselerPiyasaDegerineGore = useMemo(
     () => [...hisseler].sort((a,b) => (b.piyasaDegeri||0) - (a.piyasaDegeri||0)),
     [hisseler]
   );
   const endeksKumesi = useMemo(() => {
     if (endeksFiltre === "tumu") return null;
+    if (resmiUyelik) {
+      const liste = endeksFiltre === "100" ? resmiUyelik.bist100 : endeksFiltre === "50" ? resmiUyelik.bist50 : resmiUyelik.bist30;
+      if (liste && liste.length > 0) return new Set(liste);
+    }
     const n = endeksFiltre === "100" ? 100 : endeksFiltre === "50" ? 50 : 30;
     return new Set(hisselerPiyasaDegerineGore.slice(0, n).map(h => h.ticker));
-  }, [hisselerPiyasaDegerineGore, endeksFiltre]);
+  }, [hisselerPiyasaDegerineGore, endeksFiltre, resmiUyelik]);
 
   const filtreli = useMemo(() => {
     const q = arama.toUpperCase().trim();
@@ -3669,7 +3695,9 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri 
       </div>
       {endeksFiltre!=="tumu" && (
         <div style={{fontSize:10,color:WA(0.35),marginBottom:12,lineHeight:1.4}}>
-          ℹ️ Piyasa değerine göre en büyük {endeksFiltre==="100"?"100":endeksFiltre==="50"?"50":"30"} hisse gösteriliyor (yaklaşık — resmi BİST bileşen listesiyle birebir aynı olmayabilir)
+          {resmiUyelik
+            ? <>ℹ️ BİST {endeksFiltre==="100"?"100":endeksFiltre==="50"?"50":"30"} listesi — serbest dolaşım/likidite kriterleri uygulanmış bir kaynaktan (yine de %100 resmi Borsa İstanbul verisi garantisi yok)</>
+            : <>ℹ️ Piyasa değerine göre en büyük {endeksFiltre==="100"?"100":endeksFiltre==="50"?"50":"30"} hisse gösteriliyor (yaklaşık — resmi BİST bileşen listesiyle birebir aynı olmayabilir)</>}
         </div>
       )}
       {endeksFiltre==="tumu" && <div style={{marginBottom:14}}/>}
@@ -3828,14 +3856,18 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri 
                   </div>
                 </div>
 
-                {/* Fiyat + seçili periyodun değişimi (varsayılan: günlük) */}
-                <div style={{textAlign:"right",flexShrink:0}}>
-                  <div style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:"tabular-nums",marginBottom:2,display:"flex",alignItems:"center",justifyContent:"flex-end",gap:3}}>
+                {/* Fiyat + seçili periyodun değişimi (varsayılan: günlük)
+                    ⚠️ 2026-09-15 (kullanıcı isteği): eskiden fiyat ÜSTTE,
+                    değişim yüzdesi ALTTA — iki satır halinde ALT ALTA idi.
+                    Artık TEK SATIRDA yan yana: fiyat SOLDA, değişim rozeti
+                    SAĞDA. */}
+                <div style={{textAlign:"right",flexShrink:0,display:"flex",alignItems:"center",gap:6}}>
+                  <div style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:"tabular-nums",display:"flex",alignItems:"center",gap:3,whiteSpace:"nowrap"}}>
                     {h.fiyat ? h.fiyat.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}) : "—"}
                     {flashMap[h.ticker]&&<span style={{fontSize:10,color:flashMap[h.ticker]==="up"?C.green:C.red}}>{flashMap[h.ticker]==="up"?"▲":"▼"}</span>}
                   </div>
                   <div style={{
-                    fontSize:11,fontWeight:700,
+                    fontSize:11,fontWeight:700,whiteSpace:"nowrap",
                     color:h[perKol]>0?C.green:h[perKol]<0?C.red:C.sub,
                   }}>
                     {perEtiket&&<span style={{fontSize:8.5,fontWeight:800,color:C.sub,marginRight:3,verticalAlign:"1px"}}>{perEtiket}</span>}
@@ -4495,18 +4527,17 @@ function KatilimEndeksiTopHareketliler({ nav, onSecim, adet }: { nav: (sc: strin
     return (
       <div
         onClick={() => onSecim?.(sekme, sembol)}
-        // ⚠️ 2026-09-15 (kullanıcı isteği: "Popüler Fonlar ile Katılım
-        // Endeksi bitiş alanları arasındaki farkı istemiyorum, BİST Hisse
-        // alanındaki rakamları biraz küçülterek aynı hizaya getir"):
-        // iç dolgu 8px → 6px. Hem hisse hem fon sekmesinde AYNI oranda
-        // küçültüldü — bu yüzden bir önceki turdaki hisse/fon PARİTESİ
-        // (bkz. yukarıdaki not) BOZULMUYOR, panel sadece bütünüyle kısalıyor.
-        style={{ display: "flex", alignItems: "center", padding: "6px 2px", borderBottom: index === 4 ? "none" : `1px solid ${WA(0.06)}`, minWidth: 0, cursor: onSecim ? "pointer" : "default" }}
+        // ⚠️ 2026-09-15: bir önceki turda burası küçültülmüştü (Popüler
+        // Fonlar ile bitiş hizasını yaklaştırmak için); kullanıcı hem
+        // masaüstünde hem mobilde ESKİ boyutlara dönülmesini istedi. Padding
+        // ve puntolar eski değerlerine döndü — SABİT yükseklik kutusu (aşağıda,
+        // hisse/fon sekme paritesini koruyan asıl düzeltme) AYNEN duruyor.
+        style={{ display: "flex", alignItems: "center", padding: "8px 2px", borderBottom: index === 4 ? "none" : `1px solid ${WA(0.06)}`, minWidth: 0, cursor: onSecim ? "pointer" : "default" }}
       >
-        <div style={{ width: 14, flexShrink: 0, fontSize: 10, color: WA(0.3) }}>{index + 1}</div>
+        <div style={{ width: 14, flexShrink: 0, fontSize: 10.5, color: WA(0.3) }}>{index + 1}</div>
         <div style={{ flex: "1 1 auto", minWidth: 0 }}>
-          <div style={{ fontSize: 12.5, fontWeight: 700, color: C.soft }}>{sembol}</div>
-          <div style={{ fontSize: 10.5, fontWeight: 600, color: (TEMA==="acik"?"#000000":"#FFFFFF"), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ad}</div>
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: C.soft }}>{sembol}</div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: (TEMA==="acik"?"#000000":"#FFFFFF"), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ad}</div>
         </div>
         <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 4 }}>
           {/* ⚠️ 2026-09-15 (kullanıcı raporu: "Yatırım Fonları seçince alan
@@ -4516,19 +4547,19 @@ function KatilimEndeksiTopHareketliler({ nav, onSecim, adet }: { nav: (sc: strin
               gözle görülür şekilde değiştiriyordu. Artık İKİSİ DE aynı SABİT
               yükseklikte bir kutunun içinde ortalanıyor — punto ne olursa
               olsun satır yüksekliği iki sekmede de BİREBİR aynı. */}
-          <div style={{ height: 14, marginBottom: 2, display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
+          <div style={{ height: 16, marginBottom: 2, display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
             {isHisse ? (
-              <span style={{ fontSize: 12, fontWeight: 700, color: (TEMA==="acik"?"#000000":"#FFFFFF"), whiteSpace: "nowrap" }}>{fiyat ?? "—"}</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: (TEMA==="acik"?"#000000":"#FFFFFF"), whiteSpace: "nowrap" }}>{fiyat ?? "—"}</span>
             ) : (
-              <span style={{ fontSize: 9, color: WA(0.3), whiteSpace: "nowrap" }}>Günlük</span>
+              <span style={{ fontSize: 9.5, color: WA(0.3), whiteSpace: "nowrap" }}>Günlük</span>
             )}
           </div>
           <div style={{
-            display: "inline-flex", alignItems: "center", gap: 1, padding: "1px 4px", borderRadius: 6,
-            fontSize: 10, fontWeight: 700, color: up ? C.green : C.red,
+            display: "inline-flex", alignItems: "center", gap: 1, padding: "1.5px 5px", borderRadius: 6,
+            fontSize: 11, fontWeight: 700, color: up ? C.green : C.red,
             background: up ? C.greenLight : "rgba(248,113,113,0.15)", whiteSpace: "nowrap",
           }}>
-            {up ? <ArrowUp size={8} strokeWidth={3} /> : <ArrowDown size={8} strokeWidth={3} />}
+            {up ? <ArrowUp size={9} strokeWidth={3} /> : <ArrowDown size={9} strokeWidth={3} />}
             {Math.abs(deg).toFixed(2)}%
           </div>
         </div>
