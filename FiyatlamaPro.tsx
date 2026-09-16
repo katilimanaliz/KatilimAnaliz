@@ -23311,8 +23311,15 @@ function PortfoyTakvimModal({liste, onClose}:{liste: PortfoyKalemi[]; onClose: (
   const yogunlukOran = (pnl: number) => Math.min(1, Math.max(0.18, Math.abs(pnl)/maxMutlakPnl));
 
   return (
-    <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.7)",zIndex:600,display:"flex",alignItems:"flex-end",...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}}>
-      <div style={{background:C.card,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",maxHeight:"88vh",display:"flex",flexDirection:"column"}}>
+    // ⚠️ 2026-09-16 (kullanıcı isteği: "takvim tam ekran olsun yarım
+    // açılmasın"): ÖNCEDEN diğer modallarla AYNI "alttan açılan, maxHeight
+    // 88vh" desenini kullanıyordu — takvimin kendisi (6 satır + kontroller +
+    // legend) bu yüksekliğe çoğu zaman sığmıyordu, "yarım açık" görünüyordu.
+    // Artık TAM EKRAN: dıştaki katman position:fixed inset:0, içteki kart
+    // borderRadius YOK, height:100% — diğer alttan-açılan modallardan
+    // BİLİNÇLİ olarak farklı.
+    <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:C.bg,zIndex:600,display:"flex",flexDirection:"column",...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}}>
+      <div style={{background:C.card,width:"100%",maxWidth:680,margin:"0 auto",height:"100%",display:"flex",flexDirection:"column"}}>
         <div style={{padding:"16px 20px 12px",borderBottom:`1px solid ${WA(0.1)}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
           <div>
             <p style={{margin:0,fontSize:16,fontWeight:800,color:C.label}}>Günlük Performans Takvimi</p>
