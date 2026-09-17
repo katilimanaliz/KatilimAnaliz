@@ -35,8 +35,19 @@ jobs:
           distribution: "temurin"
           java-version: "21"
 
+      # ⚠️ 2026-09-17: Google, Android SDK deposundan eski 'tools' paketini
+      # kaldırdı (bu action'ın varsayılanı "tools platform-tools" idi) —
+      # bu son 1-2 günde birçok projede aynı anda "Warning: Failed to find
+      # package 'tools'" / exit code 1 hatasına yol açtı (bkz.
+      # android-actions/setup-android#537). DÜZELTME: packages:"" ile
+      # action'ın kendi varsayılan (artık kırık) paket kurulumu atlanıyor —
+      # ANDROID_HOME kurulumu ve lisans kabulü yine yapılıyor, sadece
+      # 'tools' paketi hiç istenmiyor. platform-tools'a ayrıca gerek yok,
+      # zaten aşağıdaki adım platforms/build-tools'u kendi kuruyor.
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: ""
 
       - name: Install Android SDK platform 36 + build-tools
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
