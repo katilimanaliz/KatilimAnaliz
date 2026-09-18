@@ -7,7 +7,7 @@ import {
   ArrowRightLeft, FileSpreadsheet, TrendingUp, TrendingDown, ArrowUp, ArrowDown, Activity, Droplets, ShieldCheck,
   Search, Landmark, Gem, Package, Bell, ClipboardList, FileText, Star,
   Settings, Headphones, BookOpen, Bot, User, Clock, Briefcase,
-  Bitcoin, Banknote, Plus, Eye, EyeOff, Calendar, Tag, Info, Pencil, Trash2, Bookmark, CheckCircle2,
+  Bitcoin, Banknote, Plus, Eye, EyeOff, Calendar, Tag, Info, Pencil, Trash2, Bookmark, CheckCircle2, ExternalLink,
 } from "lucide-react";
 // NOT: @capacitor-firebase/messaging bilinçli olarak burada static import
 // EDİLMİYOR — modül, aşağıdaki push useEffect'i içinde dinamik import ile
@@ -1359,18 +1359,27 @@ function bankaSiteBul(ad: string): string | null {
   const eslesen = BANKA_SITELERI.find(b => k.includes(b.anahtar));
   return eslesen ? eslesen.url : null;
 }
-// Küçük, tema uyumlu "Başvur ↗" rozeti — hem finansman tablosunda hem
-// katılma hesabı listesinde AYNI bileşen kullanılıyor.
-function BankaBasvurButonu({ad}:{ad:string}){
+// Küçük, tema uyumlu "Başvuru Yap" rozeti — hem finansman tablosunda hem
+// katılma hesabı listesinde hem Taksit Karşılaştırma'da AYNI bileşen
+// kullanılıyor.
+// ⚠️ 2026-09-17 (kullanıcı isteği: "ikonu daha profesyonel bir görüntü
+// yapabilirsin, Başvur yerine Başvuru yap yazabilirsin"): metin
+// "Başvur"→"Başvuru Yap" oldu, "↗" unicode karakteri yerine gerçek bir
+// ikon (lucide ExternalLink) kullanılıyor. `vurgulu` prop'u (varsayılan
+// false) EN İYİ/öne çıkan seçenek için DOLU (mavi zemin, beyaz yazı) bir
+// varyant sağlıyor — diğerleri hâlâ ince kenarlıklı, düz zeminli.
+function BankaBasvurButonu({ad, vurgulu}:{ad:string; vurgulu?:boolean}){
   const url = bankaSiteBul(ad);
   if (!url) return null;
   return (
     <a href={url} target="_blank" rel="noopener noreferrer" onClick={(e)=>e.stopPropagation()} style={{
-      display:"inline-flex",alignItems:"center",gap:2,marginLeft:6,padding:"2px 7px",borderRadius:20,
-      fontSize:9,fontWeight:800,color:C.blue,border:`1px solid ${C.blue}`,textDecoration:"none",
-      verticalAlign:"middle",whiteSpace:"nowrap",
+      display:"inline-flex",alignItems:"center",gap:4,padding:vurgulu?"6px 12px":"4px 10px",borderRadius:8,
+      fontSize:10.5,fontWeight:700,textDecoration:"none",whiteSpace:"nowrap",
+      color: vurgulu ? "#fff" : C.blue,
+      background: vurgulu ? C.blue : "transparent",
+      border:`1px solid ${C.blue}`,
     }}>
-      {CV("Başvur")} ↗
+      {CV("Başvuru Yap")} <ExternalLink size={11} color={vurgulu?"#fff":C.blue}/>
     </a>
   );
 }
@@ -1383,6 +1392,16 @@ function KarPayiOranlari({nav}:{nav:any}){
   // YENİ (2026-07-12): Finansman (konut/taşıt/ihtiyaç) sekmesi — katılma hesabıyla
   // AYNI kar-payi.json dosyasının "finansman" alanından okunur, ayrı istek atılmaz.
   const [sekme,setSekme]=useState<"finansman"|"katilma">("finansman");
+  // 2026-09-17 (kullanıcı isteği: "masaüstünde altta değil sağdaki
+  // boşlukta olsun") — bu ekranın kendi genisEkran algısı yoktu (üst
+  // bileşenden prop olarak da gelmiyor), FonGetiriIzleme'deki AYNI yerel
+  // algılama deseni eklendi.
+  const [genisEkran,setGenisEkran]=useState(()=>typeof window!=="undefined"&&window.innerWidth>=1024);
+  useEffect(()=>{
+    const guncelle=()=>setGenisEkran(window.innerWidth>=1024);
+    window.addEventListener("resize",guncelle);
+    return ()=>window.removeEventListener("resize",guncelle);
+  },[]);
   // YENİ (2026-07-12): vade kırılımı — konut 60/120 ay, taşıt/ihtiyaç 12/24 ay.
   // Bankalar şu an vadeye göre AYRI oran ilan etmiyor (araştırıldı, doğrulandı);
   // bu yüzden kar-payi.json'da iki vade sütunu aynı bilinen oranı taşıyor.
@@ -1534,12 +1553,25 @@ function KarPayiOranlari({nav}:{nav:any}){
                   return(
                     <tr key={i}>
                       <td style={{position:"sticky",left:0,zIndex:1,background:C.card,textAlign:"left",fontWeight:700,fontSize:12.5,color:enIyiMi?C.green:C.label,padding:"11px 10px",borderBottom:i<finBankalarSirali.length-1?`1px solid ${C.border}`:"none",whiteSpace:"nowrap",boxShadow:"2px 0 4px rgba(0,0,0,0.15)"}}>
-                        {b.ad}{enIyiMi&&<span style={{display:"block",fontSize:8,fontWeight:800,color:C.green,marginTop:1}}>{CV("EN İYİ")}</span>}
-                        {/* 2026-09-17 (kullanıcı isteği): bankanın kendi
-                            sitesine başvuru linki, isim hücresinin altında —
-                            sabit (sticky) sütunda yer sıkışık olduğu için
-                            ayrı bir satır olarak. */}
-                        <div><BankaBasvurButonu ad={b.ad}/></div>
+                        {/* ⚠️ 2026-09-17 (kullanıcı isteği: "masaüstünde
+                            altta değil sağdaki boşlukta olsun"): MASAÜSTÜNDE
+                            (genisEkran) sabit sütun genişçe olduğu için isim
+                            ve buton AYNI SATIRDA (isimin sağındaki boş
+                            alanda); MOBİLDE dar olduğu için isim satırının
+                            ALTINDA ayrı bir satır olarak kalmaya devam
+                            ediyor — davranış BİLİNÇLİ olarak ekran
+                            genişliğine göre ayrıştı. */}
+                        {genisEkran ? (
+                          <div style={{display:"flex",alignItems:"center",gap:10}}>
+                            <span>{b.ad}{enIyiMi&&<span style={{display:"block",fontSize:8,fontWeight:800,color:C.green,marginTop:1}}>{CV("EN İYİ")}</span>}</span>
+                            <BankaBasvurButonu ad={b.ad} vurgulu={enIyiMi}/>
+                          </div>
+                        ) : (
+                          <>
+                            {b.ad}{enIyiMi&&<span style={{display:"block",fontSize:8,fontWeight:800,color:C.green,marginTop:1}}>{CV("EN İYİ")}</span>}
+                            <div style={{marginTop:4}}><BankaBasvurButonu ad={b.ad} vurgulu={enIyiMi}/></div>
+                          </>
+                        )}
                       </td>
                       {FIN_KOLONLAR.map(k=>{
                         const deger=b[k];
@@ -1594,7 +1626,7 @@ function KarPayiOranlari({nav}:{nav:any}){
               borderBottom:i<bankalarSirali.length-1?`1px solid ${C.border}`:"none",
             }}>
               <span style={{flex:2,fontSize:12.5,fontWeight:700,color:C.label,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingRight:6}}>
-                {b.ad}<BankaBasvurButonu ad={b.ad}/>
+                {b.ad} <BankaBasvurButonu ad={b.ad}/>
               </span>
               {([["tl",b.tl],["usd",b.usd],["eur",b.eur],["altin",b.altin]] as const).map(([v,deger])=>(
                 <span key={v} style={{
@@ -13887,6 +13919,17 @@ function TaksitKarsilastirma({ s }: { s: any }) {
                         %{r.oran.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} aylık
                         {fark > 0 && <span style={{ color: C.red }}> · +{fmtTL(fark)}</span>}
                       </div>
+                      {/* ⚠️ 2026-09-17 (kullanıcı isteği: "bu ekranda da en
+                          iyi olana başvur gelsin"): diğer bankalarda buton
+                          hâlâ SADECE satır açılınca görünüyor (aşağıdaki
+                          acik bloğu), ama EN İYİ (i===0) seçenek için satırı
+                          açmaya GEREK KALMADAN, kapalı hâldeyken de doğrudan
+                          görünüyor. */}
+                      {i === 0 && (
+                        <div style={{marginTop:6}} onClick={(e)=>e.stopPropagation()}>
+                          <BankaBasvurButonu ad={r.ad} vurgulu/>
+                        </div>
+                      )}
                     </div>
                     <div style={{ textAlign: "right", flexShrink: 0 }}>
                       <div style={{ fontSize: 15, fontWeight: 800, color: i === 0 ? C.green : C.label,
@@ -13923,8 +13966,11 @@ function TaksitKarsilastirma({ s }: { s: any }) {
                           alanına da ekleyelim") — Kâr Payı Oran
                           Karşılaştırma'da kullanılan AYNI bileşen
                           (bankaSiteBul, BankaBasvurButonu) burada da
-                          kullanılıyor, yeni bir URL listesi yok. */}
-                      {bankaSiteBul(r.ad) && (
+                          kullanılıyor, yeni bir URL listesi yok.
+                          ⚠️ i===0 (en iyi) HARİÇ — o satırda buton zaten
+                          KAPALI hâldeyken de görünüyor (yukarıda), burada
+                          TEKRAR göstermek gereksiz olurdu. */}
+                      {i !== 0 && bankaSiteBul(r.ad) && (
                         <div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${WA(0.08)}`,textAlign:"right"}}>
                           <BankaBasvurButonu ad={r.ad}/>
                         </div>
