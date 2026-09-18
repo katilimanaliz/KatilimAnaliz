@@ -1384,6 +1384,84 @@ function BankaBasvurButonu({ad, vurgulu}:{ad:string; vurgulu?:boolean}){
   );
 }
 
+// ── ANA SAYFA KÂR PAYI KARŞILAŞTIRMA KARTI (2026-09-17, kullanıcı isteği:
+// "mobilde ve masaüstünde banka karşılaştırma alanının widget koyalım mı" →
+// "evet, konut taşıt ihtiyaç en iyi olsun") ─────────────────────────────────
+// AnaSayfaBist100Karti ile AYNI görsel dil (press-tile, WA(0.05) zemin,
+// 22px köşe, tıklanınca ilgili ekrana gider). Üç ürün için (Konut/Taşıt/
+// İhtiyaç) EN DÜŞÜK ilan edilen orana sahip bankayı ve doğrudan o bankaya
+// Başvuru Yap butonunu gösteriyor. Veri kaynağı KarPayiOranlari'nin ZATEN
+// kullandığı AYNI public/kar-payi.json — YENİ bir backend/istek YOK.
+// Vade seçimi: Konut için 120 ay (KarPayiOranlari'nin kendi "onaylanan
+// varsayılan"ıyla AYNI), Taşıt/İhtiyaç için 12 ay (tablodaki İLK/kısa
+// vade sütunu).
+function KarPayiOraniKarti({ nav }: { nav: (sc: string) => void }) {
+  const [veri, setVeri] = useState<any>(null);
+  useEffect(() => {
+    // MUTLAK YOL ŞART — KarPayiOranlari'ndeki AYNI ders: göreli yol native
+    // WebView'de paketin İÇİNE GÖMÜLMÜŞ eski kopyayı okur.
+    fetch(`${API_BASE}/kar-payi.json`, { cache: "no-store" })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => setVeri(d))
+      .catch(() => {});
+  }, []);
+  const finBankalar = veri?.finansman?.bankalar || [];
+  const enIyi = (kolon: string): { ad: string; oran: number } | null => {
+    let en: { ad: string; oran: number } | null = null;
+    for (const b of finBankalar) {
+      const v = b[kolon];
+      if (v != null && (en == null || v < en.oran)) en = { ad: b.ad, oran: v };
+    }
+    return en;
+  };
+  const satirlar = useMemo(() => [
+    { ikon: "🏠", etiket: "Konut",   en: enIyi("konut120") },
+    { ikon: "🚗", etiket: "Taşıt",   en: enIyi("tasit12") },
+    { ikon: "💰", etiket: "İhtiyaç", en: enIyi("ihtiyac12") },
+  ], [finBankalar]);
+  const veriVar = satirlar.some(s => s.en != null);
+
+  return (
+    <div className="press-tile" onClick={() => nav("karPayiOranlari")} style={{
+      position: "relative", cursor: "pointer", marginBottom: 20,
+      borderRadius: 22, padding: "14px 16px",
+      background: (TEMA === "acik" ? "#E9EEF4" : WA(0.05)), border: `1px solid ${WA(0.08)}`,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+        <Scale size={14} color={C.blue}/>
+        <span style={{ fontSize: 10, fontWeight: 700, color: WA(0.5), textTransform: "uppercase", letterSpacing: 0.4 }}>{TR("Kâr Payı Karşılaştırma")}</span>
+      </div>
+      {!veriVar ? (
+        <div style={{ fontSize: 12, color: WA(0.4), padding: "6px 0" }}>{CV("Yükleniyor…")}</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {satirlar.map(s => s.en && (
+            <div key={s.etiket} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                <span style={{ fontSize: 14, flexShrink: 0 }}>{s.ikon}</span>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: WA(0.85) }}>{CV(s.etiket)}</div>
+                  <div style={{ fontSize: 10, color: WA(0.45), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.en!.ad}</div>
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                <span style={{ fontSize: 14, fontWeight: 800, color: C.green, fontFamily: "monospace" }}>
+                  %{s.en!.oran.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
+                </span>
+                <BankaBasvurButonu ad={s.en!.ad}/>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ borderTop: `1px solid ${WA(0.08)}`, marginTop: 12, paddingTop: 8, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span style={{ fontSize: 10, color: WA(0.35) }}>{CV("En düşük ilan edilen aylık oran")}</span>
+        <span style={{ fontSize: 10, color: WA(0.35) }}>{CV("Tümünü Karşılaştır")} ›</span>
+      </div>
+    </div>
+  );
+}
+
 function KarPayiOranlari({nav}:{nav:any}){
   const [veri,setVeri]=useState<any>(null);
   const [yukleniyor,setYukleniyor]=useState(true);
@@ -28081,6 +28159,10 @@ function App(){
                       altında. MASAÜSTÜNDE bu kart yukarı, hero şeridinin
                       YANINA taşındı, o yüzden burada değil. */}
                   <AnaSayfaBist100Karti nav={nav}/>
+                  {/* 2026-09-17 (kullanıcı isteği: "banka karşılaştırma
+                      alanının widget koyalım mı" → "evet") — BİST kartının
+                      hemen altında, aynı "finansal özet kartları" grubunda. */}
+                  <KarPayiOraniKarti nav={nav}/>
                   {/* ── PORTFÖYÜM KARTI — GEÇİCİ OLARAK GİZLENDİ (2026-09-08) ──
                       Kullanıcı isteğiyle ana sayfadan kaldırıldı, yerine
                       header'daki çanta ikonu kondu. Kod SİLİNMEDİ, geri
@@ -28238,6 +28320,12 @@ function App(){
                 isteği). Önceden ana kolonda Göstergeler'in yanındaydı.
                 Mobilde bu kart yukarıdaki akışta kendi sırasında duruyor. */}
             {genisEkran && <KatilimSektoruOzet onAc={()=>nav("katilimSektoru")} dar/>}
+
+            {/* 2026-09-17 (kullanıcı isteği: "mobilde ve masaüstünde banka
+                karşılaştırma alanının widget koyalım mı" → "evet") —
+                Katılım Sektörü'nün hemen ardında, aynı "katılım bankacılığı"
+                temalı kart grubunda. */}
+            {genisEkran && <div style={{marginTop:14}}><KarPayiOraniKarti nav={nav}/></div>}
 
             {/* AI Finans Asistanı — sağ rayın EN ALTINDA (2026-09-15,
                 kullanıcı isteği: "AI Finans Asistanı sağ menü en alta
