@@ -1327,6 +1327,54 @@ function GetiriHesaplayici({ fon, settings, onKapat }) {
 // sitelerinin stabil/tek tip bir format sunmaması nedeniyle bu veri otomatik
 // çekilmiyor (bkz. api/kar-payi.js başındaki not) — haftalık elle güncellenip
 // Redis'te tutuluyor. Bu ekran sadece o veriyi okuyup gösteriyor.
+
+// 2026-09-17 (kullanıcı isteği: "bankaların kendi sitesine başvur alanı
+// ekleyip yönlendirebilir miyiz") — 9 katılım bankasının RESMİ web sitesi.
+// Kaynak: BDDK'nın kendi kuruluş listesi (bddk.org.tr/Kurulus/Liste/77) +
+// birden fazla bağımsız ikincil kaynakla (üniversite/danışmanlık siteleri)
+// çapraz doğrulandı, tahmin edilmedi.
+const BANKA_SITELERI: {anahtar: string; url: string}[] = [
+  {anahtar:"albaraka", url:"https://www.albarakaturk.com.tr"},
+  {anahtar:"kuveyt",   url:"https://www.kuveytturk.com.tr"},
+  {anahtar:"türkiye finans", url:"https://www.turkiyefinans.com.tr"},
+  {anahtar:"turkiye finans", url:"https://www.turkiyefinans.com.tr"},
+  {anahtar:"ziraat",   url:"https://www.ziraatkatilim.com.tr"},
+  {anahtar:"vakıf",    url:"https://www.vakifkatilim.com.tr"},
+  {anahtar:"vakif",    url:"https://www.vakifkatilim.com.tr"},
+  {anahtar:"emlak",    url:"https://www.emlakbank.com.tr"},
+  {anahtar:"hayat finans", url:"https://www.hayatfinans.com.tr"},
+  {anahtar:"dünya katılım", url:"https://www.dunyakatilim.com.tr"},
+  {anahtar:"dunya katilim", url:"https://www.dunyakatilim.com.tr"},
+  {anahtar:"tom katılım", url:"https://www.tombank.com.tr"},
+  {anahtar:"tom katilim", url:"https://www.tombank.com.tr"},
+  {anahtar:"t.o.m.",   url:"https://www.tombank.com.tr"},
+];
+// Tam eşleşme yerine ANAHTAR KELİME araması — kar-payi.json'daki "ad" alanı
+// kısa ("Kuveyt Türk") ya da uzun ("Kuveyt Türk Katılım Bankası") biçimde
+// gelebilir, ikisiyle de çalışsın diye. Bulunamazsa null — buton hiç
+// gösterilmez (yanlış/tahmini bir linke yönlendirmektense hiç göstermemek
+// tercih edildi).
+function bankaSiteBul(ad: string): string | null {
+  const k = (ad||"").toLocaleLowerCase("tr-TR");
+  const eslesen = BANKA_SITELERI.find(b => k.includes(b.anahtar));
+  return eslesen ? eslesen.url : null;
+}
+// Küçük, tema uyumlu "Başvur ↗" rozeti — hem finansman tablosunda hem
+// katılma hesabı listesinde AYNI bileşen kullanılıyor.
+function BankaBasvurButonu({ad}:{ad:string}){
+  const url = bankaSiteBul(ad);
+  if (!url) return null;
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer" onClick={(e)=>e.stopPropagation()} style={{
+      display:"inline-flex",alignItems:"center",gap:2,marginLeft:6,padding:"2px 7px",borderRadius:20,
+      fontSize:9,fontWeight:800,color:C.blue,border:`1px solid ${C.blue}`,textDecoration:"none",
+      verticalAlign:"middle",whiteSpace:"nowrap",
+    }}>
+      {CV("Başvur")} ↗
+    </a>
+  );
+}
+
 function KarPayiOranlari({nav}:{nav:any}){
   const [veri,setVeri]=useState<any>(null);
   const [yukleniyor,setYukleniyor]=useState(true);
@@ -1487,6 +1535,11 @@ function KarPayiOranlari({nav}:{nav:any}){
                     <tr key={i}>
                       <td style={{position:"sticky",left:0,zIndex:1,background:C.card,textAlign:"left",fontWeight:700,fontSize:12.5,color:enIyiMi?C.green:C.label,padding:"11px 10px",borderBottom:i<finBankalarSirali.length-1?`1px solid ${C.border}`:"none",whiteSpace:"nowrap",boxShadow:"2px 0 4px rgba(0,0,0,0.15)"}}>
                         {b.ad}{enIyiMi&&<span style={{display:"block",fontSize:8,fontWeight:800,color:C.green,marginTop:1}}>{CV("EN İYİ")}</span>}
+                        {/* 2026-09-17 (kullanıcı isteği): bankanın kendi
+                            sitesine başvuru linki, isim hücresinin altında —
+                            sabit (sticky) sütunda yer sıkışık olduğu için
+                            ayrı bir satır olarak. */}
+                        <div><BankaBasvurButonu ad={b.ad}/></div>
                       </td>
                       {FIN_KOLONLAR.map(k=>{
                         const deger=b[k];
@@ -1540,7 +1593,9 @@ function KarPayiOranlari({nav}:{nav:any}){
               display:"flex",alignItems:"center",padding:"11px 12px",
               borderBottom:i<bankalarSirali.length-1?`1px solid ${C.border}`:"none",
             }}>
-              <span style={{flex:2,fontSize:12.5,fontWeight:700,color:C.label,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingRight:6}}>{b.ad}</span>
+              <span style={{flex:2,fontSize:12.5,fontWeight:700,color:C.label,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingRight:6}}>
+                {b.ad}<BankaBasvurButonu ad={b.ad}/>
+              </span>
               {([["tl",b.tl],["usd",b.usd],["eur",b.eur],["altin",b.altin]] as const).map(([v,deger])=>(
                 <span key={v} style={{
                   flex:0.92,textAlign:"right",fontSize:12.5,fontFamily:"monospace",fontWeight:siralamaParaBirimi===v?800:700,
@@ -13864,6 +13919,16 @@ function TaksitKarsilastirma({ s }: { s: any }) {
                           </div>
                         );
                       })}
+                      {/* 2026-09-17 (kullanıcı isteği: "banka karşılaştırma
+                          alanına da ekleyelim") — Kâr Payı Oran
+                          Karşılaştırma'da kullanılan AYNI bileşen
+                          (bankaSiteBul, BankaBasvurButonu) burada da
+                          kullanılıyor, yeni bir URL listesi yok. */}
+                      {bankaSiteBul(r.ad) && (
+                        <div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${WA(0.08)}`,textAlign:"right"}}>
+                          <BankaBasvurButonu ad={r.ad}/>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
