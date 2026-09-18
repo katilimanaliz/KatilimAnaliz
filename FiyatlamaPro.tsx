@@ -1429,12 +1429,18 @@ function KarPayiOraniKarti({ nav }: { nav: (sc: string) => void }) {
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
         <Scale size={14} color={C.blue}/>
-        <span style={{ fontSize: 10, fontWeight: 700, color: WA(0.5), textTransform: "uppercase", letterSpacing: 0.4 }}>{TR("Kâr Payı Karşılaştırma")}</span>
+        <span style={{ fontSize: 10, fontWeight: 700, color: WA(0.5), textTransform: "uppercase", letterSpacing: 0.4 }}>{TR("Finansman Kâr Oranı Karşılaştırma")}</span>
       </div>
       {!veriVar ? (
         <div style={{ fontSize: 12, color: WA(0.4), padding: "6px 0" }}>{CV("Yükleniyor…")}</div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {/* 2026-09-17 (kullanıcı isteği: "başlık ekleyelim, Ürün, aylık
+              kâr oranı diye") — sütun başlığı satırı. */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <span style={{ fontSize: 9, fontWeight: 700, color: WA(0.4), textTransform: "uppercase", letterSpacing: 0.3 }}>{TR("Ürün")}</span>
+            <span style={{ fontSize: 9, fontWeight: 700, color: WA(0.4), textTransform: "uppercase", letterSpacing: 0.3 }}>{TR("Aylık Kâr Oranı")}</span>
+          </div>
           {/* ⚠️ 2026-09-17 (kullanıcı isteği: "konut yanında 60/120 ay vade
               yazsın, üstte başlık olsun; banka adı konut yazı fontu ile
               aynı olsun"): ürün adının yanına vade eklendi (başlık satırı),
@@ -1509,7 +1515,7 @@ function KarPayiKarsilastirmaGenis({ nav }: { nav: (sc: string) => void }) {
       <div onClick={()=>nav("karPayiOranlari")} style={{display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",marginBottom:16}}>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <Scale size={18} color={C.blue}/>
-          <span style={{fontSize:14,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff")}}>{TR("Kâr Payı Karşılaştırma")}</span>
+          <span style={{fontSize:14,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff")}}>{TR("Finansman Kâr Oranı Karşılaştırma")}</span>
         </div>
         <span style={{fontSize:12,color:C.blue,fontWeight:700,flexShrink:0}}>{CV("Tümünü Karşılaştır")} ›</span>
       </div>
@@ -1517,6 +1523,13 @@ function KarPayiKarsilastirmaGenis({ nav }: { nav: (sc: string) => void }) {
         <div style={{fontSize:13,color:WA(0.4),padding:"20px 0",textAlign:"center"}}>{CV("Yükleniyor…")}</div>
       ) : (
         <div style={{display:"flex",flexDirection:"column",gap:12,flex:1}}>
+          {/* 2026-09-17 (kullanıcı isteği: "masaüstünde de başlık yoksa
+              ekle, Ürün / Aylık Kâr Oranı") — kompakt karttaki AYNI sütun
+              başlığı satırı burada da. */}
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 4px"}}>
+            <span style={{fontSize:10.5,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Ürün")}</span>
+            <span style={{fontSize:10.5,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Aylık Kâr Oranı")}</span>
+          </div>
           {satirlar.map((s,i) => s.en && (
             <div key={s.etiket} onClick={(e)=>e.stopPropagation()} style={{padding:"14px 16px",borderRadius:14,background:(TEMA==="acik"?"#fff":WA(0.04)),border:`1px solid ${WA(0.07)}`,cursor:"default"}}>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
@@ -28245,15 +28258,16 @@ function App(){
               return (
                 <>
                   {piyasalarBlok}
+                  {/* ⚠️ 2026-09-17 (kullanıcı isteği: "Piyasalar'ın hemen
+                      altına koyalım"): ÖNCEDEN BİST kartının altındaydı,
+                      şimdi Piyasalar'ın hemen ardında, diğer her şeyden
+                      ÖNCE. */}
+                  <KarPayiOraniKarti nav={nav}/>
                   {asistanBlok}
                   {/* BİST 100/30 kartı — MOBİLDE AI Finans Asistanı'nın hemen
                       altında. MASAÜSTÜNDE bu kart yukarı, hero şeridinin
                       YANINA taşındı, o yüzden burada değil. */}
                   <AnaSayfaBist100Karti nav={nav}/>
-                  {/* 2026-09-17 (kullanıcı isteği: "banka karşılaştırma
-                      alanının widget koyalım mı" → "evet") — BİST kartının
-                      hemen altında, aynı "finansal özet kartları" grubunda. */}
-                  <KarPayiOraniKarti nav={nav}/>
                   {/* ── PORTFÖYÜM KARTI — GEÇİCİ OLARAK GİZLENDİ (2026-09-08) ──
                       Kullanıcı isteğiyle ana sayfadan kaldırıldı, yerine
                       header'daki çanta ikonu kondu. Kod SİLİNMEDİ, geri
