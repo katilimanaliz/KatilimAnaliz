@@ -1415,9 +1415,9 @@ function KarPayiOraniKarti({ nav }: { nav: (sc: string) => void }) {
     return en;
   };
   const satirlar = useMemo(() => [
-    { ikon: "🏠", etiket: "Konut",   en: enIyi("konut120") },
-    { ikon: "🚗", etiket: "Taşıt",   en: enIyi("tasit12") },
-    { ikon: "💰", etiket: "İhtiyaç", en: enIyi("ihtiyac12") },
+    { ikon: "🏠", etiket: "Konut",   vade: "120 Ay", en: enIyi("konut120") },
+    { ikon: "🚗", etiket: "Taşıt",   vade: "12 Ay",  en: enIyi("tasit12") },
+    { ikon: "💰", etiket: "İhtiyaç", vade: "12 Ay",  en: enIyi("ihtiyac12") },
   ], [finBankalar]);
   const veriVar = satirlar.some(s => s.en != null);
 
@@ -1435,13 +1435,22 @@ function KarPayiOraniKarti({ nav }: { nav: (sc: string) => void }) {
         <div style={{ fontSize: 12, color: WA(0.4), padding: "6px 0" }}>{CV("Yükleniyor…")}</div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {/* ⚠️ 2026-09-17 (kullanıcı isteği: "konut yanında 60/120 ay vade
+              yazsın, üstte başlık olsun; banka adı konut yazı fontu ile
+              aynı olsun"): ürün adının yanına vade eklendi (başlık satırı),
+              banka adı artık ürün başlığıyla AYNI font (11px/700/WA(0.85))
+              — önceden daha küçük/soluk (10px/WA(0.45)) bir ikincil metindi. */}
           {satirlar.map(s => s.en && (
             <div key={s.etiket} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-                <span style={{ fontSize: 14, flexShrink: 0 }}>{s.ikon}</span>
+                {/* ⚠️ 2026-09-17 (kullanıcı isteği: "başında araba vb
+                    ikonlar olmasın"): emoji ikonu (🏠/🚗/💰) render'dan
+                    kaldırıldı, veri alanı (s.ikon) dokunulmadı duruyor. */}
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: WA(0.85) }}>{CV(s.etiket)}</div>
-                  <div style={{ fontSize: 10, color: WA(0.45), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.en!.ad}</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: WA(0.85) }}>
+                    {CV(s.etiket)} <span style={{ fontWeight: 600, color: WA(0.45) }}>· {s.vade}</span>
+                  </div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: WA(0.85), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.en!.ad}</div>
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
@@ -1458,6 +1467,76 @@ function KarPayiOraniKarti({ nav }: { nav: (sc: string) => void }) {
         <span style={{ fontSize: 10, color: WA(0.35) }}>{CV("En düşük ilan edilen aylık oran")}</span>
         <span style={{ fontSize: 10, color: WA(0.35) }}>{CV("Tümünü Karşılaştır")} ›</span>
       </div>
+    </div>
+  );
+}
+
+// ── MASAÜSTÜ İÇİN GENİŞ SÜRÜM (2026-09-17, kullanıcı isteği: "masaüstünde
+// Katılım Endeksi'ni yarıya indirip Popüler Fonlar'ın olduğu yere daha
+// büyük geniş bir tasarımla yeni widget yapalım") ──────────────────────────
+// KarPayiOraniKarti ile AYNI veri/mantık (fetch, enIyi) — SADECE görsel
+// olarak daha geniş bir alana (ana kolonda endeksBlok'un YANINDA, yarım
+// genişlik) uygun, daha ferah bir tasarım. Kod TEKRARI var (ayrı bir fetch)
+// ama bu, projede ZATEN kurulu bir desen (her widget kendi verisini
+// bağımsız çeker, bkz. AnaSayfaBist100Karti) — paylaşılan state/context
+// kurmanın getirisi bu kadar küçük bir JSON için riske değmezdi.
+function KarPayiKarsilastirmaGenis({ nav }: { nav: (sc: string) => void }) {
+  const [veri, setVeri] = useState<any>(null);
+  useEffect(() => {
+    fetch(`${API_BASE}/kar-payi.json`, { cache: "no-store" })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => setVeri(d))
+      .catch(() => {});
+  }, []);
+  const finBankalar = veri?.finansman?.bankalar || [];
+  const enIyi = (kolon: string): { ad: string; oran: number } | null => {
+    let en: { ad: string; oran: number } | null = null;
+    for (const b of finBankalar) {
+      const v = b[kolon];
+      if (v != null && (en == null || v < en.oran)) en = { ad: b.ad, oran: v };
+    }
+    return en;
+  };
+  const satirlar = useMemo(() => [
+    { ikon: "🏠", etiket: "Konut",   vade: "120 Ay", en: enIyi("konut120") },
+    { ikon: "🚗", etiket: "Taşıt",   vade: "12 Ay",  en: enIyi("tasit12") },
+    { ikon: "💰", etiket: "İhtiyaç", vade: "12 Ay",  en: enIyi("ihtiyac12") },
+  ], [finBankalar]);
+  const veriVar = satirlar.some(s => s.en != null);
+
+  return (
+    <div style={{background:(TEMA==="acik"?"#E9EEF4":WA(0.05)), border:`1px solid ${WA(0.08)}`, borderRadius:22, padding:"18px 20px", height:"100%", boxSizing:"border-box", display:"flex", flexDirection:"column"}}>
+      <div onClick={()=>nav("karPayiOranlari")} style={{display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",marginBottom:16}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <Scale size={18} color={C.blue}/>
+          <span style={{fontSize:14,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff")}}>{TR("Kâr Payı Karşılaştırma")}</span>
+        </div>
+        <span style={{fontSize:12,color:C.blue,fontWeight:700,flexShrink:0}}>{CV("Tümünü Karşılaştır")} ›</span>
+      </div>
+      {!veriVar ? (
+        <div style={{fontSize:13,color:WA(0.4),padding:"20px 0",textAlign:"center"}}>{CV("Yükleniyor…")}</div>
+      ) : (
+        <div style={{display:"flex",flexDirection:"column",gap:12,flex:1}}>
+          {satirlar.map((s,i) => s.en && (
+            <div key={s.etiket} onClick={(e)=>e.stopPropagation()} style={{padding:"14px 16px",borderRadius:14,background:(TEMA==="acik"?"#fff":WA(0.04)),border:`1px solid ${WA(0.07)}`,cursor:"default"}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                {/* 2026-09-17 (kullanıcı isteği: "başında araba vb ikonlar
+                    olmasın"): emoji ikonu kaldırıldı. */}
+                <span style={{fontSize:14,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff")}}>{CV(s.etiket)}</span>
+                <span style={{fontSize:11.5,fontWeight:600,color:WA(0.4)}}>· {s.vade}</span>
+              </div>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+                <span style={{fontSize:14,fontWeight:800,color:(TEMA==="acik"?C.label:"#fff")}}>{s.en!.ad}</span>
+                <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+                  <span style={{fontSize:21,fontWeight:800,color:C.green,fontFamily:"monospace"}}>%{s.en!.oran.toLocaleString("tr-TR",{minimumFractionDigits:2})}</span>
+                  <BankaBasvurButonu ad={s.en!.ad} vurgulu={i===0}/>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <p style={{margin:"14px 0 0",fontSize:10.5,color:WA(0.35)}}>{CV("En düşük ilan edilen aylık kâr payı oranı (TL, gösterge niteliğinde)")}</p>
     </div>
   );
 }
@@ -28138,7 +28217,19 @@ function App(){
                         ile fonBlok yan yanaydı; fonBlok kalkınca endeksBlok
                         TEK BAŞINA, TAM GENİŞLİKTE render ediliyor — ızgara
                         sarmalayıcısına gerek kalmadı. */}
-                    <div style={{marginTop:26}}>{endeksBlok}</div>
+                    {/* ⚠️ 2026-09-17 (kullanıcı isteği: "masaüstünde Katılım
+                        Endeksi'ni yarıya indirip Popüler Fonlar'ın olduğu
+                        yere daha büyük geniş bir widget yapalım"): tam
+                        genişlikten TEKRAR ikili ızgaraya dönüldü — SOLDA
+                        endeksBlok (yarım genişlik), SAĞDA Popüler Fonlar'ın
+                        eski yerinde YENİ, daha geniş tasarımlı Kâr Payı
+                        Karşılaştırma widget'ı (KarPayiKarsilastirmaGenis —
+                        sağ raydaki KOMPAKT KarPayiOraniKarti'nden FARKLI,
+                        ayrı bir bileşen). MOBİL etkilenmedi. */}
+                    <div style={{...IKILI_SATIR,marginTop:26}}>
+                      <div style={{minWidth:0}}>{endeksBlok}</div>
+                      <div style={{minWidth:0}}><KarPayiKarsilastirmaGenis nav={nav}/></div>
+                    </div>
                     {/* ② Finansal Göstergeler artık TAM GENİŞLİKTE ve YATAY
                         (kendi içinde 3 sütunlu ızgara — bkz. gostergelerBlok).
                         ① Katılım Sektörü kartı buradan ÇIKARILIP sağ raya,
@@ -28321,11 +28412,13 @@ function App(){
                 Mobilde bu kart yukarıdaki akışta kendi sırasında duruyor. */}
             {genisEkran && <KatilimSektoruOzet onAc={()=>nav("katilimSektoru")} dar/>}
 
-            {/* 2026-09-17 (kullanıcı isteği: "mobilde ve masaüstünde banka
-                karşılaştırma alanının widget koyalım mı" → "evet") —
-                Katılım Sektörü'nün hemen ardında, aynı "katılım bankacılığı"
-                temalı kart grubunda. */}
-            {genisEkran && <div style={{marginTop:14}}><KarPayiOraniKarti nav={nav}/></div>}
+            {/* ⚠️ 2026-09-17: sağ raydaki KOMPAKT Kâr Payı Karşılaştırma
+                kartı BURADAN KALDIRILDI — artık ana kolonda, Popüler
+                Fonlar'ın eski yerinde DAHA BÜYÜK bir versiyonu var
+                (KarPayiKarsilastirmaGenis), aynı bilgiyi masaüstünde İKİ
+                KEZ göstermek gereksiz olurdu. MOBİLDE kompakt kart
+                (KarPayiOraniKarti) AYNEN duruyor — BİST kartının hemen
+                altında, bu değişiklikten ETKİLENMEDİ. */}
 
             {/* AI Finans Asistanı — sağ rayın EN ALTINDA (2026-09-15,
                 kullanıcı isteği: "AI Finans Asistanı sağ menü en alta
