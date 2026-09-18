@@ -25747,16 +25747,16 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onDuzen
       {sekme==="portfoy" && (
         <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:16,marginBottom:14}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
-            <span style={{fontSize:10.5,fontWeight:700,color:PORTFOY_ETIKET}}>Toplam Değer</span>
-            <div style={{display:"flex",alignItems:"center",gap:10}}>
-              {/* 2026-09-16 (kullanıcı isteği: "günlük performans takvimi
-                  ekleyelim") — Calendar zaten lucide-react'ten import edilmiş
-                  (bkz. dosya başı), yeni bir import gerekmedi. */}
-              <div onClick={()=>setTakvimAcik(true)} style={{cursor:"pointer",padding:2}}>
-                <Calendar size={15} color={PORTFOY_ETIKET}/>
+            <span style={{fontSize:10.5,fontWeight:700,color:PORTFOY_ETIKET}}>Toplam Portföyüm</span>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              {/* ⚠️ 2026-09-17 (kullanıcı isteği — referans görsel): ikonlar
+                  artık ÇIPLAK değil, temaya uygun kenarlıklı/köşeli birer
+                  kutu içinde ve daha büyük (15px → 18px ikon, 34×34 kutu). */}
+              <div onClick={()=>setTakvimAcik(true)} style={{cursor:"pointer",width:34,height:34,borderRadius:10,border:`1px solid ${C.border}`,background:C.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <Calendar size={18} color={PORTFOY_ETIKET}/>
               </div>
-              <div onClick={onGizliToggle} style={{cursor:"pointer",padding:2}}>
-                {gizli ? <EyeOff size={15} color={PORTFOY_ETIKET}/> : <Eye size={15} color={PORTFOY_ETIKET}/>}
+              <div onClick={onGizliToggle} style={{cursor:"pointer",width:34,height:34,borderRadius:10,border:`1px solid ${C.border}`,background:C.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                {gizli ? <EyeOff size={18} color={PORTFOY_ETIKET}/> : <Eye size={18} color={PORTFOY_ETIKET}/>}
               </div>
             </div>
           </div>
