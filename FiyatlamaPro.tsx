@@ -1451,7 +1451,17 @@ function BankaBasvurButonu({ad, vurgulu}:{ad:string; vurgulu?:boolean}){
 // (masaüstü) arasında HİÇBİR görsel öğe paylaşılmıyor; bu grid tanımı
 // SADECE kompakt kart için — başlık ve satırların hizasını GARANTİ ALTINA
 // alan tek kaynak. Sütunlar: Ürün (esnek) | En İyi rozeti | Oran | Buton.
-const KP_GRID_KOMPAKT = "1fr 52px 62px auto";
+// ⚠️ 2026-09-17 (kullanıcı raporu: "Aylık kar oranı, oranların üstünde
+// olması lazım" — hizasızdı): KÖK NEDEN — son sütun "auto" idi; başlık
+// satırında bu sütun BOŞ bir <span/>, veri satırlarında ise GERÇEK
+// "Başvuru Yap" butonuydu. Her satır KENDİ BAŞINA AYRI bir grid konteyneri
+// olduğu için "auto" genişliği İÇERİĞE göre BAĞIMSIZ hesaplanıyordu — boş
+// span'de küçük, gerçek buton varken büyük — bu da 1fr (Ürün) sütununun
+// iki satırda FARKLI genişlikte hesaplanmasına, dolayısıyla 3. sütunun
+// (Oran) başlangıcının satırdan satıra KAYMASINA yol açıyordu. Son sütun
+// artık SABİT (104px) — böylece TÜM sütun sınırları, içerik ne olursa
+// olsun, başlık ve veri satırlarında BİREBİR aynı.
+const KP_GRID_KOMPAKT = "1fr 52px 62px 116px";
 
 function KarPayiOraniKarti({ nav }: { nav: (sc: string) => void }) {
   const [veri, setVeri] = useState<any>(null);
@@ -29749,7 +29759,11 @@ function App(){
                     padding:"2px 2px 5px",maxWidth:"100%",boxSizing:"border-box",
                   }}>
                     <AltBarIcon tip={t.tip} aktif={aktif}/>
-                    <span style={{fontSize:9.5,fontWeight:aktif?700:500,letterSpacing:0,color:aktif?C.blue:WA(0.45),whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"100%",transition:"color 0.2s ease"}}>{CV(t.label)}</span>
+                    {/* ⚠️ 2026-09-17 (kullanıcı raporu: "alt bar okunmuyor,
+                        eski boyutuna getir"): 9.5px — hem dokümanın kendi
+                        "Mobile Tab Bar: 12-13px" önerisinin hem de genel
+                        12px alt sınırının altındaydı. 11/12px'e çıkarıldı. */}
+                    <span style={{fontSize:aktif?12:11,fontWeight:aktif?700:500,letterSpacing:0,color:aktif?C.blue:WA(0.45),whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"100%",transition:"color 0.2s ease"}}>{CV(t.label)}</span>
                     <div style={{width:aktif?18:0,height:2.5,borderRadius:2,background:C.blue,marginTop:1,transition:"width 0.2s ease"}}/>
                   </div>
                 </div>
