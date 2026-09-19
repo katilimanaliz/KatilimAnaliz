@@ -28571,7 +28571,7 @@ function App(){
             (aramaQ===""||it.label.toUpperCase().includes(aramaQ)||CV(it.label).toUpperCase().includes(aramaQ))
           );
           return(
-          <div style={{background:C.bg,padding:"12px 12px 0",paddingBottom:"calc(108px + env(safe-area-inset-bottom,0px))",boxSizing:"border-box",overflowY:"auto"}}>
+          <div style={{background:C.bg,padding:"12px 12px 0",paddingBottom:"calc(108px + env(safe-area-inset-bottom,0px))",boxSizing:"border-box",overflowY:"auto",maxWidth:genisEkran?920:"none",margin:genisEkran?"0 auto":undefined}}>
             {/* Arama çubuğu artık kök seviyedeki sabit üst blokta. */}
 
             {/* Son Kullanılanlar yatay şeridi — sadece geçmiş varsa, arama/özel filtre yokken */}
@@ -28621,6 +28621,44 @@ function App(){
             ) : (
             <>
             {/* Kategori başlıklı liste */}
+            {/* ⚠️ 2026-09-17 (kullanıcı isteği — önce görsel onay alındı):
+                MASAÜSTÜNDE artık 2x2 kategori paneli düzeni — üst sırada
+                Bireysel + Tüzel yan yana, alt sırada Katılım Hesabı +
+                Hazine yan yana. Her panel kendi kategori rengiyle, içinde
+                gerçek satır bileşeninin (press-card) AYNI stiliyle (sadece
+                panel bağlamına göre biraz daha kompakt padding) bir liste
+                barındırıyor. MOBİL dal TAMAMEN DOKUNULMADI — orijinal tek
+                sütunlu, alt alta akış aynen duruyor. */}
+            {genisEkran ? (
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+                {(["bireysel","ticari","katilim","hazine"] as const).map(katId=>{
+                  const kat=HESAPLA_KATEGORILER.find(k=>k.id===katId)!;
+                  const items=filtreliListe.filter(it=>it.kat===katId);
+                  if(items.length===0) return null;
+                  const renk=({katilim:C.blue,bireysel:C.teal,ticari:C.purple,hazine:C.orange} as Record<string,string>)[katId];
+                  return (
+                    <div key={katId} style={{background:WA(0.03),border:`1px solid ${WA(0.07)}`,borderRadius:14,padding:14}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,padding:"0 2px"}}>
+                        <span style={{width:3,height:14,borderRadius:2,background:renk,flexShrink:0}}/>
+                        <span style={{fontSize:13,fontWeight:600,color:renk}}>{TR(kat.baslik||`${kat.label} Hesaplamaları`)}</span>
+                      </div>
+                      {items.map(it=>(
+                        <div className="press-card" key={it.key} onClick={()=>nav(it.key)} style={{
+                          display:"flex",alignItems:"center",gap:12,
+                          background:WA(0.05),border:`1px solid ${WA(0.07)}`,
+                          borderRadius:12,padding:"13px 14px",marginBottom:8,cursor:"pointer",
+                        }}>
+                          <span style={{width:26,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon k={it.key} size={20} color={C.blue}/></span>
+                          <span style={{flex:1,fontSize:14,fontWeight:600,color:C.soft}}>{CV(it.label)}</span>
+                          <span style={{color:WA(0.3),fontSize:16,flexShrink:0}}>›</span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+            <>
             {HESAPLA_KATEGORILER.filter(k=>k.id!=="tumu"&&k.id!=="gecmis").map(kat=>{
               const items=filtreliListe.filter(it=>it.kat===kat.id);
               if(items.length===0) return null;
@@ -28647,6 +28685,8 @@ function App(){
                 </div>
               );
             })}
+            </>
+            )}
 
             {filtreliListe.length===0&&(
               <div style={{textAlign:"center",padding:"40px 0",color:WA(0.35),fontSize:13}}>Sonuç bulunamadı</div>
