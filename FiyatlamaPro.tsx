@@ -2209,7 +2209,7 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
       {/* Kaynak filtresi — Katılım Uygun / Tüm Fonlar (2026-09-06 eklendi) */}
       <div style={{display:"flex",gap:6,padding:"8px 12px 0",flexShrink:0}}>
         {[
-          {key:"katilim", label:"🟢 Sadece Katılım Uygun"},
+          {key:"katilim", label:"🟢 Katılıma Uygun Fonlar"},
           {key:"tumu",    label:"🌐 Tüm Fonlar"},
         ].map(k=>{
           const aktif = kaynakFiltre===k.key;
