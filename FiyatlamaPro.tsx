@@ -996,7 +996,12 @@ function parseVal(val){
   return val.replace(/\./g,'').replace(',','.');
 }
 
-function TutarField({label,value,onChange,suffix,hint}){
+// zemin (opsiyonel): 2026-09-21 (kullanıcı isteği — "Finansman Tutarı alanı
+// gri, aşağıdaki kartlarla tutarlı olsun diye beyaz yap") eklendi. Varsayılan
+// (WA(0.06)) DEĞİŞMEDİ — diğer TÜM TutarField kullanımları (Hesapla ekranları
+// vb.) hiçbir şekilde etkilenmiyor, sadece bu parametreyi AÇIKÇA geçen çağrı
+// (KarPayiKarsilastirmaGenis) yeni rengi alıyor.
+function TutarField({label,value,onChange,suffix,hint,zemin}:{label:string;value:any;onChange:(v:string)=>void;suffix?:string;hint?:string;zemin?:string}){
   const [display,setDisplay] = useState(value?formatWithDots(String(value)):'');
   const handleChange = (e)=>{
     const raw = e.target.value;
@@ -1015,7 +1020,7 @@ function TutarField({label,value,onChange,suffix,hint}){
       <div style={{position:"relative"}}>
         <input inputMode="decimal" value={display} onChange={handleChange}
           style={{width:"100%",boxSizing:"border-box",padding:suffix?"11px 40px 11px 13px":"11px 13px",
-            fontSize:15,fontWeight:600,fontFamily:"monospace",background:WA(0.06),
+            fontSize:15,fontWeight:600,fontFamily:"monospace",background:zemin||WA(0.06),
             border:`1.5px solid ${C.border}`,borderRadius:10,color:C.label,outline:"none",WebkitAppearance:"none"}}/>
         {suffix&&<span style={{position:"absolute",right:11,top:"50%",transform:"translateY(-50%)",color:C.blue,fontWeight:700,fontSize:13}}>{suffix}</span>}
       </div>
@@ -1655,10 +1660,17 @@ function KarPayiKarsilastirmaGenis({ nav }: { nav: (sc: string) => void }) {
   // diğer hücreler kendi doğal içerik genişliğinde kalıyor ve ASLA taşmıyor
   // (flex-shrink:0). Böylece dar bir sütunda bile buton hep görünür kalıyor,
   // banka adı gerekirse "…" ile kırpılıyor (kaybolmuyor).
-  const SATIR_STIL: any = { display:"flex", alignItems:"center", gap:10 };
-  const urunHucre: any = { flex:"0 0 60px", fontSize:13, fontWeight:700 };
-  const vadeHucre: any = { flex:"0 0 50px", fontSize:13, fontWeight:700 };
-  const oranHucre: any = { flex:"0 0 70px", textAlign:"center" as const };
+  // ⚠️ 2026-09-21 (kullanıcı raporu — ÜÇÜNCÜ TUR: "banka adı sığmamış,
+  // yazı fontunu tabloda 1 kademe küçült"): sabit sütunlar (Ürün/Vade/Oran)
+  // + buton + gap'ler birlikte bu dar kartta hâlâ çok yer yiyordu, "Türkiye
+  // Finans" gibi 14 karakterlik bir isim bile "Türkiye Fi…" diye kesiliyordu.
+  // Üç fixed sütun de 1 punto KÜÇÜLTÜLDÜ (13→12, oran 15→14) ve genişlikleri
+  // buna paralel daraltıldı (60→52, 50→42, 70→62), satır gap'i 10→8 —
+  // toplam ~35-40px daha isim sütunune (1fr) aktarılmış oluyor.
+  const SATIR_STIL: any = { display:"flex", alignItems:"center", gap:8 };
+  const urunHucre: any = { flex:"0 0 52px", fontSize:12, fontWeight:700 };
+  const vadeHucre: any = { flex:"0 0 42px", fontSize:12, fontWeight:700 };
+  const oranHucre: any = { flex:"0 0 62px", textAlign:"center" as const };
 
   return (
     <div style={{marginBottom:14}}>
@@ -1676,10 +1688,18 @@ function KarPayiKarsilastirmaGenis({ nav }: { nav: (sc: string) => void }) {
         <>
         <div style={{background:(TEMA==="acik"?"#E9EEF4":WA(0.05)), border:`1px solid ${WA(0.08)}`, borderRadius:16, padding:"14px 16px", boxSizing:"border-box"}}>
           <div style={{...SATIR_STIL,padding:"0 4px 8px"}}>
-            <span style={{...urunHucre,fontSize:10.5,fontWeight:700,color:WA(0.85),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Ürün")}</span>
-            <span style={{...vadeHucre,fontSize:10.5,fontWeight:700,color:WA(0.85),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Vade")}</span>
-            <span style={{flex:"1 1 auto",minWidth:0,fontSize:10.5,fontWeight:700,color:WA(0.85),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Banka adı")}</span>
-            <span style={{...oranHucre,fontSize:10.5,fontWeight:700,color:WA(0.85),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Oran")}</span>
+            {/* ⚠️ 2026-09-21 (kullanıcı raporu — DÖRDÜNCÜ TUR: "başlık boyutu
+                soldakiyle tutarlı olsun, burda hepsi büyük harf yanda küçük
+                harf var"): soldaki Katılım Endeksi panelindeki "Yükselenler"/
+                "Düşenler" başlıkları Title Case (büyük harfe zorlanmamış).
+                Bu tablonun sütun başlıkları textTransform:"uppercase" ile
+                ZORLA büyütülüyordu — kaldırıldı, letterSpacing de (uppercase
+                ile eşleşen bir ayrıntıydı) onunla birlikte kaldırıldı. Punto
+                (10.5px) zaten soldakiyle AYNIYDI, dokunulmadı. */}
+            <span style={{...urunHucre,fontSize:10.5,fontWeight:700,color:WA(0.85)}}>{TR("Ürün")}</span>
+            <span style={{...vadeHucre,fontSize:10.5,fontWeight:700,color:WA(0.85)}}>{TR("Vade")}</span>
+            <span style={{flex:"1 1 auto",minWidth:0,fontSize:10.5,fontWeight:700,color:WA(0.85)}}>{TR("Banka adı")}</span>
+            <span style={{...oranHucre,fontSize:10.5,fontWeight:700,color:WA(0.85)}}>{TR("Oran")}</span>
             <span style={{flex:"0 0 auto",width:1}}/>
           </div>
           <div style={{borderTop:`1px solid ${WA(0.1)}`}}/>
@@ -1688,11 +1708,11 @@ function KarPayiKarsilastirmaGenis({ nav }: { nav: (sc: string) => void }) {
               <div onClick={(e)=>e.stopPropagation()} style={{...SATIR_STIL,padding:"12px 4px"}}>
                 <span style={{...urunHucre,color:(TEMA==="acik"?C.label:"#fff")}}>{CV(s.etiket)}</span>
                 <span style={{...vadeHucre,color:(TEMA==="acik"?C.label:"#fff")}}>{s.vade}</span>
-                <div style={{flex:"1 1 auto",minWidth:0,display:"flex",alignItems:"center",gap:8}}>
-                  <BankaLogoRozet ad={s.en!.ad} boyut={22}/>
-                  <span style={{fontSize:13.5,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.en!.ad}</span>
+                <div style={{flex:"1 1 auto",minWidth:0,display:"flex",alignItems:"center",gap:6}}>
+                  <BankaLogoRozet ad={s.en!.ad} boyut={18}/>
+                  <span style={{fontSize:12.5,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.en!.ad}</span>
                 </div>
-                <span style={{...oranHucre,fontSize:15,fontWeight:700,color:C.green,fontFamily:"monospace"}}>%{s.en!.oran.toLocaleString("tr-TR",{minimumFractionDigits:2})}</span>
+                <span style={{...oranHucre,fontSize:14,fontWeight:700,color:C.green,fontFamily:"monospace"}}>%{s.en!.oran.toLocaleString("tr-TR",{minimumFractionDigits:2})}</span>
                 <div style={{flex:"0 0 auto"}}><BankaBasvurButonu ad={s.en!.ad}/></div>
               </div>
               {i < satirlar.length - 1 && <div style={{borderTop:`1px solid ${WA(0.06)}`}}/>}
@@ -1720,7 +1740,7 @@ function KarPayiKarsilastirmaGenis({ nav }: { nav: (sc: string) => void }) {
             <span style={{fontSize:13,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff")}}>{TR("Örnek Ödeme Planı")}</span>
           </div>
           <div style={{maxWidth:260,marginBottom:12}}>
-            <TutarField label={TR("Finansman Tutarı")} value={tutar} onChange={setTutar} suffix="₺"/>
+            <TutarField label={TR("Finansman Tutarı")} value={tutar} onChange={setTutar} suffix="₺" zemin={TEMA==="acik"?"#fff":"#16222E"}/>
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
             {satirlar.map(s => s.en && (()=>{
@@ -22001,14 +22021,26 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla,duz}:{ad:string,sembol:
           (mobil) görünümü DOKUNULMADI, hâlâ tek sütunda alt alta. */}
       {duz ? (
         <>
-          <div style={{width:66,flexShrink:0,textAlign:"right"}}>
+          {/* ⚠️ 2026-09-21 (kullanıcı raporu, ekran görüntüsüyle: "varlık
+              fiyatları büyük yazdığı için tablo kaymış, başlıkta kaymış"):
+              kök neden — bu iki hücrede (Fiyat/Değişim) minWidth:0 EKSİKTİ
+              (soldaki "ad" hücresinde zaten vardı, satır 22003). Flexbox'ta
+              minWidth:0 olmayan bir flex item, içeriği (whiteSpace:nowrap
+              uzun bir fiyat, ör. "6.837,53") 66px'ten GENİŞSE kendi
+              genişliğini o içeriğe göre BÜYÜTÜYOR — bu da sağdaki Değişim/
+              Grafik sütunlarını sağa itip başlık satırıyla hizasızlığa
+              (kaymaya) yol açıyordu. minWidth:0 + overflow:hidden ile hücre
+              ARTIK KENDİ 66px/56px genişliğinden asla taşmıyor, gerekirse
+              (aşırı uzun bir fiyat) sessizce kırpılıyor — başlıkla hizası
+              her koşulda korunuyor. */}
+          <div style={{width:66,flexShrink:0,minWidth:0,overflow:"hidden",textAlign:"right"}}>
             {guncel!=null ? (
               <span style={{fontSize:13,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace",whiteSpace:"nowrap"}}>
                 {`${paraOnek||""}${fmtDeger(guncel)}`}
               </span>
             ) : <div className="skeleton" style={{height:13,width:"80%",marginLeft:"auto",borderRadius:4}}/>}
           </div>
-          <div style={{width:56,flexShrink:0,textAlign:"right"}}>
+          <div style={{width:56,flexShrink:0,minWidth:0,overflow:"hidden",textAlign:"right"}}>
             {guncel!=null ? (
               <span style={{fontSize:11,fontWeight:700,color:degisim!=null?renk:WA(0.3),whiteSpace:"nowrap"}}>
                 {degisim!=null?`${pozitif?"+":""}${degisim.toFixed(2).replace(".",",")}%`:"—"}
