@@ -81,9 +81,9 @@
   ],
   "finansman": {
     "guncelleme": {
-      "konut": "2026-09-08",
-      "tasit": "2026-09-08",
-      "ihtiyac": "2026-09-08"
+      "konut": "2026-09-21",
+      "tasit": "2026-09-21",
+      "ihtiyac": "2026-09-21"
     },
     "bankalar": [
       {
@@ -128,8 +128,8 @@
         "konut120": 2.99,
         "tasit12": 3.39,
         "tasit24": 3.39,
-        "ihtiyac12": 3.99,
-        "ihtiyac24": 3.99
+        "ihtiyac12": 3.79,
+        "ihtiyac24": 3.79
       },
       {
         "ad": "Ziraat Katılım",
@@ -137,12 +137,12 @@
         "konut120": 2.89,
         "tasit12": 3.49,
         "tasit24": 3.49,
-        "ihtiyac12": 4.39,
-        "ihtiyac24": 4.29
+        "ihtiyac12": 4.19,
+        "ihtiyac24": 4.09
       },
       {
         "ad": "Emlak Katılım",
-        "konut60": 3.39,
+        "konut60": 3.19,
         "konut120": 3.39,
         "tasit12": 4.29,
         "tasit24": 4.29,
