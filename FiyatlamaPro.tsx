@@ -1637,6 +1637,12 @@ function KarPayiKarsilastirmaGenis({ nav }: { nav: (sc: string) => void }) {
     { ikon: "💰", etiket: "İhtiyaç", vade: "12 Ay",  en: enIyi("ihtiyac12") },
   ], [finBankalar]);
   const veriVar = satirlar.some(s => s.en != null);
+  // ⚠️ 2026-09-21 (kullanıcı isteği: "masaüstünde altına örnek ödeme planı
+  // hesaplayıcı ekleyelim, tutar gir taksitleri göster"): sol kolondaki
+  // Katılım Endeksi listesi (10 satır) yanında bu kart çok kısa kalıp
+  // altında boş alan bırakıyordu. `tutar` state'i burada tutuluyor (bu
+  // widget'a ÖZEL — Hesapla ekranındaki ayrı state'lerle karışmıyor).
+  const [tutar, setTutar] = useState("500000");
 
   return (
     <div style={{background:(TEMA==="acik"?"#E9EEF4":WA(0.05)), border:`1px solid ${WA(0.08)}`, borderRadius:22, padding:"18px 20px", height:"100%", boxSizing:"border-box", display:"flex", flexDirection:"column"}}>
@@ -1650,39 +1656,79 @@ function KarPayiKarsilastirmaGenis({ nav }: { nav: (sc: string) => void }) {
       {!veriVar ? (
         <div style={{fontSize:13,color:WA(0.4),padding:"20px 0",textAlign:"center"}}>{CV("Yükleniyor…")}</div>
       ) : (
-        <div style={{display:"flex",flexDirection:"column",gap:12,flex:1}}>
-          {/* 2026-09-17 (kullanıcı isteği: "masaüstünde de başlık yoksa
-              ekle, Ürün / Aylık Kâr Oranı") — kompakt karttaki AYNI sütun
-              başlığı. Burada "En İyi" rozeti AYRICA gerekmiyor — bu widget
-              zaten SADECE her ürün için en iyi seçeneği gösteriyor, kutu
-              içindeki her satır kendi kendini açıklıyor. */}
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 4px"}}>
-            <span style={{fontSize:10.5,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Ürün")}</span>
-            <span style={{fontSize:10.5,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Aylık Kâr Oranı")}</span>
+        <div style={{display:"flex",flexDirection:"column",flex:1}}>
+          {/* ⚠️ 2026-09-21 (kullanıcı isteği: "masaüstünde bu olmuş mu,
+              mobilde yaptığımız yan yana tek satır yok"): mobildeki
+              KarPayiOraniKarti'nin tek-satırlık hizalı grid tasarımı
+              masaüstüne hiç yansımamıştı — burada HÂLÂ eski (her ürün
+              kendi kutusunda, üst-alt) tasarım vardı. Artık AYNI mantık
+              (KP_GRID_KOMPAKT ile PAYLAŞILMIYOR — masaüstünün kendi geniş
+              sütunları var, ama başlık/hizalama deseni birebir aynı).
+              Başlık kontrastı da mobildeki gibi WA(0.4)→WA(0.85)+bold
+              yapıldı (kullanıcı "arka fon(t) siyah/okunmuyor" diye sordu). */}
+          <div style={{display:"grid",gridTemplateColumns:"90px 70px 1fr 110px 150px",alignItems:"center",gap:10,padding:"0 4px 8px"}}>
+            <span style={{fontSize:10.5,fontWeight:700,color:WA(0.85),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Ürün")}</span>
+            <span style={{fontSize:10.5,fontWeight:700,color:WA(0.85),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Vade")}</span>
+            <span style={{fontSize:10.5,fontWeight:700,color:WA(0.85),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Banka adı")}</span>
+            <span style={{fontSize:10.5,fontWeight:700,color:WA(0.85),textTransform:"uppercase",letterSpacing:0.4,textAlign:"center"}}>{TR("Aylık kâr oranı")}</span>
+            <span/>
           </div>
+          <div style={{borderTop:`1px solid ${WA(0.1)}`}}/>
           {satirlar.map((s,i) => s.en && (
-            <div key={s.etiket} onClick={(e)=>e.stopPropagation()} style={{padding:"14px 16px",borderRadius:14,background:(TEMA==="acik"?"#fff":WA(0.04)),border:`1px solid ${WA(0.07)}`,cursor:"default"}}>
-              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-                {/* 2026-09-17 (kullanıcı isteği: "başında araba vb ikonlar
-                    olmasın"): emoji ikonu kaldırıldı. */}
-                <span style={{fontSize:14,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff")}}>{CV(s.etiket)}</span>
-                <span style={{fontSize:11.5,fontWeight:600,color:WA(0.4)}}>· {s.vade}</span>
-              </div>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
-                <span style={{fontSize:14,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),display:"flex",alignItems:"center",gap:8}}>
+            <Fragment key={s.etiket}>
+              <div onClick={(e)=>e.stopPropagation()} style={{display:"grid",gridTemplateColumns:"90px 70px 1fr 110px 150px",alignItems:"center",gap:10,padding:"12px 4px"}}>
+                <span style={{fontSize:13,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff")}}>{CV(s.etiket)}</span>
+                <span style={{fontSize:13,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff")}}>{s.vade}</span>
+                <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
                   <BankaLogoRozet ad={s.en!.ad} boyut={22}/>
-                  {s.en!.ad}
-                </span>
-                <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
-                  <span style={{fontSize:21,fontWeight:700,color:C.green,fontFamily:"monospace"}}>%{s.en!.oran.toLocaleString("tr-TR",{minimumFractionDigits:2})}</span>
-                  <BankaBasvurButonu ad={s.en!.ad} vurgulu={i===0}/>
+                  <span style={{fontSize:13.5,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.en!.ad}</span>
                 </div>
+                <span style={{fontSize:16,fontWeight:700,color:C.green,fontFamily:"monospace",textAlign:"center"}}>%{s.en!.oran.toLocaleString("tr-TR",{minimumFractionDigits:2})}</span>
+                <div style={{justifySelf:"end"}}><BankaBasvurButonu ad={s.en!.ad}/></div>
               </div>
-            </div>
+              {i < satirlar.length - 1 && <div style={{borderTop:`1px solid ${WA(0.06)}`}}/>}
+            </Fragment>
           ))}
+
+          {/* ── ÖRNEK ÖDEME PLANI HESAPLAYICI (2026-09-21, kullanıcı isteği)
+              Yukarıdaki tabloda gösterilen "en iyi" oran/vade ÜÇLÜSÜNÜ
+              (Konut/Taşıt/İhtiyaç) kullanıyor — ayrı bir veri kaynağına
+              gerek yok. Hesaplama, kod tabanının HER YERİNDE (Hesapla
+              ekranları) kullanılan AYNI standart anüite formülü:
+              pmt = ao===0 ? T/V : T*ao/(1-Math.pow(1+ao,-V)). Komisyon/BSMV/
+              KKDF dahil EDİLMEDİ — tablo zaten "ilan edilen ham oran,
+              gösterge niteliğinde" notuyla sunuluyor (bkz. alt not), kesin
+              hesap için kullanıcı Hesapla menüsüne yönlendiriliyor. */}
+          <div onClick={(e)=>e.stopPropagation()} style={{borderTop:`1px solid ${WA(0.1)}`,marginTop:18,paddingTop:16}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+              <Calculator size={16} color={C.blue}/>
+              <span style={{fontSize:13,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff")}}>{TR("Örnek Ödeme Planı")}</span>
+            </div>
+            <div style={{maxWidth:260,marginBottom:12}}>
+              <TutarField label={TR("Finansman Tutarı")} value={tutar} onChange={setTutar} suffix="₺"/>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:10}}>
+              {satirlar.map(s => s.en && (
+                <div key={s.etiket} style={{padding:"11px 13px",borderRadius:12,background:(TEMA==="acik"?"#fff":WA(0.04)),border:`1px solid ${WA(0.07)}`}}>
+                  <div style={{fontSize:10.5,fontWeight:700,color:WA(0.55),textTransform:"uppercase",letterSpacing:0.3,marginBottom:5,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{CV(s.etiket)} · {s.vade}</div>
+                  <div style={{fontSize:15.5,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace"}}>
+                    {(() => {
+                      const T = sayiOku(tutar);
+                      if (!T) return "—";
+                      const ao = s.en!.oran / 100, V = parseInt(s.vade);
+                      const pmt = ao === 0 ? T / V : T * ao / (1 - Math.pow(1 + ao, -V));
+                      return fmtTL(pmt);
+                    })()}
+                  </div>
+                  <div style={{fontSize:10,color:WA(0.4),marginTop:2}}>{TR("aylık taksit")}</div>
+                </div>
+              ))}
+            </div>
+            <p style={{margin:"10px 0 0",fontSize:10,color:WA(0.4)}}>{CV("Gösterge niteliğindedir; komisyon/BSMV dahil değildir. Kesin ödeme planı için Hesapla menüsünü kullanın.")}</p>
+          </div>
         </div>
       )}
-      <p style={{margin:"14px 0 0",fontSize:10.5,color:WA(0.35)}}>{CV("En düşük ilan edilen aylık kâr payı oranı (TL, gösterge niteliğinde)")}</p>
+      <p style={{margin:"14px 0 0",fontSize:10.5,color:WA(0.4),marginTop:"auto",paddingTop:14}}>{CV("En düşük ilan edilen aylık kâr payı oranı (TL, gösterge niteliğinde)")}</p>
     </div>
   );
 }
@@ -4427,6 +4473,15 @@ function HaberGorseli({link}:{link?:string}){
 const SERIT_YUKSEKLIK = 34;
 function UstPiyasaSeridi({kalemler,onTikla}:{kalemler:any[];onTikla:(k:any)=>void}){
   const [tik,setTik]=useState(0);
+  // ⚠️ 2026-09-21 (kullanıcı raporu: "üzerine mause gelince kayma
+  // dursun" — CSS'teki .kp-serit:hover{animation-play-state:paused}
+  // kuralı yeterince güvenilir çalışmıyordu, muhtemelen bu <style>
+  // etiketinin her re-render'da (10sn'lik tik ile) yeniden eklenmesi
+  // yüzünden). Artık duraklatma DOĞRUDAN React state'iyle kontrol
+  // ediliyor — onMouseEnter/onMouseLeave ile animationPlayState inline
+  // stile yazılıyor, CSS :hover kuralına bağımlı değil. Eski CSS kuralı
+  // zararsız bir yedek olarak koda kalıyor.
+  const [duraklat,setDuraklat]=useState(false);
   // Kartlar veriyi yazdıkça şerit de tazelensin diye 10 sn'de bir yeniden oku.
   useEffect(()=>{ const t=setInterval(()=>setTik(x=>x+1),10000); return ()=>clearInterval(t); },[]);
   const veriler=useMemo(()=>{
@@ -4454,8 +4509,17 @@ function UstPiyasaSeridi({kalemler,onTikla}:{kalemler:any[];onTikla:(k:any)=>voi
                  borderBottom:`1px solid ${WA(0.09)}`,display:"flex",alignItems:"center"}}>
       <style>{`@keyframes kpSerit{from{transform:translateX(0)}to{transform:translateX(-50%)}}
                .kp-serit:hover{animation-play-state:paused}`}</style>
-      <div className="kp-serit" style={{display:"flex",alignItems:"center",gap:26,whiteSpace:"nowrap",
-             animation:`kpSerit ${Math.max(30,veriler.length*5)}s linear infinite`,paddingLeft:20}}>
+      <div className="kp-serit" onMouseEnter={()=>setDuraklat(true)} onMouseLeave={()=>setDuraklat(false)} style={{display:"flex",alignItems:"center",gap:26,whiteSpace:"nowrap",
+             animation:`kpSerit ${Math.max(30,veriler.length*5)}s linear infinite`,animationPlayState:duraklat?"paused":"running",paddingLeft:20,
+             // ⚠️ 2026-09-21 (kullanıcı raporu: "kayan yazı biraz blur gibi"):
+             // sürekli translateX animasyonu, tarayıcı elemanı kendi GPU
+             // katmanına ALMADIĞI sürece metni her karede yeniden
+             // rasterize edip alt-piksel bulanıklığına yol açabiliyor.
+             // willChange + backfaceVisibility elemanı kompozit katmana
+             // alıp kayma sırasında metni net tutuyor; font-smoothing
+             // ayarları da genel netliği artırıyor.
+             willChange:"transform", backfaceVisibility:"hidden" as const, WebkitBackfaceVisibility:"hidden" as const,
+             WebkitFontSmoothing:"antialiased" as const, MozOsxFontSmoothing:"grayscale" as const}}>
         {sira.map((v:any,i:number)=>{
           const artiMi=(v.degisim??0)>=0;
           return (
@@ -28812,7 +28876,7 @@ function App(){
             </div>
 
             {/* Fiyat Alarmlarım kısayolu — hangi filtre seçili olursa olsun görünür */}
-            <div onClick={()=>nav("fiyatAlarmlarim")} style={{
+            <div className="press-card" onClick={()=>nav("fiyatAlarmlarim")} style={{
               display:"flex",alignItems:"center",gap:10,cursor:"pointer",marginBottom:10,
               background:WA(0.04),border:`1px solid ${WA(0.08)}`,
               borderRadius:12,padding:"11px 13px",
@@ -28823,7 +28887,7 @@ function App(){
             </div>
 
             {piyasaTabloFiltre==="fonlar"?(
-              <div onClick={()=>nav("fonGetiriIzleme")} style={{
+              <div className="press-card" onClick={()=>nav("fonGetiriIzleme")} style={{
                 background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,
                 borderRadius:14,padding:"16px",display:"flex",alignItems:"center",gap:12,cursor:"pointer",marginTop:8,
               }}>
@@ -29283,7 +29347,7 @@ function App(){
                   <div style={{textAlign:"center",padding:"30px 0",color:WA(0.35),fontSize:13}}>Sonuç bulunamadı</div>
                 )}
                 {piyasaTabloFiltre==="borsa"&&(
-                  <div onClick={()=>nav("bistHisseTarayici")} style={{
+                  <div className="press-card" onClick={()=>nav("bistHisseTarayici")} style={{
                     background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,
                     borderRadius:14,padding:"16px",display:"flex",alignItems:"center",gap:12,cursor:"pointer",marginTop:10,
                   }}>
