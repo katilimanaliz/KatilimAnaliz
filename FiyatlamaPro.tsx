@@ -11058,7 +11058,17 @@ function KasaOranAnalizi(){
       const kalanGetiri=kalanGun>0 ? yb/100/365*kalanGun : 0; // kısmi son dönem getirisi
       const yillikBilesik=(Math.pow(1+donemGetiri,N)*(1+kalanGetiri)-1)*100;
       const getiri1M=(Math.pow(1+donemGetiri,N)*(1+kalanGetiri)-1)*1000000;
-      return{mod,yb,G,NV,N,kalanGun,donemGetiri:donemGetiri*100,yillikBilesik,getiri1M};
+      // ⚠️ 2026-09-21 (kullanıcı isteği: "altta bir alan da %22'nin yıllık
+      // karşılığı oranı da göstermek lazım"): NV 365'ten farklıysa (ör.
+      // 196 gün), bileşik getiri (%22,24) doğrudan yıllık %38 ile
+      // KIYASLANAMAZ — 196 gün henüz 1 yılı doldurmuyor. Bu satır, o NV
+      // günlük bileşik getiriyi YILLIKLANDIRIYOR ((1+getiri)^(365/NV)-1) —
+      // yani "bu tempo tam 1 yıl sürseydi eşdeğer yıllık bileşik oran ne
+      // olurdu" sorusuna cevap veriyor, %38 ile DOĞRUDAN kıyaslanabilir.
+      // NV=365 olduğunda (varsayılan) üs 365/365=1, yani bu değer
+      // yillikBilesik'in KENDİSİYLE AYNI — eski davranış hiç bozulmuyor.
+      const yillikEsdeger=(Math.pow(1+yillikBilesik/100,365/NV)-1)*100;
+      return{mod,yb,G,NV,N,kalanGun,donemGetiri:donemGetiri*100,yillikBilesik,yillikEsdeger,getiri1M};
     } else {
       const hb=sayiOku(hedefBilesik);
       if(!hb)return null;
@@ -11111,6 +11121,14 @@ function KasaOranAnalizi(){
         {r.kalanGun>0&&<RRow label="Son Kısmi Dönem" value={`${r.kalanGun} gün`} sub/>}
         <div style={{height:1,background:C.border,margin:"6px 0"}}/>
         <RRow label="Bileşik Getiri" value={`% ${fmtN(r.yillikBilesik,4)}`} accent={C.blue} big/>
+        {/* ⚠️ 2026-09-21 (kullanıcı isteği: "altta bir alan da %22'nin
+            yıllık karşılığı oranı da göstermek lazım"): NV≠365 olduğunda,
+            yukarıdaki Bileşik Getiri (NV günlük) doğrudan Yıllık Basit
+            Oran ile kıyaslanamaz sanılabiliyordu — bu satır aynı temponun
+            YILLIKLANDIRILMIŞ bileşik karşılığını gösterip doğrudan
+            kıyaslanabilir kılıyor. NV=365 iken üstteki satırla AYNI değeri
+            gösterir, o yüzden sadece NV≠365 iken ayrıca gösteriliyor. */}
+        {r.NV!==365 && <RRow label="Yıllık Karşılığı (Bileşik)" value={`% ${fmtN(r.yillikEsdeger,4)}`} sub accent={C.teal}/>}
         <div style={{background:C.blueLight,borderRadius:10,padding:"12px 14px",marginTop:10}}>
           <p style={{margin:0,fontSize:14,color:C.blue,fontWeight:700,lineHeight:1.6}}>
             %{fmtN(r.yb,2)} ile {r.G} günlük vadede açılan hesap, {r.NV} günü tamamlayacak şekilde
@@ -11119,6 +11137,11 @@ function KasaOranAnalizi(){
           <p style={{margin:"2px 0 0",fontSize:18,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff")}}>
             ≡ %{fmtN(r.yillikBilesik,4)} bileşik getiri ({r.NV} gün)
           </p>
+          {r.NV!==365 && (
+            <p style={{margin:"6px 0 0",fontSize:13,color:(TEMA==="acik"?C.label:"#fff"),lineHeight:1.5}}>
+              Bu tempo tam 1 yıl sürseydi: <b>≡ %{fmtN(r.yillikEsdeger,4)} yıllık bileşik</b>
+            </p>
+          )}
         </div>
       </Card>}
 
