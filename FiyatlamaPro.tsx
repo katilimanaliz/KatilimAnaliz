@@ -11058,16 +11058,23 @@ function KasaOranAnalizi(){
       const kalanGetiri=kalanGun>0 ? yb/100/365*kalanGun : 0; // kısmi son dönem getirisi
       const yillikBilesik=(Math.pow(1+donemGetiri,N)*(1+kalanGetiri)-1)*100;
       const getiri1M=(Math.pow(1+donemGetiri,N)*(1+kalanGetiri)-1)*1000000;
-      // ⚠️ 2026-09-21 (kullanıcı isteği: "altta bir alan da %22'nin yıllık
-      // karşılığı oranı da göstermek lazım"): NV 365'ten farklıysa (ör.
-      // 196 gün), bileşik getiri (%22,24) doğrudan yıllık %38 ile
-      // KIYASLANAMAZ — 196 gün henüz 1 yılı doldurmuyor. Bu satır, o NV
-      // günlük bileşik getiriyi YILLIKLANDIRIYOR ((1+getiri)^(365/NV)-1) —
-      // yani "bu tempo tam 1 yıl sürseydi eşdeğer yıllık bileşik oran ne
-      // olurdu" sorusuna cevap veriyor, %38 ile DOĞRUDAN kıyaslanabilir.
-      // NV=365 olduğunda (varsayılan) üs 365/365=1, yani bu değer
-      // yillikBilesik'in KENDİSİYLE AYNI — eski davranış hiç bozulmuyor.
-      const yillikEsdeger=(Math.pow(1+yillikBilesik/100,365/NV)-1)*100;
+      // ⚠️ 2026-09-21 (İKİNCİ TUR — kullanıcı ÖNCEKİ formülün ne yaptığını
+      // net örneklerle yanlış bulup düzeltti): "hangi vade yazarsam yazayım
+      // hep %45 çıkıyor, ben 64 günde 2 kez temdit olup KAPANAN bir hesabın
+      // müşteriye REEL olarak ne kazandırdığını yıllık bazda görmek
+      // istiyorum" dedi. Önceki formül ((1+bilesik)^(365/NV)-1) BİLEŞİK
+      // yıllıklandırma yapıyordu — "bu tempo SONSUZA KADAR sürseydi" sorusuna
+      // cevap veriyordu, bu yüzden G sabit kaldığı sürece NV'den neredeyse
+      // BAĞIMSIZ, hep aynı (~%45) çıkıyordu — tam da kullanıcının şikayet
+      // ettiği şey. Doğru olan: GERÇEKLEŞEN (NV günlük) bileşik getiriyi
+      // Mode 1'in (Basit → Eşdeğer Basit) kullandığı AYNI BASİT/DOĞRUSAL
+      // yıllıklandırma kuralıyla (getiri/gün*365) çevirmek — yani "hesap
+      // TAM BURADA kapansaydı, o güne kadar aldığı toplam getiri hangi sabit
+      // yıllık ORANA denk gelirdi" sorusuna cevap veriyor. Bu değer artık
+      // NV ile DOĞRU orantılı büyüyor (64 günde ~%38,6, 365 günde
+      // yillikBilesik'in kendisiyle TAM AYNI — çünkü NV=365 iken
+      // getiri/365*365=getiri).
+      const yillikEsdeger=(yillikBilesik/NV)*365;
       return{mod,yb,G,NV,N,kalanGun,donemGetiri:donemGetiri*100,yillikBilesik,yillikEsdeger,getiri1M};
     } else {
       const hb=sayiOku(hedefBilesik);
@@ -11128,7 +11135,7 @@ function KasaOranAnalizi(){
             YILLIKLANDIRILMIŞ bileşik karşılığını gösterip doğrudan
             kıyaslanabilir kılıyor. NV=365 iken üstteki satırla AYNI değeri
             gösterir, o yüzden sadece NV≠365 iken ayrıca gösteriliyor. */}
-        {r.NV!==365 && <RRow label="Yıllık Karşılığı (Bileşik)" value={`% ${fmtN(r.yillikEsdeger,4)}`} sub accent={C.teal}/>}
+        {r.NV!==365 && <RRow label="Yıllık Karşılığı (Basit, Gerçekleşen)" value={`% ${fmtN(r.yillikEsdeger,4)}`} sub accent={C.teal}/>}
         <div style={{background:C.blueLight,borderRadius:10,padding:"12px 14px",marginTop:10}}>
           <p style={{margin:0,fontSize:14,color:C.blue,fontWeight:700,lineHeight:1.6}}>
             %{fmtN(r.yb,2)} ile {r.G} günlük vadede açılan hesap, {r.NV} günü tamamlayacak şekilde
@@ -11139,7 +11146,7 @@ function KasaOranAnalizi(){
           </p>
           {r.NV!==365 && (
             <p style={{margin:"6px 0 0",fontSize:13,color:(TEMA==="acik"?C.label:"#fff"),lineHeight:1.5}}>
-              Bu tempo tam 1 yıl sürseydi: <b>≡ %{fmtN(r.yillikEsdeger,4)} yıllık bileşik</b>
+              Hesap {r.NV} günde kapansaydı, gerçekleşen getiri yıllık sabit orana denk gelirdi: <b>≡ %{fmtN(r.yillikEsdeger,4)}</b>
             </p>
           )}
         </div>
