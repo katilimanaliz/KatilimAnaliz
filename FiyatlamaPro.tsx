@@ -1678,9 +1678,16 @@ function KarPayiKarsilastirmaGenis({ nav }: { nav: (sc: string) => void }) {
           gibi kutu dışında olsun"): KatilimEndeksiTopHareketliler'deki
           BİREBİR AYNI desen — başlık artık kutunun İÇİNDE değil, üstünde,
           şeffaf bir satır. */}
-      <div onClick={()=>nav("karPayiOranlari")} style={{display:"flex",alignItems:"center",gap:8,marginBottom:8,cursor:"pointer"}}>
-        <Scale size={14} color={C.blue}/>
-        <span style={{fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{TR("Finansman Kâr Oranı Karşılaştırma")}</span>
+      {/* ⚠️ 2026-09-21 (kullanıcı raporu — DÖRDÜNCÜ TUR: "başlık hâlâ büyük,
+          başındaki terazi ikonu kaldır"): kök neden CSS DEĞİL, JS'teydi —
+          TR() fonksiyonu metni HER ZAMAN .toLocaleUpperCase("tr-TR") ile
+          büyütüyor (bkz. fonksiyon tanımı, satır ~651); textTransform
+          düzeltmesi bu yüzden hiçbir işe yaramamıştı. TR()→CV() (büyütmeyen,
+          sadece çeviri) ile değiştirildi. Terazi (Scale) ikonu da kaldırıldı
+          — soldaki "Katılım Endeksi · Top Hareketliler" başlığında da ikon
+          yok, birebir eşleşsin diye. */}
+      <div onClick={()=>nav("karPayiOranlari")} style={{display:"flex",alignItems:"center",marginBottom:8,cursor:"pointer"}}>
+        <span style={{fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{CV("Finansman Kâr Oranı Karşılaştırma")}</span>
       </div>
       {!veriVar ? (
         <div style={{background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,borderRadius:16,fontSize:13,color:WA(0.4),padding:"20px 0",textAlign:"center"}}>{CV("Yükleniyor…")}</div>
@@ -4609,7 +4616,7 @@ function SonHaberlerBlok({tekKutu,sonHaberler,sonHaberlerHata,sonHaberlerIlkYukl
       {(sonHaberler.length>0||sonHaberlerHata||sonHaberlerIlkYuklemeBitti)&&(
         <>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-            <span style={{fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{TR("Son Haberler")}</span>
+            <span style={{fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{CV("Son Haberler")}</span>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
               {sonHaberlerGuncelleme&&<span style={{fontSize:9.5,color:WA(0.3)}}>{sonHaberlerGuncelleme.toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"})}</span>}
               <button onClick={()=>anaSayfaHaberGetir(true)} aria-label="Haberleri yenile" style={{background:WA(0.08),border:"none",width:22,height:22,borderRadius:11,fontSize:12,color:WA(0.6),cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"transform 0.6s",transform:sonHaberlerYenileniyor?"rotate(360deg)":"none"}}>↻</button>
@@ -4696,7 +4703,7 @@ function YaklasanTakvimBlok({tekKutu,yaklasanTakvim,nav}:any){
       {yaklasanTakvim.length>0&&(
         <>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-            <span style={{fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{TR("Yaklaşan Takvim · 7 Gün")}</span>
+            <span style={{fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{CV("Yaklaşan Takvim · 7 Gün")}</span>
             <span onClick={()=>nav("finansalTakvim")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
           </div>
           {/* 2026-09-14 (kullanıcı isteği): takvim kayıtları AYRI AYRI
@@ -4750,7 +4757,7 @@ function PiyasaOzetiBlok({dikey,piyasaGorunen,piyasaSurukle,piyasaOzetiSecim,set
   return (
     <>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-        <span style={{fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{TR("Piyasa Özeti")}</span>
+        <span style={{fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{CV("Piyasa Özeti")}</span>
         <div style={{display:"flex",alignItems:"center",gap:12}}>
           <span onClick={()=>setPiyasaOzetiDuzenleAcik(true)} style={{fontSize:11,fontWeight:700,color:WA(0.4),cursor:"pointer"}}>Düzenle</span>
           <span onClick={()=>nav("piyasaMenu")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
@@ -4769,22 +4776,29 @@ function PiyasaOzetiBlok({dikey,piyasaGorunen,piyasaSurukle,piyasaOzetiSecim,set
             ad 74px · fiyat esnek · grafik 70px. Satır iç dolgusu "10px 12px"
             olduğu için başlık da aynı yatay dolguyu kullanıyor.
             Mobil yatay şeritte başlık YOK — orada kartlar yan yana kayıyor,
-            tek bir başlık satırı anlamsız olurdu. */}
+            tek bir başlık satırı anlamsız olurdu.
+            ⚠️ 2026-09-21 (kullanıcı raporu — ekran görüntüsüyle: "ikonlar
+            büyük olduğu için tablo sağa kaymış, yazı da soluk, grafik yazısı
+            bile belli olmuyor"): İKİ ayrı düzeltme — (1) ikon 22px→18px
+            (hem burada hem satırdaki gerçek ikonda, satır ~21998, İKİSİ DE
+            değişti ki hizaları yine birebir eşleşsin); (2) başlık metinleri
+            WA(0.42) (çok soluk) → WA(0.85) (okunaklı, diğer düzelttiğimiz
+            başlıklarla aynı kontrast). */}
         {dikey && (
           <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px 7px",
             borderBottom:`1px solid ${WA(0.07)}`}}>
-            {/* Logo sütunu için boş, satırla AYNI genişlikte (22px) boşluk —
+            {/* Logo sütunu için boş, satırla AYNI genişlikte (18px) boşluk —
                 yoksa "Varlık" başlığı satırdaki isimle hizasız duracaktı. */}
-            <span style={{width:22,flexShrink:0}}/>
-            <span style={{width:92,flexShrink:0,fontSize:9.5,fontWeight:700,color:WA(0.42),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Varlık")}</span>
+            <span style={{width:18,flexShrink:0}}/>
+            <span style={{width:92,flexShrink:0,fontSize:9.5,fontWeight:700,color:WA(0.85)}}>{CV("Varlık")}</span>
             {/* ⚠️ 2026-09-16 (kullanıcı isteği: "fiyat ayrı, değişim % ayrı
                 yazsın"): önceden tek bir "Fiyat / Değişim" başlığı altında
                 ikisi BİRLİKTE gösteriliyordu. Artık İKİ AYRI sütun — genişlik
                 ve hizalar aşağıdaki satırlarla (Fiyat 66px, Değişim 56px)
                 BİREBİR aynı olmalı, yoksa başlık/satır hizası bozulur. */}
-            <span style={{width:66,flexShrink:0,textAlign:"right",fontSize:9.5,fontWeight:700,color:WA(0.42),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Fiyat")}</span>
-            <span style={{width:56,flexShrink:0,textAlign:"right",fontSize:9.5,fontWeight:700,color:WA(0.42),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Değişim")}</span>
-            <span style={{width:60,flexShrink:0,textAlign:"right",fontSize:9.5,fontWeight:700,color:WA(0.42),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Grafik")}</span>
+            <span style={{width:66,flexShrink:0,textAlign:"right",fontSize:9.5,fontWeight:700,color:WA(0.85)}}>{CV("Fiyat")}</span>
+            <span style={{width:56,flexShrink:0,textAlign:"right",fontSize:9.5,fontWeight:700,color:WA(0.85)}}>{CV("Değişim")}</span>
+            <span style={{width:60,flexShrink:0,textAlign:"right",fontSize:9.5,fontWeight:700,color:WA(0.85)}}>{CV("Grafik")}</span>
           </div>
         )}
         {piyasaGorunen.map((k:any,i:number)=>{
@@ -14493,7 +14507,7 @@ function KatilimSektoruOzet({onAc,dar}:{onAc:()=>void;dar?:boolean}){
   return (
     <>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-        <span style={{fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{TR("Katılım Bankacılığı Sektörü")}</span>
+        <span style={{fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{CV("Katılım Bankacılığı Sektörü")}</span>
         <span onClick={onAc} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Aç")} ›</span>
       </div>
       {/* Açık temada komşu kartlarla (Haftalık Özet, Getiri Karşılaştırma) aynı
@@ -17005,7 +17019,7 @@ function KfkNedir(){
       </div>
 
       {/* 3) GÜNCEL PAKETLER */}
-      <p style={eyebrow}>{TR("Güncel KFK Paketleri")}</p>
+      <p style={eyebrow}>{CV("Güncel KFK Paketleri")}</p>
       <div style={{marginBottom:6}}>
         {siralanmisPaketler.map(p=>(
           <KfkPaketKart key={p.id} p={p} acik={acikPaketler.has(p.id)} onToggle={()=>paketToggle(p.id)}/>
@@ -17077,7 +17091,7 @@ function KfkNedir(){
       </div>
 
       {/* 5) BAŞVURU SÜRECİ */}
-      <p style={eyebrow}>{TR("Başvuru Süreci")}</p>
+      <p style={eyebrow}>{CV("Başvuru Süreci")}</p>
       <div style={{background:WA(0.05),border:`1px solid ${WA(0.08)}`,borderRadius:14,padding:14,marginBottom:18}}>
         {[
           ["Bankana başvur","KFK'ya doğrudan başvuru yapılmaz."],
@@ -17098,7 +17112,7 @@ function KfkNedir(){
       </div>
 
       {/* 6) KİMLER YARARLANABİLİR */}
-      <p style={eyebrow}>{TR("Kimler Yararlanabilir")}</p>
+      <p style={eyebrow}>{CV("Kimler Yararlanabilir")}</p>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
         {[
           {ad:"KOBİ'ler", yol:"M3 21h18M5 21V7l8-4v18M13 21V11l6 4v6"},
@@ -17128,7 +17142,7 @@ function KfkNedir(){
       </div>
 
       {/* 7) BAŞVURU KOŞULLARI */}
-      <p style={eyebrow}>{TR("Başvuru Koşulları")}</p>
+      <p style={eyebrow}>{CV("Başvuru Koşulları")}</p>
       <div style={{background:WA(0.05),border:`1px solid ${WA(0.08)}`,borderRadius:14,overflow:"hidden",marginBottom:18}}>
         {[
           ["✓",C.green,"Uygunluk:","Onaylanan limit, süresi içinde kalmak kaydıyla dilimler halinde kullanılabilir. Dilim kararı bankanın takdirindedir."],
@@ -17143,7 +17157,7 @@ function KfkNedir(){
       </div>
 
       {/* 8) KFK NEDEN AYRI YAPI */}
-      <p style={eyebrow}>{TR("KFK Neden Ayrı Bir Yapı?")}</p>
+      <p style={eyebrow}>{CV("KFK Neden Ayrı Bir Yapı?")}</p>
       <div style={{background:WA(0.05),border:`1px solid ${WA(0.08)}`,borderRadius:14,marginBottom:18,overflow:"hidden"}}>
         <div onClick={()=>setFikhiAcik(a=>!a)} style={{padding:"13px 14px",cursor:"pointer",display:"flex",alignItems:"flex-start",gap:10,minHeight:44}}>
           <h3 style={{flex:1,margin:0,fontSize:12.5,fontWeight:700,color:TEMA==="acik"?C.label:"#fff",lineHeight:1.4}}>
@@ -17162,7 +17176,7 @@ function KfkNedir(){
       </div>
 
       {/* 9) KFK vs KGF */}
-      <p style={eyebrow}>{TR("KFK ile KGF Arasındaki Fark Nedir?")}</p>
+      <p style={eyebrow}>{CV("KFK ile KGF Arasındaki Fark Nedir?")}</p>
       <div style={{background:WA(0.05),border:`1px solid ${WA(0.08)}`,borderRadius:14,padding:"4px 8px",marginBottom:10}}>
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
           <tbody>
@@ -17191,7 +17205,7 @@ function KfkNedir(){
       </p>
 
       {/* 10) BANKALARIN KFK TEMİNATLI ÜRÜNLERİ */}
-      <p style={eyebrow}>{TR("Bankaların KFK Teminatlı Finansmanları")}</p>
+      <p style={eyebrow}>{CV("Bankaların KFK Teminatlı Finansmanları")}</p>
       <div style={{background:"rgba(91,155,216,0.08)",border:"1px solid rgba(91,155,216,0.2)",borderRadius:14,padding:"13px 15px",marginBottom:10}}>
         <p style={{margin:0,fontSize:12.5,color:C.soft,lineHeight:1.62}}>
           {CV("Bankalar kendi finansman ürünlerinde KFK kefaletini teminat olarak kullanabilir. Bu ürünlerin fiyatlama ve koşulları KFK tarafından değil, ilgili banka tarafından belirlenir.")}
@@ -17214,7 +17228,7 @@ function KfkNedir(){
       </p>
 
       {/* 11) ORTAKLIK YAPISI */}
-      <p style={eyebrow}>{TR("Ortaklık Yapısı")}</p>
+      <p style={eyebrow}>{CV("Ortaklık Yapısı")}</p>
       <div style={{background:WA(0.05),border:`1px solid ${WA(0.08)}`,borderRadius:14,overflow:"hidden",marginBottom:10}}>
         {KFK_ORTAKLIK.map((o,i)=>{
           const maxPay=Math.max(...KFK_ORTAKLIK.map(x=>x.pay));
@@ -17236,7 +17250,7 @@ function KfkNedir(){
       </p>
 
       {/* 12) SSS */}
-      <p style={eyebrow}>{TR("Sıkça Sorulan Sorular")}</p>
+      <p style={eyebrow}>{CV("Sıkça Sorulan Sorular")}</p>
       <div style={{background:WA(0.05),border:`1px solid ${WA(0.08)}`,borderRadius:14,overflow:"hidden",marginBottom:18}}>
         {KFK_SSS.map((q,i)=>(
           <KfkSssOge key={i} q={q} acik={acikSss.has(i)} onToggle={()=>sssToggle(i)}/>
@@ -17262,7 +17276,7 @@ function KfkNedir(){
       </div>
 
       {/* 14) KAYNAKLAR */}
-      <p style={eyebrow}>{TR("Kaynaklar")}</p>
+      <p style={eyebrow}>{CV("Kaynaklar")}</p>
       <div style={{background:WA(0.04),border:`1px solid ${WA(0.08)}`,borderRadius:12,padding:"13px 14px"}}>
         <ul style={{margin:0,padding:"0 0 0 16px",fontSize:11,color:C.sub,lineHeight:2}}>
           <li>Katılım Finans Kefalet A.Ş. — katilimkefalet.com.tr</li>
@@ -17400,7 +17414,7 @@ function KiraSertifikasiIhraclari(){
       {/* YILLIK TREND */}
       {yillik.length>1 && (
         <>
-          <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{TR("Yıllara Göre İhraç")}</p>
+          <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{CV("Yıllara Göre İhraç")}</p>
           <div style={{background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,borderRadius:14,padding:"14px 15px",marginBottom:18}}>
             {yillik.map((y:any)=>(
               <div key={y.yil} style={{marginBottom:10}}>
@@ -17423,7 +17437,7 @@ function KiraSertifikasiIhraclari(){
       {/* TÜR KIRILIMI */}
       {turlerDolu.length>0 && (
         <>
-          <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{TR("Türlere Göre Dağılım")}</p>
+          <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{CV("Türlere Göre Dağılım")}</p>
           <div style={{background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,borderRadius:14,padding:"14px 15px",marginBottom:18}}>
             {turlerDolu.map((t:any,i:number)=>(
               <div key={t.anahtar} style={{marginBottom:i<turlerDolu.length-1?14:4}}>
@@ -17454,7 +17468,7 @@ function KiraSertifikasiIhraclari(){
       {/* AYLIK SEYİR */}
       {aylik.length>0 && (
         <>
-          <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{TR("Aylık Seyir")} · {veri.guncelYil}</p>
+          <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{CV("Aylık Seyir")} · {veri.guncelYil}</p>
           <div style={{background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,borderRadius:14,padding:"14px 15px 10px",marginBottom:18}}>
             <div style={{display:"flex",alignItems:"flex-end",gap:5,height:110}}>
               {aylik.map((a:any)=>{
@@ -17703,7 +17717,7 @@ function KatilimBankalari(){
           </div>
         )}
 
-        <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{TR("Öne Çıkanlar")}</p>
+        <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{CV("Öne Çıkanlar")}</p>
         <div style={{background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,borderRadius:14,overflow:"hidden"}}>
           {secili.detaylar.map((d:string,i:number)=>(
             <div key={i} style={{display:"flex",gap:10,padding:"12px 14px",borderBottom:i<secili.detaylar.length-1?`1px solid ${WA(0.06)}`:"none"}}>
@@ -21988,7 +22002,7 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla,duz}:{ad:string,sembol:
           diğer tiplerle hizası/boyutu tutarsız görünürdü. */}
       {duz && kucukIkon && (
         <div style={{
-          width:22,height:22,borderRadius:"50%",flexShrink:0,overflow:"hidden",
+          width:18,height:18,borderRadius:"50%",flexShrink:0,overflow:"hidden",
           display:"flex",alignItems:"center",justifyContent:"center",
           background:kucukIkon.tip==="bayrak"?WA(0.08):kucukIkon.bg,
           boxShadow:"0 1px 3px rgba(0,0,0,0.18)",
@@ -21996,8 +22010,8 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla,duz}:{ad:string,sembol:
           {kucukIkon.tip==="bayrak"
             ? <img src={BAYRAK_URL(kucukIkon.cc)} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
             : kucukIkon.tip==="ikon"
-            ? <kucukIkon.Comp size={11} color="#fff" strokeWidth={2.5}/>
-            : <span style={{fontSize:kucukIkon.deger.length>1?8:10,fontWeight:700,color:"#fff",lineHeight:1}}>{kucukIkon.deger}</span>}
+            ? <kucukIkon.Comp size={9} color="#fff" strokeWidth={2.5}/>
+            : <span style={{fontSize:kucukIkon.deger.length>1?7:9,fontWeight:700,color:"#fff",lineHeight:1}}>{kucukIkon.deger}</span>}
         </div>
       )}
       <div style={duz?{width:92,flexShrink:0,minWidth:0}:undefined}>
@@ -22010,7 +22024,7 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla,duz}:{ad:string,sembol:
       <p style={{margin:0,
         fontSize:duz?11:(ad.length>=12?7.8:ad.length>=10?8.3:ad.length>=8?9.2:10),
         fontWeight:700,
-        color:duz?WA(0.6):WA(0.45),
+        color:duz?(TEMA==="acik"?C.label:"#fff"):WA(0.45),
         letterSpacing:duz?0.2:(ad.length>=10?-0.1:0.2),
         overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingRight:duz?0:24}}>{TR(ad)}</p>
       </div>
@@ -22035,10 +22049,10 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla,duz}:{ad:string,sembol:
               her koşulda korunuyor. */}
           <div style={{width:66,flexShrink:0,minWidth:0,overflow:"hidden",textAlign:"right"}}>
             {guncel!=null ? (
-              <span style={{fontSize:13,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace",whiteSpace:"nowrap"}}>
+              <span style={{fontSize:12,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace",whiteSpace:"nowrap"}}>
                 {`${paraOnek||""}${fmtDeger(guncel)}`}
               </span>
-            ) : <div className="skeleton" style={{height:13,width:"80%",marginLeft:"auto",borderRadius:4}}/>}
+            ) : <div className="skeleton" style={{height:12,width:"80%",marginLeft:"auto",borderRadius:4}}/>}
           </div>
           <div style={{width:56,flexShrink:0,minWidth:0,overflow:"hidden",textAlign:"right"}}>
             {guncel!=null ? (
@@ -28309,7 +28323,7 @@ function App(){
 
             {/* Favorilerim */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-              <span style={{fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{TR("Favori Hesaplamalarım")}</span>
+              <span style={{fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{CV("Favori Hesaplamalarım")}</span>
               {/* 2026-07-31: "Tümü ›" eklendi — Piyasa Özeti başlığıyla aynı
                   desen. Hesaplama araçları menüsüne gider. Düzenle rengi de
                   oradaki gibi soluk yapıldı ki asıl eylem (Tümü) öne çıksın. */}
@@ -28386,7 +28400,7 @@ function App(){
               const piyasalarBlok = (
                 <>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-                    <span style={{fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{TR("Piyasalar")}</span>
+                    <span style={{fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{CV("Piyasalar")}</span>
                     <span onClick={()=>nav("piyasaMenu")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
                   </div>
                   <div style={{display:"grid",gridTemplateColumns:genisEkran?"repeat(4,minmax(0,1fr))":"1fr 1fr",gap:10,marginBottom:genisEkran?18:26}}>
@@ -28421,7 +28435,7 @@ function App(){
                 <>
             {/* Finansal Göstergeler — ana sayfa özeti (Seçenek A: ikonlu satırlar) */}
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:18,marginBottom:8}}>
-                  <span style={{fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{TR("Finansal Göstergeler")}</span>
+                  <span style={{fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{CV("Finansal Göstergeler")}</span>
                   <span onClick={()=>{setPiyasaTabloFiltre("gostergeler");nav("piyasaMenu");}} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
                 </div>
                 {/* 2026-09-14 masaüstü düzen revizyonu: geniş ekranda 6 gösterge
@@ -28635,7 +28649,7 @@ function App(){
             <div style={genisEkran?{minWidth:0}:{}}>
 {/* Haftalık Piyasa Özeti — ana menü alt kısayolu */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-              <span style={{fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{TR("Haftalık Piyasa Özeti")}</span>
+              <span style={{fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{CV("Haftalık Piyasa Özeti")}</span>
               <span onClick={()=>nav("haftalikOzet")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Aç")} ›</span>
             </div>
             <div className="press-card" onClick={()=>nav("haftalikOzet")} style={{
@@ -28658,7 +28672,7 @@ function App(){
             <div style={genisEkran?{minWidth:0}:{}}>
             {/* Getiri Karşılaştırma — ana menü alt kısayolu */}
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-              <span style={{fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{TR("Getiri Karşılaştırma")}</span>
+              <span style={{fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{CV("Getiri Karşılaştırma")}</span>
               <span onClick={()=>nav("getiriKarsilastirma")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Aç")} ›</span>
             </div>
             <div className="press-card" onClick={()=>nav("getiriKarsilastirma")} style={{
@@ -28729,7 +28743,7 @@ function App(){
                 YAZILMADI, var olanlara bağlanıyor). */}
             {genisEkran && (
               <div style={{marginBottom:18}}>
-                <div style={{fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),marginBottom:8}}>{TR("Sözlükler")}</div>
+                <div style={{fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),marginBottom:8}}>{CV("Sözlükler")}</div>
                 <div style={{borderRadius:16,overflow:"hidden",
                   ...(TEMA==="acik"
                     ? {background:"#E9EEF4",border:"1px solid rgba(22,34,46,0.08)"}
@@ -28808,7 +28822,7 @@ function App(){
                   {/* ⚠️ 2026-09-17 (tipografi geçişi, menü sırasına göre
                       devam): uppercase kaldırıldı, boyut/ağırlık dokümanın
                       "section title" ölçeğine (13px/600) çekildi. */}
-                  <span style={{fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{TR("Son Kullanılanlar")}</span>
+                  <span style={{fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{CV("Son Kullanılanlar")}</span>
                   <span onClick={()=>setHesaplaFiltre("gecmis")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
                 </div>
                 <div className="piyasa-scroll" style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:2}}>
