@@ -11014,6 +11014,14 @@ function KasaOranAnalizi(){
   const [gunlukOran,setGunlukOran]=useState("");
   const [vadeGun,setVadeGun]=useState("");
   const [hedefBilesik,setHedefBilesik]=useState("");
+  // ⚠️ 2026-09-21 (kullanıcı isteği: "Temdit vade altına yeni bir vade
+  // alanı açalım, nihai vade diyelim — amaç temdit vade gün sayısı ve
+  // yıllık basit orandan NİHAİ VADEDE bileşik oran ne olur onu bulmak"):
+  // ÖNCEDEN "Basit → Yıllık Bileşik" modu her zaman 365 güne (tam 1 yıl)
+  // sabitti. Artık kullanıcı hedef süreyi kendisi giriyor — 365 varsayılan
+  // (eski davranışla BİREBİR aynı sonucu verir), ama 90/180/730 gibi
+  // herhangi bir gün sayısı da girilebilir.
+  const [nihaiVade,setNihaiVade]=useState("365");
 
   const r=useCallback(()=>{
     const G=parseInt(vadeGun);
@@ -11032,21 +11040,25 @@ function KasaOranAnalizi(){
       const getiri1M=bilesikDonem*1000000;
       return{mod,yb,G,bilesikDonem:bilesikDonem*100,esdeğerYillikBasil,getiri1M};
     } else if(mod==="basit_yillik_bilesik"){
-      // Basit → Yıllık Bileşik: girilen (vade, basit yıllık oran) ikilisi AYNEN
+      // Basit → Bileşik: girilen (vade, basit yıllık oran) ikilisi AYNEN
       // korunarak — yani hesap her seferinde AYNI G günlük vade ve AYNI basit
-      // oranla — 1 yılı (365 gün) tamamlayacak şekilde ardışık temdit edilirse
-      // elde edilen YILLIK BİLEŞİK getiri. Mode 1'den farkı: burada bileşikleme
-      // GÜNLÜK değil, DÖNEM (G gün) bazında yapılıyor — çünkü temdit edilen şey
-      // günlük değil, kullanıcının yazdığı G günlük vadenin kendisi.
+      // oranla — kullanıcının belirttiği NİHAİ VADEyi (varsayılan 365 gün)
+      // tamamlayacak şekilde ardışık temdit edilirse elde edilen BİLEŞİK
+      // getiri. Mode 1'den farkı: burada bileşikleme GÜNLÜK değil, DÖNEM
+      // (G gün) bazında yapılıyor — çünkü temdit edilen şey günlük değil,
+      // kullanıcının yazdığı G günlük vadenin kendisi. donemGetiri/365
+      // sabit KALIYOR (yıllık oranı güne çeviren standart kural) — sadece
+      // KAÇ KEZ temdit edileceği (N) ve kalan gün NV'ye göre değişiyor.
       const yb=sayiOku(gunlukOran);
       if(!yb)return null;
-      const N=Math.floor(365/G); // tam temdit sayısı
-      const kalanGun=365-N*G;    // 365'i tam bölmüyorsa kalan kısmi son dönem
+      const NV=parseInt(nihaiVade)||365; // nihai vade — varsayılan 365 (eski davranışla aynı)
+      const N=Math.floor(NV/G); // tam temdit sayısı
+      const kalanGun=NV-N*G;    // NV'yi tam bölmüyorsa kalan kısmi son dönem
       const donemGetiri=yb/100/365*G;               // G günlük basit getiri (oranın G güne orantılı payı)
       const kalanGetiri=kalanGun>0 ? yb/100/365*kalanGun : 0; // kısmi son dönem getirisi
       const yillikBilesik=(Math.pow(1+donemGetiri,N)*(1+kalanGetiri)-1)*100;
       const getiri1M=(Math.pow(1+donemGetiri,N)*(1+kalanGetiri)-1)*1000000;
-      return{mod,yb,G,N,kalanGun,donemGetiri:donemGetiri*100,yillikBilesik,getiri1M};
+      return{mod,yb,G,NV,N,kalanGun,donemGetiri:donemGetiri*100,yillikBilesik,getiri1M};
     } else {
       const hb=sayiOku(hedefBilesik);
       if(!hb)return null;
@@ -11058,14 +11070,17 @@ function KasaOranAnalizi(){
       const gerekliYillikBasil=gunlukR*365*100;
       return{mod,hb,G,hedefDonem:hedefDonem*100,gerekliYillikBasil};
     }
-  },[mod,gunlukOran,vadeGun,hedefBilesik])();
+  },[mod,gunlukOran,vadeGun,hedefBilesik,nihaiVade])();
 
   return(
     <div style={{padding:"0 16px 32px"}}>
 
       <Card>
-        <Seg options={[{v:"basilden_bilesik",l:"Basit → Eşdeğer Basit"},{v:"basit_yillik_bilesik",l:"Basit → Yıllık Bileşik"},{v:"bilesikten_basil",l:"Hedef Basit → Günlük Basit"}]} value={mod} onChange={setMod}/>
+        <Seg options={[{v:"basilden_bilesik",l:"Basit → Eşdeğer Basit"},{v:"basit_yillik_bilesik",l:"Basit → Bileşik"},{v:"bilesikten_basil",l:"Hedef Basit → Günlük Basit"}]} value={mod} onChange={setMod}/>
         <Field label="Temdit Vade (Gün)" value={vadeGun} onChange={setVadeGun} suffix="Gün" hint={mod==="basilden_bilesik"?"Günlük yenilenen hesabın yukarıdaki vadede basit eşleniği hesaplanmaktadır":undefined}/>
+        {mod==="basit_yillik_bilesik" &&
+          <Field label="Nihai Vade (Gün)" value={nihaiVade} onChange={setNihaiVade} suffix="Gün" hint="Bileşik getirinin hesaplanacağı toplam süre (varsayılan: 365 — 1 yıl)"/>
+        }
         {mod==="bilesikten_basil"
           ? <Field label="Hedef Yıllık Basit Oran" value={hedefBilesik} onChange={setHedefBilesik} suffix="%"/>
           : <Field label="Yıllık Basit Kâr Payı Oranı" value={gunlukOran} onChange={setGunlukOran} suffix="%" hint="Hesabın açıldığı oran (örn: 40)"/>
@@ -11089,20 +11104,20 @@ function KasaOranAnalizi(){
       </Card>}
 
       {r&&r.mod==="basit_yillik_bilesik"&&<Card>
-        <SecTitle>1 Yıllık Bileşik Getiri</SecTitle>
+        <SecTitle>{r.NV} Günlük Bileşik Getiri</SecTitle>
         <RRow label="Vade Başına Basit Oran (Yıllık)" value={`% ${fmtN(r.yb,2)}`}/>
         <RRow label={`${r.G} Günlük Dönem Getirisi`} value={`% ${fmtN(r.donemGetiri,4)}`} sub accent={C.orange}/>
-        <RRow label="Tam Temdit Sayısı (365 Gün İçinde)" value={`${r.N} kez`} sub/>
+        <RRow label={`Tam Temdit Sayısı (${r.NV} Gün İçinde)`} value={`${r.N} kez`} sub/>
         {r.kalanGun>0&&<RRow label="Son Kısmi Dönem" value={`${r.kalanGun} gün`} sub/>}
         <div style={{height:1,background:C.border,margin:"6px 0"}}/>
-        <RRow label="Yıllık Bileşik Getiri" value={`% ${fmtN(r.yillikBilesik,4)}`} accent={C.blue} big/>
+        <RRow label="Bileşik Getiri" value={`% ${fmtN(r.yillikBilesik,4)}`} accent={C.blue} big/>
         <div style={{background:C.blueLight,borderRadius:10,padding:"12px 14px",marginTop:10}}>
           <p style={{margin:0,fontSize:14,color:C.blue,fontWeight:700,lineHeight:1.6}}>
-            %{fmtN(r.yb,2)} ile {r.G} günlük vadede açılan hesap, 1 yılı tamamlayacak şekilde
+            %{fmtN(r.yb,2)} ile {r.G} günlük vadede açılan hesap, {r.NV} günü tamamlayacak şekilde
             {r.kalanGun>0?` ${r.N} tam + ${r.kalanGun} gün kısmi`:` ${r.N} tam`} temdit edilirse
           </p>
           <p style={{margin:"2px 0 0",fontSize:18,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff")}}>
-            ≡ %{fmtN(r.yillikBilesik,4)} yıllık bileşik getiri
+            ≡ %{fmtN(r.yillikBilesik,4)} bileşik getiri ({r.NV} gün)
           </p>
         </div>
       </Card>}
@@ -28994,11 +29009,18 @@ function App(){
             aramaQ===""||r.ad.toUpperCase().includes(aramaQ)
           );
           return(
-          <div style={{background:C.bg,padding:"12px 12px 0",paddingBottom:"calc(108px + env(safe-area-inset-bottom,0px))",boxSizing:"border-box",overflowY:"auto"}}>
+          <div style={genisEkran?{display:"grid",gridTemplateColumns:"minmax(0,1fr) 320px",gap:20,alignItems:"start",padding:"12px 12px 0",paddingBottom:"calc(108px + env(safe-area-inset-bottom,0px))",boxSizing:"border-box"}:{}}>
+          <div style={{background:C.bg,...(genisEkran?{}:{padding:"12px 12px 0",paddingBottom:"calc(108px + env(safe-area-inset-bottom,0px))",boxSizing:"border-box"}),overflowY:"auto",minWidth:0}}>
             {/* Arama çubuğu artık kök seviyedeki sabit üst blokta.
-                ⚠️ 2026-09-21 (GERİ ALINDI — kullanıcı isteği: "hesapla ve
-                piyasadan sağ ekranı kaldıralım"): sağ ray (SagRay) burdan
-                kaldırıldı, ekran tekrar TEK sütun, tam genişlik. */}
+                ⚠️ 2026-09-21 (kullanıcı isteği: "piyasa ve verilere tekrar
+                ana menü sağ menüyü getirelim, piyasa özeti sonrası katılım
+                endeksi top hareketliler olsun, alttaki diğerleri olmasın"):
+                sağ ray GERİ EKLENDİ ama SagRay'in TAMAMI değil — BİST 100/30
+                + Piyasa Özeti'nin ardından Katılım Endeksi · Top
+                Hareketliler ile SINIRLI özel bir sürüm (bkz. aşağıda, ana
+                kolonun kapanışının hemen ardından). Yaklaşan Takvim,
+                Sözlükler, Katılım Bankacılığı Sektörü ve AI Finans Asistanı
+                BİLİNÇLİ OLARAK dışarıda bırakıldı. */}
 
             {/* Kategori filtre çipleri */}
             <div className="piyasa-scroll" style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:4,marginBottom:6}}>
@@ -29503,6 +29525,17 @@ function App(){
               );
             })()}
 
+          </div>{/* /ana kolon */}
+
+          {genisEkran && (
+            <div style={{minWidth:0, borderLeft:`1px solid ${WA(0.08)}`, boxShadow:"-6px 0 20px rgba(0,0,0,0.06)", paddingLeft:12}}>
+              <AnaSayfaBist100Karti nav={nav}/>
+              <PiyasaOzetiBlok dikey piyasaGorunen={piyasaGorunen} piyasaSurukle={piyasaSurukle}
+                piyasaOzetiSecim={piyasaOzetiSecim} setPiyasaOzetiDuzenleAcik={setPiyasaOzetiDuzenleAcik}
+                setSeciliKur={setSeciliKur} nav={nav}/>
+              <KatilimEndeksiTopHareketliler nav={nav} onSecim={irHisseFonDetay} adet={10}/>
+            </div>
+          )}
           </div>
           );
         })()}
