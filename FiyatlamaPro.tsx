@@ -1740,7 +1740,7 @@ function KarPayiKarsilastirmaGenis({ nav }: { nav: (sc: string) => void }) {
             <span style={{fontSize:13,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff")}}>{TR("Örnek Ödeme Planı")}</span>
           </div>
           <div style={{maxWidth:260,marginBottom:12}}>
-            <TutarField label={TR("Finansman Tutarı")} value={tutar} onChange={setTutar} suffix="₺" zemin={TEMA==="acik"?"#fff":"#16222E"}/>
+            <TutarField label={TR("Finansman Tutarı")} value={tutar} onChange={setTutar} suffix="₺" zemin={TEMA==="acik"?"#F3F6FA":"#16222E"}/>
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
             {satirlar.map(s => s.en && (()=>{
