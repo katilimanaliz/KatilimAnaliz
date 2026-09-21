@@ -1644,91 +1644,118 @@ function KarPayiKarsilastirmaGenis({ nav }: { nav: (sc: string) => void }) {
   // widget'a ÖZEL — Hesapla ekranındaki ayrı state'lerle karışmıyor).
   const [tutar, setTutar] = useState("500000");
 
+  // ⚠️ 2026-09-21 (kullanıcı raporu, ekran görüntüsüyle — İKİNCİ TUR):
+  // Bir önceki turda eklenen 5 sütunlu SABİT PX grid ("90px 70px 1fr 110px
+  // 150px") bu kartın GERÇEK genişliğinde (soldaki Katılım Endeksi ile
+  // yarı yarıya paylaşılan, sanılandan dar bir sütun) TAŞIYORDU: banka adı
+  // sütunu (1fr) sıfıra çöküyor, "Başvuru Yap" butonu kartın DIŞINA
+  // kayıyordu. Kök neden: CSS Grid'de sabit px sütunlar KÜÇÜLMEZ — konteyner
+  // onlardan dar olunca taşma OLUR. Çözüm: grid yerine FLEXBOX — sadece
+  // banka adı hücresi esniyor (flex:"1 1 auto", minWidth:0, ellipsis),
+  // diğer hücreler kendi doğal içerik genişliğinde kalıyor ve ASLA taşmıyor
+  // (flex-shrink:0). Böylece dar bir sütunda bile buton hep görünür kalıyor,
+  // banka adı gerekirse "…" ile kırpılıyor (kaybolmuyor).
+  const SATIR_STIL: any = { display:"flex", alignItems:"center", gap:10 };
+  const urunHucre: any = { flex:"0 0 60px", fontSize:13, fontWeight:700 };
+  const vadeHucre: any = { flex:"0 0 50px", fontSize:13, fontWeight:700 };
+  const oranHucre: any = { flex:"0 0 70px", textAlign:"center" as const };
+
   return (
-    <div style={{background:(TEMA==="acik"?"#E9EEF4":WA(0.05)), border:`1px solid ${WA(0.08)}`, borderRadius:22, padding:"18px 20px", height:"100%", boxSizing:"border-box", display:"flex", flexDirection:"column"}}>
-      <div onClick={()=>nav("karPayiOranlari")} style={{display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",marginBottom:16}}>
-        <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <Scale size={18} color={C.blue}/>
-          <span style={{fontSize:14,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff")}}>{TR("Finansman Kâr Oranı Karşılaştırma")}</span>
-        </div>
-        <span style={{fontSize:12,color:C.blue,fontWeight:700,flexShrink:0}}>{CV("Tümünü Karşılaştır")} ›</span>
+    <div style={{marginBottom:14}}>
+      {/* 2026-09-21 (kullanıcı isteği: "başlık soldaki top hareketliler
+          gibi kutu dışında olsun"): KatilimEndeksiTopHareketliler'deki
+          BİREBİR AYNI desen — başlık artık kutunun İÇİNDE değil, üstünde,
+          şeffaf bir satır. */}
+      <div onClick={()=>nav("karPayiOranlari")} style={{display:"flex",alignItems:"center",gap:8,marginBottom:8,cursor:"pointer"}}>
+        <Scale size={14} color={C.blue}/>
+        <span style={{fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{TR("Finansman Kâr Oranı Karşılaştırma")}</span>
       </div>
       {!veriVar ? (
-        <div style={{fontSize:13,color:WA(0.4),padding:"20px 0",textAlign:"center"}}>{CV("Yükleniyor…")}</div>
+        <div style={{background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,borderRadius:16,fontSize:13,color:WA(0.4),padding:"20px 0",textAlign:"center"}}>{CV("Yükleniyor…")}</div>
       ) : (
-        <div style={{display:"flex",flexDirection:"column",flex:1}}>
-          {/* ⚠️ 2026-09-21 (kullanıcı isteği: "masaüstünde bu olmuş mu,
-              mobilde yaptığımız yan yana tek satır yok"): mobildeki
-              KarPayiOraniKarti'nin tek-satırlık hizalı grid tasarımı
-              masaüstüne hiç yansımamıştı — burada HÂLÂ eski (her ürün
-              kendi kutusunda, üst-alt) tasarım vardı. Artık AYNI mantık
-              (KP_GRID_KOMPAKT ile PAYLAŞILMIYOR — masaüstünün kendi geniş
-              sütunları var, ama başlık/hizalama deseni birebir aynı).
-              Başlık kontrastı da mobildeki gibi WA(0.4)→WA(0.85)+bold
-              yapıldı (kullanıcı "arka fon(t) siyah/okunmuyor" diye sordu). */}
-          <div style={{display:"grid",gridTemplateColumns:"90px 70px 1fr 110px 150px",alignItems:"center",gap:10,padding:"0 4px 8px"}}>
-            <span style={{fontSize:10.5,fontWeight:700,color:WA(0.85),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Ürün")}</span>
-            <span style={{fontSize:10.5,fontWeight:700,color:WA(0.85),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Vade")}</span>
-            <span style={{fontSize:10.5,fontWeight:700,color:WA(0.85),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Banka adı")}</span>
-            <span style={{fontSize:10.5,fontWeight:700,color:WA(0.85),textTransform:"uppercase",letterSpacing:0.4,textAlign:"center"}}>{TR("Aylık kâr oranı")}</span>
-            <span/>
+        <>
+        <div style={{background:(TEMA==="acik"?"#E9EEF4":WA(0.05)), border:`1px solid ${WA(0.08)}`, borderRadius:16, padding:"14px 16px", boxSizing:"border-box"}}>
+          <div style={{...SATIR_STIL,padding:"0 4px 8px"}}>
+            <span style={{...urunHucre,fontSize:10.5,fontWeight:700,color:WA(0.85),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Ürün")}</span>
+            <span style={{...vadeHucre,fontSize:10.5,fontWeight:700,color:WA(0.85),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Vade")}</span>
+            <span style={{flex:"1 1 auto",minWidth:0,fontSize:10.5,fontWeight:700,color:WA(0.85),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Banka adı")}</span>
+            <span style={{...oranHucre,fontSize:10.5,fontWeight:700,color:WA(0.85),textTransform:"uppercase",letterSpacing:0.4}}>{TR("Oran")}</span>
+            <span style={{flex:"0 0 auto",width:1}}/>
           </div>
           <div style={{borderTop:`1px solid ${WA(0.1)}`}}/>
           {satirlar.map((s,i) => s.en && (
             <Fragment key={s.etiket}>
-              <div onClick={(e)=>e.stopPropagation()} style={{display:"grid",gridTemplateColumns:"90px 70px 1fr 110px 150px",alignItems:"center",gap:10,padding:"12px 4px"}}>
-                <span style={{fontSize:13,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff")}}>{CV(s.etiket)}</span>
-                <span style={{fontSize:13,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff")}}>{s.vade}</span>
-                <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
+              <div onClick={(e)=>e.stopPropagation()} style={{...SATIR_STIL,padding:"12px 4px"}}>
+                <span style={{...urunHucre,color:(TEMA==="acik"?C.label:"#fff")}}>{CV(s.etiket)}</span>
+                <span style={{...vadeHucre,color:(TEMA==="acik"?C.label:"#fff")}}>{s.vade}</span>
+                <div style={{flex:"1 1 auto",minWidth:0,display:"flex",alignItems:"center",gap:8}}>
                   <BankaLogoRozet ad={s.en!.ad} boyut={22}/>
                   <span style={{fontSize:13.5,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.en!.ad}</span>
                 </div>
-                <span style={{fontSize:16,fontWeight:700,color:C.green,fontFamily:"monospace",textAlign:"center"}}>%{s.en!.oran.toLocaleString("tr-TR",{minimumFractionDigits:2})}</span>
-                <div style={{justifySelf:"end"}}><BankaBasvurButonu ad={s.en!.ad}/></div>
+                <span style={{...oranHucre,fontSize:15,fontWeight:700,color:C.green,fontFamily:"monospace"}}>%{s.en!.oran.toLocaleString("tr-TR",{minimumFractionDigits:2})}</span>
+                <div style={{flex:"0 0 auto"}}><BankaBasvurButonu ad={s.en!.ad}/></div>
               </div>
               {i < satirlar.length - 1 && <div style={{borderTop:`1px solid ${WA(0.06)}`}}/>}
             </Fragment>
           ))}
-
-          {/* ── ÖRNEK ÖDEME PLANI HESAPLAYICI (2026-09-21, kullanıcı isteği)
-              Yukarıdaki tabloda gösterilen "en iyi" oran/vade ÜÇLÜSÜNÜ
-              (Konut/Taşıt/İhtiyaç) kullanıyor — ayrı bir veri kaynağına
-              gerek yok. Hesaplama, kod tabanının HER YERİNDE (Hesapla
-              ekranları) kullanılan AYNI standart anüite formülü:
-              pmt = ao===0 ? T/V : T*ao/(1-Math.pow(1+ao,-V)). Komisyon/BSMV/
-              KKDF dahil EDİLMEDİ — tablo zaten "ilan edilen ham oran,
-              gösterge niteliğinde" notuyla sunuluyor (bkz. alt not), kesin
-              hesap için kullanıcı Hesapla menüsüne yönlendiriliyor. */}
-          <div onClick={(e)=>e.stopPropagation()} style={{borderTop:`1px solid ${WA(0.1)}`,marginTop:18,paddingTop:16}}>
-            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
-              <Calculator size={16} color={C.blue}/>
-              <span style={{fontSize:13,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff")}}>{TR("Örnek Ödeme Planı")}</span>
-            </div>
-            <div style={{maxWidth:260,marginBottom:12}}>
-              <TutarField label={TR("Finansman Tutarı")} value={tutar} onChange={setTutar} suffix="₺"/>
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:10}}>
-              {satirlar.map(s => s.en && (
-                <div key={s.etiket} style={{padding:"11px 13px",borderRadius:12,background:(TEMA==="acik"?"#fff":WA(0.04)),border:`1px solid ${WA(0.07)}`}}>
-                  <div style={{fontSize:10.5,fontWeight:700,color:WA(0.55),textTransform:"uppercase",letterSpacing:0.3,marginBottom:5,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{CV(s.etiket)} · {s.vade}</div>
-                  <div style={{fontSize:15.5,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace"}}>
-                    {(() => {
-                      const T = sayiOku(tutar);
-                      if (!T) return "—";
-                      const ao = s.en!.oran / 100, V = parseInt(s.vade);
-                      const pmt = ao === 0 ? T / V : T * ao / (1 - Math.pow(1 + ao, -V));
-                      return fmtTL(pmt);
-                    })()}
-                  </div>
-                  <div style={{fontSize:10,color:WA(0.4),marginTop:2}}>{TR("aylık taksit")}</div>
-                </div>
-              ))}
-            </div>
-            <p style={{margin:"10px 0 0",fontSize:10,color:WA(0.4)}}>{CV("Gösterge niteliğindedir; komisyon/BSMV dahil değildir. Kesin ödeme planı için Hesapla menüsünü kullanın.")}</p>
-          </div>
         </div>
+
+        {/* ── ÖRNEK ÖDEME PLANI HESAPLAYICI ───────────────────────────────
+            Yukarıdaki tabloda gösterilen "en iyi" oran/vade ÜÇLÜSÜNÜ
+            (Konut/Taşıt/İhtiyaç) kullanıyor — ayrı bir veri kaynağına
+            gerek yok. Hesaplama, kod tabanının HER YERİNDE (Hesapla
+            ekranları) kullanılan AYNI standart anüite formülü:
+            pmt = ao===0 ? T/V : T*ao/(1-Math.pow(1+ao,-V)). Komisyon/BSMV/
+            KKDF dahil EDİLMEDİ — tablo zaten "ilan edilen ham oran,
+            gösterge niteliğinde" notuyla sunuluyor (bkz. alt not), kesin
+            hesap için kullanıcı Hesapla menüsüne yönlendiriliyor.
+            2026-09-21 (kullanıcı raporu — İKİNCİ TUR): 3 kutu YAN YANA
+            beyazdı ("beyaz kutular olmasın") — artık ALT ALTA (kullanıcı
+            isteği) ve tema-duyarlı zeminde (#fff DEĞİL, diğer iç kartlarla
+            AYNI #F3F6FA/#16222E), sağ tarafına "Toplam Geri Ödeme" ve
+            "Toplam Kâr Payı" detayı eklendi. */}
+        <div onClick={(e)=>e.stopPropagation()} style={{background:(TEMA==="acik"?"#E9EEF4":WA(0.05)), border:`1px solid ${WA(0.08)}`, borderRadius:16, padding:"14px 16px", boxSizing:"border-box", marginTop:12}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+            <Calculator size={16} color={C.blue}/>
+            <span style={{fontSize:13,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff")}}>{TR("Örnek Ödeme Planı")}</span>
+          </div>
+          <div style={{maxWidth:260,marginBottom:12}}>
+            <TutarField label={TR("Finansman Tutarı")} value={tutar} onChange={setTutar} suffix="₺"/>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {satirlar.map(s => s.en && (()=>{
+              const T = sayiOku(tutar);
+              const ao = s.en!.oran / 100, V = parseInt(s.vade);
+              const pmt = T>0 ? (ao === 0 ? T / V : T * ao / (1 - Math.pow(1 + ao, -V))) : null;
+              return (
+                <div key={s.etiket} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:14,padding:"12px 14px",borderRadius:12,background:(TEMA==="acik"?"#F3F6FA":"#16222E"),border:`1px solid ${WA(0.07)}`}}>
+                  <div style={{minWidth:0}}>
+                    <div style={{fontSize:10.5,fontWeight:700,color:WA(0.55),textTransform:"uppercase",letterSpacing:0.3,marginBottom:4,whiteSpace:"nowrap"}}>{CV(s.etiket)} · {s.vade}</div>
+                    <div style={{fontSize:16,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace"}}>{pmt!=null?fmtTL(pmt):"—"}</div>
+                    <div style={{fontSize:10,color:WA(0.4),marginTop:1}}>{TR("aylık taksit")}</div>
+                  </div>
+                  <div style={{textAlign:"right",flexShrink:0}}>
+                    <div style={{fontSize:10,color:WA(0.45)}}>{TR("Toplam Geri Ödeme")}</div>
+                    <div style={{fontSize:13,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace"}}>{pmt!=null?fmtTL(pmt*V):"—"}</div>
+                    <div style={{fontSize:10,color:WA(0.45),marginTop:4}}>{TR("Toplam Kâr Payı")}</div>
+                    <div style={{fontSize:12.5,fontWeight:700,color:C.green,fontFamily:"monospace"}}>{pmt!=null?fmtTL(pmt*V-T):"—"}</div>
+                  </div>
+                </div>
+              );
+            })())}
+          </div>
+          <p style={{margin:"10px 0 0",fontSize:10,color:WA(0.4)}}>{CV("Gösterge niteliğindedir; komisyon/BSMV dahil değildir. Kesin ödeme planı için Hesapla menüsünü kullanın.")}</p>
+        </div>
+        <p style={{margin:"10px 4px 0",fontSize:10.5,color:WA(0.4)}}>{CV("En düşük ilan edilen aylık kâr payı oranı (TL, gösterge niteliğinde)")}</p>
+        </>
       )}
-      <p style={{margin:"14px 0 0",fontSize:10.5,color:WA(0.4),marginTop:"auto",paddingTop:14}}>{CV("En düşük ilan edilen aylık kâr payı oranı (TL, gösterge niteliğinde)")}</p>
+      {/* 2026-09-21 (kullanıcı isteği: "tümünü karşılaştır yine soldaki top
+          hareketliler gibi en altta olsun"): "Tümünü Gör →" ile BİREBİR
+          AYNI buton — üstteki başlığın yanından buraya taşındı. */}
+      <button onClick={()=>nav("karPayiOranlari")} style={{
+        display:"block", width:"100%", textAlign:"center", fontSize:10.5, color:C.blue,
+        fontWeight:600, marginTop:10, background:"transparent", border:"none", cursor:"pointer", padding:"6px 0",
+      }}>{CV("Tümünü Karşılaştır")} →</button>
     </div>
   );
 }
@@ -4662,8 +4689,8 @@ function YaklasanTakvimBlok({tekKutu,yaklasanTakvim,nav}:any){
               const gunFark=Math.round((new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime()-bugun.getTime())/86400000);
               const gunEtiket=gunFark===0?"Bugün":gunFark===1?"Yarın":d.toLocaleDateString("tr-TR",{day:"numeric",month:"short"});
               return(
-                <div key={i} style={{
-                  display:"flex",alignItems:"center",gap:10,
+                <div key={i} className="kp-side-item" onClick={()=>nav("finansalTakvim")} style={{
+                  display:"flex",alignItems:"center",gap:10,cursor:"pointer",
                   ...(tekKutu
                     ? {borderTop:i===0?"none":`1px solid ${WA(0.07)}`}
                     : {background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,borderRadius:12,marginBottom:8}),
@@ -21749,13 +21776,17 @@ function BildirimModal({onClose}){
 }
 
 // ─── PİYASA ÖZETİ KARTI (mini sparkline + günlük değişim) ──────────────────
-// Windows, bayrak emojilerini (🇺🇸 🇪🇺 🇬🇧 🇹🇷) renderlayamaz — Chrome/Edge'de
-// soluk "US/EU/GB" harf çiftine dönüşürler ve açık/koyu temada okunmazlar
-// (kullanıcı raporu, 13 Tem masaüstü ekran görüntüsü). Bayrak desteği olmayan
-// platformlarda kart rozetleri Au/Ag ile aynı görsel dildeki yuvarlak metin
-// rozetlerine düşer ($ € £ ₺ …). iOS/Android/macOS bayrakları doğru çizer,
-// onlarda davranış değişmez.
-const BAYRAK_EMOJI_OK=(()=>{ try{ return !/Windows/i.test(navigator.userAgent); }catch{ return true; } })();
+// ⚠️ 2026-09-21 (kullanıcı raporu — İKİNCİ TUR: "masaüstünde ikonlar çok
+// yapay duruyor, daha gerçekçi ikonlar koyalım" + "CHF'de ikon yok"):
+// ÖNCEKİ çözüm (13 Temmuz): Windows bayrak emojilerini (🇺🇸 🇪🇺 🇬🇧) doğru
+// çizmediği için ($ € £ gibi) yuvarlak METİN rozetlerine düşülüyordu — bu
+// rozetler kullanıcının şikayet ettiği "yapay" görünümün ta kendisiydi.
+// ARTIK platform/emoji desteğine bakılmıyor — TÜM para birimleri gerçek
+// bayrak GÖRSELİ (flagcdn.com, SVG) kullanıyor, bu görseller her platformda
+// (Windows dahil) birebir aynı ve gerçekçi görünüyor. Ayrıca kapsam
+// genişletildi: PIYASA_TABLO_VERISI.doviz listesindeki TÜM para birimleri
+// (CHF dahil — eksikti) artık bir bayrağa sahip, "ikon yok" durumu kalmadı.
+const BAYRAK_URL = (cc: string) => `https://flagcdn.com/${cc}.svg`;
 
 // duz=true: kart kendi çerçevesini/köşe yuvarlağını ÇİZMEZ. Ana sayfanın sağ
 // rayında kalemler tek bir kutunun içinde ayraçlı satırlar olarak duruyor
@@ -21854,24 +21885,36 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla,duz}:{ad:string,sembol:
   // anlam ifade etmez.
   const kucukIkon = (()=>{
     const a = ad.toUpperCase();
-    // Bayrak destekleniyorsa emoji, desteklenmiyorsa (Windows) yuvarlak metin rozeti
-    const bayrak=(emoji:string,yedek:string,yedekBg:string)=>
-      BAYRAK_EMOJI_OK ? {tip:"bayrak",deger:emoji} : {tip:"metin",deger:yedek,bg:yedekBg};
-    if(a.includes("USD")||a.includes("DOLAR")) return bayrak("🇺🇸","$","#2E7D32");
-    if(a.includes("EUR")) return bayrak("🇪🇺","€","#24479E");
-    if(a.includes("GBP")||a.includes("STERLİN")) return bayrak("🇬🇧","£","#5B3A8E");
+    const bayrak=(cc:string)=>({tip:"bayrak" as const, cc});
+    if(a.includes("USD")||a.includes("DOLAR")) return bayrak("us");
+    if(a.includes("EUR")) return bayrak("eu");
+    if(a.includes("GBP")||a.includes("STERLİN")) return bayrak("gb");
+    if(a.includes("CHF")||a.includes("FRANK")) return bayrak("ch");
+    if(a.includes("CAD")) return bayrak("ca");
+    if(a.includes("AUD")) return bayrak("au");
+    if(a.includes("JPY")||a.includes("YEN")) return bayrak("jp");
+    if(a.includes("CNY")||a.includes("YUAN")) return bayrak("cn");
+    if(a.includes("RUB")) return bayrak("ru");
+    if(a.includes("SAR")) return bayrak("sa");
+    if(a.includes("AED")) return bayrak("ae");
+    if(a.includes("SEK")) return bayrak("se");
+    if(a.includes("NOK")) return bayrak("no");
+    if(a.includes("DKK")) return bayrak("dk");
+    if(a.includes("ZAR")) return bayrak("za");
+    if(a.includes("AZN")) return bayrak("az");
+    if(a.includes("KWD")) return bayrak("kw");
     // ⚠️ 2026-09-15 (kullanıcı isteği — referans tasarım): BİST/Altın/Gümüş
     // artık BAYRAK/HARF rozeti DEĞİL, referans görseldeki gibi TEMATİK bir
     // ikon (BİST → yükseliş grafiği, Altın/Gümüş → madeni para). Zemin
     // renkleri AYNEN korundu — sadece rozetin içeriği değişti.
-    if(a.includes("ALTIN")||a.includes("ALTİN")) return {tip:"ikon",Comp:Coins,bg:"#B8912E"};
-    if(a.includes("GÜMÜŞ")||a.includes("GUMUS")) return {tip:"ikon",Comp:Gem,bg:"#7A8591"};
-    if(a.includes("BITCOIN")||a.includes("BTC")) return {tip:"ikon",Comp:Bitcoin,bg:"#D9820A"};
-    if(a.includes("ETHEREUM")||a.includes("ETH")) return {tip:"metin",deger:"Ξ",bg:"#4A5FC1"};
-    if(a.includes("BIST")) return {tip:"ikon",Comp:BarChart3,bg:"#1A8F5C"};
-    if(a.includes("BRENT")||a.includes("PETROL")||a.includes("WTI")) return {tip:"ikon",Comp:Droplets,bg:"#1E3A5F"};
-    if(a.includes("DAX")) return bayrak("🇩🇪","DE","#3A3A3A");
-    if(a.includes("S&P")||a.includes("NASDAQ")||a.includes("DOW")) return bayrak("🇺🇸","US","#1A3A6E");
+    if(a.includes("ALTIN")||a.includes("ALTİN")) return {tip:"ikon" as const,Comp:Coins,bg:"#B8912E"};
+    if(a.includes("GÜMÜŞ")||a.includes("GUMUS")) return {tip:"ikon" as const,Comp:Gem,bg:"#7A8591"};
+    if(a.includes("BITCOIN")||a.includes("BTC")) return {tip:"ikon" as const,Comp:Bitcoin,bg:"#D9820A"};
+    if(a.includes("ETHEREUM")||a.includes("ETH")) return {tip:"metin" as const,deger:"Ξ",bg:"#4A5FC1"};
+    if(a.includes("BIST")) return {tip:"ikon" as const,Comp:BarChart3,bg:"#1A8F5C"};
+    if(a.includes("BRENT")||a.includes("PETROL")||a.includes("WTI")) return {tip:"ikon" as const,Comp:Droplets,bg:"#1E3A5F"};
+    if(a.includes("DAX")) return bayrak("de");
+    if(a.includes("S&P")||a.includes("NASDAQ")||a.includes("DOW")) return bayrak("us");
     return null;
   })();
 
@@ -21891,7 +21934,9 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla,duz}:{ad:string,sembol:
           (sağ üstte mutlak konumlu rozet) AYNEN duruyor — dokunulmadı. */}
       {!duz && kucukIkon&&(
         kucukIkon.tip==="bayrak" ? (
-          <span style={{position:"absolute",top:7,right:8,fontSize:15,lineHeight:1,borderRadius:3,overflow:"hidden",boxShadow:"0 1px 2px rgba(0,0,0,0.25)"}}>{kucukIkon.deger}</span>
+          <span style={{position:"absolute",top:7,right:8,width:19,height:14,lineHeight:0,borderRadius:3,overflow:"hidden",boxShadow:"0 1px 2px rgba(0,0,0,0.25)",display:"block"}}>
+            <img src={BAYRAK_URL(kucukIkon.cc)} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+          </span>
         ) : (
           <span style={{
             position:"absolute",top:7,right:6,width:17,height:17,borderRadius:"50%",
@@ -21929,7 +21974,7 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla,duz}:{ad:string,sembol:
           boxShadow:"0 1px 3px rgba(0,0,0,0.18)",
         }}>
           {kucukIkon.tip==="bayrak"
-            ? <span style={{fontSize:13,lineHeight:1}}>{kucukIkon.deger}</span>
+            ? <img src={BAYRAK_URL(kucukIkon.cc)} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
             : kucukIkon.tip==="ikon"
             ? <kucukIkon.Comp size={11} color="#fff" strokeWidth={2.5}/>
             : <span style={{fontSize:kucukIkon.deger.length>1?8:10,fontWeight:700,color:"#fff",lineHeight:1}}>{kucukIkon.deger}</span>}
@@ -28411,7 +28456,7 @@ function App(){
                     const gecmisDestekli = !!g.seriAd; // bu gösterge kavramsal olarak geçmiş veri sunuyor mu
                     const tiklanabilir = g.seri && g.seri.length>0;
                     return (
-                    <div key={i} onClick={(e)=>{
+                    <div key={i} className={gecmisDestekli?"kp-side-item":undefined} onClick={(e)=>{
                       if(!gecmisDestekli) return; // TCMB Politika Faizi gibi hiç geçmişi olmayanlar — karta düşsün
                       e.stopPropagation();
                       if(tiklanabilir){
