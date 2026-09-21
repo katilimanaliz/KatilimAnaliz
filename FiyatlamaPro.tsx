@@ -1582,7 +1582,10 @@ function KarPayiOraniKarti({ nav }: { nav: (sc: string) => void }) {
               <div style={{ display: "grid", gridTemplateColumns: KP_GRID_KOMPAKT, alignItems: "center", gap: 6 }}>
                 <span style={{ fontSize: 11.5, fontWeight: 700, color: WA(0.85) }}>{CV(s.etiket)}</span>
                 <span style={{ fontSize: 11.5, fontWeight: 700, color: WA(0.85) }}>{s.vade}</span>
-                <span style={{ fontSize: 12, fontWeight: 700, color: WA(0.85), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.en!.ad}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0 }}>
+                  <BankaLogoRozet ad={s.en!.ad} boyut={16}/>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: WA(0.85), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.en!.ad}</span>
+                </div>
                 <span style={{ fontSize: 13, fontWeight: 700, color: C.green, fontFamily: "monospace", textAlign: "right", whiteSpace: "nowrap" }}>
                   %{s.en!.oran.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                 </span>
