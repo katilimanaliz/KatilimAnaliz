@@ -1776,8 +1776,8 @@ function KarPayiKarsilastirmaGenis({ nav }: { nav: (sc: string) => void }) {
                       <BankaLogoRozet ad={s.en!.ad} boyut={16}/>
                       <span style={{fontSize:11.5,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.en!.ad}</span>
                     </div>
+                    <div style={{fontSize:9.5,color:WA(0.45),marginBottom:2}}>{CV("Aylık Oran")}</div>
                     <div style={{fontSize:13,fontWeight:700,color:C.green,fontFamily:"monospace"}}>%{s.en!.oran.toLocaleString("tr-TR",{minimumFractionDigits:2})}</div>
-                    <div style={{fontSize:9.5,color:WA(0.4),marginTop:1}}>{TR("aylık oran")}</div>
                   </div>
                   <div style={{textAlign:"right",flexShrink:0}}>
                     <div style={{fontSize:10,color:WA(0.45)}}>{TR("Toplam Geri Ödeme")}</div>
@@ -5074,13 +5074,17 @@ function AnaSayfaBist100Karti({ nav }: { nav: (sc: string) => void }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
           <span style={{ width: 6, height: 6, borderRadius: 3, background: C.green, boxShadow: `0 0 6px ${C.green}`, flexShrink: 0 }} />
-          <span style={{ fontSize: 10, fontWeight: 700, color: WA(0.5), textTransform: "uppercase", letterSpacing: 0.4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{etiket}</span>
+          {/* ⚠️ 2026-09-21 (kullanıcı isteği: "gecikmeli yerine 15 dk
+              gecikmeli olsun, ve sığsın"): "BİST 100 · 15 DK GECİKMELİ"
+              zorla büyük harfle (textTransform:uppercase) eski metinden
+              (GECİKMELİ) daha da uzundu, dar sütunda "GECİK…" diye
+              kırpılıyordu. textTransform kaldırıldı (metin doğal
+              büyük/küçük harfiyle daha dar), punto da 10→9. */}
+          <span style={{ fontSize: 9, fontWeight: 700, color: WA(0.5), letterSpacing: 0.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{etiket}</span>
         </div>
-        {/* ⚠️ 2026-09-17 (kullanıcı onaylı tipografi pilotu): finansal
-            değer 20px/800 → 26px/700 (TP.financialValueMobile ile
-            tutarlı — doküman "ana finansal değer daha büyük ve belirgin
-            olmalı" diyor, ama 800/900 kullanma kuralına da uymalı). */}
-        <div style={{ fontSize: 26, fontWeight: 700, fontFamily: "monospace", letterSpacing: "-0.01em", color: (TEMA === "acik" ? C.label : "#fff") }}>
+        {/* ⚠️ 2026-09-21 (kullanıcı isteği: "BİST 100 alanındaki rakamlar
+            çok büyük, biraz küçültelim"): 26px → 21px. */}
+        <div style={{ fontSize: 21, fontWeight: 700, fontFamily: "monospace", letterSpacing: "-0.01em", color: (TEMA === "acik" ? C.label : "#fff") }}>
           {veri ? veri.deger.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}
         </div>
         {veri && (
@@ -5100,13 +5104,17 @@ function AnaSayfaBist100Karti({ nav }: { nav: (sc: string) => void }) {
   return (
     <div className="press-tile" onClick={() => nav("bistHisseTarayici")} style={{
       position: "relative", overflow: "hidden", cursor: "pointer",
-      marginBottom: 20,
+      // ⚠️ 2026-09-21 (kullanıcı isteği: "BİST tablosu çok az daha aşağı
+      // alalım, üstteki bara sıfır duruyor"): sağ ray'ın İLK öğesi olduğu
+      // için üst boşluğu yoktu, hemen üstteki sabit bara bitişik
+      // duruyordu — marginTop:6 ile küçük bir nefes payı eklendi.
+      marginTop: 6, marginBottom: 20,
       borderRadius: 22, padding: "14px 16px",
       background: (TEMA === "acik" ? "#E9EEF4" : WA(0.05)), border: `1px solid ${WA(0.08)}`,
     }}>
       <span style={{ position: "absolute", top: 14, right: 14, color: WA(0.3), fontSize: 16 }}>›</span>
       <div style={{ display: "flex" }}>
-        <EndeksBlok etiket={TR("BIST 100 · GECİKMELİ")} veri={bist100}/>
+        <EndeksBlok etiket={CV("BİST 100 · 15 dk gecikmeli")} veri={bist100}/>
         <div style={{ width: 1, background: WA(0.08), margin: "2px 28px 2px 12px" }}/>
         <EndeksBlok etiket="BİST 30" veri={bist30}/>
       </div>
@@ -27968,13 +27976,16 @@ function App(){
              başlasın" dedi; marka artık şeridin hemen altında. */
           boxShadow:"4px 0 24px rgba(0,0,0,0.35)",padding:"10px 14px 16px"}}>
           {/* Marka */}
+          {/* ⚠️ 2026-09-21 (kullanıcı isteği: "marka ve altındaki sloganı
+              biraz büyütelim"): logo 42→48px, "Katılım Plus" 16→18px,
+              slogan 10→11px — oranlar korunarak bir kademe büyütüldü. */}
           <div onClick={()=>nav("home")} style={{display:"flex",alignItems:"center",gap:11,padding:"2px 8px 18px",cursor:"pointer",borderBottom:`1px solid ${WA(0.07)}`,marginBottom:14}}>
-            <div style={{width:42,height:42,borderRadius:21,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,background:"#FFFFFF",boxShadow:"0 1px 4px rgba(0,0,0,0.25)"}}>
-              <img src={KATILIM_LOGO_B64} alt="" style={{height:28,width:"auto",display:"block"}}/>
+            <div style={{width:48,height:48,borderRadius:24,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,background:"#FFFFFF",boxShadow:"0 1px 4px rgba(0,0,0,0.25)"}}>
+              <img src={KATILIM_LOGO_B64} alt="" style={{height:32,width:"auto",display:"block"}}/>
             </div>
             <div style={{display:"flex",flexDirection:"column",minWidth:0}}>
-              <span style={{fontSize:16,fontWeight:700,letterSpacing:"-0.01em",color:(TEMA==="acik"?"#16222E":"#EAF1FA")}}>Katılım <span style={{background:"linear-gradient(90deg,#1B9E7A,#2CCB9A)",WebkitBackgroundClip:"text",backgroundClip:"text",color:"transparent"}}>Plus</span></span>
-              <span style={{fontSize:10,fontWeight:600,color:(TEMA==="acik"?"#274762":"rgba(255,255,255,0.72)"),marginTop:1,whiteSpace:"nowrap"}}>{CV("Katılım Finansının Akıllı Asistanı")}</span>
+              <span style={{fontSize:18,fontWeight:700,letterSpacing:"-0.01em",color:(TEMA==="acik"?"#16222E":"#EAF1FA")}}>Katılım <span style={{background:"linear-gradient(90deg,#1B9E7A,#2CCB9A)",WebkitBackgroundClip:"text",backgroundClip:"text",color:"transparent"}}>Plus</span></span>
+              <span style={{fontSize:11,fontWeight:600,color:(TEMA==="acik"?"#274762":"rgba(255,255,255,0.72)"),marginTop:1,whiteSpace:"nowrap"}}>{CV("Katılım Finansının Akıllı Asistanı")}</span>
             </div>
           </div>
           {/* Ana gezinme (alt bar sekmelerinin masaüstü karşılığı) */}
