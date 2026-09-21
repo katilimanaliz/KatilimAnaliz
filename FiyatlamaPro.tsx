@@ -28164,22 +28164,16 @@ function App(){
                 ile SADECE başlığın kendi offsetHeight'ını ölçüyordu; aradaki
                 fark kadar içerik başlığın altında kalıyordu. Mobilde şerit
                 render edilmediği için pay da eklenmiyor. */}
-            {/* ⚠️ 2026-09-21 (kullanıcı isteği: "arama çubuğu/bildirim orta
-                alanda kalsın, sağ menü sol menüyle aynı hizadan başlasın"):
-                ÖNCEDEN bu TEK spacer (SERIT_YUKSEKLIK + arama çubuğu
-                yüksekliği) aşağıdaki TÜM ızgarayı (ana kolon + sağ ray
-                birlikte) aşağı itiyordu — sağ ray bu yüzden sol menüden
-                (sadece SERIT_YUKSEKLIK kadar aşağıda başlayan, sabit
-                konumlu) daha AŞAĞIDAN başlıyordu. Artık burada SADECE şerit
-                payı (SERIT_YUKSEKLIK) var — ızgaranın TAMAMI (sağ ray
-                DAHİL) artık sol menüyle AYNI hizadan başlıyor. Arama
-                çubuğunun kendi yüksekliği kadar olan İKİNCİ pay, aşağıda
-                SADECE ana kolonun İÇİNE taşındı (bkz. "ANA KOLON" açılışı) —
-                böylece sadece ana kolon içeriği arama çubuğunun altından
-                başlıyor, sağ ray ETKİLENMİYOR. Mobilde (!genisEkran) tek
-                sütun olduğu için ayrım YOK, eski TEK spacer davranışı
-                BİREBİR korundu. */}
-            <div style={{height:genisEkran?SERIT_YUKSEKLIK:anaSayfaUstBlokYukseklik}}/>
+            {/* ⚠️ 2026-09-21 (GERİ ALINDI — kullanıcı raporu, ekran görüntüsüyle:
+                "portföyüm ve bildirim başlık üzerine gelmiş"): bir önceki
+                turda spacer'ı ikiye bölüp sağ ray'ı sol menüyle aynı
+                hizadan başlatmıştık ("aynı hizadan başlasın" isteğiyle) —
+                ama bu, sağ raydaki BİST kartının sabit üst blokla (arama
+                çubuğu+portföy+bildirim) AYNI Y konumunda başlamasına, ikisi
+                çakışıp üst üste binmesine yol açtı. Görsel hata, istenen
+                düzeltmeden daha kötüydü — TEK spacer'a (bilinen, çalışan
+                davranış) geri dönüldü. */}
+            <div style={{height:anaSayfaUstBlokYukseklik + (genisEkran?SERIT_YUKSEKLIK:0)}}/>
 
             {/* ── APP STORE BANNER — yalnızca MOBİL tarayıcıda; native'de gizli.
                 Masaüstünde de gizli (2026-07-13): sağ alttaki QR kartı aynı işi
@@ -28366,17 +28360,19 @@ function App(){
                 yüzden yükseklik eşitlemeye gerek kalmıyor. Ana kolonda ise
                 satırlar 3 değil 2 kart — dengelemesi çok daha kolay.
                 MOBİLDE style boş nesne ({}) → düz div, akış bozulmuyor. ══ */}
-            <div style={genisEkran?{display:"grid",gridTemplateColumns:"minmax(0,1fr) 320px",gap:20,alignItems:"start"}:{}}>
+            {/* ⚠️ 2026-09-21 (kullanıcı isteği: "sağ menü en alta haberlerin
+                sonuna kadar uzansın"): alignItems "start"→"stretch" — sağ
+                ray'ın kapsayıcısı artık ana kolonla (genelde daha uzun olan,
+                en altta "Son Haberler" ile biten) AYNI yükseklikte, ray'ın
+                alanı ana kolonun bittiği yere kadar uzanıyor. */}
+            <div style={genisEkran?{display:"grid",gridTemplateColumns:"minmax(0,1fr) 320px",gap:20,alignItems:"stretch"}:{}}>
 
             {/* ── ANA KOLON ── */}
             <div style={{minWidth:0}}>
 
-            {/* ⚠️ 2026-09-21 (kullanıcı isteği — bkz. yukarıdaki spacer notu):
-                arama çubuğunun kendi yüksekliği artık SADECE burada, ana
-                kolonun İÇİNDE — sağ ray bu paya sahip DEĞİL, sol menüyle
-                aynı hizadan başlıyor. Mobilde HİÇBİR şey render etmiyor
-                (yukarıdaki tek spacer zaten bu payı taşıyor). */}
-            {genisEkran && <div style={{height:anaSayfaUstBlokYukseklik}}/>}
+            {/* ⚠️ 2026-09-21: ana kolona özel arama çubuğu spacer'ı GERİ
+                ALINDI — yukarıdaki TEK spacer'a dönüldü, burada ayrıca
+                bir şeye gerek yok (bkz. yukarıdaki not). */}
 
             {/* ⚠️ HERO ARTIK ANA KOLONUN İÇİNDE (2026-09-15, kullanıcı isteği:
                 "Piyasa özeti alanı, portföy ve bildirim tuşlarının hemen
@@ -28840,16 +28836,18 @@ function App(){
             (aramaQ===""||it.label.toUpperCase().includes(aramaQ)||CV(it.label).toUpperCase().includes(aramaQ))
           );
           return(
-          <div style={genisEkran?{display:"grid",gridTemplateColumns:"minmax(0,1fr) 320px",gap:20,alignItems:"start",padding:"12px 12px 0",paddingBottom:"calc(108px + env(safe-area-inset-bottom,0px))",boxSizing:"border-box"}:{}}>
-          <div style={{background:C.bg,...(genisEkran?{}:{padding:"12px 12px 0",paddingBottom:"calc(108px + env(safe-area-inset-bottom,0px))",boxSizing:"border-box"}),overflowY:"auto",minWidth:0}}>
+          <div style={{background:C.bg,padding:"12px 12px 0",paddingBottom:"calc(108px + env(safe-area-inset-bottom,0px))",boxSizing:"border-box",overflowY:"auto"}}>
             {/* ⚠️ 2026-09-21 (kullanıcı isteği: "Hesapla menüsü masaüstünde
                 tam ekran yapalım"): maxWidth:920 + margin:auto kaldırıldı —
                 önceden masaüstünde içerik ortada dar bir sütuna sıkışıp
                 geniş ekranın iki yanında boşluk bırakıyordu (kullanıcının
                 ekran görüntüsünde net görünüyordu). Artık genişlik SINIRSIZ,
                 mevcut kapsayıcının (sidebar sonrası kalan alan) TAMAMINI
-                kullanıyor — aşağıdaki 2 sütunlu ızgara (genisEkran ? ...)
-                bu sayede gerçekten geniş ekrana yayılıyor. */}
+                kullanıyor.
+                ⚠️ 2026-09-21 (GERİ ALINDI — kullanıcı isteği: "hesapla ve
+                piyasadan sağ ekranı kaldıralım"): bir önceki turda eklenen
+                sağ ray (SagRay) burdan kaldırıldı, ekran tekrar TEK sütun,
+                tam genişlik. */}
             {/* Arama çubuğu artık kök seviyedeki sabit üst blokta. */}
 
             {/* Son Kullanılanlar yatay şeridi — sadece geçmiş varsa, arama/özel filtre yokken */}
@@ -28971,11 +28969,6 @@ function App(){
             )}
             </>
             )}
-          </div>{/* /ana kolon */}
-
-          {genisEkran && <SagRay nav={nav} piyasaGorunen={piyasaGorunen} piyasaSurukle={piyasaSurukle}
-            piyasaOzetiSecim={piyasaOzetiSecim} setPiyasaOzetiDuzenleAcik={setPiyasaOzetiDuzenleAcik}
-            setSeciliKur={setSeciliKur} yaklasanTakvim={yaklasanTakvim} genisEkran={genisEkran}/>}
           </div>
           );
         })()}
@@ -28990,9 +28983,11 @@ function App(){
             aramaQ===""||r.ad.toUpperCase().includes(aramaQ)
           );
           return(
-          <div style={genisEkran?{display:"grid",gridTemplateColumns:"minmax(0,1fr) 320px",gap:20,alignItems:"start",padding:"12px 12px 0",paddingBottom:"calc(108px + env(safe-area-inset-bottom,0px))",boxSizing:"border-box"}:{}}>
-          <div style={{background:C.bg,...(genisEkran?{}:{padding:"12px 12px 0",paddingBottom:"calc(108px + env(safe-area-inset-bottom,0px))",boxSizing:"border-box"}),overflowY:"auto",minWidth:0}}>
-            {/* Arama çubuğu artık kök seviyedeki sabit üst blokta. */}
+          <div style={{background:C.bg,padding:"12px 12px 0",paddingBottom:"calc(108px + env(safe-area-inset-bottom,0px))",boxSizing:"border-box",overflowY:"auto"}}>
+            {/* Arama çubuğu artık kök seviyedeki sabit üst blokta.
+                ⚠️ 2026-09-21 (GERİ ALINDI — kullanıcı isteği: "hesapla ve
+                piyasadan sağ ekranı kaldıralım"): sağ ray (SagRay) burdan
+                kaldırıldı, ekran tekrar TEK sütun, tam genişlik. */}
 
             {/* Kategori filtre çipleri */}
             <div className="piyasa-scroll" style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:4,marginBottom:6}}>
@@ -29497,11 +29492,6 @@ function App(){
               );
             })()}
 
-          </div>{/* /ana kolon */}
-
-          {genisEkran && <SagRay nav={nav} piyasaGorunen={piyasaGorunen} piyasaSurukle={piyasaSurukle}
-            piyasaOzetiSecim={piyasaOzetiSecim} setPiyasaOzetiDuzenleAcik={setPiyasaOzetiDuzenleAcik}
-            setSeciliKur={setSeciliKur} yaklasanTakvim={yaklasanTakvim} genisEkran={genisEkran}/>}
           </div>
           );
         })()}
@@ -29806,12 +29796,10 @@ function App(){
           veriliyor, böylece içerik bloğun altına girmiyor. */}
       {screen==="home"&&(
         <div ref={anaSayfaUstBlokRef} style={{
-          // ⚠️ 2026-09-21 (kullanıcı isteği: "arama çubuğu, portföy ve
-          // bildirim orta alanda kalsın"): right:0 → sağ kenar artık sağ
-          // ray'ın genişliği kadar (320px ray + 20px ızgara boşluğu) İÇERİDE
-          // duruyor — blok artık sadece ANA KOLON genişliğinde, sağ raya
-          // taşmıyor. Mobilde (!genisEkran) DEĞİŞMEDİ, right hâlâ 0.
-          position:"fixed",top:genisEkran?SERIT_YUKSEKLIK:0,left:SIDEBAR_W,right:genisEkran?340:0,zIndex:45,
+          // ⚠️ 2026-09-21 (GERİ ALINDI — bkz. yukarıdaki spacer notu):
+          // right:340 (sağ raya taşmasın diye) çakışma hatasına yol açtı,
+          // tam genişliğe (right:0) geri dönüldü.
+          position:"fixed",top:genisEkran?SERIT_YUKSEKLIK:0,left:SIDEBAR_W,right:0,zIndex:45,
           background:C.bg,
         }}>
           <div style={{maxWidth:genisEkran?"none":kolonW,margin:"0 auto",padding:"0 20px"}}>
