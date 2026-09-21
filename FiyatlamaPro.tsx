@@ -4803,20 +4803,20 @@ function PiyasaOzetiBlok({dikey,piyasaGorunen,piyasaSurukle,piyasaOzetiSecim,set
             WA(0.42) (çok soluk) → WA(0.85) (okunaklı, diğer düzelttiğimiz
             başlıklarla aynı kontrast). */}
         {dikey && (
-          <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px 7px",
+          <div style={{display:"flex",alignItems:"center",gap:6,padding:"9px 12px 7px",
             borderBottom:`1px solid ${WA(0.07)}`}}>
             {/* Logo sütunu için boş, satırla AYNI genişlikte (18px) boşluk —
                 yoksa "Varlık" başlığı satırdaki isimle hizasız duracaktı. */}
             <span style={{width:16,flexShrink:0}}/>
-            <span style={{width:92,flexShrink:0,fontSize:9.5,fontWeight:700,color:WA(0.85)}}>{CV("Varlık")}</span>
+            <span style={{width:70,flexShrink:0,fontSize:9.5,fontWeight:700,color:WA(0.85)}}>{CV("Varlık")}</span>
             {/* ⚠️ 2026-09-16 (kullanıcı isteği: "fiyat ayrı, değişim % ayrı
                 yazsın"): önceden tek bir "Fiyat / Değişim" başlığı altında
                 ikisi BİRLİKTE gösteriliyordu. Artık İKİ AYRI sütun — genişlik
                 ve hizalar aşağıdaki satırlarla (Fiyat 66px, Değişim 56px)
                 BİREBİR aynı olmalı, yoksa başlık/satır hizası bozulur. */}
-            <span style={{width:66,flexShrink:0,textAlign:"right",fontSize:9.5,fontWeight:700,color:WA(0.85)}}>{CV("Fiyat")}</span>
-            <span style={{width:56,flexShrink:0,textAlign:"right",fontSize:9.5,fontWeight:700,color:WA(0.85)}}>{CV("Değişim")}</span>
-            <span style={{width:60,flexShrink:0,textAlign:"right",fontSize:9.5,fontWeight:700,color:WA(0.85)}}>{CV("Grafik")}</span>
+            <span style={{width:56,flexShrink:0,textAlign:"right",fontSize:9.5,fontWeight:700,color:WA(0.85)}}>{CV("Fiyat")}</span>
+            <span style={{width:46,flexShrink:0,textAlign:"right",fontSize:9.5,fontWeight:700,color:WA(0.85)}}>{CV("Değişim")}</span>
+            <span style={{width:50,flexShrink:0,textAlign:"right",fontSize:9.5,fontWeight:700,color:WA(0.85)}}>{CV("Grafik")}</span>
           </div>
         )}
         {piyasaGorunen.map((k:any,i:number)=>{
@@ -4838,6 +4838,69 @@ function PiyasaOzetiBlok({dikey,piyasaGorunen,piyasaSurukle,piyasaOzetiSecim,set
         )}
       </div>
     </>
+  );
+}
+
+// ── SAĞ RAY (2026-09-21, kullanıcı isteği: "Hesapla ve Piyasa menülerine
+// de ana menüdeki gibi sağdaki gibi bir alan koyalım mı" → "her ikisine
+// de, ana sayfadakiyle birebir aynı") ──────────────────────────────────────
+// Ana sayfanın masaüstü sağ rayı (BİST 100/30 + Piyasa Özeti + Yaklaşan
+// Takvim + Sözlükler + Katılım Bankacılığı Sektörü + AI Finans Asistanı)
+// BİREBİR AYNI içerikle buraya taşındı — kod TEK YERDE, üç ekran (Ana
+// Sayfa, Hesapla, Piyasa) da AYNI fonksiyona çağrı yapıyor. Ana sayfadaki
+// orijinal satır içi blok da bu bileşene çağrıya çevrildi (aşağıda,
+// "screen==='home'" dalında) — davranış hiç değişmedi, sadece paylaşıldı.
+function SagRay({nav, piyasaGorunen, piyasaSurukle, piyasaOzetiSecim, setPiyasaOzetiDuzenleAcik, setSeciliKur, yaklasanTakvim, genisEkran}: any){
+  // ⚠️ 2026-09-21 (kullanıcı isteği: "sağdaki menüyü de sol menü gibi hafif
+  // öne çıkıyormuş gibi gösterelim, sol menü izi gibi"): sol menüde bu
+  // hissi borderRight + boxShadow:"4px 0 24px rgba(0,0,0,0.35)" veriyordu
+  // (bkz. satır ~27958) — o menünün SOLID bir zemini var, ray'ın YOK (kendi
+  // kartları ayrı ayrı zeminli), o yüzden AYNI şiddette gölge burada "leke"
+  // gibi dururdu. Kenarlık + çok daha HAFİF, sola doğru (negatif x) bir
+  // gölge kullanıldı — solid zemin olmadan da ince bir "ayrım/derinlik"
+  // hissi veriyor, sol menüyle simetrik (o sağa gölge düşürüyor, bu sola).
+  return (
+    <div style={{minWidth:0, borderLeft:`1px solid ${WA(0.08)}`, boxShadow:"-6px 0 20px rgba(0,0,0,0.06)", paddingLeft:12}}>
+
+      {genisEkran && <AnaSayfaBist100Karti nav={nav}/>}
+
+      {genisEkran && <PiyasaOzetiBlok dikey piyasaGorunen={piyasaGorunen} piyasaSurukle={piyasaSurukle}
+        piyasaOzetiSecim={piyasaOzetiSecim} setPiyasaOzetiDuzenleAcik={setPiyasaOzetiDuzenleAcik}
+        setSeciliKur={setSeciliKur} nav={nav}/>}
+
+      {genisEkran && <YaklasanTakvimBlok tekKutu yaklasanTakvim={yaklasanTakvim} nav={nav}/>}
+
+      {genisEkran && (
+        <div style={{marginBottom:18}}>
+          <div style={{fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),marginBottom:8}}>{CV("Sözlükler")}</div>
+          <div style={{borderRadius:16,overflow:"hidden",
+            ...(TEMA==="acik"
+              ? {background:"#E9EEF4",border:"1px solid rgba(22,34,46,0.08)"}
+              : {background:"#16222E",border:`1px solid ${WA(0.07)}`})}}>
+            {[
+              {ekran:"sozluk",        ad:"Katılım Bankacılığı Sözlüğü", alt:"Murabaha, mudarebe, sukuk…", ikon:"📖", renk:C.green},
+              {ekran:"ekonomiSozluk", ad:"Ekonomi Sözlüğü",             alt:"196 terim — enflasyondan rezervlere", ikon:"📚", renk:"#A78BFA"},
+            ].map((s,i)=>(
+              <div key={s.ekran} className="press-card" onClick={()=>nav(s.ekran)} style={{
+                display:"flex",alignItems:"center",gap:11,padding:"12px 14px",cursor:"pointer",
+                borderTop:i===0?"none":`1px solid ${WA(0.07)}`}}>
+                <div style={{width:32,height:32,borderRadius:9,background:`${s.renk}26`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:16}}>{s.ikon}</div>
+                <div style={{minWidth:0,flex:1}}>
+                  <div style={{color:WA(0.85),fontSize:12.5,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.ad}</div>
+                  <div style={{color:(TEMA==="acik"?"#4A6178":"rgba(255,255,255,0.55)"),fontSize:10,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.alt}</div>
+                </div>
+                <span style={{fontSize:12,color:WA(0.25),flexShrink:0}}>›</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {genisEkran && <KatilimSektoruOzet onAc={()=>nav("katilimSektoru")} dar/>}
+
+      {genisEkran && <div style={{marginTop:14}}><AsistanKarti nav={nav} genisEkran={genisEkran}/></div>}
+
+    </div>
   );
 }
 
@@ -22008,7 +22071,7 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla,duz}:{ad:string,sembol:
           "grafik çok büyük, onu rakamların sağına alalım"): solda ad + fiyat +
           değişim, sağda mini grafik. Kart görünümünde (mobil yatay şerit) her
           şey ALT ALTA kalıyor — orada kart zaten dar, yan yana sığmaz. */}
-      <div style={duz?{display:"flex",alignItems:"center",gap:10}:undefined}>
+      <div style={duz?{display:"flex",alignItems:"center",gap:6}:undefined}>
       {/* ⚠️ DÜZ (sağ ray) GÖRÜNÜMÜ TEK SATIR (2026-09-15, kullanıcı isteği:
           "önce USD/TRY, yanında fiyat ve değişim yüzdesi, yanında grafik").
           Önceki hâlinde ad ÜSTTE, fiyat/değişim ALTTA idi; grafik sağda tek
@@ -22032,7 +22095,7 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla,duz}:{ad:string,sembol:
             : <span style={{fontSize:kucukIkon.deger.length>1?6:8,fontWeight:700,color:"#fff",lineHeight:1}}>{kucukIkon.deger}</span>}
         </div>
       )}
-      <div style={duz?{width:92,flexShrink:0,minWidth:0}:undefined}>
+      <div style={duz?{width:70,flexShrink:0,minWidth:0}:undefined}>
       {/* ⚠️ PUNTO STANDARDI (2026-09-15, kullanıcı raporu: "yazı fontları
           büyüklükleri, kalın-ince ayrımı hepsi farklı"): kart (mobil) modunda
           punto ADIN UZUNLUĞUNA göre kademeleniyor — dar kartta "GRAM ALTIN"
@@ -22065,14 +22128,14 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla,duz}:{ad:string,sembol:
               ARTIK KENDİ 66px/56px genişliğinden asla taşmıyor, gerekirse
               (aşırı uzun bir fiyat) sessizce kırpılıyor — başlıkla hizası
               her koşulda korunuyor. */}
-          <div style={{width:66,flexShrink:0,minWidth:0,overflow:"hidden",textAlign:"right"}}>
+          <div style={{width:56,flexShrink:0,minWidth:0,overflow:"hidden",textAlign:"right"}}>
             {guncel!=null ? (
               <span style={{fontSize:12,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace",whiteSpace:"nowrap"}}>
                 {`${paraOnek||""}${fmtDeger(guncel)}`}
               </span>
             ) : <div className="skeleton" style={{height:12,width:"80%",marginLeft:"auto",borderRadius:4}}/>}
           </div>
-          <div style={{width:56,flexShrink:0,minWidth:0,overflow:"hidden",textAlign:"right"}}>
+          <div style={{width:46,flexShrink:0,minWidth:0,overflow:"hidden",textAlign:"right"}}>
             {guncel!=null ? (
               <span style={{fontSize:11,fontWeight:700,color:degisim!=null?renk:WA(0.3),whiteSpace:"nowrap"}}>
                 {degisim!=null?`${pozitif?"+":""}${degisim.toFixed(2).replace(".",",")}%`:"—"}
@@ -22100,7 +22163,7 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla,duz}:{ad:string,sembol:
           )}
         </div>
       )}
-      <div style={duz?{width:60,flexShrink:0}:undefined}>
+      <div style={duz?{width:50,flexShrink:0}:undefined}>
       {(guncel==null&&yukleniyor)
         ? <div className="skeleton" style={{height:duz?20:24,borderRadius:6}}/>
         : <svg width="100%" height={duz?20:24} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{display:"block"}}>
@@ -28101,7 +28164,22 @@ function App(){
                 ile SADECE başlığın kendi offsetHeight'ını ölçüyordu; aradaki
                 fark kadar içerik başlığın altında kalıyordu. Mobilde şerit
                 render edilmediği için pay da eklenmiyor. */}
-            <div style={{height:anaSayfaUstBlokYukseklik + (genisEkran?SERIT_YUKSEKLIK:0)}}/>
+            {/* ⚠️ 2026-09-21 (kullanıcı isteği: "arama çubuğu/bildirim orta
+                alanda kalsın, sağ menü sol menüyle aynı hizadan başlasın"):
+                ÖNCEDEN bu TEK spacer (SERIT_YUKSEKLIK + arama çubuğu
+                yüksekliği) aşağıdaki TÜM ızgarayı (ana kolon + sağ ray
+                birlikte) aşağı itiyordu — sağ ray bu yüzden sol menüden
+                (sadece SERIT_YUKSEKLIK kadar aşağıda başlayan, sabit
+                konumlu) daha AŞAĞIDAN başlıyordu. Artık burada SADECE şerit
+                payı (SERIT_YUKSEKLIK) var — ızgaranın TAMAMI (sağ ray
+                DAHİL) artık sol menüyle AYNI hizadan başlıyor. Arama
+                çubuğunun kendi yüksekliği kadar olan İKİNCİ pay, aşağıda
+                SADECE ana kolonun İÇİNE taşındı (bkz. "ANA KOLON" açılışı) —
+                böylece sadece ana kolon içeriği arama çubuğunun altından
+                başlıyor, sağ ray ETKİLENMİYOR. Mobilde (!genisEkran) tek
+                sütun olduğu için ayrım YOK, eski TEK spacer davranışı
+                BİREBİR korundu. */}
+            <div style={{height:genisEkran?SERIT_YUKSEKLIK:anaSayfaUstBlokYukseklik}}/>
 
             {/* ── APP STORE BANNER — yalnızca MOBİL tarayıcıda; native'de gizli.
                 Masaüstünde de gizli (2026-07-13): sağ alttaki QR kartı aynı işi
@@ -28292,6 +28370,13 @@ function App(){
 
             {/* ── ANA KOLON ── */}
             <div style={{minWidth:0}}>
+
+            {/* ⚠️ 2026-09-21 (kullanıcı isteği — bkz. yukarıdaki spacer notu):
+                arama çubuğunun kendi yüksekliği artık SADECE burada, ana
+                kolonun İÇİNDE — sağ ray bu paya sahip DEĞİL, sol menüyle
+                aynı hizadan başlıyor. Mobilde HİÇBİR şey render etmiyor
+                (yukarıdaki tek spacer zaten bu payı taşıyor). */}
+            {genisEkran && <div style={{height:anaSayfaUstBlokYukseklik}}/>}
 
             {/* ⚠️ HERO ARTIK ANA KOLONUN İÇİNDE (2026-09-15, kullanıcı isteği:
                 "Piyasa özeti alanı, portföy ve bildirim tuşlarının hemen
@@ -28728,85 +28813,10 @@ function App(){
             </div>{/* /ana kolon */}
 
             {/* ── SAĞ RAY — yalnızca dikey listeler ────────────────────────── */}
-            <div style={{minWidth:0}}>
-
-            {/* BİST 100 / BİST 30 — sağ rayın EN ÜSTÜNDE (2026-09-15,
-                kullanıcı isteği). Önceden hero'nun yanındaydı. doluYukseklik
-                VERİLMİYOR: o prop, kartı hero'nun sabit 158px yüksekliğine
-                sabitliyordu; rayda böyle bir eş yükseklik kısıtı yok, kart
-                kendi doğal boyunda duruyor. */}
-            {genisEkran && <AnaSayfaBist100Karti nav={nav}/>}
-
-            {/* Piyasa Özeti — MASAÜSTÜNDE burada, DİKEY liste olarak.
-                Mobilde yukarıda yatay şerit olarak render ediliyor. */}
-            {genisEkran && <PiyasaOzetiBlok dikey piyasaGorunen={piyasaGorunen} piyasaSurukle={piyasaSurukle}
+            <SagRay nav={nav} piyasaGorunen={piyasaGorunen} piyasaSurukle={piyasaSurukle}
               piyasaOzetiSecim={piyasaOzetiSecim} setPiyasaOzetiDuzenleAcik={setPiyasaOzetiDuzenleAcik}
-              setSeciliKur={setSeciliKur} nav={nav}/>}
+              setSeciliKur={setSeciliKur} yaklasanTakvim={yaklasanTakvim} genisEkran={genisEkran}/>
 
-            {/* Son Haberler ve Yaklaşan Takvim — MASAÜSTÜNDE sağ rayda, TEK
-                KUTU görünümüyle. Mobilde bu bloklar buraya DEĞİL, yukarıdaki
-                akışın kendi sırasına render ediliyor (bkz. mobil dal) —
-                önceki turda sıra ve görünüm farkında olmadan mobilde de
-                değişmişti, kullanıcı bildirdi. */}
-            {/* Yaklaşan Takvim, piyasa verilerinin HEMEN ALTINDA (2026-09-15,
-                kullanıcı isteği). Son Haberler ise raydan ÇIKARILIP ana kolonun
-                en altına, tam genişlikte YATAY bir blok olarak alındı — orada
-                kısayol satırının altında büyük bir beyaz alan kalıyordu. */}
-            {genisEkran && <YaklasanTakvimBlok tekKutu yaklasanTakvim={yaklasanTakvim} nav={nav}/>}
-
-            {/* ── SÖZLÜK KISAYOLLARI (2026-09-15, kullanıcı isteği) ─────────
-                Yaklaşan Takvim'in altında, rayın en sonunda iki kısayol.
-                Ekran anahtarları mevcut: "sozluk" = Katılım Bankacılığı
-                Sözlüğü, "ekonomiSozluk" = Ekonomi Sözlüğü (yeni ekran
-                YAZILMADI, var olanlara bağlanıyor). */}
-            {genisEkran && (
-              <div style={{marginBottom:18}}>
-                <div style={{fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),marginBottom:8}}>{CV("Sözlükler")}</div>
-                <div style={{borderRadius:16,overflow:"hidden",
-                  ...(TEMA==="acik"
-                    ? {background:"#E9EEF4",border:"1px solid rgba(22,34,46,0.08)"}
-                    : {background:"#16222E",border:`1px solid ${WA(0.07)}`})}}>
-                  {[
-                    {ekran:"sozluk",        ad:"Katılım Bankacılığı Sözlüğü", alt:"Murabaha, mudarebe, sukuk…", ikon:"📖", renk:C.green},
-                    {ekran:"ekonomiSozluk", ad:"Ekonomi Sözlüğü",             alt:"196 terim — enflasyondan rezervlere", ikon:"📚", renk:"#A78BFA"},
-                  ].map((s,i)=>(
-                    <div key={s.ekran} className="press-card" onClick={()=>nav(s.ekran)} style={{
-                      display:"flex",alignItems:"center",gap:11,padding:"12px 14px",cursor:"pointer",
-                      borderTop:i===0?"none":`1px solid ${WA(0.07)}`}}>
-                      <div style={{width:32,height:32,borderRadius:9,background:`${s.renk}26`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:16}}>{s.ikon}</div>
-                      <div style={{minWidth:0,flex:1}}>
-                        <div style={{color:WA(0.85),fontSize:12.5,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.ad}</div>
-                        <div style={{color:(TEMA==="acik"?"#4A6178":"rgba(255,255,255,0.55)"),fontSize:10,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.alt}</div>
-                      </div>
-                      <span style={{fontSize:12,color:WA(0.25),flexShrink:0}}>›</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* ① Katılım Bankacılığı Sektörü — MASAÜSTÜNDE sağ rayın en
-                altında, sözlüklerin hemen ardında (2026-09-15, kullanıcı
-                isteği). Önceden ana kolonda Göstergeler'in yanındaydı.
-                Mobilde bu kart yukarıdaki akışta kendi sırasında duruyor. */}
-            {genisEkran && <KatilimSektoruOzet onAc={()=>nav("katilimSektoru")} dar/>}
-
-            {/* ⚠️ 2026-09-17: sağ raydaki KOMPAKT Kâr Payı Karşılaştırma
-                kartı BURADAN KALDIRILDI — artık ana kolonda, Popüler
-                Fonlar'ın eski yerinde DAHA BÜYÜK bir versiyonu var
-                (KarPayiKarsilastirmaGenis), aynı bilgiyi masaüstünde İKİ
-                KEZ göstermek gereksiz olurdu. MOBİLDE kompakt kart
-                (KarPayiOraniKarti) AYNEN duruyor — BİST kartının hemen
-                altında, bu değişiklikten ETKİLENMEDİ. */}
-
-            {/* AI Finans Asistanı — sağ rayın EN ALTINDA (2026-09-15,
-                kullanıcı isteği: "AI Finans Asistanı sağ menü en alta
-                alalım"). Önceden ana kolonda Haftalık Özet/Getiri
-                Karşılaştırma ile aynı satırdaydı. */}
-            {genisEkran && <div style={{marginTop:14}}><AsistanKarti nav={nav} genisEkran={genisEkran}/></div>}
-
-
-            </div>{/* /sağ ray */}
             </div>{/* /ana kolon + sağ ray */}
 
 
@@ -28830,7 +28840,8 @@ function App(){
             (aramaQ===""||it.label.toUpperCase().includes(aramaQ)||CV(it.label).toUpperCase().includes(aramaQ))
           );
           return(
-          <div style={{background:C.bg,padding:"12px 12px 0",paddingBottom:"calc(108px + env(safe-area-inset-bottom,0px))",boxSizing:"border-box",overflowY:"auto"}}>
+          <div style={genisEkran?{display:"grid",gridTemplateColumns:"minmax(0,1fr) 320px",gap:20,alignItems:"start",padding:"12px 12px 0",paddingBottom:"calc(108px + env(safe-area-inset-bottom,0px))",boxSizing:"border-box"}:{}}>
+          <div style={{background:C.bg,...(genisEkran?{}:{padding:"12px 12px 0",paddingBottom:"calc(108px + env(safe-area-inset-bottom,0px))",boxSizing:"border-box"}),overflowY:"auto",minWidth:0}}>
             {/* ⚠️ 2026-09-21 (kullanıcı isteği: "Hesapla menüsü masaüstünde
                 tam ekran yapalım"): maxWidth:920 + margin:auto kaldırıldı —
                 önceden masaüstünde içerik ortada dar bir sütuna sıkışıp
@@ -28960,6 +28971,11 @@ function App(){
             )}
             </>
             )}
+          </div>{/* /ana kolon */}
+
+          {genisEkran && <SagRay nav={nav} piyasaGorunen={piyasaGorunen} piyasaSurukle={piyasaSurukle}
+            piyasaOzetiSecim={piyasaOzetiSecim} setPiyasaOzetiDuzenleAcik={setPiyasaOzetiDuzenleAcik}
+            setSeciliKur={setSeciliKur} yaklasanTakvim={yaklasanTakvim} genisEkran={genisEkran}/>}
           </div>
           );
         })()}
@@ -28974,7 +28990,8 @@ function App(){
             aramaQ===""||r.ad.toUpperCase().includes(aramaQ)
           );
           return(
-          <div style={{background:C.bg,padding:"12px 12px 0",paddingBottom:"calc(108px + env(safe-area-inset-bottom,0px))",boxSizing:"border-box",overflowY:"auto"}}>
+          <div style={genisEkran?{display:"grid",gridTemplateColumns:"minmax(0,1fr) 320px",gap:20,alignItems:"start",padding:"12px 12px 0",paddingBottom:"calc(108px + env(safe-area-inset-bottom,0px))",boxSizing:"border-box"}:{}}>
+          <div style={{background:C.bg,...(genisEkran?{}:{padding:"12px 12px 0",paddingBottom:"calc(108px + env(safe-area-inset-bottom,0px))",boxSizing:"border-box"}),overflowY:"auto",minWidth:0}}>
             {/* Arama çubuğu artık kök seviyedeki sabit üst blokta. */}
 
             {/* Kategori filtre çipleri */}
@@ -29480,6 +29497,11 @@ function App(){
               );
             })()}
 
+          </div>{/* /ana kolon */}
+
+          {genisEkran && <SagRay nav={nav} piyasaGorunen={piyasaGorunen} piyasaSurukle={piyasaSurukle}
+            piyasaOzetiSecim={piyasaOzetiSecim} setPiyasaOzetiDuzenleAcik={setPiyasaOzetiDuzenleAcik}
+            setSeciliKur={setSeciliKur} yaklasanTakvim={yaklasanTakvim} genisEkran={genisEkran}/>}
           </div>
           );
         })()}
@@ -29784,7 +29806,12 @@ function App(){
           veriliyor, böylece içerik bloğun altına girmiyor. */}
       {screen==="home"&&(
         <div ref={anaSayfaUstBlokRef} style={{
-          position:"fixed",top:genisEkran?SERIT_YUKSEKLIK:0,left:SIDEBAR_W,right:0,zIndex:45,
+          // ⚠️ 2026-09-21 (kullanıcı isteği: "arama çubuğu, portföy ve
+          // bildirim orta alanda kalsın"): right:0 → sağ kenar artık sağ
+          // ray'ın genişliği kadar (320px ray + 20px ızgara boşluğu) İÇERİDE
+          // duruyor — blok artık sadece ANA KOLON genişliğinde, sağ raya
+          // taşmıyor. Mobilde (!genisEkran) DEĞİŞMEDİ, right hâlâ 0.
+          position:"fixed",top:genisEkran?SERIT_YUKSEKLIK:0,left:SIDEBAR_W,right:genisEkran?340:0,zIndex:45,
           background:C.bg,
         }}>
           <div style={{maxWidth:genisEkran?"none":kolonW,margin:"0 auto",padding:"0 20px"}}>
