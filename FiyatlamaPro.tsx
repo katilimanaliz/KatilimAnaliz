@@ -1527,7 +1527,7 @@ function BankaLogoRozet({ad, boyut=26}:{ad:string; boyut?:number}){
 // — kart zaten sadece "en iyi" seçeneği gösteriyor, rozet gereksizdi).
 // "Başvuru Yap" yazılı buton yerine küçük dairesel dış-link ikonu
 // (BankaBasvurIkonu) kullanılıyor.
-const KP_GRID_KOMPAKT = "50px 42px 1fr 56px 26px";
+const KP_GRID_KOMPAKT = "50px 42px 1fr 64px 26px";
 
 function KarPayiOraniKarti({ nav }: { nav: (sc: string) => void }) {
   const [veri, setVeri] = useState<any>(null);
@@ -1573,7 +1573,7 @@ function KarPayiOraniKarti({ nav }: { nav: (sc: string) => void }) {
             <span style={{ fontSize: 10, fontWeight: 700, color: WA(0.85), textTransform: "uppercase", letterSpacing: 0.3 }}>{TR("Ürün")}</span>
             <span style={{ fontSize: 10, fontWeight: 700, color: WA(0.85), textTransform: "uppercase", letterSpacing: 0.3 }}>{TR("Vade")}</span>
             <span style={{ fontSize: 10, fontWeight: 700, color: WA(0.85), textTransform: "uppercase", letterSpacing: 0.3 }}>{TR("Banka adı")}</span>
-            <span style={{ fontSize: 10, fontWeight: 700, color: WA(0.85), textTransform: "uppercase", letterSpacing: 0.3, textAlign: "right", lineHeight: 1.2 }}>{TR("Aylık")}<br/>{TR("kâr oranı")}</span>
+            <span style={{ fontSize: 10, fontWeight: 700, color: WA(0.85), textTransform: "uppercase", letterSpacing: 0.3, textAlign: "center", lineHeight: 1.2 }}>{TR("Aylık")}<br/>{TR("kâr oranı")}</span>
             <span/>
           </div>
           <div style={{ borderTop: `1px solid ${WA(0.14)}` }}/>
@@ -1586,7 +1586,7 @@ function KarPayiOraniKarti({ nav }: { nav: (sc: string) => void }) {
                   <BankaLogoRozet ad={s.en!.ad} boyut={16}/>
                   <span style={{ fontSize: 12, fontWeight: 700, color: WA(0.85), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.en!.ad}</span>
                 </div>
-                <span style={{ fontSize: 13, fontWeight: 700, color: C.green, fontFamily: "monospace", textAlign: "right", whiteSpace: "nowrap" }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: C.green, fontFamily: "monospace", textAlign: "center", whiteSpace: "nowrap" }}>
                   %{s.en!.oran.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}
                 </span>
                 <BankaBasvurIkonu ad={s.en!.ad}/>
@@ -1596,9 +1596,9 @@ function KarPayiOraniKarti({ nav }: { nav: (sc: string) => void }) {
           ))}
         </div>
       )}
-      <div style={{ borderTop: `1px solid ${WA(0.08)}`, marginTop: 12, paddingTop: 8, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span style={{ fontSize: 10, color: WA(0.35) }}>{CV("En düşük ilan edilen aylık oran")}</span>
-        <span style={{ fontSize: 10, color: WA(0.35) }}>{CV("Tümünü Karşılaştır")} ›</span>
+      <div style={{ borderTop: `1px solid ${WA(0.08)}`, marginTop: 12, paddingTop: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <span style={{ fontSize: 11.5, fontWeight: 600, color: WA(0.6) }}>{CV("En düşük ilan edilen aylık oran")}</span>
+        <span style={{ fontSize: 11.5, fontWeight: 700, color: C.blue, flexShrink: 0, whiteSpace: "nowrap" }}>{CV("Tümünü Karşılaştır")} ›</span>
       </div>
     </div>
   );
