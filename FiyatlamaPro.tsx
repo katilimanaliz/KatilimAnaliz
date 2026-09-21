@@ -1477,16 +1477,21 @@ function bankaLogoBul(ad: string): string | null {
   );
   return eslesen?.logo || null;
 }
-// Küçük, yuvarlak logo rozeti — eşleşme yoksa hiçbir şey render ETMİYOR
+// Küçük logo rozeti — eşleşme yoksa hiçbir şey render ETMİYOR
 // (BankaBasvurButonu'ndaki "yanlış/tahmini göstermektense hiç gösterme"
 // ilkesiyle AYNI).
+// ⚠️ 2026-09-21 (kullanıcı isteği — TÜM ekranlar, tek yerden: "ortadaki
+// beyazlık olmadan sadece icon koyabilir miyiz"): yuvarlak beyaz zemin +
+// kenarlık + iç boşluk (padding) kaldırıldı — artık SADECE logo görseli.
+// Bu bileşen PAYLAŞILAN (Taksit Karşılaştırma, Kâr Payı tabloları, ana
+// sayfa kartları, Örnek Ödeme Planı — hepsi BURAYA çağrı yapıyor), o yüzden
+// tek bir değişiklik TÜM ekranlara aynı anda yansıyor.
 function BankaLogoRozet({ad, boyut=26}:{ad:string; boyut?:number}){
   const logo = bankaLogoBul(ad);
   if (!logo) return null;
   return (
     <img src={logo} alt="" style={{
-      width:boyut, height:boyut, borderRadius:"50%", objectFit:"contain",
-      background:"#fff", border:`1px solid ${C.border}`, flexShrink:0, padding:2,
+      width:boyut, height:boyut, objectFit:"contain", flexShrink:0,
     }}/>
   );
 }
@@ -1755,11 +1760,24 @@ function KarPayiKarsilastirmaGenis({ nav }: { nav: (sc: string) => void }) {
               const ao = s.en!.oran / 100, V = parseInt(s.vade);
               const pmt = T>0 ? (ao === 0 ? T / V : T * ao / (1 - Math.pow(1 + ao, -V))) : null;
               return (
-                <div key={s.etiket} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:14,padding:"12px 14px",borderRadius:12,background:(TEMA==="acik"?"#F3F6FA":"#16222E"),border:`1px solid ${WA(0.07)}`}}>
-                  <div style={{minWidth:0}}>
+                <div key={s.etiket} style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",borderRadius:12,background:(TEMA==="acik"?"#F3F6FA":"#16222E"),border:`1px solid ${WA(0.07)}`}}>
+                  <div style={{minWidth:0,flexShrink:0}}>
                     <div style={{fontSize:10.5,fontWeight:700,color:WA(0.55),textTransform:"uppercase",letterSpacing:0.3,marginBottom:4,whiteSpace:"nowrap"}}>{CV(s.etiket)} · {s.vade}</div>
                     <div style={{fontSize:16,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace"}}>{pmt!=null?fmtTL(pmt):"—"}</div>
                     <div style={{fontSize:10,color:WA(0.4),marginTop:1}}>{TR("aylık taksit")}</div>
+                  </div>
+                  {/* ⚠️ 2026-09-21 (kullanıcı isteği: "ortadaki alana banka adı
+                      ve aylık oranını da gösterelim"): tutar/toplam bilgisi
+                      hangi bankanın/oranın karşılığı olduğunu göstermiyordu —
+                      yukarıdaki tabloda zaten hesaplanmış s.en!.ad/oran aynen
+                      kullanılıyor, ayrı bir veri kaynağına gerek yok. */}
+                  <div style={{flex:"1 1 auto",minWidth:0,textAlign:"center"}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:5,marginBottom:3}}>
+                      <BankaLogoRozet ad={s.en!.ad} boyut={16}/>
+                      <span style={{fontSize:11.5,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.en!.ad}</span>
+                    </div>
+                    <div style={{fontSize:13,fontWeight:700,color:C.green,fontFamily:"monospace"}}>%{s.en!.oran.toLocaleString("tr-TR",{minimumFractionDigits:2})}</div>
+                    <div style={{fontSize:9.5,color:WA(0.4),marginTop:1}}>{TR("aylık oran")}</div>
                   </div>
                   <div style={{textAlign:"right",flexShrink:0}}>
                     <div style={{fontSize:10,color:WA(0.45)}}>{TR("Toplam Geri Ödeme")}</div>
@@ -17658,7 +17676,7 @@ function KatilimBankalari(){
         <div onClick={()=>setSecili(null)} style={{display:"inline-flex",alignItems:"center",gap:6,color:C.blue,fontSize:13,fontWeight:700,cursor:"pointer",marginBottom:14}}>‹ Bankalar listesi</div>
 
         <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:16}}>
-          <div style={{width:60,height:60,borderRadius:16,background:secili.logo?"#FFFFFF":secili.renk,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,fontWeight:700,color:"#fff",flexShrink:0,padding:secili.logo?8:0,boxSizing:"border-box",boxShadow:secili.logo?"0 1px 4px rgba(0,0,0,0.2)":"none"}}>
+          <div style={{width:60,height:60,borderRadius:secili.logo?0:16,background:secili.logo?"transparent":secili.renk,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,fontWeight:700,color:"#fff",flexShrink:0}}>
             {secili.logo ? <img src={secili.logo} alt="" style={{width:"100%",height:"100%",objectFit:"contain",display:"block"}}/> : secili.harf}
           </div>
           <div style={{flex:1,minWidth:0}}>
@@ -17745,7 +17763,7 @@ function KatilimBankalari(){
           background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,
           borderRadius:14,padding:"12px 14px",marginBottom:9,cursor:"pointer",
         }}>
-          <div style={{width:46,height:46,borderRadius:12,background:b.logo?"#FFFFFF":b.renk,display:"flex",alignItems:"center",justifyContent:"center",fontSize:21,fontWeight:700,color:"#fff",flexShrink:0,padding:b.logo?6:0,boxSizing:"border-box",boxShadow:b.logo?"0 1px 3px rgba(0,0,0,0.18)":"none"}}>
+          <div style={{width:46,height:46,borderRadius:b.logo?0:12,background:b.logo?"transparent":b.renk,display:"flex",alignItems:"center",justifyContent:"center",fontSize:21,fontWeight:700,color:"#fff",flexShrink:0}}>
             {b.logo ? <img src={b.logo} alt="" style={{width:"100%",height:"100%",objectFit:"contain",display:"block"}}/> : b.harf}
           </div>
           <div style={{flex:1,minWidth:0}}>
