@@ -4807,7 +4807,7 @@ function PiyasaOzetiBlok({dikey,piyasaGorunen,piyasaSurukle,piyasaOzetiSecim,set
             borderBottom:`1px solid ${WA(0.07)}`}}>
             {/* Logo sütunu için boş, satırla AYNI genişlikte (18px) boşluk —
                 yoksa "Varlık" başlığı satırdaki isimle hizasız duracaktı. */}
-            <span style={{width:18,flexShrink:0}}/>
+            <span style={{width:16,flexShrink:0}}/>
             <span style={{width:92,flexShrink:0,fontSize:9.5,fontWeight:700,color:WA(0.85)}}>{CV("Varlık")}</span>
             {/* ⚠️ 2026-09-16 (kullanıcı isteği: "fiyat ayrı, değişim % ayrı
                 yazsın"): önceden tek bir "Fiyat / Değişim" başlığı altında
@@ -22020,7 +22020,7 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla,duz}:{ad:string,sembol:
           diğer tiplerle hizası/boyutu tutarsız görünürdü. */}
       {duz && kucukIkon && (
         <div style={{
-          width:18,height:18,borderRadius:"50%",flexShrink:0,overflow:"hidden",
+          width:16,height:16,borderRadius:"50%",flexShrink:0,overflow:"hidden",
           display:"flex",alignItems:"center",justifyContent:"center",
           background:kucukIkon.tip==="bayrak"?WA(0.08):kucukIkon.bg,
           boxShadow:"0 1px 3px rgba(0,0,0,0.18)",
@@ -22028,8 +22028,8 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla,duz}:{ad:string,sembol:
           {kucukIkon.tip==="bayrak"
             ? <img src={BAYRAK_URL(kucukIkon.cc)} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
             : kucukIkon.tip==="ikon"
-            ? <kucukIkon.Comp size={9} color="#fff" strokeWidth={2.5}/>
-            : <span style={{fontSize:kucukIkon.deger.length>1?7:9,fontWeight:700,color:"#fff",lineHeight:1}}>{kucukIkon.deger}</span>}
+            ? <kucukIkon.Comp size={8} color="#fff" strokeWidth={2.5}/>
+            : <span style={{fontSize:kucukIkon.deger.length>1?6:8,fontWeight:700,color:"#fff",lineHeight:1}}>{kucukIkon.deger}</span>}
         </div>
       )}
       <div style={duz?{width:92,flexShrink:0,minWidth:0}:undefined}>
@@ -22040,7 +22040,7 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla,duz}:{ad:string,sembol:
           bu kademelendirme satırdan satıra farklı punto üretiyordu; orada
           SABİT 11px/700 kullanılıyor. */}
       <p style={{margin:0,
-        fontSize:duz?11:(ad.length>=12?7.8:ad.length>=10?8.3:ad.length>=8?9.2:10),
+        fontSize:duz?10.5:(ad.length>=12?7.8:ad.length>=10?8.3:ad.length>=8?9.2:10),
         fontWeight:700,
         color:duz?(TEMA==="acik"?C.label:"#fff"):WA(0.45),
         letterSpacing:duz?0.2:(ad.length>=10?-0.1:0.2),
@@ -28830,7 +28830,15 @@ function App(){
             (aramaQ===""||it.label.toUpperCase().includes(aramaQ)||CV(it.label).toUpperCase().includes(aramaQ))
           );
           return(
-          <div style={{background:C.bg,padding:"12px 12px 0",paddingBottom:"calc(108px + env(safe-area-inset-bottom,0px))",boxSizing:"border-box",overflowY:"auto",maxWidth:genisEkran?920:"none",margin:genisEkran?"0 auto":undefined}}>
+          <div style={{background:C.bg,padding:"12px 12px 0",paddingBottom:"calc(108px + env(safe-area-inset-bottom,0px))",boxSizing:"border-box",overflowY:"auto"}}>
+            {/* ⚠️ 2026-09-21 (kullanıcı isteği: "Hesapla menüsü masaüstünde
+                tam ekran yapalım"): maxWidth:920 + margin:auto kaldırıldı —
+                önceden masaüstünde içerik ortada dar bir sütuna sıkışıp
+                geniş ekranın iki yanında boşluk bırakıyordu (kullanıcının
+                ekran görüntüsünde net görünüyordu). Artık genişlik SINIRSIZ,
+                mevcut kapsayıcının (sidebar sonrası kalan alan) TAMAMINI
+                kullanıyor — aşağıdaki 2 sütunlu ızgara (genisEkran ? ...)
+                bu sayede gerçekten geniş ekrana yayılıyor. */}
             {/* Arama çubuğu artık kök seviyedeki sabit üst blokta. */}
 
             {/* Son Kullanılanlar yatay şeridi — sadece geçmiş varsa, arama/özel filtre yokken */}
