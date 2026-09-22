@@ -28025,8 +28025,12 @@ function App(){
               biraz büyütelim"): logo 42→48px, "Katılım Plus" 16→18px,
               slogan 10→11px — oranlar korunarak bir kademe büyütüldü. */}
           <div onClick={()=>nav("home")} style={{display:"flex",alignItems:"center",gap:11,padding:"2px 8px 18px",cursor:"pointer",borderBottom:`1px solid ${WA(0.07)}`,marginBottom:14}}>
-            <div style={{width:48,height:48,borderRadius:24,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,background:"#FFFFFF",boxShadow:"0 1px 4px rgba(0,0,0,0.25)"}}>
-              <img src={KATILIM_LOGO_B64} alt="" style={{height:32,width:"auto",display:"block"}}/>
+            {/* ⚠️ 2026-09-21 (kullanıcı isteği: "diğerlerinde de aynısı
+                varsa öyle yapalım"): mobil ana sayfadakiyle AYNI düzeltme —
+                beyaz zemin/gölge kaldırıldı, logo kendi boyutu (32→38px)
+                büyütüldü. */}
+            <div style={{width:48,height:48,borderRadius:24,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+              <img src={KATILIM_LOGO_B64} alt="" style={{height:38,width:"auto",display:"block"}}/>
             </div>
             <div style={{display:"flex",flexDirection:"column",minWidth:0}}>
               <span style={{fontSize:18,fontWeight:700,letterSpacing:"-0.01em",color:(TEMA==="acik"?"#16222E":"#EAF1FA")}}>Katılım <span style={{background:"linear-gradient(90deg,#1B9E7A,#2CCB9A)",WebkitBackgroundClip:"text",backgroundClip:"text",color:"transparent"}}>Plus</span></span>
@@ -28127,8 +28131,8 @@ function App(){
           border:`1px solid ${TEMA==="acik"?"rgba(22,34,46,0.14)":"rgba(255,255,255,0.10)"}`,
           borderRadius:18,padding:"16px 16px 14px",boxShadow:"0 12px 40px rgba(0,0,0,0.45), 0 3px 12px rgba(0,0,0,0.3)"}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <div style={{width:38,height:38,borderRadius:19,background:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"0 1px 4px rgba(0,0,0,0.25)"}}>
-              <img src={KATILIM_LOGO_B64} alt="" style={{height:24,width:"auto",display:"block"}}/>
+            <div style={{width:38,height:38,borderRadius:19,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+              <img src={KATILIM_LOGO_B64} alt="" style={{height:30,width:"auto",display:"block"}}/>
             </div>
             <div style={{flex:1,fontSize:15.5,fontWeight:700,letterSpacing:"-0.01em",color:TEMA==="acik"?"#16222E":"#EAF1FA"}}>{CV("Katılım Plus artık cebinde")}</div>
             <button onClick={()=>{setQrPopupKapali(true);}} style={{
@@ -29896,8 +29900,16 @@ function App(){
             <div style={{display:"flex",alignItems:"center",justifyContent:genisEkran?"flex-end":"space-between",gap:10,marginBottom:genisEkran?0:20,flexShrink:0}}>
               {!genisEkran && (
               <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
-                <div style={{width:44,height:44,borderRadius:22,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,background:"#FFFFFF",boxShadow:"0 1px 4px rgba(0,0,0,0.25)"}}>
-                  <img src={KATILIM_LOGO_B64} alt="" style={{height:30,width:"auto",display:"block"}}/>
+                {/* ⚠️ 2026-09-21 (kullanıcı isteği: "marka amblemindeki arka
+                    plandaki beyaz kutudan kurtarsak"): logo PNG'sinin zaten
+                    GERÇEK bir şeffaf arka planı var (alfa kanalı ile
+                    doğrulandı) — çevresindeki beyaz daire + gölge sadece
+                    bizim CSS'imizdi, kaldırıldı. Daire artık sadece
+                    boyut/hizalama için var, görsel bir zemini yok. Logo
+                    kendi boyutu 30→36px büyütüldü — artık kendini saran bir
+                    dolgulu daireye sığdırma zorunluluğu yok. */}
+              <div style={{width:44,height:44,borderRadius:22,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  <img src={KATILIM_LOGO_B64} alt="" style={{height:36,width:"auto",display:"block"}}/>
                 </div>
                 <div style={{display:"flex",flexDirection:"column",justifyContent:"center",minWidth:0}}>
                   {/* ⚠️ 2026-09-17 (kullanıcı onaylı tipografi pilotu, Ana
