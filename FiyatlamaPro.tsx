@@ -7577,6 +7577,54 @@ function KalanAnaparaModal({plan, onClose, showCeza=false, ticari=false, aylikOr
   );
 }
 
+// ─── BANKA SEÇ (kâr payı oranı otomatik doldurma) ──────────────────────────
+// (2026-09-21, kullanıcı isteği: "Bireysel Finansman Hesaplama alanlarına
+// banka adı veya oran seçimi getirsek mi" → "sadece oran dolsun"): Konut/
+// Taşıt/İhtiyaç Finansmanı Hesaplama ekranlarında kullanıcı oranı ELLE
+// yazmak zorundaydı — halbuki AYNI oran, "Finansman Kâr Oranı Karşılaştırma"
+// tablosunu besleyen public/kar-payi.json dosyasında banka bazında zaten
+// duruyor. YENİ bir backend/istek YOK — aynı dosya, aynı `finansman.
+// bankalar[]` dizisi kullanılıyor (bkz. KarPayiKarsilastirmaGenis, ~satır
+// 1552). `kolon` prop'u hangi ürün/vade sütununu (konut120/tasit12/
+// ihtiyac12) okuyacağını belirliyor — HER ZAMAN bu ürünün "ana" vadesi
+// (tabloda gösterilen, kullanıcının en sık karşılaştığı) kullanılıyor;
+// kullanıcı hesaplayıcıda FARKLI bir vade yazarsa (ör. taşıtta 24 ay) oran
+// otomatik güncellenmiyor — "sadece oran dolsun" isteği net olduğu için
+// vade eşleştirmesi bilinçli olarak basit tutuldu, oran alanı zaten HER
+// ZAMAN elle değiştirilebilir kalıyor.
+function BankaOranSecici({kolon,onSec}:{kolon:string;onSec:(oran:number,ad:string)=>void}){
+  const [veri,setVeri]=useState<any>(null);
+  useEffect(()=>{
+    fetch(`${API_BASE}/kar-payi.json`,{cache:"no-store"})
+      .then(r=>r.ok?r.json():null)
+      .then(d=>setVeri(d))
+      .catch(()=>{});
+  },[]);
+  const bankalar=useMemo(()=>{
+    const liste=(veri?.finansman?.bankalar||[]).filter((b:any)=>b[kolon]!=null);
+    return liste.sort((a:any,b:any)=>a[kolon]-b[kolon]);
+  },[veri,kolon]);
+  const [seciliAd,setSeciliAd]=useState("");
+  if(!bankalar.length) return null; // veri henüz gelmediyse/hiç yoksa sessizce hiç görünmüyor
+  return(
+    <div style={{marginBottom:13}}>
+      <label style={{display:"block",fontSize:12,fontWeight:600,color:C.sub,marginBottom:4}}>{TR("Banka Seç (isteğe bağlı)")}</label>
+      <select value={seciliAd} onChange={e=>{
+          const ad=e.target.value;
+          setSeciliAd(ad);
+          if(!ad) return;
+          const b=bankalar.find((x:any)=>x.ad===ad);
+          if(b) onSec(b[kolon],ad);
+        }}
+        style={{padding:"11px 13px",borderRadius:10,border:`1.5px solid ${C.border}`,background:C.card,fontSize:14,fontWeight:600,color:C.label,outline:"none",width:"100%",boxSizing:"border-box"}}>
+        <option value="">{CV("Manuel gir")}</option>
+        {bankalar.map((b:any)=>(
+          <option key={b.ad} value={b.ad}>{b.ad} — %{fmtN(b[kolon],2)}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
 
 // ─── ERKEN KAPAMA MODALI ─────────────────────────────────────────────────────
 function KonutFinansman({s,onGecmis})/* v2 */{
@@ -7751,6 +7799,7 @@ function KonutFinansman({s,onGecmis})/* v2 */{
           </div>
         </>}
         <Field label="Vade (Ay)" value={vade} onChange={setVade} suffix="Ay"/>
+        <BankaOranSecici kolon="konut120" onSec={(o)=>setOran(fmtN(o,2))}/>
         <Field label={`Kâr Payı Oranı (${tip==="yillik"?"Yıllık":"Aylık"})`} value={oran} onChange={setOran} suffix="%"/>
         {/* Kredi Kullandırım Komisyonu */}
         <div style={{marginTop:4,marginBottom:4}}>
@@ -7992,6 +8041,7 @@ function TasitFinansman({s,onGecmis}){
         </div>}
         <Field label="Finansman Tutarı" value={tutar} onChange={setTutar} suffix="₺"/>
         <Field label="Vade (Ay)" value={vade} onChange={setVade} suffix="Ay"/>
+        <BankaOranSecici kolon="tasit12" onSec={(o)=>setOran(fmtN(o,2))}/>
         <Field label={`Kâr Payı Oranı (${tip==="yillik"?"Yıllık":"Aylık"})`} value={oran} onChange={setOran} suffix="%"/>
         {/* Kullandırım Komisyonu */}
         <div style={{marginTop:4,marginBottom:4}}>
@@ -8250,6 +8300,7 @@ function YatirimFonuFinansman({s,onGecmis}){
           <p style={{margin:"3px 0 0",fontSize:11,color:C.sub}}>Hesaplama tarihi otomatik olarak kullanım tarihi kabul edilir</p>
         </div>}
         <Field label={mod==="pesin"?"Peşin Sonrası Taksit Sayısı":"Vade (Ay)"} value={vade} onChange={setVade} suffix="Ay"/>
+        <BankaOranSecici kolon="ihtiyac12" onSec={(o)=>setOran(fmtN(o,2))}/>
         <Field label={`Kâr Payı Oranı (${tip==="yillik"?"Yıllık":"Aylık"})`} value={oran} onChange={setOran} suffix="%"/>
         {mod==="standart"&&lim&&<div style={{background:C.blueLight,borderRadius:10,padding:"9px 12px",marginBottom:4}}>
           <p style={{margin:0,fontSize:12,color:C.blue,fontWeight:700}}>
