@@ -121,14 +121,12 @@ const API_BASE = IS_NATIVE ? "https://www.katilimplus.com" : "";
 //    Google, Apple sağlayıcılarını etkinleştir. Proje zaten push bildirimleri
 //    için var (bkz. @capacitor-firebase/messaging kullanımı) — AYNI proje
 //    kullanılıyor, YENİ bir Firebase projesi GEREKMİYOR.
-// 2) Hemen aşağıdaki FIREBASE_WEB_CONFIG sabitini Firebase Console →
-//    Project Settings → General → "Your apps" → Web app → SDK config ile
-//    doldur (apiKey, authDomain, projectId, storageBucket, messagingSenderId,
-//    appId). Web app kaydı yoksa Firebase Console'dan "</> Web" ile bir tane
-//    eklemen gerekiyor (birkaç tıkla, ücretsiz).
+// 2) FIREBASE_WEB_CONFIG artık GERÇEK değerlerle dolu (2026-09-21, "Katilim
+//    Plus Web" app'i Firebase Console'da oluşturulup config buraya işlendi)
+//    — bu adım TAMAMLANDI, ayrıca bir şey yapmana gerek yok.
 // 3) npm paketleri: `npm install firebase @capacitor-firebase/authentication`
-//    — package.json'a EKLENMESİ gerekiyor, bu dosyanın deploy script'i bunu
-//    OTOMATİK yapmıyor (diğer @capacitor-firebase paketleri gibi).
+//    — deploy_fiyatlamapro_v148.py'den itibaren bu script'in İÇİNE otomatik
+//    eklendi, ayrı bir adıma gerek yok.
 // 4) Apple ile Giriş: Apple Developer hesabında "Sign In with Apple"
 //    capability'sinin App ID'ye eklenmesi + Firebase Console'da Apple
 //    sağlayıcısına Service ID/Key girilmesi gerekiyor.
@@ -138,12 +136,13 @@ const API_BASE = IS_NATIVE ? "https://www.katilimplus.com" : "";
 //    genelde gerekmiyor.
 // ═══════════════════════════════════════════════════════════════════════
 const FIREBASE_WEB_CONFIG = {
-  apiKey: "BURAYA_FIREBASE_WEB_API_KEY",
-  authDomain: "BURAYA_PROJE.firebaseapp.com",
-  projectId: "BURAYA_PROJE_ID",
-  storageBucket: "BURAYA_PROJE.appspot.com",
-  messagingSenderId: "BURAYA_SENDER_ID",
-  appId: "BURAYA_APP_ID",
+  apiKey: "AIzaSyCMuV2U__279jCKkK3tc31n2qgXpA4H-pU",
+  authDomain: "katilim-plus.firebaseapp.com",
+  projectId: "katilim-plus",
+  storageBucket: "katilim-plus.firebasestorage.app",
+  messagingSenderId: "98018570739",
+  appId: "1:98018570739:web:b12ca4179459eb6bd3a286",
+  measurementId: "G-QE6S181M0J",
 };
 
 type KpKullanici = { uid:string; email:string|null; ad:string|null; saglayici:string } | null;
