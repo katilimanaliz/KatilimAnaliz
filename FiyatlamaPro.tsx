@@ -236,11 +236,15 @@ function useKpKimlik(){
     }
   };
 
-  const eposta_kayit=(eposta:string,sifre:string)=>_islemSarmala(async()=>{
+  const eposta_kayit=(eposta:string,sifre:string,adSoyad?:string)=>_islemSarmala(async()=>{
     const gercekIsNative=(window as any).Capacitor?.isNativePlatform?.() ?? false;
     if(gercekIsNative){
       const mod=await import("@capacitor-firebase/authentication");
       await mod.FirebaseAuthentication.createUserWithEmailAndPassword({email:eposta,password:sifre});
+      // ⚠️ 2026-09-21 (kullanıcı isteği: "kayıt ol da isim soyisim de
+      // sorması lazım"): ad-soyad verildiyse Firebase'in kendi displayName
+      // alanına yazılıyor — ayrı bir veri deposu gerekmiyor.
+      if(adSoyad) await mod.FirebaseAuthentication.updateProfile({displayName:adSoyad});
       // ⚠️ 2026-09-21 (kullanıcı isteği: "kayıt anında otomatik doğrulama
       // maili gitsin"): kayıt BAŞARILI olduktan hemen sonra doğrulama
       // e-postası gönderiliyor. Bu ayrı bir adım — Firebase kayıt sırasında
@@ -248,8 +252,9 @@ function useKpKimlik(){
       await mod.FirebaseAuthentication.sendEmailVerification();
     } else {
       const app=await kpFirebaseWebApp();
-      const {getAuth,createUserWithEmailAndPassword,sendEmailVerification}=await import("firebase/auth");
+      const {getAuth,createUserWithEmailAndPassword,updateProfile,sendEmailVerification}=await import("firebase/auth");
       const cred=await createUserWithEmailAndPassword(getAuth(app),eposta,sifre);
+      if(adSoyad) await updateProfile(cred.user,{displayName:adSoyad});
       await sendEmailVerification(cred.user);
     }
   });
@@ -347,10 +352,13 @@ function useKpKimlik(){
 }
 
 // ── Giriş / Kayıt Ekranı ──
-function HesapGiris({kimlik,onBasarili}:{kimlik:ReturnType<typeof useKpKimlik>;onBasarili:()=>void}){
+function HesapGiris({kimlik,onBasarili,nav}:{kimlik:ReturnType<typeof useKpKimlik>;onBasarili:()=>void;nav:(sc:string)=>void}){
   const [mod,setMod]=useState<"giris"|"kayit">("giris");
   const [eposta,setEposta]=useState("");
   const [sifre,setSifre]=useState("");
+  // ⚠️ 2026-09-21 (kullanıcı isteği: "kayıt ol da isim soyisim de sorması
+  // lazım"): sadece kayıt modunda görünen, isteğe bağlı olmayan bir alan.
+  const [adSoyad,setAdSoyad]=useState("");
   const [gonderiliyor,setGonderiliyor]=useState(false);
   // ⚠️ 2026-09-21 (kullanıcı isteği: "şifre unuttum... ikisini de ekle"):
   // sıfırlama e-postası gönderildiğinde göstermek için — hata değil, bilgi
@@ -363,10 +371,11 @@ function HesapGiris({kimlik,onBasarili}:{kimlik:ReturnType<typeof useKpKimlik>;o
 
   const gonder=async()=>{
     if(!eposta||!sifre){ kimlik.setKimlikHata("E-posta ve şifre gerekli."); return; }
+    if(mod==="kayit"&&!adSoyad.trim()){ kimlik.setKimlikHata("Ad Soyad gerekli."); return; }
     if(!kvkkOnay){ kimlik.setKimlikHata("Devam etmek için Gizlilik Politikası'nı onaylaman gerekiyor."); return; }
     setGonderiliyor(true);
     setSifirlamaGonderildi(false);
-    const basarili = mod==="kayit" ? await kimlik.eposta_kayit(eposta,sifre) : await kimlik.eposta_giris(eposta,sifre);
+    const basarili = mod==="kayit" ? await kimlik.eposta_kayit(eposta,sifre,adSoyad.trim()) : await kimlik.eposta_giris(eposta,sifre);
     setGonderiliyor(false);
     if(basarili) onBasarili();
   };
@@ -382,6 +391,7 @@ function HesapGiris({kimlik,onBasarili}:{kimlik:ReturnType<typeof useKpKimlik>;o
     <div style={{padding:"0 16px 32px"}}>
       <Card>
         <Seg options={[{v:"giris",l:"Giriş Yap"},{v:"kayit",l:"Kayıt Ol"}]} value={mod} onChange={(v:any)=>{setMod(v); kimlik.setKimlikHata(null); setSifirlamaGonderildi(false);}}/>
+        {mod==="kayit" && <Field label="Ad Soyad" value={adSoyad} onChange={setAdSoyad} type="text"/>}
         <Field label="E-posta" value={eposta} onChange={setEposta} type="email"/>
         <Field label="Şifre" value={sifre} onChange={setSifre} type="password"/>
         {mod==="giris" && (
@@ -399,7 +409,7 @@ function HesapGiris({kimlik,onBasarili}:{kimlik:ReturnType<typeof useKpKimlik>;o
         <label style={{display:"flex",alignItems:"flex-start",gap:8,margin:"0 2px 14px",cursor:"pointer"}}>
           <input type="checkbox" checked={kvkkOnay} onChange={e=>setKvkkOnay(e.target.checked)} style={{marginTop:2,width:16,height:16,flexShrink:0,accentColor:C.blue}}/>
           <span style={{fontSize:12,color:WA(0.6),lineHeight:1.4}}>
-            {CV("Devam ederek")} <a href="/gizlilik" target="_blank" rel="noopener noreferrer" style={{color:C.blue,fontWeight:700,textDecoration:"none"}} onClick={e=>e.stopPropagation()}>{CV("Gizlilik Politikası")}</a>{CV("'nı okuduğumu ve kabul ettiğimi onaylıyorum.")}
+            {CV("Devam ederek")} <span onClick={e=>{e.stopPropagation(); nav("kvkkAydinlatma");}} style={{color:C.blue,fontWeight:700,cursor:"pointer"}}>{CV("KVKK Aydınlatma Metni")}</span>{CV("'ni ve")} <span onClick={e=>{e.stopPropagation(); nav("gizlilikPolitikasi");}} style={{color:C.blue,fontWeight:700,cursor:"pointer"}}>{CV("Gizlilik Politikası")}</span>{CV("'nı okuduğumu ve kabul ettiğimi onaylıyorum.")}
           </span>
         </label>
         <button onClick={gonder} disabled={gonderiliyor} style={{width:"100%",marginTop:6,padding:"13px 0",borderRadius:12,border:"none",background:C.blue,color:"#fff",fontSize:15,fontWeight:700,cursor:gonderiliyor?"default":"pointer",opacity:gonderiliyor?0.6:1}}>
@@ -420,6 +430,101 @@ function HesapGiris({kimlik,onBasarili}:{kimlik:ReturnType<typeof useKpKimlik>;o
         </button>
       </Card>
     </div>
+  );
+}
+
+// ── Yasal metin ekranları (KVKK Aydınlatma Metni + Gizlilik Politikası) ──
+// (2026-09-21, kullanıcı isteği: "kvkk metni ve gizlilik metni oluşturup
+// onu da kayıtta görünen link tıklayınca gelecek şekilde eklemek lazım,
+// ayrıca masaüstünde sayfa en altında bilgi alanında göstermek lazım"):
+// Dış /gizlilik sayfasına DEĞİL, uygulama İÇİNDE iki yeni ekran olarak
+// eklendi — böylece içerik tam kontrolümüzde, normal deploy akışıyla
+// güncellenebiliyor, kırık bağlantı riski yok.
+// ⚠️ ÖNEMLİ: Bu metinler makul, standart bir TASLAK olarak yazıldı — ben
+// avukat değilim. KVKK ihlalleri gerçek para cezası riski taşıyor,
+// yayına almadan önce bir hukuk danışmanına (mali müşavir/avukat)
+// kontrol ettirmen ŞİDDETLE önerilir — özellikle "veri sorumlusu" kimliği
+// (şirket unvanı/vergi no varsa) ve gerçek veri aktarım ortakları kısmı.
+function YasalMetinEkrani({baslik,children}:{baslik:string;children:React.ReactNode}){
+  return(
+    <div style={{padding:"0 16px 32px"}}>
+      <Card>
+        <p style={{margin:"0 0 4px",fontSize:11,color:WA(0.4)}}>{CV("Son güncelleme: 21 Eylül 2026")}</p>
+        {children}
+      </Card>
+    </div>
+  );
+}
+function YmBaslik({children}:{children:React.ReactNode}){return <p style={{margin:"18px 0 6px",fontSize:14,fontWeight:700,color:C.label}}>{children}</p>;}
+function YmP({children}:{children:React.ReactNode}){return <p style={{margin:"0 0 4px",fontSize:13,color:WA(0.7),lineHeight:1.6}}>{children}</p>;}
+
+function KvkkAydinlatma(){
+  return(
+    <YasalMetinEkrani baslik="KVKK Aydınlatma Metni">
+      <YmP>6698 sayılı Kişisel Verilerin Korunması Kanunu ("KVKK") m.10 uyarınca, Katılım Plus uygulamasını ("Uygulama") kullanırken işlenen kişisel verilerinizle ilgili olarak aydınlatma yükümlülüğümüzü yerine getiriyoruz.</YmP>
+
+      <YmBaslik>1. Veri Sorumlusu</YmBaslik>
+      <YmP>Kişisel verileriniz, Uygulamanın işletmecisi tarafından veri sorumlusu sıfatıyla işlenmektedir. İletişim: katilimplus2026@gmail.com.</YmP>
+
+      <YmBaslik>2. İşlenen Kişisel Veriler</YmBaslik>
+      <YmP>Hesap oluşturduğunuzda: ad soyad, e-posta adresi ve şifreniz (Firebase Authentication tarafından şifrelenmiş biçimde saklanır, biz ham şifrenizi hiçbir zaman görmeyiz/saklamayız).</YmP>
+      <YmP>Uygulamayı kullanırken: cihaz push bildirim jetonu (bildirim göndermek için), favori/geçmiş hesaplama kayıtlarınız (cihazınızda veya hesabınıza bağlı olarak saklanır).</YmP>
+      <YmP>Kimlik doğrulama sağlayıcı tercihinize göre: Google veya Apple hesabınızdan paylaşmayı seçtiğiniz ad ve e-posta bilgisi.</YmP>
+
+      <YmBaslik>3. İşleme Amaçları</YmBaslik>
+      <YmP>Hesabınızı oluşturmak ve kimliğinizi doğrulamak, Uygulama içi tercihlerinizi (favoriler, hesaplama geçmişi, alarmlar) cihazlar arasında senkronize etmek, size push bildirimi göndermek, hesap güvenliğini sağlamak, yasal yükümlülüklerimizi yerine getirmek.</YmP>
+
+      <YmBaslik>4. Hukuki Sebep</YmBaslik>
+      <YmP>Kişisel verileriniz; açık rızanızın alınması, bir sözleşmenin kurulması veya ifasıyla doğrudan ilgili olması ve veri sorumlusunun meşru menfaati hukuki sebeplerine dayanılarak işlenmektedir.</YmP>
+
+      <YmBaslik>5. Kişisel Verilerin Aktarımı</YmBaslik>
+      <YmP>Kimlik doğrulama ve bildirim altyapısı için verileriniz, hizmet sağlayıcımız Google LLC'nin (Firebase) sunucularında işlenmektedir. Verileriniz, yasal zorunluluklar dışında üçüncü taraflarla pazarlama amacıyla paylaşılmaz veya satılmaz.</YmP>
+
+      <YmBaslik>6. Saklama Süresi</YmBaslik>
+      <YmP>Kişisel verileriniz, hesabınız aktif olduğu sürece ve ilgili mevzuatta öngörülen zamanaşımı süreleri boyunca saklanır. Hesabınızı sildiğinizde, verileriniz makul bir süre içinde silinir veya anonim hale getirilir.</YmP>
+
+      <YmBaslik>7. KVKK m.11 Kapsamındaki Haklarınız</YmBaslik>
+      <YmP>Kişisel verinizin işlenip işlenmediğini öğrenme, işlenmişse buna ilişkin bilgi talep etme, işlenme amacını ve amacına uygun kullanılıp kullanılmadığını öğrenme, yurt içinde/dışında aktarıldığı üçüncü kişileri bilme, eksik/yanlış işlenmişse düzeltilmesini isteme, KVKK m.7'deki şartlar çerçevesinde silinmesini/yok edilmesini isteme, düzeltme/silme işlemlerinin aktarılan üçüncü kişilere bildirilmesini isteme, otomatik sistemlerle analiz sonucu aleyhinize bir sonucun ortaya çıkmasına itiraz etme, kanuna aykırı işleme sebebiyle zarara uğramanız hâlinde zararın giderilmesini talep etme.</YmP>
+      <YmP>Bu haklarınızı kullanmak için katilimplus2026@gmail.com adresinden bize ulaşabilir, ya da Uygulama içinde Profil → Hesabımı Sil yoluyla hesabınızı ve verilerinizi doğrudan silebilirsiniz.</YmP>
+    </YasalMetinEkrani>
+  );
+}
+
+function GizlilikPolitikasi(){
+  return(
+    <YasalMetinEkrani baslik="Gizlilik Politikası">
+      <YmP>Bu Gizlilik Politikası, Katılım Plus uygulamasını ("Uygulama") kullanırken verilerinizin nasıl toplandığını, kullanıldığını ve korunduğunu açıklar.</YmP>
+
+      <YmBaslik>1. Topladığımız Veriler</YmBaslik>
+      <YmP>• Hesap bilgileri: ad soyad, e-posta, şifre (Firebase Authentication ile şifrelenmiş) — hesap oluşturmanız hâlinde.</YmP>
+      <YmP>• Cihaz bilgileri: push bildirim jetonu, platform (iOS/Android/web).</YmP>
+      <YmP>• Kullanım verileri: favori hesaplamalarınız, hesaplama geçmişiniz, fiyat alarmlarınız — hesabınız yoksa sadece cihazınızda (localStorage), hesabınız varsa hesabınıza bağlı olarak saklanır.</YmP>
+      <YmP>• Uygulama, kredi kartı veya banka hesap bilgisi TOPLAMAZ — hiçbir finansal işlem/ödeme özelliği bulunmamaktadır.</YmP>
+
+      <YmBaslik>2. Verileri Nasıl Kullanıyoruz</YmBaslik>
+      <YmP>Verileriniz yalnızca hesabınızı yönetmek, Uygulama deneyiminizi kişiselleştirmek (favoriler, geçmiş, alarmlar), size bildirim göndermek ve Uygulamayı iyileştirmek için kullanılır. Verileriniz reklam amacıyla üçüncü taraflara satılmaz.</YmP>
+
+      <YmBaslik>3. Üçüncü Taraf Hizmetler</YmBaslik>
+      <YmP>Kimlik doğrulama ve bildirimler için Google Firebase kullanıyoruz. Piyasa verileri (fon, hisse, döviz, altın fiyatları) TEFAS, Fonoloji, TradingView gibi kaynaklardan çekilir — bu kaynaklara kişisel verinizin hiçbiri iletilmez, sadece genel piyasa verisi talep edilir.</YmP>
+
+      <YmBaslik>4. Çerezler ve Yerel Depolama</YmBaslik>
+      <YmP>Uygulama, tercihlerinizi (tema, dil, favoriler) cihazınızda yerel depolama (localStorage) ile saklar. Bu veriler cihazınızdan ayrılmaz, sunucularımıza otomatik olarak gönderilmez.</YmP>
+
+      <YmBaslik>5. Veri Güvenliği</YmBaslik>
+      <YmP>Şifreniz hiçbir zaman düz metin olarak saklanmaz — kimlik doğrulama tamamen Google Firebase Authentication altyapısı üzerinden, endüstri standardı şifreleme ile yürütülür.</YmP>
+
+      <YmBaslik>6. Haklarınız</YmBaslik>
+      <YmP>Hesabınızı ve ilişkili verilerinizi istediğiniz zaman Profil → Hesabımı Sil yoluyla kalıcı olarak silebilirsiniz. KVKK kapsamındaki detaylı haklarınız için KVKK Aydınlatma Metni'ne bakınız.</YmP>
+
+      <YmBaslik>7. Çocukların Gizliliği</YmBaslik>
+      <YmP>Uygulama, 18 yaş altı bireylere yönelik değildir ve bilerek 18 yaş altı kullanıcılardan veri toplamaz.</YmP>
+
+      <YmBaslik>8. Değişiklikler</YmBaslik>
+      <YmP>Bu politika zaman zaman güncellenebilir; önemli değişikliklerde Uygulama içinden bilgilendirileceksiniz.</YmP>
+
+      <YmBaslik>9. İletişim</YmBaslik>
+      <YmP>Sorularınız için: katilimplus2026@gmail.com</YmP>
+    </YasalMetinEkrani>
   );
 }
 
@@ -14504,7 +14609,8 @@ function SiteAltBilgi({onEkran}:{onEkran:(sc:string)=>void}){
           {ad:"Kira Sertifikası",      ekran:"kiraSertifikasi"},
         ])}
         {sutun("Yasal", [
-          {ad:"Gizlilik Politikası", href:"/gizlilik"},
+          {ad:"KVKK Aydınlatma Metni", ekran:"kvkkAydinlatma"},
+          {ad:"Gizlilik Politikası", ekran:"gizlilikPolitikasi"},
           {ad:"İletişim",            href:"mailto:katilimplus2026@gmail.com"},
         ])}
       </div>
@@ -19577,6 +19683,8 @@ const MENU = {
   karPayiOranlari:{title:"Kâr Payı Oran Karşılaştırma",back:"home"},
   fiyatAlarmlarim:{title:"Fiyat Alarmlarım",back:"piyasaMenu"},
   hesapGiris:{title:"Giriş Yap / Kayıt Ol",back:"profil"},
+  kvkkAydinlatma:{title:"KVKK Aydınlatma Metni",back:"hesapGiris"},
+  gizlilikPolitikasi:{title:"Gizlilik Politikası",back:"hesapGiris"},
   bistHisseTarayici:{title:"BİST Hisse Veri İzleme",back:"home"},
   // bireysel finansman (sadece 3)
   konutFinansman:{title:"Konut Finansmanı Hesaplama",back:"hesaplaMenu"},
@@ -30022,11 +30130,20 @@ function App(){
             <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px 16px",marginBottom:12,display:"flex",alignItems:"center",gap:12}}>
               {kimlik.kullanici ? (<>
                 <div style={{width:40,height:40,borderRadius:20,background:"linear-gradient(135deg,#1B9E7A,#2CCB9A)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:700,color:"#fff",flexShrink:0}}>
-                  {(kimlik.kullanici.email||"?")[0].toLocaleUpperCase("tr-TR")}
+                  {(kimlik.kullanici.ad||kimlik.kullanici.email||"?")[0].toLocaleUpperCase("tr-TR")}
                 </div>
                 <div style={{flex:1,minWidth:0}}>
-                  <p style={{margin:0,fontSize:13.5,fontWeight:700,color:C.label,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{kimlik.kullanici.email||CV("Hesabım")}</p>
-                  <p style={{margin:"1px 0 0",fontSize:11,color:WA(0.45)}}>{CV("Giriş yapıldı")}</p>
+                  {/* ⚠️ 2026-09-21 (kullanıcı isteği: "kayıt ol da isim
+                      soyisim de sorması lazım"): ad varsa birincil satır
+                      olarak gösteriliyor, e-posta ikincil satıra düşüyor —
+                      ad yoksa (ör. eski hesap) eskisi gibi sadece e-posta. */}
+                  {kimlik.kullanici.ad ? (<>
+                    <p style={{margin:0,fontSize:13.5,fontWeight:700,color:C.label,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{kimlik.kullanici.ad}</p>
+                    <p style={{margin:"1px 0 0",fontSize:11,color:WA(0.45),whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{kimlik.kullanici.email}</p>
+                  </>) : (<>
+                    <p style={{margin:0,fontSize:13.5,fontWeight:700,color:C.label,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{kimlik.kullanici.email||CV("Hesabım")}</p>
+                    <p style={{margin:"1px 0 0",fontSize:11,color:WA(0.45)}}>{CV("Giriş yapıldı")}</p>
+                  </>)}
                 </div>
                 <button onClick={()=>kimlik.cikisYap()} style={{padding:"7px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:"transparent",color:C.red,fontSize:12.5,fontWeight:700,cursor:"pointer",flexShrink:0}}>{CV("Çıkış Yap")}</button>
               </>) : (<>
@@ -30247,7 +30364,9 @@ function App(){
         {screen==="piyasaHaberleri"&&<PiyasaHaberleri/>}
         {screen==="finansalGostergeler"&&<FinansalGostergeler onKurTikla={(k:any)=>setSeciliKur(k)}/>}
         {screen==="ayarlar"&&<Ayarlar settings={settings} onSave={handleSave}/>}
-        {screen==="hesapGiris"&&<HesapGiris kimlik={kimlik} onBasarili={()=>nav("profil")}/>}
+        {screen==="hesapGiris"&&<HesapGiris kimlik={kimlik} onBasarili={()=>nav("profil")} nav={nav}/>}
+        {screen==="kvkkAydinlatma"&&<KvkkAydinlatma/>}
+        {screen==="gizlilikPolitikasi"&&<GizlilikPolitikasi/>}
 
         {/* ── YASAL UYARI FOOTER ── */}
         {!["home","hesaplaMenu","piyasaMenu","araclarMenu","asistan","sozluk","finansalTakvim","finansalGostergeler","vadeTakibi","katilimBankalari","piyasaHaberleri","ayarlar","profil"].includes(screen)&&(
