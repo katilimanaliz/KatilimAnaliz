@@ -107,6 +107,223 @@ function ekranZoomTersi(){
 }
 const API_BASE = IS_NATIVE ? "https://www.katilimplus.com" : "";
 
+// ═══════════════════════════════════════════════════════════════════════
+// ── HESAP / KİMLİK DOĞRULAMA (Firebase Authentication) ──
+// (2026-09-21, kullanıcı isteği: "Üyelik sistemi yok, önce onu getirelim,
+// ödeme için Apple ve Play Store satınalma metotlarını kullanalım" — bu
+// FAZ 1: üyelik/giriş sistemi. Faz 2 (Portföyüm/Fiyat Alarmlarım/AI Asistan
+// limitinin cihazId'den hesaba taşınması) ve Faz 3 (RevenueCat + IAP) ayrı
+// turlarda ele alınacak.)
+//
+// ⚠️⚠️⚠️ GEREKLİ KURULUM (bu koddan BAĞIMSIZ, Uğur'un yapması gereken —
+// bunlar tamamlanmadan giriş/kayıt ÇALIŞMAZ):
+// 1) Firebase Console → Authentication → Sign-in method → Email/Password,
+//    Google, Apple sağlayıcılarını etkinleştir. Proje zaten push bildirimleri
+//    için var (bkz. @capacitor-firebase/messaging kullanımı) — AYNI proje
+//    kullanılıyor, YENİ bir Firebase projesi GEREKMİYOR.
+// 2) Hemen aşağıdaki FIREBASE_WEB_CONFIG sabitini Firebase Console →
+//    Project Settings → General → "Your apps" → Web app → SDK config ile
+//    doldur (apiKey, authDomain, projectId, storageBucket, messagingSenderId,
+//    appId). Web app kaydı yoksa Firebase Console'dan "</> Web" ile bir tane
+//    eklemen gerekiyor (birkaç tıkla, ücretsiz).
+// 3) npm paketleri: `npm install firebase @capacitor-firebase/authentication`
+//    — package.json'a EKLENMESİ gerekiyor, bu dosyanın deploy script'i bunu
+//    OTOMATİK yapmıyor (diğer @capacitor-firebase paketleri gibi).
+// 4) Apple ile Giriş: Apple Developer hesabında "Sign In with Apple"
+//    capability'sinin App ID'ye eklenmesi + Firebase Console'da Apple
+//    sağlayıcısına Service ID/Key girilmesi gerekiyor.
+// 5) Google ile Giriş: Firebase Console genelde OAuth client'ı otomatik
+//    oluşturuyor; iOS/Android'de GoogleService-Info.plist / google-
+//    services.json zaten var (push için eklenmişti), ek native adım
+//    genelde gerekmiyor.
+// ═══════════════════════════════════════════════════════════════════════
+const FIREBASE_WEB_CONFIG = {
+  apiKey: "BURAYA_FIREBASE_WEB_API_KEY",
+  authDomain: "BURAYA_PROJE.firebaseapp.com",
+  projectId: "BURAYA_PROJE_ID",
+  storageBucket: "BURAYA_PROJE.appspot.com",
+  messagingSenderId: "BURAYA_SENDER_ID",
+  appId: "BURAYA_APP_ID",
+};
+
+type KpKullanici = { uid:string; email:string|null; ad:string|null; saglayici:string } | null;
+
+// Firebase Web SDK'yı SADECE web'de (native değilken) dinamik import eder —
+// @capacitor-firebase/messaging ile AYNI desen (bkz. yukarıdaki push bildirim
+// kaydı): modül yalnızca gerektiğinde yüklenir, native tarafta hiç import
+// edilmez. `getApps().length` kontrolü, birden fazla yerden çağrıldığında
+// Firebase'in ikinci kez initializeApp() ile hata vermesini önler.
+async function kpFirebaseWebApp(){
+  const { initializeApp, getApps } = await import("firebase/app");
+  return getApps().length ? getApps()[0] : initializeApp(FIREBASE_WEB_CONFIG);
+}
+
+function kpKimlikHataMetni(kod:string|undefined):string{
+  const k=String(kod||"");
+  if(k.includes("email-already-in-use")) return "Bu e-posta zaten kayıtlı. Giriş yapmayı dene.";
+  if(k.includes("invalid-email")) return "E-posta adresi geçersiz.";
+  if(k.includes("weak-password")) return "Şifre en az 6 karakter olmalı.";
+  if(k.includes("user-not-found")||k.includes("wrong-password")||k.includes("invalid-credential")) return "E-posta veya şifre hatalı.";
+  if(k.includes("too-many-requests")) return "Çok fazla deneme yapıldı, biraz sonra tekrar dene.";
+  if(k.includes("popup-closed-by-user")||k.includes("cancelled")||k.includes("canceled")) return ""; // kullanıcı kendi iptal etti — hata gösterme
+  return "Bir şeyler ters gitti, tekrar dener misin?";
+}
+
+// Paylaşılan kimlik hook'u — kök bileşende BİR KERE çağrılıp alt ekranlara
+// prop olarak geçiriliyor (Context yerine — dosyadaki mevcut desen zaten
+// "tek büyük kök bileşen + prop geçişi", örn. KonutFinansman'a s={settings}
+// geçişi gibi). Her ekranın kendi Firebase dinleyicisini AÇMASINI önler.
+function useKpKimlik(){
+  const [kullanici,setKullanici]=useState<KpKullanici>(null);
+  const [kimlikYukleniyor,setKimlikYukleniyor]=useState(true);
+  const [kimlikHata,setKimlikHata]=useState<string|null>(null);
+
+  useEffect(()=>{
+    let iptal=false;
+    const gercekIsNative=(window as any).Capacitor?.isNativePlatform?.() ?? false;
+    (async()=>{
+      try{
+        if(gercekIsNative){
+          const mod=await import("@capacitor-firebase/authentication");
+          const FA=mod.FirebaseAuthentication;
+          const {user}=await FA.getCurrentUser();
+          if(!iptal) setKullanici(user?{uid:user.uid,email:user.email,ad:user.displayName,saglayici:user.providerId||"bilinmiyor"}:null);
+          await FA.addListener("authStateChange",(event:any)=>{
+            const u=event?.user;
+            if(!iptal) setKullanici(u?{uid:u.uid,email:u.email,ad:u.displayName,saglayici:u.providerId||"bilinmiyor"}:null);
+          });
+        } else {
+          const app=await kpFirebaseWebApp();
+          const {getAuth,onAuthStateChanged}=await import("firebase/auth");
+          onAuthStateChanged(getAuth(app),(u)=>{
+            if(iptal) return;
+            setKullanici(u?{uid:u.uid,email:u.email,ad:u.displayName,saglayici:u.providerData?.[0]?.providerId||"bilinmiyor"}:null);
+          });
+        }
+      }catch(e){
+        console.error("Kimlik doğrulama başlatılamadı:",e);
+      }finally{
+        if(!iptal) setKimlikYukleniyor(false);
+      }
+    })();
+    return ()=>{ iptal=true; };
+  },[]);
+
+  const _islemSarmala=async(islem:()=>Promise<void>)=>{
+    setKimlikHata(null);
+    try{ await islem(); return true; }
+    catch(e:any){ setKimlikHata(kpKimlikHataMetni(e?.code||e?.message)); return false; }
+  };
+
+  const eposta_kayit=(eposta:string,sifre:string)=>_islemSarmala(async()=>{
+    const gercekIsNative=(window as any).Capacitor?.isNativePlatform?.() ?? false;
+    if(gercekIsNative){
+      const mod=await import("@capacitor-firebase/authentication");
+      await mod.FirebaseAuthentication.createUserWithEmailAndPassword({email:eposta,password:sifre});
+    } else {
+      const app=await kpFirebaseWebApp();
+      const {getAuth,createUserWithEmailAndPassword}=await import("firebase/auth");
+      await createUserWithEmailAndPassword(getAuth(app),eposta,sifre);
+    }
+  });
+
+  const eposta_giris=(eposta:string,sifre:string)=>_islemSarmala(async()=>{
+    const gercekIsNative=(window as any).Capacitor?.isNativePlatform?.() ?? false;
+    if(gercekIsNative){
+      const mod=await import("@capacitor-firebase/authentication");
+      await mod.FirebaseAuthentication.signInWithEmailAndPassword({email:eposta,password:sifre});
+    } else {
+      const app=await kpFirebaseWebApp();
+      const {getAuth,signInWithEmailAndPassword}=await import("firebase/auth");
+      await signInWithEmailAndPassword(getAuth(app),eposta,sifre);
+    }
+  });
+
+  const google_giris=()=>_islemSarmala(async()=>{
+    const gercekIsNative=(window as any).Capacitor?.isNativePlatform?.() ?? false;
+    if(gercekIsNative){
+      const mod=await import("@capacitor-firebase/authentication");
+      await mod.FirebaseAuthentication.signInWithGoogle();
+    } else {
+      const app=await kpFirebaseWebApp();
+      const {getAuth,GoogleAuthProvider,signInWithPopup}=await import("firebase/auth");
+      await signInWithPopup(getAuth(app),new GoogleAuthProvider());
+    }
+  });
+
+  const apple_giris=()=>_islemSarmala(async()=>{
+    const gercekIsNative=(window as any).Capacitor?.isNativePlatform?.() ?? false;
+    if(gercekIsNative){
+      const mod=await import("@capacitor-firebase/authentication");
+      await mod.FirebaseAuthentication.signInWithApple();
+    } else {
+      const app=await kpFirebaseWebApp();
+      const {getAuth,OAuthProvider,signInWithPopup}=await import("firebase/auth");
+      await signInWithPopup(getAuth(app),new OAuthProvider("apple.com"));
+    }
+  });
+
+  const cikisYap=async()=>{
+    try{
+      const gercekIsNative=(window as any).Capacitor?.isNativePlatform?.() ?? false;
+      if(gercekIsNative){
+        const mod=await import("@capacitor-firebase/authentication");
+        await mod.FirebaseAuthentication.signOut();
+      } else {
+        const app=await kpFirebaseWebApp();
+        const {getAuth,signOut}=await import("firebase/auth");
+        await signOut(getAuth(app));
+      }
+    }catch(e){ console.error("Çıkış yapılamadı:",e); }
+  };
+
+  return {kullanici,kimlikYukleniyor,kimlikHata,setKimlikHata,eposta_kayit,eposta_giris,google_giris,apple_giris,cikisYap};
+}
+
+// ── Giriş / Kayıt Ekranı ──
+function HesapGiris({kimlik,onBasarili}:{kimlik:ReturnType<typeof useKpKimlik>;onBasarili:()=>void}){
+  const [mod,setMod]=useState<"giris"|"kayit">("giris");
+  const [eposta,setEposta]=useState("");
+  const [sifre,setSifre]=useState("");
+  const [gonderiliyor,setGonderiliyor]=useState(false);
+
+  const gonder=async()=>{
+    if(!eposta||!sifre){ kimlik.setKimlikHata("E-posta ve şifre gerekli."); return; }
+    setGonderiliyor(true);
+    const basarili = mod==="kayit" ? await kimlik.eposta_kayit(eposta,sifre) : await kimlik.eposta_giris(eposta,sifre);
+    setGonderiliyor(false);
+    if(basarili) onBasarili();
+  };
+
+  return(
+    <div style={{padding:"0 16px 32px"}}>
+      <Card>
+        <Seg options={[{v:"giris",l:"Giriş Yap"},{v:"kayit",l:"Kayıt Ol"}]} value={mod} onChange={(v:any)=>{setMod(v); kimlik.setKimlikHata(null);}}/>
+        <Field label="E-posta" value={eposta} onChange={setEposta}/>
+        <Field label="Şifre" value={sifre} onChange={setSifre}/>
+        {kimlik.kimlikHata && <p style={{margin:"4px 2px 12px",fontSize:12.5,color:C.red,fontWeight:600}}>{kimlik.kimlikHata}</p>}
+        <button onClick={gonder} disabled={gonderiliyor} style={{width:"100%",marginTop:6,padding:"13px 0",borderRadius:12,border:"none",background:C.blue,color:"#fff",fontSize:15,fontWeight:700,cursor:gonderiliyor?"default":"pointer",opacity:gonderiliyor?0.6:1}}>
+          {gonderiliyor?"…":(mod==="kayit"?CV("Kayıt Ol"):CV("Giriş Yap"))}
+        </button>
+
+        <div style={{display:"flex",alignItems:"center",gap:10,margin:"18px 0"}}>
+          <div style={{flex:1,height:1,background:C.border}}/>
+          <span style={{fontSize:11,color:WA(0.4),fontWeight:600}}>{TR("veya")}</span>
+          <div style={{flex:1,height:1,background:C.border}}/>
+        </div>
+
+        <button onClick={async()=>{ if(await kimlik.apple_giris()) onBasarili(); }} style={{width:"100%",padding:"12px 0",borderRadius:12,border:`1.5px solid ${C.border}`,background:(TEMA==="acik"?"#000":"#fff"),color:(TEMA==="acik"?"#fff":"#000"),fontSize:14.5,fontWeight:700,cursor:"pointer",marginBottom:10}}>
+          {CV("Apple ile Devam Et")}
+        </button>
+        <button onClick={async()=>{ if(await kimlik.google_giris()) onBasarili(); }} style={{width:"100%",padding:"12px 0",borderRadius:12,border:`1.5px solid ${C.border}`,background:C.card,color:C.label,fontSize:14.5,fontWeight:700,cursor:"pointer"}}>
+          {CV("Google ile Devam Et")}
+        </button>
+      </Card>
+    </div>
+  );
+}
+
+
 // ── HAFTA SONU PİYASA KONTROLÜ ──
 // BİST ve TEFAS Cumartesi/Pazar işlem görmez; fiyatlar Cuma kapanışından
 // Pazartesi açılışına kadar değişmez. Bu yüzden hisse/fon ekranlarında hafta
@@ -7618,8 +7835,15 @@ function BankaOranSecici({kolon,onSec}:{kolon:string;onSec:(oran:number,ad:strin
         }}
         style={{padding:"11px 13px",borderRadius:10,border:`1.5px solid ${C.border}`,background:C.card,fontSize:14,fontWeight:600,color:C.label,outline:"none",width:"100%",boxSizing:"border-box"}}>
         <option value="">{CV("Manuel gir")}</option>
+        {/* ⚠️ 2026-09-21 (kullanıcı raporu, ekran görüntüsüyle: "Türkiye
+            Finans satıra sığmamış"): iOS'un YERLİ <select> seçici penceresi
+            kendi genişliğini/satır sarmasını OS seviyesinde çiziyor, bizim
+            CSS'imiz option metnini biçimlendiremiyor — tek yapabileceğimiz
+            metni KISALTMAK. " — %" (boşluk-tire-boşluk-yüzde, 3 karakter)
+            → " %" (tek boşluk) — "Türkiye Finans" gibi sınırda kalan isimler
+            artık satıra sığıyor. */}
         {bankalar.map((b:any)=>(
-          <option key={b.ad} value={b.ad}>{b.ad} — %{fmtN(b[kolon],2)}</option>
+          <option key={b.ad} value={b.ad}>{b.ad} %{fmtN(b[kolon],2)}</option>
         ))}
       </select>
     </div>
@@ -19250,6 +19474,7 @@ const MENU = {
   fonGetiriIzleme:{title:"Yatırım Fonları Getiri İzleme",back:"home"},
   karPayiOranlari:{title:"Kâr Payı Oran Karşılaştırma",back:"home"},
   fiyatAlarmlarim:{title:"Fiyat Alarmlarım",back:"piyasaMenu"},
+  hesapGiris:{title:"Giriş Yap / Kayıt Ol",back:"profil"},
   bistHisseTarayici:{title:"BİST Hisse Veri İzleme",back:"home"},
   // bireysel finansman (sadece 3)
   konutFinansman:{title:"Konut Finansmanı Hesaplama",back:"hesaplaMenu"},
@@ -27591,6 +27816,9 @@ function App(){
     setKullaniciAdi(ad);
     try{ localStorage.setItem("katilimAnaliz_kullaniciAdi_v1", ad); }catch{}
   };
+  // Hesap/kimlik doğrulama — kök seviyede BİR KERE (bkz. useKpKimlik tanımı,
+  // dosya başında). Profil ekranı ve HesapGiris ekranı bunu prop olarak alır.
+  const kimlik=useKpKimlik();
   const [piyasaTabloFiltre,setPiyasaTabloFiltre]=useState("gostergeler");
   // "Göstergeler" sekmesi içi alt-kategori (2026-07-23 kategorileştirme):
   // aktivite / enflasyon / para / karpayi / risk. Bankanın kendi makro veri
@@ -29682,6 +29910,32 @@ function App(){
         {screen==="profil"&&(
           <div style={{background:C.bg,padding:"12px 12px 0",paddingBottom:"calc(108px + env(safe-area-inset-bottom,0px))",boxSizing:"border-box",overflowY:"auto"}}>
 
+            {/* ── Hesabım — Firebase Authentication (2026-09-21 eklendi) ──
+                Zorunlu değil (misafir kullanım devam ediyor), ama
+                girişi teşvik ediyoruz. Giriş yapılmışsa e-posta + Çıkış Yap;
+                yapılmamışsa "Giriş Yap / Kayıt Ol" daveti. */}
+            <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px 16px",marginBottom:12,display:"flex",alignItems:"center",gap:12}}>
+              {kimlik.kullanici ? (<>
+                <div style={{width:40,height:40,borderRadius:20,background:"linear-gradient(135deg,#1B9E7A,#2CCB9A)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:700,color:"#fff",flexShrink:0}}>
+                  {(kimlik.kullanici.email||"?")[0].toLocaleUpperCase("tr-TR")}
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <p style={{margin:0,fontSize:13.5,fontWeight:700,color:C.label,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{kimlik.kullanici.email||CV("Hesabım")}</p>
+                  <p style={{margin:"1px 0 0",fontSize:11,color:WA(0.45)}}>{CV("Giriş yapıldı")}</p>
+                </div>
+                <button onClick={()=>kimlik.cikisYap()} style={{padding:"7px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:"transparent",color:C.red,fontSize:12.5,fontWeight:700,cursor:"pointer",flexShrink:0}}>{CV("Çıkış Yap")}</button>
+              </>) : (<>
+                <div style={{width:40,height:40,borderRadius:20,background:WA(0.08),display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  <User size={19} color={WA(0.4)} strokeWidth={2}/>
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <p style={{margin:0,fontSize:13.5,fontWeight:700,color:C.label}}>{CV("Misafir kullanıyorsun")}</p>
+                  <p style={{margin:"1px 0 0",fontSize:11,color:WA(0.45)}}>{CV("Verilerini kaydetmek için hesap aç")}</p>
+                </div>
+                <button onClick={()=>nav("hesapGiris")} style={{padding:"7px 14px",borderRadius:9,border:"none",background:C.blue,color:"#fff",fontSize:12.5,fontWeight:700,cursor:"pointer",flexShrink:0}}>{CV("Giriş Yap")}</button>
+              </>)}
+            </div>
+
             {/* Profil üst kısmı — avatar + isim + hızlı istatistikler (üyelik sistemi yok, cihaz bazında) */}
             <div style={{
               background:(TEMA==="acik"?"linear-gradient(135deg,#E8F0FA 0%,#F6FAFD 70%)":"linear-gradient(135deg,#16243A 0%,#0F1923 70%)"),
@@ -29873,6 +30127,7 @@ function App(){
         {screen==="piyasaHaberleri"&&<PiyasaHaberleri/>}
         {screen==="finansalGostergeler"&&<FinansalGostergeler onKurTikla={(k:any)=>setSeciliKur(k)}/>}
         {screen==="ayarlar"&&<Ayarlar settings={settings} onSave={handleSave}/>}
+        {screen==="hesapGiris"&&<HesapGiris kimlik={kimlik} onBasarili={()=>nav("profil")}/>}
 
         {/* ── YASAL UYARI FOOTER ── */}
         {!["home","hesaplaMenu","piyasaMenu","araclarMenu","asistan","sozluk","finansalTakvim","finansalGostergeler","vadeTakibi","katilimBankalari","piyasaHaberleri","ayarlar","profil"].includes(screen)&&(
