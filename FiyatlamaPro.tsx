@@ -145,7 +145,7 @@ const FIREBASE_WEB_CONFIG = {
   measurementId: "G-QE6S181M0J",
 };
 
-type KpKullanici = { uid:string; email:string|null; ad:string|null; saglayici:string } | null;
+type KpKullanici = { uid:string; email:string|null; ad:string|null; saglayici:string; dogrulandi:boolean } | null;
 
 // Firebase Web SDK'yı SADECE web'de (native değilken) dinamik import eder —
 // @capacitor-firebase/messaging ile AYNI desen (bkz. yukarıdaki push bildirim
@@ -200,17 +200,17 @@ function useKpKimlik(){
           const mod=await import("@capacitor-firebase/authentication");
           const FA=mod.FirebaseAuthentication;
           const {user}=await FA.getCurrentUser();
-          if(!iptal) setKullanici(user?{uid:user.uid,email:user.email,ad:user.displayName,saglayici:user.providerId||"bilinmiyor"}:null);
+          if(!iptal) setKullanici(user?{uid:user.uid,email:user.email,ad:user.displayName,saglayici:user.providerId||"bilinmiyor",dogrulandi:!!user.emailVerified}:null);
           await FA.addListener("authStateChange",(event:any)=>{
             const u=event?.user;
-            if(!iptal) setKullanici(u?{uid:u.uid,email:u.email,ad:u.displayName,saglayici:u.providerId||"bilinmiyor"}:null);
+            if(!iptal) setKullanici(u?{uid:u.uid,email:u.email,ad:u.displayName,saglayici:u.providerId||"bilinmiyor",dogrulandi:!!u.emailVerified}:null);
           });
         } else {
           const app=await kpFirebaseWebApp();
           const {getAuth,onAuthStateChanged}=await import("firebase/auth");
           onAuthStateChanged(getAuth(app),(u)=>{
             if(iptal) return;
-            setKullanici(u?{uid:u.uid,email:u.email,ad:u.displayName,saglayici:u.providerData?.[0]?.providerId||"bilinmiyor"}:null);
+            setKullanici(u?{uid:u.uid,email:u.email,ad:u.displayName,saglayici:u.providerData?.[0]?.providerId||"bilinmiyor",dogrulandi:!!u.emailVerified}:null);
           });
         }
       }catch(e){
@@ -326,6 +326,54 @@ function useKpKimlik(){
     }catch(e){ console.error("Çıkış yapılamadı:",e); }
   };
 
+  // ⚠️ 2026-09-21 (kullanıcı isteği: "üyeliğin aktif olması için bir mail
+  // gider içindeki link tıklar üyelik aktif olur bu yapılır mı" → "Tamam"):
+  // Resend YERİNE, zaten gönderdiğimiz Firebase doğrulama linkini gerçekten
+  // KULLANAN bir akış. Kayıt sonrası kullanıcı "E-postanı Doğrula" ekranında
+  // bekliyor — reload() ile Firebase'den GÜNCEL emailVerified durumunu
+  // çekip kontrol ediyoruz (kullanıcı objesindeki eski/önbellekteki değer
+  // değil, gerçek zamanlı sorgu).
+  const epostaTekrarGonder=()=>_islemSarmala(async()=>{
+    const gercekIsNative=(window as any).Capacitor?.isNativePlatform?.() ?? false;
+    if(gercekIsNative){
+      const mod=await import("@capacitor-firebase/authentication");
+      await mod.FirebaseAuthentication.sendEmailVerification();
+    } else {
+      const app=await kpFirebaseWebApp();
+      const {getAuth,sendEmailVerification}=await import("firebase/auth");
+      const auth=getAuth(app);
+      if(!auth.currentUser) throw new Error("no-user");
+      await sendEmailVerification(auth.currentUser);
+    }
+  });
+
+  const epostaDogrulamaKontrolEt=async():Promise<boolean>=>{
+    try{
+      const gercekIsNative=(window as any).Capacitor?.isNativePlatform?.() ?? false;
+      if(gercekIsNative){
+        const mod=await import("@capacitor-firebase/authentication");
+        await mod.FirebaseAuthentication.reload();
+        const {user}=await mod.FirebaseAuthentication.getCurrentUser();
+        const dogrulandi=!!user?.emailVerified;
+        if(user) setKullanici({uid:user.uid,email:user.email,ad:user.displayName,saglayici:user.providerId||"bilinmiyor",dogrulandi});
+        return dogrulandi;
+      } else {
+        const app=await kpFirebaseWebApp();
+        const {getAuth,reload}=await import("firebase/auth");
+        const auth=getAuth(app);
+        if(!auth.currentUser) return false;
+        await reload(auth.currentUser);
+        const u=auth.currentUser;
+        const dogrulandi=!!u.emailVerified;
+        setKullanici({uid:u.uid,email:u.email,ad:u.displayName,saglayici:u.providerData?.[0]?.providerId||"bilinmiyor",dogrulandi});
+        return dogrulandi;
+      }
+    }catch(e){
+      console.error("Doğrulama kontrolü başarısız:",e);
+      return false;
+    }
+  };
+
   // ⚠️ 2026-09-21 (kullanıcı isteği: "KVKK gereği... veri çaldırmayalım"):
   // KVKK m.7/m.11 kullanıcıya kendi verisinin SİLİNMESİNİ isteme hakkı
   // veriyor — sadece "Çıkış Yap" yetmiyor, hesabı gerçekten silen bir yol
@@ -348,12 +396,12 @@ function useKpKimlik(){
     }
   });
 
-  return {kullanici,kimlikYukleniyor,kimlikHata,setKimlikHata,eposta_kayit,eposta_giris,sifremiUnuttum,google_giris,apple_giris,cikisYap,hesabimiSil};
+  return {kullanici,kimlikYukleniyor,kimlikHata,setKimlikHata,eposta_kayit,eposta_giris,sifremiUnuttum,google_giris,apple_giris,cikisYap,hesabimiSil,epostaTekrarGonder,epostaDogrulamaKontrolEt};
 }
 
 // ── Giriş / Kayıt Ekranı ──
-function HesapGiris({kimlik,onBasarili,nav}:{kimlik:ReturnType<typeof useKpKimlik>;onBasarili:()=>void;nav:(sc:string)=>void}){
-  const [mod,setMod]=useState<"giris"|"kayit">("giris");
+function HesapGiris({kimlik,onBasarili,nav,baslangicModu}:{kimlik:ReturnType<typeof useKpKimlik>;onBasarili:()=>void;nav:(sc:string)=>void;baslangicModu?:"giris"|"kayit"}){
+  const [mod,setMod]=useState<"giris"|"kayit">(baslangicModu||"giris");
   const [eposta,setEposta]=useState("");
   const [sifre,setSifre]=useState("");
   // ⚠️ 2026-09-21 (kullanıcı isteği: "kayıt ol da isim soyisim de sorması
@@ -376,8 +424,21 @@ function HesapGiris({kimlik,onBasarili,nav}:{kimlik:ReturnType<typeof useKpKimli
     setGonderiliyor(true);
     setSifirlamaGonderildi(false);
     const basarili = mod==="kayit" ? await kimlik.eposta_kayit(eposta,sifre,adSoyad.trim()) : await kimlik.eposta_giris(eposta,sifre);
-    setGonderiliyor(false);
-    if(basarili) onBasarili();
+    if(!basarili){ setGonderiliyor(false); return; }
+    // ⚠️ 2026-09-21 (kullanıcı isteği: "içindeki link tıklar üyelik aktif
+    // olur" → "Tamam"): kayıt SONRASI her zaman doğrulama bekleme ekranına
+    // gidiyor. Giriş'te de aynı kontrol yapılıyor — aksi halde kullanıcı
+    // doğrulamayı atlayıp sadece "Giriş Yap" ile geçitin etrafından
+    // dolaşabilirdi. Google/Apple ile girenler zaten sağlayıcı tarafından
+    // doğrulanmış sayıldığı için bu kontrole hiç girmiyor (ayrı butonlar).
+    if(mod==="kayit"){
+      setGonderiliyor(false);
+      nav("epostaDogrula");
+    } else {
+      const dogrulandimi=await kimlik.epostaDogrulamaKontrolEt();
+      setGonderiliyor(false);
+      if(dogrulandimi) onBasarili(); else nav("epostaDogrula");
+    }
   };
 
   const sifremiUnuttumTikla=async()=>{
@@ -428,6 +489,63 @@ function HesapGiris({kimlik,onBasarili,nav}:{kimlik:ReturnType<typeof useKpKimli
         <button onClick={async()=>{ if(!kvkkOnay){ kimlik.setKimlikHata("Devam etmek için Gizlilik Politikası'nı onaylaman gerekiyor."); return; } if(await kimlik.google_giris()) onBasarili(); }} style={{width:"100%",padding:"12px 0",borderRadius:12,border:`1.5px solid ${C.border}`,background:C.card,color:C.label,fontSize:14.5,fontWeight:700,cursor:"pointer"}}>
           {CV("Google ile Devam Et")}
         </button>
+      </Card>
+    </div>
+  );
+}
+
+// ── E-postanı Doğrula (bekleme geçidi) ──
+// (2026-09-21, kullanıcı isteği: "üyeliğin aktif olması için bir mail
+// gider içindeki link tıklar üyelik aktif olur bu yapılır mı" → "Tamam"):
+// Kayıt sonrası (ve doğrulanmamış bir hesapla giriş denendiğinde) kullanıcı
+// buraya düşüyor. "Doğruladım, Kontrol Et" — Firebase'den GÜNCEL durumu
+// çeker; link henüz tıklanmadıysa "henüz doğrulanmamış" der, tıklandıysa
+// içeri alır.
+function EpostaDogrula({kimlik,onBasarili,nav}:{kimlik:ReturnType<typeof useKpKimlik>;onBasarili:()=>void;nav:(sc:string)=>void}){
+  const [kontrolEdiliyor,setKontrolEdiliyor]=useState(false);
+  const [tekrarGonderildi,setTekrarGonderildi]=useState(false);
+  const [henuzDegil,setHenuzDegil]=useState(false);
+
+  const kontrolEt=async()=>{
+    setKontrolEdiliyor(true);
+    setHenuzDegil(false);
+    const dogrulandimi=await kimlik.epostaDogrulamaKontrolEt();
+    setKontrolEdiliyor(false);
+    if(dogrulandimi) onBasarili(); else setHenuzDegil(true);
+  };
+
+  const tekrarGonder=async()=>{
+    setTekrarGonderildi(false);
+    const basarili=await kimlik.epostaTekrarGonder();
+    if(basarili) setTekrarGonderildi(true);
+  };
+
+  return(
+    <div style={{padding:"0 16px 32px"}}>
+      <Card>
+        <div style={{textAlign:"center",padding:"8px 0 4px"}}>
+          <div style={{width:52,height:52,borderRadius:26,margin:"0 auto 16px",display:"flex",alignItems:"center",justifyContent:"center",background:C.blueLight}}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={C.blue} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2.5"/><path d="m2 7 10 6 10-6"/></svg>
+          </div>
+          <p style={{margin:0,fontSize:17,fontWeight:700,color:C.label}}>{CV("E-postanı Doğrula")}</p>
+          <p style={{margin:"8px 0 0",fontSize:13,color:WA(0.55),lineHeight:1.55}}>
+            <b style={{color:C.label}}>{kimlik.kullanici?.email}</b>{CV(" adresine bir doğrulama bağlantısı gönderdik. Bağlantıya tıkladıktan sonra aşağıdaki butona dokun.")}
+          </p>
+
+          {henuzDegil && <p style={{margin:"14px 0 0",fontSize:12.5,color:C.red,fontWeight:600}}>{CV("Henüz doğrulanmamış görünüyor — bağlantıya tıkladıktan sonra tekrar dener misin?")}</p>}
+          {tekrarGonderildi && <p style={{margin:"14px 0 0",fontSize:12.5,color:C.green,fontWeight:600}}>{CV("Doğrulama bağlantısı tekrar gönderildi.")}</p>}
+          {kimlik.kimlikHata && <p style={{margin:"14px 0 0",fontSize:12.5,color:C.red,fontWeight:600}}>{kimlik.kimlikHata}</p>}
+
+          <button onClick={kontrolEt} disabled={kontrolEdiliyor} style={{width:"100%",marginTop:18,padding:"13px 0",borderRadius:12,border:"none",background:C.blue,color:"#fff",fontSize:14.5,fontWeight:700,cursor:kontrolEdiliyor?"default":"pointer",opacity:kontrolEdiliyor?0.6:1}}>
+            {kontrolEdiliyor?"…":CV("Doğruladım, Kontrol Et")}
+          </button>
+          <button onClick={tekrarGonder} style={{width:"100%",marginTop:10,padding:"12px 0",borderRadius:12,border:`1.5px solid ${C.border}`,background:"transparent",color:C.label,fontSize:14.5,fontWeight:700,cursor:"pointer"}}>
+            {CV("Bağlantıyı Tekrar Gönder")}
+          </button>
+          <p onClick={()=>kimlik.cikisYap().then(()=>nav("home"))} style={{margin:"16px 0 0",fontSize:12.5,color:WA(0.4),fontWeight:600,cursor:"pointer"}}>
+            {CV("Farklı bir hesapla devam et (Çıkış Yap)")}
+          </p>
+        </div>
       </Card>
     </div>
   );
@@ -19683,6 +19801,7 @@ const MENU = {
   karPayiOranlari:{title:"Kâr Payı Oran Karşılaştırma",back:"home"},
   fiyatAlarmlarim:{title:"Fiyat Alarmlarım",back:"piyasaMenu"},
   hesapGiris:{title:"Giriş Yap / Kayıt Ol",back:"profil"},
+  epostaDogrula:{title:"E-postanı Doğrula",back:"profil"},
   kvkkAydinlatma:{title:"KVKK Aydınlatma Metni",back:"hesapGiris"},
   gizlilikPolitikasi:{title:"Gizlilik Politikası",back:"hesapGiris"},
   bistHisseTarayici:{title:"BİST Hisse Veri İzleme",back:"home"},
@@ -28032,6 +28151,11 @@ function App(){
   // KVKK m.7/m.11 (2026-09-21 eklendi): hesap silme, mevcut "Tümünü Sil"
   // deseniyle AYNI iki-dokunuşlu onay (bkz. satır ~22108, silOnay).
   const [hesapSilOnay,setHesapSilOnay]=useState(false);
+  // ⚠️ 2026-09-21 (kullanıcı isteği: "hesap oluştur veya giriş yap alanı
+  // ekleyelim"): Profil'deki "Hesap Oluştur" ve "Giriş Yap" butonları
+  // HesapGiris ekranını hangi sekmeyle (kayıt/giriş) açacağını buradan
+  // belirliyor.
+  const [girisBaslangicModu,setGirisBaslangicModu]=useState<"giris"|"kayit">("giris");
   const [piyasaTabloFiltre,setPiyasaTabloFiltre]=useState("gostergeler");
   // "Göstergeler" sekmesi içi alt-kategori (2026-07-23 kategorileştirme):
   // aktivite / enflasyon / para / karpayi / risk. Bankanın kendi makro veri
@@ -28521,7 +28645,14 @@ function App(){
                 varsa öyle yapalım"): mobil ana sayfadakiyle AYNI düzeltme —
                 beyaz zemin/gölge kaldırıldı, logo kendi boyutu (32→38px)
                 büyütüldü. */}
-            <div style={{width:48,height:48,borderRadius:24,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            {/* ⚠️ 2026-09-21 (kullanıcı isteği: "sol üst katılım plus iconu
+                açık mod uygulamadaki gibi aynı olacak koyu modda siyah
+                icon var"): logonun lacivert rengi koyu temanın koyu
+                arka planına karşı neredeyse siyah/görünmez okunuyordu
+                (kontrast sorunu — logo dosyası DEĞİŞMEDİ). SADECE koyu
+                temada hafif açık bir zemin geri eklendi, açık temada
+                hâlâ şeffaf (önceki turdaki hal korunuyor). */}
+            <div style={{width:48,height:48,borderRadius:24,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,background:TEMA==="koyu"?"rgba(255,255,255,0.92)":"transparent"}}>
               <img src={KATILIM_LOGO_B64} alt="" style={{height:38,width:"auto",display:"block"}}/>
             </div>
             <div style={{display:"flex",flexDirection:"column",minWidth:0}}>
@@ -28623,7 +28754,7 @@ function App(){
           border:`1px solid ${TEMA==="acik"?"rgba(22,34,46,0.14)":"rgba(255,255,255,0.10)"}`,
           borderRadius:18,padding:"16px 16px 14px",boxShadow:"0 12px 40px rgba(0,0,0,0.45), 0 3px 12px rgba(0,0,0,0.3)"}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <div style={{width:38,height:38,borderRadius:19,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            <div style={{width:38,height:38,borderRadius:19,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,background:TEMA==="koyu"?"rgba(255,255,255,0.92)":"transparent"}}>
               <img src={KATILIM_LOGO_B64} alt="" style={{height:30,width:"auto",display:"block"}}/>
             </div>
             <div style={{flex:1,fontSize:15.5,fontWeight:700,letterSpacing:"-0.01em",color:TEMA==="acik"?"#16222E":"#EAF1FA"}}>{CV("Katılım Plus artık cebinde")}</div>
@@ -30125,10 +30256,9 @@ function App(){
 
             {/* ── Hesabım — Firebase Authentication (2026-09-21 eklendi) ──
                 Zorunlu değil (misafir kullanım devam ediyor), ama
-                girişi teşvik ediyoruz. Giriş yapılmışsa e-posta + Çıkış Yap;
-                yapılmamışsa "Giriş Yap / Kayıt Ol" daveti. */}
+                girişi teşvik ediyoruz. Giriş yapılmışsa e-posta + Çıkış Yap. */}
+            {kimlik.kullanici ? (
             <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px 16px",marginBottom:12,display:"flex",alignItems:"center",gap:12}}>
-              {kimlik.kullanici ? (<>
                 <div style={{width:40,height:40,borderRadius:20,background:"linear-gradient(135deg,#1B9E7A,#2CCB9A)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:700,color:"#fff",flexShrink:0}}>
                   {(kimlik.kullanici.ad||kimlik.kullanici.email||"?")[0].toLocaleUpperCase("tr-TR")}
                 </div>
@@ -30146,17 +30276,34 @@ function App(){
                   </>)}
                 </div>
                 <button onClick={()=>kimlik.cikisYap()} style={{padding:"7px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:"transparent",color:C.red,fontSize:12.5,fontWeight:700,cursor:"pointer",flexShrink:0}}>{CV("Çıkış Yap")}</button>
-              </>) : (<>
-                <div style={{width:40,height:40,borderRadius:20,background:WA(0.08),display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                  <User size={19} color={WA(0.4)} strokeWidth={2}/>
-                </div>
-                <div style={{flex:1,minWidth:0}}>
-                  <p style={{margin:0,fontSize:13.5,fontWeight:700,color:C.label}}>{CV("Misafir kullanıyorsun")}</p>
-                  <p style={{margin:"1px 0 0",fontSize:11,color:WA(0.45)}}>{CV("Verilerini kaydetmek için hesap aç")}</p>
-                </div>
-                <button onClick={()=>nav("hesapGiris")} style={{padding:"7px 14px",borderRadius:9,border:"none",background:C.blue,color:"#fff",fontSize:12.5,fontWeight:700,cursor:"pointer",flexShrink:0}}>{CV("Giriş Yap")}</button>
-              </>)}
             </div>
+            ) : (
+            /* ⚠️ 2026-09-21 (kullanıcı isteği: "şu şekilde hesap oluştur
+                veya giriş yap alanı ekleyelim" — referans ekran görüntüsü
+                verildi): eski tek-satır "Misafir kullanıyorsun" kartı
+                yerine, referanstaki gibi başlık + açıklama + iki buton
+                (Hesap Oluştur / Giriş Yap) içeren daha büyük bir kart. */
+            <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"22px 18px",marginBottom:12,textAlign:"center"}}>
+              <div style={{width:52,height:52,borderRadius:26,margin:"0 auto 14px",display:"flex",alignItems:"center",justifyContent:"center",border:`1.5px dashed ${C.border}`}}>
+                <User size={22} color={WA(0.4)} strokeWidth={2}/>
+              </div>
+              <p style={{margin:0,fontSize:17,fontWeight:700,color:C.label}}>{CV("Hesabını oluştur")}</p>
+              <p style={{margin:"6px 0 16px",fontSize:12.5,color:WA(0.55),lineHeight:1.5}}>{CV("Favorilerini, hesaplama geçmişini ve alarmlarını hesabına bağlayıp tüm cihazlarında kullanabilirsin.")}</p>
+              <button onClick={()=>{ setGirisBaslangicModu("kayit"); nav("hesapGiris"); }} style={{width:"100%",padding:"13px 0",borderRadius:12,border:"none",background:C.blue,color:"#fff",fontSize:14.5,fontWeight:700,cursor:"pointer",marginBottom:10}}>{CV("Hesap Oluştur")}</button>
+              <button onClick={()=>{ setGirisBaslangicModu("giris"); nav("hesapGiris"); }} style={{width:"100%",padding:"12px 0",borderRadius:12,border:`1.5px solid ${C.border}`,background:"transparent",color:C.label,fontSize:14.5,fontWeight:700,cursor:"pointer"}}>{CV("Giriş Yap")}</button>
+            </div>
+            )}
+
+            {/* ⚠️ 2026-09-21: doğrulanmamış e-posta/şifre hesapları için
+                hatırlatma — kullanıcı doğrulamadan çıkıp uygulamayı
+                kapatmış, sonra Profil'e doğrudan gelmiş olabilir. Google/
+                Apple sağlayıcıları zaten doğrulanmış sayıldığı için hariç. */}
+            {kimlik.kullanici && !kimlik.kullanici.dogrulandi && kimlik.kullanici.saglayici==="password" && (
+              <div style={{background:C.blueLight,border:`1px solid ${C.border}`,borderRadius:12,padding:"11px 14px",marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
+                <span style={{flex:1,fontSize:12,color:C.blue,fontWeight:600}}>{CV("E-postan henüz doğrulanmadı.")}</span>
+                <button onClick={()=>nav("epostaDogrula")} style={{padding:"6px 12px",borderRadius:8,border:"none",background:C.blue,color:"#fff",fontSize:11.5,fontWeight:700,cursor:"pointer",flexShrink:0}}>{CV("Doğrula")}</button>
+              </div>
+            )}
 
             {/* KVKK m.7/m.11 — hesap silme hakkı (2026-09-21 eklendi).
                 Sadece giriş yapılmışsa görünür. İki dokunuşlu onay:
@@ -30173,41 +30320,24 @@ function App(){
               </div>
             )}
 
-            {/* Profil üst kısmı — avatar + isim + hızlı istatistikler (üyelik sistemi yok, cihaz bazında) */}
+            {/* ⚠️ 2026-09-21 (kullanıcı isteği: "İsim Rumuz Gir alanını
+                kaldıralım"): cihaz bazlı takma ad girişi kaldırıldı —
+                artık gerçek hesaplarda Ad Soyad zaten Firebase'den
+                geliyor (yukarıdaki hesap kartında gösteriliyor), bu alan
+                fazlalık ve kafa karıştırıcı hale gelmişti. İstatistik
+                satırı (Favori/Hesaplama) kaldı, kendi sade kartına taşındı. */}
             <div style={{
               background:(TEMA==="acik"?"linear-gradient(135deg,#E8F0FA 0%,#F6FAFD 70%)":"linear-gradient(135deg,#16243A 0%,#0F1923 70%)"),
               border:"1px solid rgba(91,155,216,0.25)",borderRadius:20,
-              padding:"20px 16px",marginBottom:16,textAlign:"center",
+              padding:"16px",marginBottom:16,
             }}>
-              <div style={{
-                width:64,height:64,borderRadius:32,margin:"0 auto 12px",
-                background:"linear-gradient(135deg,#3B82F6,#5B9BD8)",
-                display:"flex",alignItems:"center",justifyContent:"center",
-                fontSize:24,fontWeight:700,color:"#fff",
-                boxShadow:"0 0 20px rgba(59,130,246,0.4)",
-              }}>
-                {kullaniciAdi.trim() ? kullaniciAdi.trim()[0].toLocaleUpperCase("tr-TR") : <User size={28} color="#fff" strokeWidth={2}/>}
-              </div>
-              <input
-                value={kullaniciAdi}
-                onChange={e=>kullaniciAdiKaydet(e.target.value)}
-                placeholder={CV("İsim / rumuz gir…")}
-                maxLength={24}
-                style={{
-                  width:"100%",boxSizing:"border-box",background:"transparent",border:"none",outline:"none",
-                  textAlign:"center",fontSize:18,fontWeight:700,color:C.soft,fontFamily:"inherit",
-                  padding:"2px 0",marginBottom:2,
-                }}
-              />
-              <p style={{margin:0,fontSize:11,color:WA(0.35)}}>{CV("Sadece bu cihazda saklanır")}</p>
-
-              <div style={{display:"flex",marginTop:16,borderTop:`1px solid ${WA(0.08)}`,paddingTop:14}}>
-                <div style={{flex:1}}>
+              <div style={{display:"flex"}}>
+                <div style={{flex:1,textAlign:"center"}}>
                   <p style={{margin:0,fontSize:20,fontWeight:700,color:C.blue}}>{favoriler.length}</p>
                   <p style={{margin:"2px 0 0",fontSize:10.5,color:WA(0.45)}}>{CV("Favori")}</p>
                 </div>
                 <div style={{width:1,background:WA(0.08)}}/>
-                <div style={{flex:1}}>
+                <div style={{flex:1,textAlign:"center"}}>
                   <p style={{margin:0,fontSize:20,fontWeight:700,color:C.green}}>{gecmis.length}</p>
                   <p style={{margin:"2px 0 0",fontSize:10.5,color:WA(0.45)}}>{CV("Hesaplama")}</p>
                 </div>
@@ -30364,7 +30494,8 @@ function App(){
         {screen==="piyasaHaberleri"&&<PiyasaHaberleri/>}
         {screen==="finansalGostergeler"&&<FinansalGostergeler onKurTikla={(k:any)=>setSeciliKur(k)}/>}
         {screen==="ayarlar"&&<Ayarlar settings={settings} onSave={handleSave}/>}
-        {screen==="hesapGiris"&&<HesapGiris kimlik={kimlik} onBasarili={()=>nav("profil")} nav={nav}/>}
+        {screen==="hesapGiris"&&<HesapGiris kimlik={kimlik} onBasarili={()=>nav("profil")} nav={nav} baslangicModu={girisBaslangicModu}/>}
+        {screen==="epostaDogrula"&&<EpostaDogrula kimlik={kimlik} onBasarili={()=>nav("profil")} nav={nav}/>}
         {screen==="kvkkAydinlatma"&&<KvkkAydinlatma/>}
         {screen==="gizlilikPolitikasi"&&<GizlilikPolitikasi/>}
 
@@ -30445,15 +30576,12 @@ function App(){
             <div style={{display:"flex",alignItems:"center",justifyContent:genisEkran?"flex-end":"space-between",gap:10,marginBottom:genisEkran?0:20,flexShrink:0}}>
               {!genisEkran && (
               <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
-                {/* ⚠️ 2026-09-21 (kullanıcı isteği: "marka amblemindeki arka
-                    plandaki beyaz kutudan kurtarsak"): logo PNG'sinin zaten
-                    GERÇEK bir şeffaf arka planı var (alfa kanalı ile
-                    doğrulandı) — çevresindeki beyaz daire + gölge sadece
-                    bizim CSS'imizdi, kaldırıldı. Daire artık sadece
-                    boyut/hizalama için var, görsel bir zemini yok. Logo
-                    kendi boyutu 30→36px büyütüldü — artık kendini saran bir
-                    dolgulu daireye sığdırma zorunluluğu yok. */}
-              <div style={{width:44,height:44,borderRadius:22,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                {/* ⚠️ 2026-09-21 (kullanıcı isteği: "koyu modda siyah icon
+                    var, açık moddaki gibi aynı olacak"): logo lacivert
+                    rengi koyu temanın arka planına karşı neredeyse siyah
+                    okunuyordu (kontrast sorunu). SADECE koyu temada hafif
+                    açık bir zemin geri eklendi, açık temada şeffaf kalıyor. */}
+              <div style={{width:44,height:44,borderRadius:22,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,background:TEMA==="koyu"?"rgba(255,255,255,0.92)":"transparent"}}>
                   <img src={KATILIM_LOGO_B64} alt="" style={{height:36,width:"auto",display:"block"}}/>
                 </div>
                 <div style={{display:"flex",flexDirection:"column",justifyContent:"center",minWidth:0}}>
