@@ -162,10 +162,24 @@ function kpKimlikHataMetni(kod:string|undefined):string{
   if(k.includes("email-already-in-use")) return "Bu e-posta zaten kayıtlı. Giriş yapmayı dene.";
   if(k.includes("invalid-email")) return "E-posta adresi geçersiz.";
   if(k.includes("weak-password")) return "Şifre en az 6 karakter olmalı.";
-  if(k.includes("user-not-found")||k.includes("wrong-password")||k.includes("invalid-credential")) return "E-posta veya şifre hatalı.";
+  // ⚠️ 2026-09-21 (kullanıcı raporu: "giriş yapta bu kullanıcı olmamasına
+  // rağmen verdiği hata kullanıcı yok kayıt ol filan dememi lazım"):
+  // user-not-found ARTIK ayrı — önceden wrong-password/invalid-credential
+  // ile aynı genel mesaja düşüyordu, artık kullanıcıyı doğrudan Kayıt Ol'a
+  // yönlendiriyor.
+  if(k.includes("user-not-found")) return "Bu e-posta ile kayıtlı bir hesap bulunamadı. Kayıt Ol sekmesinden yeni hesap açabilirsin.";
+  if(k.includes("wrong-password")||k.includes("invalid-credential")) return "E-posta veya şifre hatalı.";
   if(k.includes("too-many-requests")) return "Çok fazla deneme yapıldı, biraz sonra tekrar dene.";
+  if(k.includes("requires-recent-login")) return "Güvenlik gereği hesap silmeden önce tekrar giriş yapman gerekiyor. Çıkış yapıp yeniden giriş dener misin?";
+  if(k.includes("no-user")) return "Silinecek bir hesap bulunamadı.";
   if(k.includes("popup-closed-by-user")||k.includes("cancelled")||k.includes("canceled")) return ""; // kullanıcı kendi iptal etti — hata gösterme
-  return "Bir şeyler ters gitti, tekrar dener misin?";
+  // ⚠️ 2026-09-21: hem giriş hem kayıtta AYNI genel mesaj çıktığı raporlandı
+  // — demek ki gelen hata kodu yukarıdaki HİÇBİR deseni tutturamıyor
+  // (native eklentinin hata şekli beklenenden farklı olabilir). Körlemesine
+  // yeni desenler eklemek yerine, ASIL hata kodunu/mesajını ekranda
+  // gösteriyoruz — bir sonraki denemede ekran görüntüsüyle kesin teşhis
+  // konulabilir.
+  return `Bir şeyler ters gitti${k?` (${k})`:""} — tekrar dener misin?`;
 }
 
 // Paylaşılan kimlik hook'u — kök bileşende BİR KERE çağrılıp alt ekranlara
@@ -211,7 +225,15 @@ function useKpKimlik(){
   const _islemSarmala=async(islem:()=>Promise<void>)=>{
     setKimlikHata(null);
     try{ await islem(); return true; }
-    catch(e:any){ setKimlikHata(kpKimlikHataMetni(e?.code||e?.message)); return false; }
+    catch(e:any){
+      // ⚠️ 2026-09-21: tam hata nesnesini konsola basıyoruz (Safari Web
+      // Inspector / Xcode konsolundan görülebilir) — bazı Capacitor
+      // eklentileri hata kodunu .code yerine .errorMessage ya da düz
+      // .message içinde farklı bir formatta veriyor, üç ihtimali de deniyoruz.
+      console.error("Kimlik işlemi hata verdi:", e);
+      setKimlikHata(kpKimlikHataMetni(e?.code||e?.errorMessage||e?.message));
+      return false;
+    }
   };
 
   const eposta_kayit=(eposta:string,sifre:string)=>_islemSarmala(async()=>{
@@ -299,7 +321,29 @@ function useKpKimlik(){
     }catch(e){ console.error("Çıkış yapılamadı:",e); }
   };
 
-  return {kullanici,kimlikYukleniyor,kimlikHata,setKimlikHata,eposta_kayit,eposta_giris,sifremiUnuttum,google_giris,apple_giris,cikisYap};
+  // ⚠️ 2026-09-21 (kullanıcı isteği: "KVKK gereği... veri çaldırmayalım"):
+  // KVKK m.7/m.11 kullanıcıya kendi verisinin SİLİNMESİNİ isteme hakkı
+  // veriyor — sadece "Çıkış Yap" yetmiyor, hesabı gerçekten silen bir yol
+  // gerekiyor. Firebase'in deleteUser() işlemi GÜVENLİK GEREĞİ yakın
+  // zamanda giriş yapılmış olmasını istiyor — çok önce giriş yapıldıysa
+  // "auth/requires-recent-login" hatası döner, bunu kullanıcıya anlaşılır
+  // bir mesajla bildiriyoruz (tekrar giriş yapmasını istiyoruz), teknik
+  // hata kodunu değil.
+  const hesabimiSil=()=>_islemSarmala(async()=>{
+    const gercekIsNative=(window as any).Capacitor?.isNativePlatform?.() ?? false;
+    if(gercekIsNative){
+      const mod=await import("@capacitor-firebase/authentication");
+      await mod.FirebaseAuthentication.deleteUser();
+    } else {
+      const app=await kpFirebaseWebApp();
+      const {getAuth,deleteUser}=await import("firebase/auth");
+      const auth=getAuth(app);
+      if(!auth.currentUser) throw new Error("no-user");
+      await deleteUser(auth.currentUser);
+    }
+  });
+
+  return {kullanici,kimlikYukleniyor,kimlikHata,setKimlikHata,eposta_kayit,eposta_giris,sifremiUnuttum,google_giris,apple_giris,cikisYap,hesabimiSil};
 }
 
 // ── Giriş / Kayıt Ekranı ──
@@ -312,9 +356,14 @@ function HesapGiris({kimlik,onBasarili}:{kimlik:ReturnType<typeof useKpKimlik>;o
   // sıfırlama e-postası gönderildiğinde göstermek için — hata değil, bilgi
   // amaçlı bir onay mesajı.
   const [sifirlamaGonderildi,setSifirlamaGonderildi]=useState(false);
+  // KVKK (2026-09-21 eklendi): kayıt olurken açık rıza onayı — Gizlilik
+  // Politikası sayfası (/gizlilik) zaten var ve KVKK m.11 haklarını
+  // içeriyor, burada ona link veren bir onay kutusu ekleniyor.
+  const [kvkkOnay,setKvkkOnay]=useState(false);
 
   const gonder=async()=>{
     if(!eposta||!sifre){ kimlik.setKimlikHata("E-posta ve şifre gerekli."); return; }
+    if(!kvkkOnay){ kimlik.setKimlikHata("Devam etmek için Gizlilik Politikası'nı onaylaman gerekiyor."); return; }
     setGonderiliyor(true);
     setSifirlamaGonderildi(false);
     const basarili = mod==="kayit" ? await kimlik.eposta_kayit(eposta,sifre) : await kimlik.eposta_giris(eposta,sifre);
@@ -343,6 +392,16 @@ function HesapGiris({kimlik,onBasarili}:{kimlik:ReturnType<typeof useKpKimlik>;o
         {sifirlamaGonderildi && <p style={{margin:"-2px 2px 12px",fontSize:12.5,color:C.green,fontWeight:600}}>{CV("Sıfırlama bağlantısı e-postana gönderildi.")}</p>}
         {kimlik.kimlikHata && <p style={{margin:"4px 2px 12px",fontSize:12.5,color:C.red,fontWeight:600}}>{kimlik.kimlikHata}</p>}
         {mod==="kayit" && <p style={{margin:"-6px 2px 12px",fontSize:11.5,color:WA(0.5)}}>{CV("Kayıt olunca doğrulama bağlantısı içeren bir e-posta alacaksın.")}</p>}
+        {/* KVKK (2026-09-21 eklendi): mod==="kayit" ile SINIRLI değil —
+            e-posta, Google ve Apple'ın ÜÇÜ de yeni hesap oluşturabildiği
+            için onay kutusu HER ÜÇ yolu da kapsıyor, sadece e-posta ile
+            "Kayıt Ol" akışını değil. */}
+        <label style={{display:"flex",alignItems:"flex-start",gap:8,margin:"0 2px 14px",cursor:"pointer"}}>
+          <input type="checkbox" checked={kvkkOnay} onChange={e=>setKvkkOnay(e.target.checked)} style={{marginTop:2,width:16,height:16,flexShrink:0,accentColor:C.blue}}/>
+          <span style={{fontSize:12,color:WA(0.6),lineHeight:1.4}}>
+            {CV("Devam ederek")} <a href="/gizlilik" target="_blank" rel="noopener noreferrer" style={{color:C.blue,fontWeight:700,textDecoration:"none"}} onClick={e=>e.stopPropagation()}>{CV("Gizlilik Politikası")}</a>{CV("'nı okuduğumu ve kabul ettiğimi onaylıyorum.")}
+          </span>
+        </label>
         <button onClick={gonder} disabled={gonderiliyor} style={{width:"100%",marginTop:6,padding:"13px 0",borderRadius:12,border:"none",background:C.blue,color:"#fff",fontSize:15,fontWeight:700,cursor:gonderiliyor?"default":"pointer",opacity:gonderiliyor?0.6:1}}>
           {gonderiliyor?"…":(mod==="kayit"?CV("Kayıt Ol"):CV("Giriş Yap"))}
         </button>
@@ -353,10 +412,10 @@ function HesapGiris({kimlik,onBasarili}:{kimlik:ReturnType<typeof useKpKimlik>;o
           <div style={{flex:1,height:1,background:C.border}}/>
         </div>
 
-        <button onClick={async()=>{ if(await kimlik.apple_giris()) onBasarili(); }} style={{width:"100%",padding:"12px 0",borderRadius:12,border:`1.5px solid ${C.border}`,background:(TEMA==="acik"?"#000":"#fff"),color:(TEMA==="acik"?"#fff":"#000"),fontSize:14.5,fontWeight:700,cursor:"pointer",marginBottom:10}}>
+        <button onClick={async()=>{ if(!kvkkOnay){ kimlik.setKimlikHata("Devam etmek için Gizlilik Politikası'nı onaylaman gerekiyor."); return; } if(await kimlik.apple_giris()) onBasarili(); }} style={{width:"100%",padding:"12px 0",borderRadius:12,border:`1.5px solid ${C.border}`,background:(TEMA==="acik"?"#000":"#fff"),color:(TEMA==="acik"?"#fff":"#000"),fontSize:14.5,fontWeight:700,cursor:"pointer",marginBottom:10}}>
           {CV("Apple ile Devam Et")}
         </button>
-        <button onClick={async()=>{ if(await kimlik.google_giris()) onBasarili(); }} style={{width:"100%",padding:"12px 0",borderRadius:12,border:`1.5px solid ${C.border}`,background:C.card,color:C.label,fontSize:14.5,fontWeight:700,cursor:"pointer"}}>
+        <button onClick={async()=>{ if(!kvkkOnay){ kimlik.setKimlikHata("Devam etmek için Gizlilik Politikası'nı onaylaman gerekiyor."); return; } if(await kimlik.google_giris()) onBasarili(); }} style={{width:"100%",padding:"12px 0",borderRadius:12,border:`1.5px solid ${C.border}`,background:C.card,color:C.label,fontSize:14.5,fontWeight:700,cursor:"pointer"}}>
           {CV("Google ile Devam Et")}
         </button>
       </Card>
@@ -27862,6 +27921,9 @@ function App(){
   // Hesap/kimlik doğrulama — kök seviyede BİR KERE (bkz. useKpKimlik tanımı,
   // dosya başında). Profil ekranı ve HesapGiris ekranı bunu prop olarak alır.
   const kimlik=useKpKimlik();
+  // KVKK m.7/m.11 (2026-09-21 eklendi): hesap silme, mevcut "Tümünü Sil"
+  // deseniyle AYNI iki-dokunuşlu onay (bkz. satır ~22108, silOnay).
+  const [hesapSilOnay,setHesapSilOnay]=useState(false);
   const [piyasaTabloFiltre,setPiyasaTabloFiltre]=useState("gostergeler");
   // "Göstergeler" sekmesi içi alt-kategori (2026-07-23 kategorileştirme):
   // aktivite / enflasyon / para / karpayi / risk. Bankanın kendi makro veri
@@ -29978,6 +30040,21 @@ function App(){
                 <button onClick={()=>nav("hesapGiris")} style={{padding:"7px 14px",borderRadius:9,border:"none",background:C.blue,color:"#fff",fontSize:12.5,fontWeight:700,cursor:"pointer",flexShrink:0}}>{CV("Giriş Yap")}</button>
               </>)}
             </div>
+
+            {/* KVKK m.7/m.11 — hesap silme hakkı (2026-09-21 eklendi).
+                Sadece giriş yapılmışsa görünür. İki dokunuşlu onay:
+                ilk tık "Emin misiniz?" yazar, ikincisi gerçekten siler. */}
+            {kimlik.kullanici && (
+              <div style={{textAlign:"center",marginBottom:14}}>
+                <p onClick={async()=>{
+                    if(hesapSilOnay){ setHesapSilOnay(false); if(await kimlik.hesabimiSil()) nav("home"); }
+                    else setHesapSilOnay(true);
+                  }} style={{margin:0,fontSize:12,fontWeight:600,color:hesapSilOnay?C.red:WA(0.38),cursor:"pointer"}}>
+                  {hesapSilOnay?CV("Emin misiniz? (tekrar dokun)"):CV("Hesabımı Sil")}
+                </p>
+                {kimlik.kimlikHata && <p style={{margin:"4px 0 0",fontSize:11.5,color:C.red,fontWeight:600}}>{kimlik.kimlikHata}</p>}
+              </div>
+            )}
 
             {/* Profil üst kısmı — avatar + isim + hızlı istatistikler (üyelik sistemi yok, cihaz bazında) */}
             <div style={{
