@@ -145,7 +145,7 @@ const FIREBASE_WEB_CONFIG = {
   measurementId: "G-QE6S181M0J",
 };
 
-type KpKullanici = { uid:string; email:string|null; ad:string|null; saglayici:string; dogrulandi:boolean } | null;
+type KpKullanici = { uid:string; email:string|null; ad:string|null; saglayici:string; dogrulandi:boolean; olusturmaTarihi:string|null } | null;
 
 // Firebase Web SDK'yı SADECE web'de (native değilken) dinamik import eder —
 // @capacitor-firebase/messaging ile AYNI desen (bkz. yukarıdaki push bildirim
@@ -182,6 +182,22 @@ function kpKimlikHataMetni(kod:string|undefined):string{
   return `Bir şeyler ters gitti${k?` (${k})`:""} — tekrar dener misin?`;
 }
 
+// ⚠️ 2026-09-21 (kullanıcı isteği: "en üstteki kutuyu yap" — referans
+// ekran görüntüsündeki "Haziran 2026'dan beri" tarzı katılım tarihi):
+// Firebase'in kendi user.metadata.creationTime alanından (web/native
+// ikisi de aynı ISO/GMT string formatını veriyor) "Ay YYYY'dan beri"
+// çeviriyor. Tarih ayrıştırılamazsa (beklenmedik format) sessizce null
+// dönüyor — ekranda o satır hiç gösterilmiyor.
+function kpKatilimTarihiMetni(iso:string|null|undefined):string|null{
+  if(!iso) return null;
+  try{
+    const d=new Date(iso);
+    if(isNaN(d.getTime())) return null;
+    const aylar=["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
+    return `${aylar[d.getMonth()]} ${d.getFullYear()}'dan beri`;
+  }catch{ return null; }
+}
+
 // Paylaşılan kimlik hook'u — kök bileşende BİR KERE çağrılıp alt ekranlara
 // prop olarak geçiriliyor (Context yerine — dosyadaki mevcut desen zaten
 // "tek büyük kök bileşen + prop geçişi", örn. KonutFinansman'a s={settings}
@@ -200,17 +216,17 @@ function useKpKimlik(){
           const mod=await import("@capacitor-firebase/authentication");
           const FA=mod.FirebaseAuthentication;
           const {user}=await FA.getCurrentUser();
-          if(!iptal) setKullanici(user?{uid:user.uid,email:user.email,ad:user.displayName,saglayici:user.providerId||"bilinmiyor",dogrulandi:!!user.emailVerified}:null);
+          if(!iptal) setKullanici(user?{uid:user.uid,email:user.email,ad:user.displayName,saglayici:user.providerId||"bilinmiyor",dogrulandi:!!user.emailVerified,olusturmaTarihi:(user as any).metadata?.creationTime||null}:null);
           await FA.addListener("authStateChange",(event:any)=>{
             const u=event?.user;
-            if(!iptal) setKullanici(u?{uid:u.uid,email:u.email,ad:u.displayName,saglayici:u.providerId||"bilinmiyor",dogrulandi:!!u.emailVerified}:null);
+            if(!iptal) setKullanici(u?{uid:u.uid,email:u.email,ad:u.displayName,saglayici:u.providerId||"bilinmiyor",dogrulandi:!!u.emailVerified,olusturmaTarihi:u.metadata?.creationTime||null}:null);
           });
         } else {
           const app=await kpFirebaseWebApp();
           const {getAuth,onAuthStateChanged}=await import("firebase/auth");
           onAuthStateChanged(getAuth(app),(u)=>{
             if(iptal) return;
-            setKullanici(u?{uid:u.uid,email:u.email,ad:u.displayName,saglayici:u.providerData?.[0]?.providerId||"bilinmiyor",dogrulandi:!!u.emailVerified}:null);
+            setKullanici(u?{uid:u.uid,email:u.email,ad:u.displayName,saglayici:u.providerData?.[0]?.providerId||"bilinmiyor",dogrulandi:!!u.emailVerified,olusturmaTarihi:u.metadata?.creationTime||null}:null);
           });
         }
       }catch(e){
@@ -355,7 +371,7 @@ function useKpKimlik(){
         await mod.FirebaseAuthentication.reload();
         const {user}=await mod.FirebaseAuthentication.getCurrentUser();
         const dogrulandi=!!user?.emailVerified;
-        if(user) setKullanici({uid:user.uid,email:user.email,ad:user.displayName,saglayici:user.providerId||"bilinmiyor",dogrulandi});
+        if(user) setKullanici({uid:user.uid,email:user.email,ad:user.displayName,saglayici:user.providerId||"bilinmiyor",dogrulandi,olusturmaTarihi:user.metadata?.creationTime||null});
         return dogrulandi;
       } else {
         const app=await kpFirebaseWebApp();
@@ -365,7 +381,7 @@ function useKpKimlik(){
         await reload(auth.currentUser);
         const u=auth.currentUser;
         const dogrulandi=!!u.emailVerified;
-        setKullanici({uid:u.uid,email:u.email,ad:u.displayName,saglayici:u.providerData?.[0]?.providerId||"bilinmiyor",dogrulandi});
+        setKullanici({uid:u.uid,email:u.email,ad:u.displayName,saglayici:u.providerData?.[0]?.providerId||"bilinmiyor",dogrulandi,olusturmaTarihi:u.metadata?.creationTime||null});
         return dogrulandi;
       }
     }catch(e){
@@ -30257,12 +30273,16 @@ function App(){
         {screen==="profil"&&(
           <div style={{background:C.bg,padding:"12px 12px 0",paddingBottom:"calc(108px + env(safe-area-inset-bottom,0px))",boxSizing:"border-box",overflowY:"auto"}}>
 
-            {/* ── Hesabım — Firebase Authentication (2026-09-21 eklendi) ──
-                Zorunlu değil (misafir kullanım devam ediyor), ama
-                girişi teşvik ediyoruz. Giriş yapılmışsa e-posta + Çıkış Yap. */}
+            {/* ── Hesabım — Firebase Authentication (2026-09-21 eklendi,
+                21 Eylül'de referans ekran görüntüsüne göre üst kutu
+                yeniden tasarlandı — SADECE bu kutu, rozet/seviye/öğrenme
+                gibi diğer bölümler kullanıcı isteğiyle bilinçli olarak
+                dışarıda bırakıldı). Zorunlu değil (misafir kullanım
+                devam ediyor), ama girişi teşvik ediyoruz. */}
             {kimlik.kullanici ? (
-            <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px 16px",marginBottom:12,display:"flex",alignItems:"center",gap:12}}>
-                <div style={{width:40,height:40,borderRadius:20,background:"linear-gradient(135deg,#1B9E7A,#2CCB9A)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:700,color:"#fff",flexShrink:0}}>
+            <div style={{background:(TEMA==="acik"?"linear-gradient(135deg,#E8F0FA 0%,#F6FAFD 70%)":"linear-gradient(135deg,#16243A 0%,#0F1923 70%)"),border:"1px solid rgba(91,155,216,0.25)",borderRadius:20,padding:"18px 18px 16px",marginBottom:12}}>
+              <div style={{display:"flex",alignItems:"center",gap:14}}>
+                <div style={{width:56,height:56,borderRadius:28,background:"linear-gradient(135deg,#1B9E7A,#2CCB9A)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontWeight:700,color:"#fff",flexShrink:0}}>
                   {(kimlik.kullanici.ad||kimlik.kullanici.email||"?")[0].toLocaleUpperCase("tr-TR")}
                 </div>
                 <div style={{flex:1,minWidth:0}}>
@@ -30271,14 +30291,23 @@ function App(){
                       olarak gösteriliyor, e-posta ikincil satıra düşüyor —
                       ad yoksa (ör. eski hesap) eskisi gibi sadece e-posta. */}
                   {kimlik.kullanici.ad ? (<>
-                    <p style={{margin:0,fontSize:13.5,fontWeight:700,color:C.label,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{kimlik.kullanici.ad}</p>
-                    <p style={{margin:"1px 0 0",fontSize:11,color:WA(0.45),whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{kimlik.kullanici.email}</p>
-                  </>) : (<>
-                    <p style={{margin:0,fontSize:13.5,fontWeight:700,color:C.label,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{kimlik.kullanici.email||CV("Hesabım")}</p>
-                    <p style={{margin:"1px 0 0",fontSize:11,color:WA(0.45)}}>{CV("Giriş yapıldı")}</p>
-                  </>)}
+                    <p style={{margin:0,fontSize:17,fontWeight:700,color:C.label,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{kimlik.kullanici.ad}</p>
+                    <p style={{margin:"2px 0 0",fontSize:12,color:WA(0.5),whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{kimlik.kullanici.email}</p>
+                  </>) : (
+                    <p style={{margin:0,fontSize:17,fontWeight:700,color:C.label,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{kimlik.kullanici.email||CV("Hesabım")}</p>
+                  )}
                 </div>
-                <button onClick={()=>kimlik.cikisYap()} style={{padding:"7px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:"transparent",color:C.red,fontSize:12.5,fontWeight:700,cursor:"pointer",flexShrink:0}}>{CV("Çıkış Yap")}</button>
+                <button onClick={()=>kimlik.cikisYap()} style={{padding:"7px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:"transparent",color:C.red,fontSize:12,fontWeight:700,cursor:"pointer",flexShrink:0}}>{CV("Çıkış Yap")}</button>
+              </div>
+              {/* ⚠️ 2026-09-21: "Ücretsiz" şu an sadece statik bir etiket —
+                  henüz ücretli katman yok (Faz 3, RevenueCat/IAP ile
+                  gelecek), o zaman bu satır gerçek plan durumunu
+                  yansıtacak şekilde güncellenecek. Katılım tarihi
+                  Firebase'in gerçek creationTime alanından geliyor. */}
+              <div style={{display:"flex",alignItems:"center",gap:8,marginTop:14,paddingTop:12,borderTop:`1px solid ${WA(0.08)}`}}>
+                <span style={{padding:"3px 10px",borderRadius:20,background:WA(0.1),fontSize:11,fontWeight:700,color:C.label}}>{CV("Ücretsiz")}</span>
+                {kpKatilimTarihiMetni(kimlik.kullanici.olusturmaTarihi) && <span style={{fontSize:12,color:WA(0.5)}}>{kpKatilimTarihiMetni(kimlik.kullanici.olusturmaTarihi)}</span>}
+              </div>
             </div>
             ) : (
             /* ⚠️ 2026-09-21 (kullanıcı isteği: "şu şekilde hesap oluştur
