@@ -219,10 +219,16 @@ function useKpKimlik(){
     if(gercekIsNative){
       const mod=await import("@capacitor-firebase/authentication");
       await mod.FirebaseAuthentication.createUserWithEmailAndPassword({email:eposta,password:sifre});
+      // ⚠️ 2026-09-21 (kullanıcı isteği: "kayıt anında otomatik doğrulama
+      // maili gitsin"): kayıt BAŞARILI olduktan hemen sonra doğrulama
+      // e-postası gönderiliyor. Bu ayrı bir adım — Firebase kayıt sırasında
+      // OTOMATİK göndermiyor, biz açıkça istemek zorundayız.
+      await mod.FirebaseAuthentication.sendEmailVerification();
     } else {
       const app=await kpFirebaseWebApp();
-      const {getAuth,createUserWithEmailAndPassword}=await import("firebase/auth");
-      await createUserWithEmailAndPassword(getAuth(app),eposta,sifre);
+      const {getAuth,createUserWithEmailAndPassword,sendEmailVerification}=await import("firebase/auth");
+      const cred=await createUserWithEmailAndPassword(getAuth(app),eposta,sifre);
+      await sendEmailVerification(cred.user);
     }
   });
 
@@ -235,6 +241,23 @@ function useKpKimlik(){
       const app=await kpFirebaseWebApp();
       const {getAuth,signInWithEmailAndPassword}=await import("firebase/auth");
       await signInWithEmailAndPassword(getAuth(app),eposta,sifre);
+    }
+  });
+
+  // ⚠️ 2026-09-21 (kullanıcı isteği: "şifre yenileme şifre unuttum... otomatik
+  // mail gidecek mi" → "ikisini de ekle"): "Şifremi Unuttum" akışı — Firebase
+  // e-postanın içeriğini/gönderimini KENDİSİ hallediyor, biz sadece isteği
+  // tetikliyoruz. Gönderen adresi/şablonu Firebase Console → Authentication →
+  // Templates'ten ayarlanıyor, kod tarafından belirlenmiyor.
+  const sifremiUnuttum=(eposta:string)=>_islemSarmala(async()=>{
+    const gercekIsNative=(window as any).Capacitor?.isNativePlatform?.() ?? false;
+    if(gercekIsNative){
+      const mod=await import("@capacitor-firebase/authentication");
+      await mod.FirebaseAuthentication.sendPasswordResetEmail({email:eposta});
+    } else {
+      const app=await kpFirebaseWebApp();
+      const {getAuth,sendPasswordResetEmail}=await import("firebase/auth");
+      await sendPasswordResetEmail(getAuth(app),eposta);
     }
   });
 
@@ -276,7 +299,7 @@ function useKpKimlik(){
     }catch(e){ console.error("Çıkış yapılamadı:",e); }
   };
 
-  return {kullanici,kimlikYukleniyor,kimlikHata,setKimlikHata,eposta_kayit,eposta_giris,google_giris,apple_giris,cikisYap};
+  return {kullanici,kimlikYukleniyor,kimlikHata,setKimlikHata,eposta_kayit,eposta_giris,sifremiUnuttum,google_giris,apple_giris,cikisYap};
 }
 
 // ── Giriş / Kayıt Ekranı ──
@@ -285,22 +308,41 @@ function HesapGiris({kimlik,onBasarili}:{kimlik:ReturnType<typeof useKpKimlik>;o
   const [eposta,setEposta]=useState("");
   const [sifre,setSifre]=useState("");
   const [gonderiliyor,setGonderiliyor]=useState(false);
+  // ⚠️ 2026-09-21 (kullanıcı isteği: "şifre unuttum... ikisini de ekle"):
+  // sıfırlama e-postası gönderildiğinde göstermek için — hata değil, bilgi
+  // amaçlı bir onay mesajı.
+  const [sifirlamaGonderildi,setSifirlamaGonderildi]=useState(false);
 
   const gonder=async()=>{
     if(!eposta||!sifre){ kimlik.setKimlikHata("E-posta ve şifre gerekli."); return; }
     setGonderiliyor(true);
+    setSifirlamaGonderildi(false);
     const basarili = mod==="kayit" ? await kimlik.eposta_kayit(eposta,sifre) : await kimlik.eposta_giris(eposta,sifre);
     setGonderiliyor(false);
     if(basarili) onBasarili();
   };
 
+  const sifremiUnuttumTikla=async()=>{
+    if(!eposta){ kimlik.setKimlikHata("Önce e-posta adresini yaz."); return; }
+    setSifirlamaGonderildi(false);
+    const basarili=await kimlik.sifremiUnuttum(eposta);
+    if(basarili) setSifirlamaGonderildi(true);
+  };
+
   return(
     <div style={{padding:"0 16px 32px"}}>
       <Card>
-        <Seg options={[{v:"giris",l:"Giriş Yap"},{v:"kayit",l:"Kayıt Ol"}]} value={mod} onChange={(v:any)=>{setMod(v); kimlik.setKimlikHata(null);}}/>
-        <Field label="E-posta" value={eposta} onChange={setEposta}/>
-        <Field label="Şifre" value={sifre} onChange={setSifre}/>
+        <Seg options={[{v:"giris",l:"Giriş Yap"},{v:"kayit",l:"Kayıt Ol"}]} value={mod} onChange={(v:any)=>{setMod(v); kimlik.setKimlikHata(null); setSifirlamaGonderildi(false);}}/>
+        <Field label="E-posta" value={eposta} onChange={setEposta} type="email"/>
+        <Field label="Şifre" value={sifre} onChange={setSifre} type="password"/>
+        {mod==="giris" && (
+          <p onClick={sifremiUnuttumTikla} style={{margin:"-6px 2px 12px",fontSize:12.5,color:C.blue,fontWeight:700,cursor:"pointer",textAlign:"right"}}>
+            {CV("Şifremi Unuttum")}
+          </p>
+        )}
+        {sifirlamaGonderildi && <p style={{margin:"-2px 2px 12px",fontSize:12.5,color:C.green,fontWeight:600}}>{CV("Sıfırlama bağlantısı e-postana gönderildi.")}</p>}
         {kimlik.kimlikHata && <p style={{margin:"4px 2px 12px",fontSize:12.5,color:C.red,fontWeight:600}}>{kimlik.kimlikHata}</p>}
+        {mod==="kayit" && <p style={{margin:"-6px 2px 12px",fontSize:11.5,color:WA(0.5)}}>{CV("Kayıt olunca doğrulama bağlantısı içeren bir e-posta alacaksın.")}</p>}
         <button onClick={gonder} disabled={gonderiliyor} style={{width:"100%",marginTop:6,padding:"13px 0",borderRadius:12,border:"none",background:C.blue,color:"#fff",fontSize:15,fontWeight:700,cursor:gonderiliyor?"default":"pointer",opacity:gonderiliyor?0.6:1}}>
           {gonderiliyor?"…":(mod==="kayit"?CV("Kayıt Ol"):CV("Giriş Yap"))}
         </button>
@@ -1268,7 +1310,9 @@ function Field({label,value,onChange,suffix,hint,type="number",prefix}){
         {prefix&&<span style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:C.blue,fontWeight:700,fontSize:14,zIndex:1}}>{prefix}</span>}
         <input
           type={isOran?"text":type}
-          inputMode={type==="password"?"text":"decimal"}
+          inputMode={(type==="password"||type==="email"||type==="text")?"text":"decimal"}
+          autoCapitalize={(type==="email"||type==="password")?"none":undefined}
+          autoComplete={type==="email"?"email":type==="password"?"current-password":undefined}
           value={value}
           onChange={e=>onChange(isOran?sadeceRakamVeVirgul(e.target.value):e.target.value)}
           onKeyDown={isOran?(e=>{
