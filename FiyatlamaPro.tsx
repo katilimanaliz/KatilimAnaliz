@@ -147,6 +147,43 @@ const FIREBASE_WEB_CONFIG = {
 
 type KpKullanici = { uid:string; email:string|null; ad:string|null; saglayici:string; dogrulandi:boolean; olusturmaTarihi:string|null } | null;
 
+// Pro üyelik durumu — kullanıcıdan AYRI tutuluyor (kullanıcı Firebase Auth'tan
+// gelir, pro durumu Firestore'un `pro/{uid}` dokümanından). Ayrı tutmanın
+// nedeni: auth objesi her yeniden oluşturulduğunda (login/logout) sıfırdan
+// kurulur, pro durumu ise IAP/webhook tarafından ayrı güncellenecek — ikisini
+// karıştırmak gereksiz yeniden render'lara ve senkronizasyon hatalarına yol açar.
+// ⚠️ 2026-09-26: bu ilk sürüm — pro alanı şimdilik App Store/Play Store IAP'a
+// bağlı DEĞİL, sadece Firestore Console'dan elle set edilebiliyor (beta test
+// ve kendi hesabın için). Gerçek abonelik entegrasyonu (StoreKit/Play Billing
+// + sunucu tarafı doğrulama) ayrı bir iş paketi.
+type KpProDurum = { aktif:boolean; bitisTarihi:string|null; kaynak:string|null };
+const KP_PRO_VARSAYILAN: KpProDurum = { aktif:false, bitisTarihi:null, kaynak:null };
+
+// uid için Firestore'dan pro durumunu okur. firebase/firestore SADECE web SDK
+// gerektirir — native tarafta ayrı bir Capacitor eklentisi KURULMASINA gerek
+// yok, çünkü bu SDK ağ üzerinden çalışır ve Capacitor WebView içinde de aynen
+// çalışır (auth ise native oturum/token yönetimi gerektirdiği için ayrı
+// @capacitor-firebase/authentication eklentisi kullanıyorduk — Firestore'da
+// böyle bir native-özel katman şart değil).
+async function kpProDurumGetir(uid:string): Promise<KpProDurum>{
+  try{
+    const app=await kpFirebaseWebApp();
+    const {getFirestore,doc,getDoc}=await import("firebase/firestore");
+    const snap=await getDoc(doc(getFirestore(app),"pro",uid));
+    if(!snap.exists()) return KP_PRO_VARSAYILAN;
+    const d=snap.data() as any;
+    const bitisTarihi:string|null = d?.bitisTarihi || null;
+    // Bitiş tarihi geçmişse aktif sayma — sunucu tarafında güncellenmemiş
+    // eski bir "aktif:true" kaydı yüzünden süresi dolmuş bir aboneliğin
+    // çalışmaya devam etmesini önler.
+    const suresiDolmus = bitisTarihi ? (new Date(bitisTarihi).getTime() < Date.now()) : false;
+    return { aktif: !!d?.aktif && !suresiDolmus, bitisTarihi, kaynak: d?.kaynak || null };
+  }catch(e){
+    console.error("Pro durumu okunamadı:", e);
+    return KP_PRO_VARSAYILAN;
+  }
+}
+
 // Firebase Web SDK'yı SADECE web'de (native değilken) dinamik import eder —
 // @capacitor-firebase/messaging ile AYNI desen (bkz. yukarıdaki push bildirim
 // kaydı): modül yalnızca gerektiğinde yüklenir, native tarafta hiç import
@@ -207,6 +244,20 @@ function kpKatilimTarihiMetni(iso:string|null|undefined):string|null{
   }catch{ return null; }
 }
 
+// Pro-kilitli bir aksiyona (paylaşım, sınırsız alarm vb.) her yerden aynı
+// şekilde kapı koymak için: pro değilse paywall ekranına yönlendirip false
+// döner (çağıran taraf aksiyonu İPTAL eder), pro ise true döner (aksiyon
+// DEVAM eder). Tek bir yerde tanımlanmasının amacı: ekran ekran "pro mu
+// kontrol et" mantığını tekrar tekrar yazıp birini unutma riskini ortadan
+// kaldırmak — bkz. Dersler 11.3 (komşu kodun deseni taklit edilmeli).
+// ⚠️ "proSatinAl" ekranı henüz YOK — bu fonksiyon şimdilik oraya nav()
+// çağırıyor, ekran eklenene kadar bu bir sonraki adım.
+function kpProGerekliMi(pro:KpProDurum, nav:(ekran:string)=>void): boolean{
+  if(pro.aktif) return true;
+  nav("proSatinAl");
+  return false;
+}
+
 // Paylaşılan kimlik hook'u — kök bileşende BİR KERE çağrılıp alt ekranlara
 // prop olarak geçiriliyor (Context yerine — dosyadaki mevcut desen zaten
 // "tek büyük kök bileşen + prop geçişi", örn. KonutFinansman'a s={settings}
@@ -215,6 +266,8 @@ function useKpKimlik(){
   const [kullanici,setKullanici]=useState<KpKullanici>(null);
   const [kimlikYukleniyor,setKimlikYukleniyor]=useState(true);
   const [kimlikHata,setKimlikHata]=useState<string|null>(null);
+  const [pro,setPro]=useState<KpProDurum>(KP_PRO_VARSAYILAN);
+  const [proYukleniyor,setProYukleniyor]=useState(false);
 
   useEffect(()=>{
     let iptal=false;
@@ -246,6 +299,18 @@ function useKpKimlik(){
     })();
     return ()=>{ iptal=true; };
   },[]);
+
+  // Pro durumu — kullanıcının uid'i her değiştiğinde (giriş/çıkış/hesap
+  // değişimi) YENİDEN okunur. Misafir kullanıcıda (uid yok) hiç sorgu
+  // atılmadan direkt varsayılana (aktif:false) düşülür — gereksiz Firestore
+  // okuması yapılmaz.
+  useEffect(()=>{
+    let iptal=false;
+    if(!kullanici?.uid){ setPro(KP_PRO_VARSAYILAN); return; }
+    setProYukleniyor(true);
+    kpProDurumGetir(kullanici.uid).then(d=>{ if(!iptal){ setPro(d); setProYukleniyor(false); } });
+    return ()=>{ iptal=true; };
+  },[kullanici?.uid]);
 
   const _islemSarmala=async(islem:()=>Promise<void>,baglam:"eposta"|"diger"="eposta")=>{
     setKimlikHata(null);
@@ -473,7 +538,7 @@ function useKpKimlik(){
     }
   });
 
-  return {kullanici,kimlikYukleniyor,kimlikHata,setKimlikHata,eposta_kayit,eposta_giris,sifremiUnuttum,google_giris,apple_giris,cikisYap,hesabimiSil,epostaTekrarGonder,epostaDogrulamaKontrolEt,adGuncelle,sifreDegistir};
+  return {kullanici,kimlikYukleniyor,kimlikHata,setKimlikHata,eposta_kayit,eposta_giris,sifremiUnuttum,google_giris,apple_giris,cikisYap,hesabimiSil,epostaTekrarGonder,epostaDogrulamaKontrolEt,adGuncelle,sifreDegistir,pro,proYukleniyor};
 }
 
 // ── Giriş / Kayıt Ekranı ──
@@ -719,6 +784,96 @@ function ProfilAyarlari({kimlik,nav}:{kimlik:ReturnType<typeof useKpKimlik>;nav:
           {!hesapSilOnay && <span style={{fontSize:12,color:WA(0.45)}}>{CV("kalıcı, geri alınamaz")}</span>}
         </div>
       </Card>
+    </div>
+  );
+}
+
+// ── Pro satın alma ekranı (2026-09-26) ──────────────────────────────────
+// ⚠️ HENÜZ StoreKit/Play Billing'e bağlı DEĞİL — satinAl() şimdilik bir yer
+// tutucu. Gerçek satın alma akışı (App Store/Play Store ürün kimlikleri,
+// receipt doğrulama, Firestore'daki pro/{uid} dokümanının SUNUCU tarafında
+// güncellenmesi — istemci asla kendi pro durumunu yazamamalı) ayrı bir iş
+// paketi. Bu ekran şimdilik sadece fiyat/özellik vitrinini gösteriyor.
+// kpProGerekliMi() HERHANGİ bir ekrandan buraya yönlendirebiliyor, ama
+// back hedefi (ekran sözlüğünde "profil") sabit — YasalMetinEkrani/
+// hesapGiris'teki AYNI basit "sabit geri hedefi" deseni; nereden açıldığını
+// hatırlayıp oraya dönmek istersen ayrı bir state (örn. geriDonulecekEkran)
+// eklemek gerekir.
+function ProSatinAl({kimlik,nav}:{kimlik:ReturnType<typeof useKpKimlik>;nav:(sc:string)=>void}){
+  const [donem,setDonem]=useState<"aylik"|"yillik">("yillik");
+  const [gonderiliyor,setGonderiliyor]=useState(false);
+
+  const satinAl=async()=>{
+    setGonderiliyor(true);
+    kimlik.setKimlikHata("Satın alma altyapısı henüz bağlanmadı — yakında.");
+    setGonderiliyor(false);
+  };
+
+  const satir=(etiket:string, ucretsiz:boolean|string, pro:boolean|string)=>(
+    <div style={{display:"grid",gridTemplateColumns:"1fr 56px 56px",alignItems:"center",padding:"11px 0",borderBottom:`1px solid ${C.border}`}}>
+      <span style={{fontSize:13,color:C.text,fontWeight:500}}>{CV(etiket)}</span>
+      <span style={{textAlign:"center",fontSize:typeof ucretsiz==="string"?10.5:13,fontWeight:700,color:typeof ucretsiz==="string"?WA(0.5):(ucretsiz?C.green:WA(0.28))}}>
+        {typeof ucretsiz==="string" ? CV(ucretsiz) : (ucretsiz?"✓":"✕")}
+      </span>
+      <span style={{textAlign:"center",fontSize:typeof pro==="string"?10.5:13,fontWeight:700,color:C.green}}>
+        {typeof pro==="string" ? CV(pro) : (pro?"✓":"✕")}
+      </span>
+    </div>
+  );
+
+  return(
+    <div style={{padding:"0 16px 32px"}}>
+      <Card style={{textAlign:"center",padding:"22px 18px"}}>
+        <span style={{display:"inline-block",fontSize:11.5,fontWeight:700,color:"#06120E",background:"linear-gradient(90deg,#D8A94E,#F0CB7A)",padding:"5px 12px",borderRadius:20,marginBottom:12}}>{TR("Katılım Plus Pro")}</span>
+        <p style={{fontSize:19,fontWeight:700,color:C.label,margin:"0 0 6px",lineHeight:1.3}}>{CV("Daha fazla veri, daha rahat karar")}</p>
+        <p style={{fontSize:13,color:C.sub,margin:0,lineHeight:1.5}}>{CV("Fon Karşılaştırma'da birden fazla fon ekle, sınırsız alarm kur, hesaplamalarını PDF/WhatsApp ile paylaş.")}</p>
+      </Card>
+
+      <Card>
+        <div style={{display:"flex",background:WA(0.06),borderRadius:14,padding:4,gap:4}}>
+          <button onClick={()=>setDonem("aylik")} style={{flex:1,border:"none",background:donem==="aylik"?"linear-gradient(135deg,#1B9E7A,#2CCB9A)":"transparent",color:donem==="aylik"?"#06120E":C.sub,borderRadius:11,padding:"11px 6px",textAlign:"left",cursor:"pointer"}}>
+            <span style={{fontSize:12.5,fontWeight:600,display:"block"}}>{CV("Aylık")}</span>
+            <span style={{fontSize:15,fontWeight:700}}>₺99,99</span>
+          </button>
+          <button onClick={()=>setDonem("yillik")} style={{flex:1,border:"none",background:donem==="yillik"?"linear-gradient(135deg,#1B9E7A,#2CCB9A)":"transparent",color:donem==="yillik"?"#06120E":C.sub,borderRadius:11,padding:"11px 6px",textAlign:"left",cursor:"pointer"}}>
+            <span style={{fontSize:12.5,fontWeight:600,display:"block"}}>{CV("Yıllık")} <span style={{fontSize:9.5,fontWeight:700,color:donem==="yillik"?"#06120E":"#D8A94E",background:donem==="yillik"?"rgba(6,18,14,0.15)":"rgba(216,169,78,0.15)",padding:"1px 5px",borderRadius:6,marginLeft:4}}>{CV("2 ay bedava")}</span></span>
+            <span style={{fontSize:15,fontWeight:700}}>₺999,99</span>
+          </button>
+        </div>
+        <p style={{textAlign:"center",fontSize:11.5,color:WA(0.45),margin:"10px 2px 0"}}>{CV("7 gün ücretsiz dene, istediğin an iptal et.")}</p>
+      </Card>
+
+      <Card>
+        <SecTitle>Ücretsiz ile Pro Farkı</SecTitle>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 56px 56px",padding:"0 0 8px"}}>
+          <span/>
+          <span style={{textAlign:"center",fontSize:10.5,fontWeight:700,color:WA(0.4)}}>{TR("Ücretsiz")}</span>
+          <span style={{textAlign:"center",fontSize:10.5,fontWeight:700,color:C.green}}>{TR("Pro")}</span>
+        </div>
+        {satir("Fon Karşılaştırma'da çoklu fon ekleme", false, true)}
+        {satir("AI Finans Asistanı", "7/gün", "Sınırsız")}
+        {satir("Fiyat alarmları", "3 adet", "Sınırsız")}
+        {satir("Hesaplamaları PDF/WhatsApp ile paylaş", false, true)}
+        {satir("Hesaplayıcılar, BİST & fon tarama", true, true)}
+      </Card>
+
+      {kimlik.kimlikHata && <p style={{margin:"0 2px 12px",fontSize:12.5,color:C.red,fontWeight:600,textAlign:"center"}}>{kimlik.kimlikHata}</p>}
+
+      <button onClick={satinAl} disabled={gonderiliyor} style={{width:"100%",padding:"15px 0",borderRadius:14,border:"none",background:"linear-gradient(135deg,#1B9E7A,#2CCB9A)",color:"#06120E",fontSize:15,fontWeight:700,cursor:gonderiliyor?"default":"pointer",opacity:gonderiliyor?0.6:1,marginTop:4}}>
+        {gonderiliyor?"…":CV("7 Gün Ücretsiz Dene")}
+      </button>
+      <p style={{textAlign:"center",fontSize:10.5,color:WA(0.4),margin:"10px 10px 0",lineHeight:1.5}}>
+        {CV("Deneme sonrası")} {donem==="yillik"?"yıllık ₺999,99":"aylık ₺99,99"} {CV("olarak devam eder. Dönem bitmeden en az 24 saat önce iptal etmezsen abonelik App Store/Google Play hesabın üzerinden otomatik yenilenir.")}
+      </p>
+
+      <div style={{textAlign:"center",marginTop:18}}>
+        <span style={{fontSize:11.5,color:WA(0.45)}}>
+          <span onClick={()=>nav("gizlilikPolitikasi")} style={{textDecoration:"underline",cursor:"pointer"}}>{CV("Gizlilik Politikası")}</span>
+          {" · "}
+          <span onClick={()=>nav("kvkkAydinlatma")} style={{textDecoration:"underline",cursor:"pointer"}}>{CV("KVKK Aydınlatma Metni")}</span>
+        </span>
+        <p style={{fontSize:10,color:WA(0.35),margin:"8px 0 0"}}>{CV("Abonelik yönetimi ve iptali: Ayarlar → Apple Kimliği / Google Hesabı → Abonelikler.")}</p>
+      </div>
     </div>
   );
 }
@@ -19976,6 +20131,7 @@ const MENU = {
   hesapGiris:{title:"Giriş Yap / Kayıt Ol",back:"profil"},
   epostaDogrula:{title:"E-postanı Doğrula",back:"profil"},
   profilAyarlari:{title:"Profil Ayarları",back:"profil"},
+  proSatinAl:{title:"Katılım Plus Pro",back:"profil"},
   kvkkAydinlatma:{title:"KVKK Aydınlatma Metni",back:"hesapGiris"},
   gizlilikPolitikasi:{title:"Gizlilik Politikası",back:"hesapGiris"},
   bistHisseTarayici:{title:"BİST Hisse Veri İzleme",back:"home"},
@@ -30677,6 +30833,7 @@ function App(){
         {screen==="hesapGiris"&&<HesapGiris kimlik={kimlik} onBasarili={()=>nav("profil")} nav={nav} baslangicModu={girisBaslangicModu}/>}
         {screen==="epostaDogrula"&&<EpostaDogrula kimlik={kimlik} onBasarili={()=>nav("profil")} nav={nav}/>}
         {screen==="profilAyarlari"&&<ProfilAyarlari kimlik={kimlik} nav={nav}/>}
+        {screen==="proSatinAl"&&<ProSatinAl kimlik={kimlik} nav={nav}/>}
         {screen==="kvkkAydinlatma"&&<KvkkAydinlatma/>}
         {screen==="gizlilikPolitikasi"&&<GizlilikPolitikasi/>}
 
