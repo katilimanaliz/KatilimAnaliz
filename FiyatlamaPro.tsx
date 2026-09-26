@@ -412,7 +412,59 @@ function useKpKimlik(){
     }
   });
 
-  return {kullanici,kimlikYukleniyor,kimlikHata,setKimlikHata,eposta_kayit,eposta_giris,sifremiUnuttum,google_giris,apple_giris,cikisYap,hesabimiSil,epostaTekrarGonder,epostaDogrulamaKontrolEt};
+  // ⚠️ 2026-09-21 (kullanıcı isteği: "kutu içinde sağda ayarlar düğmesi
+  // olsun ordan isim soyisim bilgileri, şifre değiştirme bilgileri hesap
+  // silme filan olsun"): Profil Ayarları ekranı için iki YENİ işlem.
+  const adGuncelle=(yeniAd:string)=>_islemSarmala(async()=>{
+    const gercekIsNative=(window as any).Capacitor?.isNativePlatform?.() ?? false;
+    if(gercekIsNative){
+      const mod=await import("@capacitor-firebase/authentication");
+      await mod.FirebaseAuthentication.updateProfile({displayName:yeniAd});
+    } else {
+      const app=await kpFirebaseWebApp();
+      const {getAuth,updateProfile}=await import("firebase/auth");
+      const auth=getAuth(app);
+      if(!auth.currentUser) throw new Error("no-user");
+      await updateProfile(auth.currentUser,{displayName:yeniAd});
+    }
+    // updateProfile onAuthStateChanged'i TETİKLEMİYOR — state'i elle
+    // güncelliyoruz, mevcut kullanici'nin diğer alanlarını koruyarak.
+    setKullanici(onceki=>onceki?{...onceki,ad:yeniAd}:onceki);
+  });
+
+  // Şifre değiştirme GÜVENLİK GEREĞİ yakın zamanda giriş yapılmış olmasını
+  // istiyor (deleteUser ile aynı kısıtlama) — direkt deniyoruz, "requires-
+  // recent-login" gelirse kullanıcının verdiği MEVCUT şifreyle otomatik
+  // tekrar giriş yapıp (bu "yakın zamanda giriş" sayılıyor) TEKRAR
+  // deniyoruz. Kullanıcıya ayrı bir "tekrar giriş yap" adımı çıkarmıyor.
+  const sifreDegistir=(mevcutSifre:string,yeniSifre:string)=>_islemSarmala(async()=>{
+    const gercekIsNative=(window as any).Capacitor?.isNativePlatform?.() ?? false;
+    const email=kullanici?.email;
+    if(gercekIsNative){
+      const mod=await import("@capacitor-firebase/authentication");
+      try{
+        await mod.FirebaseAuthentication.updatePassword({newPassword:yeniSifre});
+      }catch(e:any){
+        if(!String(e?.code||e?.message||"").includes("requires-recent-login")||!email) throw e;
+        await mod.FirebaseAuthentication.signInWithEmailAndPassword({email,password:mevcutSifre});
+        await mod.FirebaseAuthentication.updatePassword({newPassword:yeniSifre});
+      }
+    } else {
+      const app=await kpFirebaseWebApp();
+      const {getAuth,updatePassword,signInWithEmailAndPassword}=await import("firebase/auth");
+      const auth=getAuth(app);
+      if(!auth.currentUser) throw new Error("no-user");
+      try{
+        await updatePassword(auth.currentUser,yeniSifre);
+      }catch(e:any){
+        if(!String(e?.code||"").includes("requires-recent-login")||!email) throw e;
+        await signInWithEmailAndPassword(auth,email,mevcutSifre);
+        if(auth.currentUser) await updatePassword(auth.currentUser,yeniSifre);
+      }
+    }
+  });
+
+  return {kullanici,kimlikYukleniyor,kimlikHata,setKimlikHata,eposta_kayit,eposta_giris,sifremiUnuttum,google_giris,apple_giris,cikisYap,hesabimiSil,epostaTekrarGonder,epostaDogrulamaKontrolEt,adGuncelle,sifreDegistir};
 }
 
 // ── Giriş / Kayıt Ekranı ──
@@ -562,6 +614,83 @@ function EpostaDogrula({kimlik,onBasarili,nav}:{kimlik:ReturnType<typeof useKpKi
             {CV("Farklı bir hesapla devam et (Çıkış Yap)")}
           </p>
         </div>
+      </Card>
+    </div>
+  );
+}
+
+// ── Profil Ayarları ──
+// (2026-09-21, kullanıcı isteği: "kutu içinde sağda ayarlar düğmesi olsun
+// ordan isim soyisim bilgileri, şifre değiştirme bilgileri hesap silme
+// filan olsun"): Ad Soyad düzenleme, Şifre Değiştir, Hesabımı Sil — üçü
+// bir arada. "Hesabımı Sil" daha önce Profil'de kutunun ALTINDA ayrı bir
+// linkti, buraya TAŞINDI (Profil'deki eski konumundan kaldırıldı).
+function ProfilAyarlari({kimlik,nav}:{kimlik:ReturnType<typeof useKpKimlik>;nav:(sc:string)=>void}){
+  const [ad,setAd]=useState(kimlik.kullanici?.ad||"");
+  const [adGonderiliyor,setAdGonderiliyor]=useState(false);
+  const [adKaydedildi,setAdKaydedildi]=useState(false);
+
+  const [mevcutSifre,setMevcutSifre]=useState("");
+  const [yeniSifre,setYeniSifre]=useState("");
+  const [sifreGonderiliyor,setSifreGonderiliyor]=useState(false);
+  const [sifreDegisti,setSifreDegisti]=useState(false);
+
+  const [hesapSilOnay,setHesapSilOnay]=useState(false);
+
+  // Sadece e-posta/şifre ile girenler şifre değiştirebilir — Google/Apple
+  // ile girenlerin KatılımPlus'ta bir şifresi yok, sağlayıcı yönetiyor.
+  const epostaSifreliMi=kimlik.kullanici?.saglayici==="password";
+
+  const adKaydet=async()=>{
+    if(!ad.trim()){ kimlik.setKimlikHata("Ad Soyad boş olamaz."); return; }
+    setAdGonderiliyor(true);
+    setAdKaydedildi(false);
+    const basarili=await kimlik.adGuncelle(ad.trim());
+    setAdGonderiliyor(false);
+    if(basarili) setAdKaydedildi(true);
+  };
+
+  const sifreKaydet=async()=>{
+    if(!mevcutSifre||!yeniSifre){ kimlik.setKimlikHata("Mevcut ve yeni şifre gerekli."); return; }
+    setSifreGonderiliyor(true);
+    setSifreDegisti(false);
+    const basarili=await kimlik.sifreDegistir(mevcutSifre,yeniSifre);
+    setSifreGonderiliyor(false);
+    if(basarili){ setSifreDegisti(true); setMevcutSifre(""); setYeniSifre(""); }
+  };
+
+  return(
+    <div style={{padding:"0 16px 32px"}}>
+      <Card>
+        <SecTitle>Hesap</SecTitle>
+        <Field label="Ad Soyad" value={ad} onChange={setAd} type="text"/>
+        <p style={{margin:"-6px 2px 10px",fontSize:11.5,color:WA(0.45)}}>{CV("E-posta")}: {kimlik.kullanici?.email}</p>
+        {adKaydedildi && <p style={{margin:"0 2px 10px",fontSize:12.5,color:C.green,fontWeight:600}}>{CV("Kaydedildi.")}</p>}
+        <button onClick={adKaydet} disabled={adGonderiliyor} style={{width:"100%",padding:"12px 0",borderRadius:12,border:"none",background:C.blue,color:"#fff",fontSize:14,fontWeight:700,cursor:adGonderiliyor?"default":"pointer",opacity:adGonderiliyor?0.6:1}}>
+          {adGonderiliyor?"…":CV("Adı Kaydet")}
+        </button>
+      </Card>
+
+      {epostaSifreliMi && <Card>
+        <SecTitle>Şifre Değiştir</SecTitle>
+        <Field label="Mevcut Şifre" value={mevcutSifre} onChange={setMevcutSifre} type="password"/>
+        <Field label="Yeni Şifre" value={yeniSifre} onChange={setYeniSifre} type="password"/>
+        {sifreDegisti && <p style={{margin:"0 2px 10px",fontSize:12.5,color:C.green,fontWeight:600}}>{CV("Şifren değiştirildi.")}</p>}
+        <button onClick={sifreKaydet} disabled={sifreGonderiliyor} style={{width:"100%",padding:"12px 0",borderRadius:12,border:"none",background:C.blue,color:"#fff",fontSize:14,fontWeight:700,cursor:sifreGonderiliyor?"default":"pointer",opacity:sifreGonderiliyor?0.6:1}}>
+          {sifreGonderiliyor?"…":CV("Şifreyi Değiştir")}
+        </button>
+      </Card>}
+
+      {kimlik.kimlikHata && <p style={{margin:"0 2px 12px",fontSize:12.5,color:C.red,fontWeight:600,textAlign:"center"}}>{kimlik.kimlikHata}</p>}
+
+      <Card>
+        <SecTitle>Tehlikeli Bölge</SecTitle>
+        <p onClick={async()=>{
+            if(hesapSilOnay){ setHesapSilOnay(false); if(await kimlik.hesabimiSil()) nav("home"); }
+            else setHesapSilOnay(true);
+          }} style={{margin:0,fontSize:13.5,fontWeight:700,color:hesapSilOnay?C.red:WA(0.5),cursor:"pointer",textAlign:"center",padding:"6px 0"}}>
+          {hesapSilOnay?CV("Emin misiniz? (tekrar dokun)"):CV("Hesabımı Sil (kalıcı, geri alınamaz)")}
+        </p>
       </Card>
     </div>
   );
@@ -19819,6 +19948,7 @@ const MENU = {
   fiyatAlarmlarim:{title:"Fiyat Alarmlarım",back:"piyasaMenu"},
   hesapGiris:{title:"Giriş Yap / Kayıt Ol",back:"profil"},
   epostaDogrula:{title:"E-postanı Doğrula",back:"profil"},
+  profilAyarlari:{title:"Profil Ayarları",back:"profil"},
   kvkkAydinlatma:{title:"KVKK Aydınlatma Metni",back:"hesapGiris"},
   gizlilikPolitikasi:{title:"Gizlilik Politikası",back:"hesapGiris"},
   bistHisseTarayici:{title:"BİST Hisse Veri İzleme",back:"home"},
@@ -28165,9 +28295,6 @@ function App(){
   // Hesap/kimlik doğrulama — kök seviyede BİR KERE (bkz. useKpKimlik tanımı,
   // dosya başında). Profil ekranı ve HesapGiris ekranı bunu prop olarak alır.
   const kimlik=useKpKimlik();
-  // KVKK m.7/m.11 (2026-09-21 eklendi): hesap silme, mevcut "Tümünü Sil"
-  // deseniyle AYNI iki-dokunuşlu onay (bkz. satır ~22108, silOnay).
-  const [hesapSilOnay,setHesapSilOnay]=useState(false);
   // ⚠️ 2026-09-21 (kullanıcı isteği: "hesap oluştur veya giriş yap alanı
   // ekleyelim"): Profil'deki "Hesap Oluştur" ve "Giriş Yap" butonları
   // HesapGiris ekranını hangi sekmeyle (kayıt/giriş) açacağını buradan
@@ -30280,12 +30407,20 @@ function App(){
                 dışarıda bırakıldı). Zorunlu değil (misafir kullanım
                 devam ediyor), ama girişi teşvik ediyoruz. */}
             {kimlik.kullanici ? (
-            <div style={{background:(TEMA==="acik"?"linear-gradient(135deg,#E8F0FA 0%,#F6FAFD 70%)":"linear-gradient(135deg,#16243A 0%,#0F1923 70%)"),border:"1px solid rgba(91,155,216,0.25)",borderRadius:20,padding:"18px 18px 16px",marginBottom:12}}>
+            <div style={{position:"relative",background:(TEMA==="acik"?"linear-gradient(135deg,#E8F0FA 0%,#F6FAFD 70%)":"linear-gradient(135deg,#16243A 0%,#0F1923 70%)"),border:"1px solid rgba(91,155,216,0.25)",borderRadius:20,padding:"18px 18px 16px",marginBottom:12}}>
+              {/* ⚠️ 2026-09-21 (kullanıcı isteği: "kutu içinde sağda
+                  ayarlar düğmesi olsun ordan isim soyisim bilgileri, şifre
+                  değiştirme bilgileri hesap silme filan olsun"): kutunun
+                  sağ üst köşesine mutlak konumlu dişli ikonu — satır
+                  içindeki Çıkış Yap ile yer çakışmasın diye ayrı katmanda. */}
+              <button onClick={()=>nav("profilAyarlari")} aria-label="Profil Ayarları" style={{position:"absolute",top:12,right:12,width:30,height:30,borderRadius:15,border:"none",background:WA(0.1),display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
+                <Settings size={15} color={WA(0.6)} strokeWidth={2}/>
+              </button>
               <div style={{display:"flex",alignItems:"center",gap:14}}>
                 <div style={{width:56,height:56,borderRadius:28,background:"linear-gradient(135deg,#1B9E7A,#2CCB9A)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontWeight:700,color:"#fff",flexShrink:0}}>
                   {(kimlik.kullanici.ad||kimlik.kullanici.email||"?")[0].toLocaleUpperCase("tr-TR")}
                 </div>
-                <div style={{flex:1,minWidth:0}}>
+                <div style={{flex:1,minWidth:0,paddingRight:34}}>
                   {/* ⚠️ 2026-09-21 (kullanıcı isteği: "kayıt ol da isim
                       soyisim de sorması lazım"): ad varsa birincil satır
                       olarak gösteriliyor, e-posta ikincil satıra düşüyor —
@@ -30297,7 +30432,6 @@ function App(){
                     <p style={{margin:0,fontSize:17,fontWeight:700,color:C.label,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{kimlik.kullanici.email||CV("Hesabım")}</p>
                   )}
                 </div>
-                <button onClick={()=>kimlik.cikisYap()} style={{padding:"7px 12px",borderRadius:9,border:`1px solid ${C.border}`,background:"transparent",color:C.red,fontSize:12,fontWeight:700,cursor:"pointer",flexShrink:0}}>{CV("Çıkış Yap")}</button>
               </div>
               {/* ⚠️ 2026-09-21: "Ücretsiz" şu an sadece statik bir etiket —
                   henüz ücretli katman yok (Faz 3, RevenueCat/IAP ile
@@ -30307,6 +30441,8 @@ function App(){
               <div style={{display:"flex",alignItems:"center",gap:8,marginTop:14,paddingTop:12,borderTop:`1px solid ${WA(0.08)}`}}>
                 <span style={{padding:"3px 10px",borderRadius:20,background:WA(0.1),fontSize:11,fontWeight:700,color:C.label}}>{CV("Ücretsiz")}</span>
                 {kpKatilimTarihiMetni(kimlik.kullanici.olusturmaTarihi) && <span style={{fontSize:12,color:WA(0.5)}}>{kpKatilimTarihiMetni(kimlik.kullanici.olusturmaTarihi)}</span>}
+                <span style={{flex:1}}/>
+                <button onClick={()=>kimlik.cikisYap()} style={{padding:"5px 11px",borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",color:C.red,fontSize:11.5,fontWeight:700,cursor:"pointer",flexShrink:0}}>{CV("Çıkış Yap")}</button>
               </div>
             </div>
             ) : (
@@ -30334,21 +30470,6 @@ function App(){
               <div style={{background:C.blueLight,border:`1px solid ${C.border}`,borderRadius:12,padding:"11px 14px",marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
                 <span style={{flex:1,fontSize:12,color:C.blue,fontWeight:600}}>{CV("E-postan henüz doğrulanmadı.")}</span>
                 <button onClick={()=>nav("epostaDogrula")} style={{padding:"6px 12px",borderRadius:8,border:"none",background:C.blue,color:"#fff",fontSize:11.5,fontWeight:700,cursor:"pointer",flexShrink:0}}>{CV("Doğrula")}</button>
-              </div>
-            )}
-
-            {/* KVKK m.7/m.11 — hesap silme hakkı (2026-09-21 eklendi).
-                Sadece giriş yapılmışsa görünür. İki dokunuşlu onay:
-                ilk tık "Emin misiniz?" yazar, ikincisi gerçekten siler. */}
-            {kimlik.kullanici && (
-              <div style={{textAlign:"center",marginBottom:14}}>
-                <p onClick={async()=>{
-                    if(hesapSilOnay){ setHesapSilOnay(false); if(await kimlik.hesabimiSil()) nav("home"); }
-                    else setHesapSilOnay(true);
-                  }} style={{margin:0,fontSize:12,fontWeight:600,color:hesapSilOnay?C.red:WA(0.38),cursor:"pointer"}}>
-                  {hesapSilOnay?CV("Emin misiniz? (tekrar dokun)"):CV("Hesabımı Sil")}
-                </p>
-                {kimlik.kimlikHata && <p style={{margin:"4px 0 0",fontSize:11.5,color:C.red,fontWeight:600}}>{kimlik.kimlikHata}</p>}
               </div>
             )}
 
@@ -30528,6 +30649,7 @@ function App(){
         {screen==="ayarlar"&&<Ayarlar settings={settings} onSave={handleSave}/>}
         {screen==="hesapGiris"&&<HesapGiris kimlik={kimlik} onBasarili={()=>nav("profil")} nav={nav} baslangicModu={girisBaslangicModu}/>}
         {screen==="epostaDogrula"&&<EpostaDogrula kimlik={kimlik} onBasarili={()=>nav("profil")} nav={nav}/>}
+        {screen==="profilAyarlari"&&<ProfilAyarlari kimlik={kimlik} nav={nav}/>}
         {screen==="kvkkAydinlatma"&&<KvkkAydinlatma/>}
         {screen==="gizlilikPolitikasi"&&<GizlilikPolitikasi/>}
 
