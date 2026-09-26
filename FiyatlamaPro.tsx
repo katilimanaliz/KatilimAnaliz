@@ -30616,13 +30616,16 @@ function App(){
                   )}
                 </div>
               </div>
-              {/* ⚠️ 2026-09-21: "Ücretsiz" şu an sadece statik bir etiket —
-                  henüz ücretli katman yok (Faz 3, RevenueCat/IAP ile
-                  gelecek), o zaman bu satır gerçek plan durumunu
-                  yansıtacak şekilde güncellenecek. Katılım tarihi
-                  Firebase'in gerçek creationTime alanından geliyor. */}
+              {/* ⚠️ 2026-09-26: "Ücretsiz" artık statik değil — kimlik.pro.aktif
+                  Firestore'daki pro/{uid} dokümanından geliyor (bkz.
+                  useKpKimlik hook'u). Pro iken altın rozet, değilken eski
+                  gri "Ücretsiz" etiketi aynen kalıyor. */}
               <div style={{display:"flex",alignItems:"center",gap:8,marginTop:14,paddingTop:12,borderTop:`1px solid ${WA(0.08)}`}}>
-                <span style={{padding:"3px 10px",borderRadius:20,background:WA(0.1),fontSize:11,fontWeight:700,color:C.label}}>{CV("Ücretsiz")}</span>
+                {kimlik.pro.aktif ? (
+                  <span style={{padding:"3px 10px",borderRadius:20,background:"linear-gradient(90deg,#D8A94E,#F0CB7A)",fontSize:11,fontWeight:700,color:"#06120E"}}>{TR("⭐ Pro")}</span>
+                ) : (
+                  <span style={{padding:"3px 10px",borderRadius:20,background:WA(0.1),fontSize:11,fontWeight:700,color:C.label}}>{CV("Ücretsiz")}</span>
+                )}
                 {kpKatilimTarihiMetni(kimlik.kullanici.olusturmaTarihi) && <span style={{fontSize:12,color:WA(0.5)}}>{kpKatilimTarihiMetni(kimlik.kullanici.olusturmaTarihi)}</span>}
                 <span style={{flex:1}}/>
                 <button onClick={()=>kimlik.cikisYap()} style={{padding:"5px 11px",borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",color:C.red,fontSize:11.5,fontWeight:700,cursor:"pointer",flexShrink:0}}>{CV("Çıkış Yap")}</button>
@@ -30643,6 +30646,23 @@ function App(){
               <button onClick={()=>{ setGirisBaslangicModu("kayit"); nav("hesapGiris"); }} style={{width:"100%",padding:"13px 0",borderRadius:12,border:"none",background:C.blue,color:"#fff",fontSize:14.5,fontWeight:700,cursor:"pointer",marginBottom:10}}>{CV("Hesap Oluştur")}</button>
               <button onClick={()=>{ setGirisBaslangicModu("giris"); nav("hesapGiris"); }} style={{width:"100%",padding:"12px 0",borderRadius:12,border:`1.5px solid ${C.border}`,background:"transparent",color:C.label,fontSize:14.5,fontWeight:700,cursor:"pointer"}}>{CV("Giriş Yap")}</button>
             </div>
+            )}
+
+            {/* ⚠️ 2026-09-26: Pro'ya Geç kartı — sadece GİRİŞ YAPMIŞ ve
+                HENÜZ PRO OLMAYAN kullanıcıya gösteriliyor. proYukleniyor
+                true iken (Firestore sorgusu sürerken) hiç göstermiyoruz —
+                aksi halde "Ücretsiz" varsayılanıyla bir an için yanlışlıkla
+                Pro olmayan biri gibi görünüp, sorgu bitince kart aniden
+                kaybolabilir (Pro kullanıcılar için rahatsız edici titreme). */}
+            {kimlik.kullanici && !kimlik.proYukleniyor && !kimlik.pro.aktif && (
+              <div onClick={()=>nav("proSatinAl")} style={{cursor:"pointer",display:"flex",alignItems:"center",gap:12,background:"linear-gradient(135deg,#1B9E7A,#2CCB9A)",borderRadius:16,padding:"14px 16px",marginBottom:12}}>
+                <span style={{width:36,height:36,borderRadius:18,background:"rgba(6,18,14,0.15)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:16}}>⭐</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <p style={{margin:0,fontSize:14,fontWeight:700,color:"#06120E"}}>{CV("Pro'ya Geç")}</p>
+                  <p style={{margin:"2px 0 0",fontSize:11.5,color:"rgba(6,18,14,0.7)"}}>{CV("Sınırsız alarm, çoklu fon karşılaştırma ve daha fazlası")}</p>
+                </div>
+                <span style={{fontSize:18,color:"#06120E",flexShrink:0}}>›</span>
+              </div>
             )}
 
             {/* ⚠️ 2026-09-21: doğrulanmamış e-posta/şifre hesapları için
