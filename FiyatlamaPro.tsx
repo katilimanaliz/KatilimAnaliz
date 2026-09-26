@@ -157,7 +157,7 @@ async function kpFirebaseWebApp(){
   return getApps().length ? getApps()[0] : initializeApp(FIREBASE_WEB_CONFIG);
 }
 
-function kpKimlikHataMetni(kod:string|undefined):string{
+function kpKimlikHataMetni(kod:string|undefined,baglam:"eposta"|"diger"="eposta"):string{
   const k=String(kod||"");
   if(k.includes("email-already-in-use")) return "Bu e-posta zaten kayıtlı. Giriş yapmayı dene.";
   if(k.includes("invalid-email")) return "E-posta adresi geçersiz.";
@@ -168,7 +168,16 @@ function kpKimlikHataMetni(kod:string|undefined):string{
   // ile aynı genel mesaja düşüyordu, artık kullanıcıyı doğrudan Kayıt Ol'a
   // yönlendiriyor.
   if(k.includes("user-not-found")) return "Bu e-posta ile kayıtlı bir hesap bulunamadı. Kayıt Ol sekmesinden yeni hesap açabilirsin.";
-  if(k.includes("wrong-password")||k.includes("invalid-credential")) return "E-posta veya şifre hatalı.";
+  // ⚠️ 2026-09-21 (kullanıcı raporu: "Apple ile Devam Et"i başarıyla
+  // onayladıktan SONRA "E-posta veya şifre hatalı" çıktı — bu YANLIŞ
+  // bağlamdaydı): Firebase'in "invalid-credential" hata KODU sadece
+  // e-posta/şifre'ye özgü değil, Apple/Google gibi sağlayıcıların kimlik
+  // doğrulaması ARKA UÇTA (ör. bizim private key'imizle) başarısız
+  // olduğunda da AYNI kodu döndürebiliyor. O yüzden bu eşleme SADECE
+  // e-posta/şifre bağlamında (baglam==="eposta") uygulanıyor — Apple/
+  // Google girişinde aynı kod gelirse, kullanıcıyı yanlış yönlendirmemek
+  // için altdaki GENEL (ham kod gösteren) mesaja düşüyor.
+  if(baglam==="eposta"&&(k.includes("wrong-password")||k.includes("invalid-credential"))) return "E-posta veya şifre hatalı.";
   if(k.includes("too-many-requests")) return "Çok fazla deneme yapıldı, biraz sonra tekrar dene.";
   if(k.includes("requires-recent-login")) return "Güvenlik gereği hesap silmeden önce tekrar giriş yapman gerekiyor. Çıkış yapıp yeniden giriş dener misin?";
   if(k.includes("no-user")) return "Silinecek bir hesap bulunamadı.";
@@ -238,7 +247,7 @@ function useKpKimlik(){
     return ()=>{ iptal=true; };
   },[]);
 
-  const _islemSarmala=async(islem:()=>Promise<void>)=>{
+  const _islemSarmala=async(islem:()=>Promise<void>,baglam:"eposta"|"diger"="eposta")=>{
     setKimlikHata(null);
     try{ await islem(); return true; }
     catch(e:any){
@@ -247,7 +256,7 @@ function useKpKimlik(){
       // eklentileri hata kodunu .code yerine .errorMessage ya da düz
       // .message içinde farklı bir formatta veriyor, üç ihtimali de deniyoruz.
       console.error("Kimlik işlemi hata verdi:", e);
-      setKimlikHata(kpKimlikHataMetni(e?.code||e?.errorMessage||e?.message));
+      setKimlikHata(kpKimlikHataMetni(e?.code||e?.errorMessage||e?.message,baglam));
       return false;
     }
   };
@@ -314,7 +323,7 @@ function useKpKimlik(){
       const {getAuth,GoogleAuthProvider,signInWithPopup}=await import("firebase/auth");
       await signInWithPopup(getAuth(app),new GoogleAuthProvider());
     }
-  });
+  },"diger");
 
   const apple_giris=()=>_islemSarmala(async()=>{
     const gercekIsNative=(window as any).Capacitor?.isNativePlatform?.() ?? false;
@@ -326,7 +335,7 @@ function useKpKimlik(){
       const {getAuth,OAuthProvider,signInWithPopup}=await import("firebase/auth");
       await signInWithPopup(getAuth(app),new OAuthProvider("apple.com"));
     }
-  });
+  },"diger");
 
   const cikisYap=async()=>{
     try{
