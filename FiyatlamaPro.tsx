@@ -1172,9 +1172,14 @@ function Icon({k, size=22, color=(TEMA==="acik"?"#4A6E96":"#8FA8D8"), strokeWidt
 let TEMA_SECIM: "koyu" | "acik" | "sistem" = (() => {
   try {
     const v = localStorage.getItem("kp_tema");
-    if (v === "acik" || v === "sistem") return v;
-    return "koyu";
-  } catch (e) { return "koyu"; }
+    if (v === "koyu" || v === "sistem") return v;
+    // ⚠️ 2026-09-26 (kullanıcı isteği: "Açık mod varsayılan olsun"):
+    // daha önce kayıtlı bir tercih YOKSA (ilk açılış) varsayılan artık
+    // "acik". localStorage'da zaten "koyu" yazılı olan MEVCUT kullanıcılar
+    // etkilenmiyor — bu satır sadece hiç kayıt bulunamayan/geçersiz olan
+    // durumda devreye giriyor.
+    return "acik";
+  } catch (e) { return "acik"; }
 })();
 let TEMA: "koyu" | "acik" = (() => {
   if (TEMA_SECIM === "acik") return "acik";
@@ -7920,7 +7925,7 @@ function OranAnalizi({s}){
   );
 }
 
-function OdemePlani({plan, bsmvOran, kkdfOran, onClose, showKomisyon, basitOran, efektifOran, anaparaTutar, taksitAraligiGun}){
+function OdemePlani({plan, bsmvOran, kkdfOran, onClose, showKomisyon, basitOran, efektifOran, anaparaTutar, taksitAraligiGun, kimlik, nav}){
   const bsmv=bsmvOran||0, kkdf=kkdfOran||0;
   const hasBsmv=bsmv>0, hasKkdf=kkdf>0, hasTax=(bsmv+kkdf)>0;
   const MONTHS=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
@@ -8168,6 +8173,21 @@ function RaporModal({baslik, satirlar, plan, onClose, showKdv=false, bsmvOran=0,
   };
 
   const pdfOlusturVePaylas = async () => {
+    // ⚠️ 2026-09-26 (kullanıcı isteği: "Paylaş aksiyonu Pro yapalım"):
+    // fonksiyonun EN BAŞINDA kontrol — kimlik/nav prop olarak yoksa
+    // (kullanılmayan/eski bir çağrı noktası kalırsa) opsiyonel zincirleme
+    // ile FAIL-OPEN yerine burada AÇIKÇA "pro değilse dur" davranışını
+    // yalnızca kimlik gerçekten mevcutsa uyguluyoruz — kimlik hiç
+    // gelmezse (unutulan bir 8. çağrı noktası gibi) kilitlemek yerine
+    // eski (kısıtlanmamış) davranışa düşüyor; bu, "hiç çalışmayan bir
+    // paylaş butonu" yerine "gözden kaçmış bir yerde hâlâ ücretsiz
+    // paylaşım" riskini tercih eder — kullanıcı deneyimi güvenlik
+    // sınırından önemli.
+    if(kimlik && !kimlik.pro.aktif){
+      onClose();
+      kpProGerekliMi(kimlik.pro, nav);
+      return;
+    }
     setYukleniyor(true);
     // ── NATIVE (Capacitor/iOS) DALI (2026-07-11) ─────────────────────────
     // window.open + printWindow.print() yaklaşımı WKWebView'de ÇALIŞMAZ:
@@ -8504,7 +8524,7 @@ function BankaOranSecici({kolon,onSec}:{kolon:string;onSec:(oran:number,ad:strin
 }
 
 // ─── ERKEN KAPAMA MODALI ─────────────────────────────────────────────────────
-function KonutFinansman({s,onGecmis})/* v2 */{
+function KonutFinansman({s,onGecmis,kimlik,nav})/* v2 */{
   const [tutar,setTutar]=useState("");
   const [vade,setVade]=useState("");
   const [oran,setOran]=useState("");
@@ -8649,7 +8669,7 @@ function KonutFinansman({s,onGecmis})/* v2 */{
           </div>
         </div>
       )}
-      {showPlan&&r?.plan&&<OdemePlani plan={r.plan} bsmvOran={r.bsmvR} kkdfOran={r.kkdfR} onClose={()=>setShowPlan(false)} showKomisyon={r.kullUcret>0} basitOran={tip==="aylik"?sayiOku(oran)*12:sayiOku(oran)} efektifOran={r?.efektifYillik} anaparaTutar={parseFloat(tutar)}/>}
+      {showPlan&&r?.plan&&<OdemePlani plan={r.plan} bsmvOran={r.bsmvR} kkdfOran={r.kkdfR} onClose={()=>setShowPlan(false)} showKomisyon={r.kullUcret>0} basitOran={tip==="aylik"?sayiOku(oran)*12:sayiOku(oran)} efektifOran={r?.efektifYillik} anaparaTutar={parseFloat(tutar)} kimlik={kimlik} nav={nav}/>}
       {showErken&&r?.plan&&<KalanAnaparaModal plan={r.plan} onClose={()=>setShowErken(false)} showCeza={true}/>}
       <Card>
         {/* İlk Ev Toggle */}
@@ -8762,7 +8782,7 @@ function KonutFinansman({s,onGecmis})/* v2 */{
   );
 }
 
-function TasitFinansman({s,onGecmis}){
+function TasitFinansman({s,onGecmis,kimlik,nav}){
   const [tutar,setTutar]=useState("");
   const [vade,setVade]=useState("");
   const [oran,setOran]=useState("");
@@ -8900,7 +8920,7 @@ function TasitFinansman({s,onGecmis}){
         </div>
       )}
       {showPlan&&r?.plan&&<OdemePlani plan={r.plan} bsmvOran={s.bireyselBSMV} kkdfOran={s.bireyselKKDF} onClose={()=>setShowPlan(false)} showKomisyon={r.kullUcret>0}
-        basitOran={tip==="aylik"?sayiOku(oran)*12:sayiOku(oran)} efektifOran={r?.efektifYillik} anaparaTutar={parseFloat(tutar)}/>}
+        basitOran={tip==="aylik"?sayiOku(oran)*12:sayiOku(oran)} efektifOran={r?.efektifYillik} anaparaTutar={parseFloat(tutar)} kimlik={kimlik} nav={nav}/>}
       {showErken&&r?.plan&&<KalanAnaparaModal plan={r.plan} onClose={()=>setShowErken(false)}/>}
       <Card>
         <Seg options={[{v:"aylik",l:"Aylık %"},{v:"yillik",l:"Yıllık %"}]} value={tip} onChange={setTip}/>
@@ -9010,7 +9030,7 @@ function TasitFinansman({s,onGecmis}){
 }
 
 
-function YatirimFonuFinansman({s,onGecmis}){
+function YatirimFonuFinansman({s,onGecmis,kimlik,nav}){
   const [mod,setMod]=useState("standart"); // "standart" | "pesin"
   const [tutar,setTutar]=useState("");
   const [vade,setVade]=useState("");
@@ -9163,9 +9183,9 @@ function YatirimFonuFinansman({s,onGecmis}){
   return(
     <div style={{padding:"0 16px 32px"}}>
       {showPlan&&mod==="standart"&&r?.plan&&<OdemePlani plan={r.plan} bsmvOran={r.bsmvR} kkdfOran={r.kkdfR} onClose={()=>setShowPlan(false)} showKomisyon={r.kullUcret>0}
-        basitOran={tip==="aylik"?sayiOku(oran)*12:sayiOku(oran)} efektifOran={r?.efektifYillik} anaparaTutar={parseFloat(tutar)}/>}
+        basitOran={tip==="aylik"?sayiOku(oran)*12:sayiOku(oran)} efektifOran={r?.efektifYillik} anaparaTutar={parseFloat(tutar)} kimlik={kimlik} nav={nav}/>}
       {showPlan&&mod==="pesin"&&rPesin?.plan&&<OdemePlani plan={rPesin.plan} bsmvOran={rPesin.bsmvR} kkdfOran={rPesin.kkdfR} onClose={()=>setShowPlan(false)} showKomisyon={false}
-        basitOran={tip==="aylik"?sayiOku(oran)*12:sayiOku(oran)} anaparaTutar={parseFloat(tutar)}/>}
+        basitOran={tip==="aylik"?sayiOku(oran)*12:sayiOku(oran)} anaparaTutar={parseFloat(tutar)} kimlik={kimlik} nav={nav}/>}
       {showErken&&mod==="standart"&&r?.plan&&<KalanAnaparaModal plan={r.plan} onClose={()=>setShowErken(false)}/>}
       <Card>
         <Seg options={[{v:"standart",l:"Standart"},{v:"pesin",l:"İlk Taksit Peşin"}]} value={mod} onChange={setMod}/>
@@ -9295,7 +9315,7 @@ function YatirimFonuFinansman({s,onGecmis}){
 
 
 
-function ToggFinansman({s,onGecmis}){
+function ToggFinansman({s,onGecmis,kimlik,nav}){
   const [tutar,setTutar]=useState("");
   const [vade,setVade]=useState("");
   const [oran,setOran]=useState("");
@@ -9423,7 +9443,7 @@ function ToggFinansman({s,onGecmis}){
         </div>
       )}
       {showPlan&&r?.plan&&<OdemePlani plan={r.plan} bsmvOran={s.bireyselBSMV} kkdfOran={s.bireyselKKDF} onClose={()=>setShowPlan(false)} showKomisyon={r?.kullUcret>0}
-        basitOran={tip==="aylik"?sayiOku(oran)*12:sayiOku(oran)} efektifOran={r?.efektifYillik} anaparaTutar={parseFloat(tutar)}/>}
+        basitOran={tip==="aylik"?sayiOku(oran)*12:sayiOku(oran)} efektifOran={r?.efektifYillik} anaparaTutar={parseFloat(tutar)} kimlik={kimlik} nav={nav}/>}
       {showErken&&r?.plan&&<KalanAnaparaModal plan={r.plan} onClose={()=>setShowErken(false)}/>}
       <Card>
         <Seg options={[{v:"aylik",l:"Aylık %"},{v:"yillik",l:"Yıllık %"}]} value={tip} onChange={setTip}/>
@@ -9527,7 +9547,7 @@ function ToggFinansman({s,onGecmis}){
   );
 }
 
-function ArsaIsyeriFinansman({s,onGecmis}){
+function ArsaIsyeriFinansman({s,onGecmis,kimlik,nav}){
   const [ekspertiz,setEkspertiz]=useState("");
   const [tahsisPct,setTahsisPct]=useState("");
   const [tutar,setTutar]=useState("");
@@ -9601,7 +9621,7 @@ function ArsaIsyeriFinansman({s,onGecmis}){
   return(
     <div style={{padding:"0 16px 32px"}}>
       {showPlan&&r?.plan&&<OdemePlani plan={r.plan} bsmvOran={r?.bsmvR||0} kkdfOran={r?.kkdfR||0} onClose={()=>setShowPlan(false)} showKomisyon={r?.kullUcret>0}
-        basitOran={tip==="aylik"?sayiOku(oran)*12:sayiOku(oran)} efektifOran={r?.efektifYillik} anaparaTutar={parseFloat(tutar)}/>}
+        basitOran={tip==="aylik"?sayiOku(oran)*12:sayiOku(oran)} efektifOran={r?.efektifYillik} anaparaTutar={parseFloat(tutar)} kimlik={kimlik} nav={nav}/>}
       {showErken&&r?.plan&&<KalanAnaparaModal plan={r.plan} onClose={()=>setShowErken(false)}/>}
       <Card>
         <Seg options={[{v:"aylik",l:"Aylık %"},{v:"yillik",l:"Yıllık %"}]} value={tip} onChange={setTip}/>
@@ -9726,7 +9746,7 @@ function ArsaIsyeriFinansman({s,onGecmis}){
   );
 }
 
-function TaksitenKredi({s}){
+function TaksitenKredi({s,kimlik,nav}){
   const [taksit,  setTaksit]  = useState("");
   const [vade,    setVade]    = useState("");
   const [oran,    setOran]    = useState("");
@@ -9782,7 +9802,7 @@ function TaksitenKredi({s}){
 
   return(
     <div style={{padding:"0 16px 32px"}}>
-      {showPlan&&r?.plan&&<OdemePlani plan={r.plan} bsmvOran={bsmvOran} kkdfOran={kkdfOran} onClose={()=>setShowPlan(false)}/>}
+      {showPlan&&r?.plan&&<OdemePlani plan={r.plan} bsmvOran={bsmvOran} kkdfOran={kkdfOran} onClose={()=>setShowPlan(false)} kimlik={kimlik} nav={nav}/>}
       <Card>
         <SecTitle>Kredi Türü</SecTitle>
         <Seg options={[{v:"bireysel",l:"Bireysel"},{v:"tuzel",l:"Tüzel/Ticari"}]} value={tur} onChange={setTur}/>
@@ -20449,6 +20469,34 @@ const HESAPLA_ARAC_LISTESI = [
   {key:"hazineSenaryo",      icon:"📊", label:"Kur Hareketi Senaryo Analizi",        kat:"hazine"},
 ];
 
+// ⚠️ 2026-09-26 (kullanıcı isteği: "hesaplama modüllerinde de ücretsiz
+// seçeneğinde günde 5 tane ile sınırla"): hesaplama araçları reaktif
+// (girdi değiştikçe sonuç anında güncelleniyor) — ayrı bir "Hesapla"
+// düğmesi YOK, dolayısıyla "kaç hesaplama yapıldığı" sayılamaz. Bunun
+// yerine EKRAN AÇMA sayılıyor: bir aracı bugün İLK kez açmak sayaca 1
+// ekler, AYNI aracı bugün tekrar tekrar açmak (girdileri değiştirip
+// yeniden bakmak) ÜCRETSİZ — portfoyEkle'deki "sadece gerçekten yeni
+// olan sayılır" mantığının aynısı. Cihaz/localStorage bazlı (AI
+// Asistan'ın cihazId limitiyle AYNI felsefe — hesap yerine cihaz, çünkü
+// bu tamamen istemci tarafında, backend'e hiç gitmiyor).
+const KP_HESAPLAMA_ANAHTARLARI = new Set(HESAPLA_ARAC_LISTESI.map(h=>h.key));
+const KP_HESAPLAMA_UCRETSIZ_LIMIT = 5;
+const KP_HESAPLAMA_LS_KEY = "kp_hesaplama_kullanim_v1";
+function kpHesaplamaIzinVer(ekran:string): boolean{
+  if(!KP_HESAPLAMA_ANAHTARLARI.has(ekran)) return true; // hesaplama araci degil (ör. ana sayfa), limit disi
+  try{
+    const bugun = new Date().toISOString().slice(0,10);
+    const ham = localStorage.getItem(KP_HESAPLAMA_LS_KEY);
+    let kayit: {tarih:string; kullanilan:string[]} = ham ? JSON.parse(ham) : null as any;
+    if(!kayit || kayit.tarih !== bugun) kayit = {tarih:bugun, kullanilan:[]};
+    if(kayit.kullanilan.includes(ekran)) return true; // bugun zaten acilmis, tekrar serbest
+    if(kayit.kullanilan.length >= KP_HESAPLAMA_UCRETSIZ_LIMIT) return false;
+    kayit.kullanilan.push(ekran);
+    localStorage.setItem(KP_HESAPLAMA_LS_KEY, JSON.stringify(kayit));
+    return true;
+  }catch{ return true; } // localStorage erisilemezse limit UYGULANMAZ (fail-open — AI Asistan limitiyle ayni tercih)
+}
+
 // ─── HAZİNE İŞLEMLERİ ─────────────────────────────────────────────────────────
 const HT_PARA_BIRIMLERI = ["TRY","USD","EUR","GBP","CHF","SAR","AED","RUB","CNY","JPY","XAU","XAG"];
 const HT_PARA_ETIKET:any = {TRY:"TRY",USD:"USD",EUR:"EUR",GBP:"GBP",CHF:"CHF",SAR:"SAR",AED:"AED",RUB:"RUB",CNY:"CNY",JPY:"JPY",XAU:"Altın (gr)",XAG:"Gümüş (gr)"};
@@ -28395,9 +28443,19 @@ function App(){
       return yeni;
     });
   };
+  // ⚠️ 2026-09-26: Ücretsizde portföy/takip listesi toplamda 5 kalemle
+  // sınırlı. Kontrol SADECE liste GERÇEKTEN uzadığında yapılıyor —
+  // portfoyBirlestir mevcut bir kaleme yeni bir parti (lot) eklerken listeyi
+  // UZATMAZ (miktar/maliyet günceller), bu yüzden var olan bir hisseye
+  // ekleme yapmak asla limite takılmaz; sadece YENİ bir ürün eklemek sayılır.
+  const KP_PORTFOY_UCRETSIZ_LIMIT = 5;
   const portfoyEkle=(k:PortfoyKalemi)=>{
     setPortfoy(liste=>{
       const yeni=portfoyBirlestir(liste,k);
+      if(yeni.length>liste.length && !kimlik.pro.aktif && yeni.length>KP_PORTFOY_UCRETSIZ_LIMIT){
+        kpProGerekliMi(kimlik.pro, nav);
+        return liste;
+      }
       portfoyYaz(yeni);
       return yeni;
     });
@@ -28771,7 +28829,23 @@ function App(){
   // Örn. ana sayfadaki Favorilerim'den açılan araçlar "home"a geri döner;
   // aynı araç Hesaplamalar menüsünden açılırsa normal menüsüne döner.
   const backHedefOzel=useRef<string|null>(null);
-  const nav=(sc,geriHedefi?:string)=>{backHedefOzel.current=geriHedefi||null;setScreen(sc);};
+  // ⚠️ 2026-09-26: hesaplama araçlarına girişte günlük ücretsiz limiti
+  // burada, TEK merkezden kontrol ediliyor — bir araca nasıl ulaşılırsa
+  // ulaşılsın (Favoriler, Hesaplamalar menüsü, arama, Son Kullanılanlar…)
+  // HEPSİ bu nav() fonksiyonundan geçiyor, ayrı ayrı her tıklama noktasını
+  // değiştirmeye gerek kalmıyor (Paylaş/alarm'da kaçındığımız "çok sayıda
+  // çağrı noktası" riskinin AKSİNE, burada TEK bir çağrı noktası var).
+  // setScreen("proSatinAl") DOĞRUDAN çağrılıyor (kpProGerekliMi değil) —
+  // kpProGerekliMi kendi içinde nav() çağırır, nav()'un kendi gövdesinden
+  // nav()'u çağırmak gereksiz bir dolaylama olurdu.
+  const nav=(sc,geriHedefi?:string)=>{
+    if(!kimlik.pro.aktif && !kpHesaplamaIzinVer(sc)){
+      backHedefOzel.current=null;
+      setScreen("proSatinAl");
+      return;
+    }
+    backHedefOzel.current=geriHedefi||null;setScreen(sc);
+  };
   const irHisseFonDetay=(tur:"hisse"|"fon", sembol:string, geriHedefi?:string)=>{
     if(tur==="hisse"){ setPendingHisseSecim(sembol); nav("bistHisseTarayici", geriHedefi); }
     else { setPendingFonSecim(sembol); nav("fonGetiriIzleme", geriHedefi); }
@@ -30804,12 +30878,12 @@ function App(){
         {screen==="oranAnalizi"&&<OranAnalizi s={settings}/>}
         {screen==="tahvilBono"&&<TahvilBono s={settings} onGecmis={k=>gecmisKaydet(gecmis,setGecmis,k)}/>}
         {screen==="taksitKarsilastirma"&&<TaksitKarsilastirma s={settings}/>}
-        {screen==="konutFinansman"&&<KonutFinansman s={settings} onGecmis={k=>gecmisKaydet(gecmis,setGecmis,k)}/>}
-        {screen==="tasitFinansman"&&<TasitFinansman s={settings} onGecmis={k=>gecmisKaydet(gecmis,setGecmis,k)}/>}
-        {screen==="yatirimFonuFinansman"&&<YatirimFonuFinansman s={settings} onGecmis={k=>gecmisKaydet(gecmis,setGecmis,k)}/>}
-        {screen==="toggFinansman"&&<ToggFinansman s={settings} onGecmis={k=>gecmisKaydet(gecmis,setGecmis,k)}/>}
-        {screen==="arsaIsyeri"&&<ArsaIsyeriFinansman s={settings} onGecmis={k=>gecmisKaydet(gecmis,setGecmis,k)}/>}
-        {screen==="taksitenKredi"&&<TaksitenKredi s={settings}/>}
+        {screen==="konutFinansman"&&<KonutFinansman s={settings} onGecmis={k=>gecmisKaydet(gecmis,setGecmis,k)} kimlik={kimlik} nav={nav}/>}
+        {screen==="tasitFinansman"&&<TasitFinansman s={settings} onGecmis={k=>gecmisKaydet(gecmis,setGecmis,k)} kimlik={kimlik} nav={nav}/>}
+        {screen==="yatirimFonuFinansman"&&<YatirimFonuFinansman s={settings} onGecmis={k=>gecmisKaydet(gecmis,setGecmis,k)} kimlik={kimlik} nav={nav}/>}
+        {screen==="toggFinansman"&&<ToggFinansman s={settings} onGecmis={k=>gecmisKaydet(gecmis,setGecmis,k)} kimlik={kimlik} nav={nav}/>}
+        {screen==="arsaIsyeri"&&<ArsaIsyeriFinansman s={settings} onGecmis={k=>gecmisKaydet(gecmis,setGecmis,k)} kimlik={kimlik} nav={nav}/>}
+        {screen==="taksitenKredi"&&<TaksitenKredi s={settings} kimlik={kimlik} nav={nav}/>}
         {screen==="spotFinansman"&&<SpotKredi s={settings} onGecmis={k=>gecmisKaydet(gecmis,setGecmis,k)}/>}
         {screen==="taksitliTicari"&&<TaksitliTicariFinansman s={settings}/>}
         {screen==="cekArkasiFinansman"&&<CekArkasiFinansman s={settings} onGecmis={k=>gecmisKaydet(gecmis,setGecmis,k)}/>}
