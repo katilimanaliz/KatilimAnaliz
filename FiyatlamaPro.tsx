@@ -159,28 +159,89 @@ type KpKullanici = { uid:string; email:string|null; ad:string|null; saglayici:st
 type KpProDurum = { aktif:boolean; bitisTarihi:string|null; kaynak:string|null };
 const KP_PRO_VARSAYILAN: KpProDurum = { aktif:false, bitisTarihi:null, kaynak:null };
 
+// RevenueCat SDK'sını TEK SEFERLİK yapılandırır — paylaşılan bir promise
+// ile: kpRevenueCatAktifMi VE aşağıdaki Purchases.logIn çağrısı BUNU
+// bekliyor, böylece Purchases.configure() tamamlanmadan başka hiçbir
+// Purchases.* metodu çağrılmıyor. Bu, React effect'lerinin çalışma
+// SIRASINDAN TAMAMEN BAĞIMSIZ bir garanti — hangi effect önce/sonra
+// tetiklenirse tetiklensin, configure() her zaman ilk tamamlanan olur.
+// ⚠️ Sadece NATIVE + iOS'ta çalışıyor — Android tarafı henüz eklenmedi
+// (Play Console'da ürünler + RevenueCat'te ayrı bir Android API key
+// oluşturulana kadar bilinçli olarak atlandı).
+let kpRevenueCatYapilandirmaPromise: Promise<boolean> | null = null;
+function kpRevenueCatYapilandir(): Promise<boolean>{
+  if(!kpRevenueCatYapilandirmaPromise){
+    kpRevenueCatYapilandirmaPromise = (async()=>{
+      try{
+        const gercekIsNative=(window as any).Capacitor?.isNativePlatform?.() ?? false;
+        if(!gercekIsNative) return false;
+        const { Purchases } = await import("@revenuecat/purchases-capacitor");
+        const { Capacitor } = await import("@capacitor/core");
+        const platform = Capacitor.getPlatform();
+        if(platform==="ios"){
+          await Purchases.configure({ apiKey: "appl_pJVUqFpFMyHaEyfmmgPVhKBmVPe" });
+          return true;
+        }
+        return false;
+      }catch(e){
+        console.error("RevenueCat yapilandirilamadi:", e);
+        return false;
+      }
+    })();
+  }
+  return kpRevenueCatYapilandirmaPromise;
+}
+
+// RevenueCat'in kendi abonelik durumunu okur — SADECE native'de çalışır
+// (web/PWA'da satın alma zaten mümkün değil, boşuna SDK yüklemeye gerek
+// yok). Entitlement kimliği "katılım_plus_pro" — RevenueCat panelinde
+// tanımlanan Entitlement'ın birebir kimliği, bkz. Configure adımı.
+async function kpRevenueCatAktifMi(): Promise<boolean>{
+  try{
+    const yapilandirildi = await kpRevenueCatYapilandir();
+    if(!yapilandirildi) return false;
+    const { Purchases } = await import("@revenuecat/purchases-capacitor");
+    const { customerInfo } = await Purchases.getCustomerInfo();
+    return typeof customerInfo.entitlements.active["katılım_plus_pro"] !== "undefined";
+  }catch(e){
+    console.error("RevenueCat durumu okunamadı:", e);
+    return false;
+  }
+}
+
 // uid için Firestore'dan pro durumunu okur. firebase/firestore SADECE web SDK
 // gerektirir — native tarafta ayrı bir Capacitor eklentisi KURULMASINA gerek
 // yok, çünkü bu SDK ağ üzerinden çalışır ve Capacitor WebView içinde de aynen
 // çalışır (auth ise native oturum/token yönetimi gerektirdiği için ayrı
 // @capacitor-firebase/authentication eklentisi kullanıyorduk — Firestore'da
 // böyle bir native-özel katman şart değil).
+// ⚠️ 2026-09-26: RevenueCat entegrasyonuyla birlikte artık İKİ kaynak var —
+// Firestore'daki `pro/{uid}` (elle set edilebilen, beta test için) VE
+// RevenueCat'in kendi entitlement durumu (gerçek satın almalar). Kullanıcı
+// İKİSİNDEN HERHANGİ BİRİNDE aktifse Pro sayılıyor — Firestore'daki elle
+// işaretleme yöntemi bilinçli olarak KALDIRILMADI, beta testi kolaylaştırıyor.
 async function kpProDurumGetir(uid:string): Promise<KpProDurum>{
+  const revenueCatAktif = await kpRevenueCatAktifMi();
   try{
     const app=await kpFirebaseWebApp();
     const {getFirestore,doc,getDoc}=await import("firebase/firestore");
     const snap=await getDoc(doc(getFirestore(app),"pro",uid));
-    if(!snap.exists()) return KP_PRO_VARSAYILAN;
+    if(!snap.exists()) return { aktif:revenueCatAktif, bitisTarihi:null, kaynak:revenueCatAktif?"revenuecat":null };
     const d=snap.data() as any;
     const bitisTarihi:string|null = d?.bitisTarihi || null;
     // Bitiş tarihi geçmişse aktif sayma — sunucu tarafında güncellenmemiş
     // eski bir "aktif:true" kaydı yüzünden süresi dolmuş bir aboneliğin
     // çalışmaya devam etmesini önler.
     const suresiDolmus = bitisTarihi ? (new Date(bitisTarihi).getTime() < Date.now()) : false;
-    return { aktif: !!d?.aktif && !suresiDolmus, bitisTarihi, kaynak: d?.kaynak || null };
+    const firestoreAktif = !!d?.aktif && !suresiDolmus;
+    return {
+      aktif: firestoreAktif || revenueCatAktif,
+      bitisTarihi,
+      kaynak: firestoreAktif ? (d?.kaynak || null) : (revenueCatAktif ? "revenuecat" : null),
+    };
   }catch(e){
     console.error("Pro durumu okunamadı:", e);
-    return KP_PRO_VARSAYILAN;
+    return { aktif:revenueCatAktif, bitisTarihi:null, kaynak:revenueCatAktif?"revenuecat":null };
   }
 }
 
@@ -303,14 +364,32 @@ function useKpKimlik(){
   // Pro durumu — kullanıcının uid'i her değiştiğinde (giriş/çıkış/hesap
   // değişimi) YENİDEN okunur. Misafir kullanıcıda (uid yok) hiç sorgu
   // atılmadan direkt varsayılana (aktif:false) düşülür — gereksiz Firestore
-  // okuması yapılmaz.
+  // okuması yapılmaz. proYenileSayaci, satın alma tamamlandıktan HEMEN
+  // sonra durumu yeniden okutmak için elle artırılan bir tetikleyici —
+  // uid değişmediği için normalde bu effect tekrar çalışmaz, satın alma
+  // sonrası "Ücretsiz" görünmeye devam etmesin diye eklendi.
+  const [proYenileSayaci,setProYenileSayaci]=useState(0);
   useEffect(()=>{
     let iptal=false;
     if(!kullanici?.uid){ setPro(KP_PRO_VARSAYILAN); return; }
     setProYukleniyor(true);
-    kpProDurumGetir(kullanici.uid).then(d=>{ if(!iptal){ setPro(d); setProYukleniyor(false); } });
+    // RevenueCat'in kendi kullanıcı kimliğini bizim uid'imizle eşleştiriyoruz
+    // (Purchases.logIn) — bu olmadan RevenueCat rastgele/cihaz-bazlı anonim
+    // bir kimlik kullanır, entitlement durumu hesaba değil cihaza bağlanır.
+    (async()=>{
+      try{
+        const yapilandirildi = await kpRevenueCatYapilandir();
+        if(yapilandirildi){
+          const { Purchases } = await import("@revenuecat/purchases-capacitor");
+          await Purchases.logIn({ appUserID: kullanici.uid });
+        }
+      }catch(e){ console.error("RevenueCat logIn basarisiz:", e); }
+      const d = await kpProDurumGetir(kullanici.uid);
+      if(!iptal){ setPro(d); setProYukleniyor(false); }
+    })();
     return ()=>{ iptal=true; };
-  },[kullanici?.uid]);
+  },[kullanici?.uid, proYenileSayaci]);
+  const proYenile=()=>setProYenileSayaci(n=>n+1);
 
   const _islemSarmala=async(islem:()=>Promise<void>,baglam:"eposta"|"diger"="eposta")=>{
     setKimlikHata(null);
@@ -538,7 +617,7 @@ function useKpKimlik(){
     }
   });
 
-  return {kullanici,kimlikYukleniyor,kimlikHata,setKimlikHata,eposta_kayit,eposta_giris,sifremiUnuttum,google_giris,apple_giris,cikisYap,hesabimiSil,epostaTekrarGonder,epostaDogrulamaKontrolEt,adGuncelle,sifreDegistir,pro,proYukleniyor};
+  return {kullanici,kimlikYukleniyor,kimlikHata,setKimlikHata,eposta_kayit,eposta_giris,sifremiUnuttum,google_giris,apple_giris,cikisYap,hesabimiSil,epostaTekrarGonder,epostaDogrulamaKontrolEt,adGuncelle,sifreDegistir,pro,proYukleniyor,proYenile};
 }
 
 // ── Giriş / Kayıt Ekranı ──
@@ -802,10 +881,73 @@ function ProfilAyarlari({kimlik,nav}:{kimlik:ReturnType<typeof useKpKimlik>;nav:
 function ProSatinAl({kimlik,nav}:{kimlik:ReturnType<typeof useKpKimlik>;nav:(sc:string)=>void}){
   const [donem,setDonem]=useState<"aylik"|"yillik">("yillik");
   const [gonderiliyor,setGonderiliyor]=useState(false);
+  const [geriYukleniyor,setGeriYukleniyor]=useState(false);
 
+  const geriYukle=async()=>{
+    setGeriYukleniyor(true);
+    kimlik.setKimlikHata(null);
+    const gercekIsNative=(window as any).Capacitor?.isNativePlatform?.() ?? false;
+    if(!gercekIsNative){
+      kimlik.setKimlikHata("Geri yükleme sadece mobil uygulamada yapılabilir.");
+      setGeriYukleniyor(false);
+      return;
+    }
+    try{
+      const { Purchases } = await import("@revenuecat/purchases-capacitor");
+      const { customerInfo } = await Purchases.restorePurchases();
+      const aktif = typeof customerInfo.entitlements.active["katılım_plus_pro"] !== "undefined";
+      if(aktif){
+        kimlik.proYenile();
+        nav("profil");
+      } else {
+        kimlik.setKimlikHata("Bu hesapla ilişkili aktif bir Pro aboneliği bulunamadı.");
+      }
+    }catch(e:any){
+      console.error("Geri yukleme hatasi:", e);
+      kimlik.setKimlikHata("Geri yükleme sırasında bir sorun oluştu: "+(e?.message||"bilinmiyor"));
+    }
+    setGeriYukleniyor(false);
+  };
+
+  // ⚠️ 2026-09-26: gerçek RevenueCat satın alma çağrısı. paket seçimi
+  // packageType'a göre yapılıyor (identifier'ları elle eşleştirmek yerine)
+  // — RevenueCat panelinde "Monthly"/"Yearly" olarak adlandırdığımız
+  // paketlerin dahili tipleri MONTHLY/ANNUAL, bu daha güvenilir bir eşleşme
+  // (panel taraflı bir isim değişikliği kodu bozmaz).
   const satinAl=async()=>{
     setGonderiliyor(true);
-    kimlik.setKimlikHata("Satın alma altyapısı henüz bağlanmadı — yakında.");
+    kimlik.setKimlikHata(null);
+    const gercekIsNative=(window as any).Capacitor?.isNativePlatform?.() ?? false;
+    if(!gercekIsNative){
+      kimlik.setKimlikHata("Satın alma sadece mobil uygulamada yapılabilir — bu bir önizleme.");
+      setGonderiliyor(false);
+      return;
+    }
+    try{
+      const { Purchases } = await import("@revenuecat/purchases-capacitor");
+      const offerings = await Purchases.getOfferings();
+      const mevcut = offerings.current;
+      const paket = mevcut?.availablePackages.find(
+        p=>p.packageType === (donem==="aylik" ? "MONTHLY" : "ANNUAL")
+      );
+      if(!paket){
+        kimlik.setKimlikHata("Şu an bu paket satın alınamıyor — daha sonra tekrar dener misin?");
+        setGonderiliyor(false);
+        return;
+      }
+      await Purchases.purchasePackage({ aPackage: paket });
+      kimlik.proYenile();
+      nav("profil");
+    }catch(e:any){
+      // Kullanıcı satın alma penceresini kendisi kapatırsa bu bir hata
+      // SAYILMAZ — sürüme göre e.userCancelled ya da e.code farklı
+      // gelebildiği için ikisi de kontrol ediliyor.
+      const iptalEtti = e?.userCancelled === true || String(e?.code||"").includes("CANCEL");
+      if(!iptalEtti){
+        console.error("Satin alma hatasi:", e);
+        kimlik.setKimlikHata("Satın alma sırasında bir sorun oluştu: "+(e?.message||"bilinmiyor"));
+      }
+    }
     setGonderiliyor(false);
   };
 
@@ -865,6 +1007,15 @@ function ProSatinAl({kimlik,nav}:{kimlik:ReturnType<typeof useKpKimlik>;nav:(sc:
       <p style={{textAlign:"center",fontSize:10.5,color:WA(0.4),margin:"10px 10px 0",lineHeight:1.5}}>
         {CV("Deneme sonrası")} {donem==="yillik"?"yıllık ₺999,99":"aylık ₺99,99"} {CV("olarak devam eder. Dönem bitmeden en az 24 saat önce iptal etmezsen abonelik App Store/Google Play hesabın üzerinden otomatik yenilenir.")}
       </p>
+
+      {/* ⚠️ 2026-09-26: "Satın Alımları Geri Yükle" — App Store incelemesinin
+          ZORUNLU tuttuğu bir buton (daha önce başka bir cihazda/hesapta
+          satın almış kullanıcı için). RevenueCat'in restorePurchases()
+          çağrısı, cihazın Apple ID'sindeki mevcut makbuzları kontrol edip
+          entitlement'ı otomatik günceller. */}
+      <button onClick={geriYukle} disabled={geriYukleniyor} style={{display:"block",width:"100%",background:"transparent",border:"none",padding:"10px 0 0",fontSize:12,fontWeight:600,color:C.blue,cursor:geriYukleniyor?"default":"pointer"}}>
+        {geriYukleniyor?"…":CV("Satın Alımları Geri Yükle")}
+      </button>
 
       <div style={{textAlign:"center",marginTop:18}}>
         <span style={{fontSize:11.5,color:WA(0.45)}}>
@@ -28536,6 +28687,7 @@ function App(){
   // Hesap/kimlik doğrulama — kök seviyede BİR KERE (bkz. useKpKimlik tanımı,
   // dosya başında). Profil ekranı ve HesapGiris ekranı bunu prop olarak alır.
   const kimlik=useKpKimlik();
+
   // ⚠️ 2026-09-21 (kullanıcı isteği: "hesap oluştur veya giriş yap alanı
   // ekleyelim"): Profil'deki "Hesap Oluştur" ve "Giriş Yap" butonları
   // HesapGiris ekranını hangi sekmeyle (kayıt/giriş) açacağını buradan
