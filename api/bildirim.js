@@ -68,6 +68,34 @@
 // gönderilir — bildirimGonder'daki gibi TÜM kullanıcılara değil. Tetiklenen
 // alarm "aktif:false" yapılır (tek seferlik) — kullanıcı isterse aynı
 // koşulla yeni bir alarm kurabilir.
+//
+// ── 5) HESABA BAĞLAMA + MİSAFİR/ÜCRETSİZ/PRO SINIRI (2026-09-27 eklendi) ──
+//
+// alarm-ekle artık isteğe bağlı bir 'uid' alanı kabul ediyor (Firebase
+// Authentication uid'i). uid gönderilirse alarm o hesaba bağlanır VE aktif
+// fiyat/yüzde alarmı sayısı hesabın Pro durumuna göre sınırlanır (misafir: 2,
+// ücretsiz üye: 5, Pro: sınırsız). uid gönderilmezse (misafir) eskisi gibi çalışır.
+//
+//   POST ?islem=alarm-hesaba-bagla { token, uid }
+//   → kullanıcı giriş yaptığında BİR KEZ çağrılır; bu cihazın token'ına
+//     kayıtlı, henüz uid'i olmayan alarmları o hesaba bağlar.
+//
+// ── 6) HABER BİLDİRİMLERİ (2026-09-27 eklendi) ──
+//
+//   POST ?islem=haber-bildirim-ayarla { token, acik, kategoriler?, uid? }
+//   POST ?islem=haber-bildirim-gonder { baslik, govde, kategori? } (ADMIN)
+//
+// Detaylar için aşağıdaki "HABER BİLDİRİMLERİ" bölümüne bakın.
+//
+// ── 7) BANKA ORANI ALARMI (2026-09-27 eklendi) — SADECE PRO ──
+//
+//   POST ?islem=alarm-ekle { token, uid, tip:"banka_oran", banka, urun,
+//                            yon:"ustunde"|"altinda", hedefFiyat, ad? }
+//
+// urun ∈ {tl,usd,eur,altin} (kâr payı) veya {konut60,konut120,tasit12,
+// tasit24,ihtiyac12,ihtiyac24} (finansman). Veri kar-payi.json'dan (repodaki
+// public/kar-payi.json) okunuyor. uid Pro değilse 403. Detaylar için
+// aşağıdaki "BANKA ORANI ALARMLARI" bölümüne bakın.
 
 import { Redis } from "@upstash/redis";
 import { randomUUID } from "crypto";
@@ -493,6 +521,142 @@ async function duyurulariListele(req, res) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// HABER BİLDİRİMLERİ (2026-09-27)
+// ═══════════════════════════════════════════════════════════════════════════
+// Fiyat alarmlarından FARKLI: kullanıcı bir EŞİK kurmuyor, sadece "yeni önemli
+// haber/bildirimlerimi haber ver" diye ABONE oluyor — genel (misafir dahil)
+// veya kategori bazlı (yalnızca hesaplı kullanıcı).
+//
+//   POST ?islem=haber-bildirim-ayarla
+//        { token, acik:true|false, kategoriler?:string[], uid? }
+//   POST ?islem=haber-bildirim-gonder   (ADMIN — x-admin-key/?anahtar=)
+//        { baslik, govde, kategori?, veri?, anahtar? }
+//
+// kategoriler VERİLMEMİŞSE (veya boş dizi) o token "genel abone" sayılır —
+// her haber-bildirim-gonder çağrısında (kategori filtresi ne olursa olsun)
+// bildirim alır. kategoriler VERİLMİŞSE, yalnızca o kategorilerden biriyle
+// gönderilen haberlerde bildirim alır — genel (kategorisiz) bir gönderimde
+// DAHİL EDİLMEZ, çünkü kullanıcı bilinçli olarak daraltmış demektir.
+//
+// ⚠️ OTOMATİK TETİKLEME BU DOSYADA YOK: "yeni bir haber yayınlandığında"
+// haber-bildirim-gonder'ı otomatik çağıracak parça, haberlerin çekildiği ayrı
+// bir dosyada (muhtemelen /api/finans-haberleri.js benzeri) olmalı — o dosya
+// bu turda elimizde değildi. Şimdilik yalnızca ADMIN elle (veya ileride o
+// dosyadan) tetikleyebiliyor; abone kaydı/kaldırma tarafı tam çalışıyor.
+const HABER_BILDIRIM_TOKENS_KEY = "haberBildirimTokens";        // Set<token>
+const HABER_BILDIRIM_KATEGORI_PREFIX = "haberBildirimKategori:"; // + token → string[]
+
+async function haberBildirimAyarla(req, res) {
+  const { token, acik, kategoriler } = req.body || {};
+  if (!token || typeof acik !== "boolean") {
+    res.status(400).json({ hata: "'token' ve boolean 'acik' alanları zorunlu" });
+    return;
+  }
+  try {
+    if (!acik) {
+      await redis.srem(HABER_BILDIRIM_TOKENS_KEY, token);
+      await redis.del(HABER_BILDIRIM_KATEGORI_PREFIX + token);
+      res.status(200).json({ basarili: true, abone: false });
+      return;
+    }
+    await redis.sadd(HABER_BILDIRIM_TOKENS_KEY, token);
+    if (Array.isArray(kategoriler) && kategoriler.length > 0) {
+      const temiz = kategoriler.filter((k) => typeof k === "string" && k.length > 0 && k.length < 50).slice(0, 20);
+      await redis.set(HABER_BILDIRIM_KATEGORI_PREFIX + token, temiz);
+    } else {
+      // Kategori verilmemiş/boşaltılmış → "tüm kategoriler" (genel abone).
+      await redis.del(HABER_BILDIRIM_KATEGORI_PREFIX + token);
+    }
+    res.status(200).json({ basarili: true, abone: true });
+  } catch (e) {
+    res.status(500).json({ hata: "Bildirim tercihi kaydedilemedi", detay: e.message });
+  }
+}
+
+async function haberBildirimGonder(req, res) {
+  const gelenAnahtarHeader = req.headers["x-admin-key"];
+  const gelenAnahtarQuery = req.query?.anahtar;
+  const gelenAnahtarBody = req.body?.anahtar;
+  if (
+    !process.env.ADMIN_GIZLI_ANAHTAR ||
+    (gelenAnahtarHeader !== process.env.ADMIN_GIZLI_ANAHTAR &&
+      gelenAnahtarQuery !== process.env.ADMIN_GIZLI_ANAHTAR &&
+      gelenAnahtarBody !== process.env.ADMIN_GIZLI_ANAHTAR)
+  ) {
+    res.status(401).json({ hata: "Yetkisiz istek" });
+    return;
+  }
+
+  const { baslik, govde, kategori, veri } = req.body || {};
+  if (!baslik || !govde) {
+    res.status(400).json({ hata: "'baslik' ve 'govde' alanları zorunlu" });
+    return;
+  }
+
+  const tokenlar = await redis.smembers(HABER_BILDIRIM_TOKENS_KEY);
+  if (!tokenlar || tokenlar.length === 0) {
+    res.status(200).json({ basarili: true, gonderilen: 0, mesaj: "Kayıtlı haber bildirimi abonesi yok" });
+    return;
+  }
+
+  // kategori verilmişse: yalnızca "genel abone" (kategori kaydı yok) VEYA
+  // o kategoriyi seçmiş token'lara git. Redis'e N ayrı istek atmamak için
+  // önce hepsinin kategori kayıtlarını TEK seferde (mget) çekiyoruz.
+  let hedefTokenlar = tokenlar;
+  if (kategori) {
+    const anahtarlar = tokenlar.map((t) => HABER_BILDIRIM_KATEGORI_PREFIX + t);
+    const kayitlar = anahtarlar.length ? await redis.mget(...anahtarlar) : [];
+    hedefTokenlar = tokenlar.filter((t, i) => {
+      const k = kayitlar[i];
+      if (!Array.isArray(k) || k.length === 0) return true; // genel abone
+      return k.includes(kategori);
+    });
+  }
+
+  if (hedefTokenlar.length === 0) {
+    res.status(200).json({ basarili: true, gonderilen: 0, mesaj: "Bu kategoriye abone kimse yok" });
+    return;
+  }
+
+  const GRUP_BOYU = 500;
+  let gonderilenToplam = 0;
+  let gecersizTokenlar = [];
+
+  for (let i = 0; i < hedefTokenlar.length; i += GRUP_BOYU) {
+    const grup = hedefTokenlar.slice(i, i + GRUP_BOYU);
+    const mesaj = {
+      notification: { title: baslik, body: govde },
+      data: veri || {},
+      tokens: grup,
+      android: { notification: { sound: "default", channelId: "default" } },
+      apns: { payload: { aps: { sound: "default" } } },
+    };
+    const sonuc = await admin.messaging().sendEachForMulticast(mesaj);
+    gonderilenToplam += sonuc.successCount;
+    sonuc.responses.forEach((r, idx) => {
+      if (!r.success) {
+        const kod = r.error?.code || "";
+        if (kod.includes("registration-token-not-registered") || kod.includes("invalid-argument")) {
+          gecersizTokenlar.push(grup[idx]);
+        }
+      }
+    });
+  }
+
+  if (gecersizTokenlar.length > 0) {
+    await redis.srem(HABER_BILDIRIM_TOKENS_KEY, ...gecersizTokenlar);
+    for (const t of gecersizTokenlar) await redis.del(HABER_BILDIRIM_KATEGORI_PREFIX + t);
+  }
+
+  res.status(200).json({
+    basarili: true,
+    hedefTokenSayisi: hedefTokenlar.length,
+    basariylaGonderilen: gonderilenToplam,
+    temizlenenGecersizToken: gecersizTokenlar.length,
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // FİYAT ALARMLARI
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -534,8 +698,54 @@ async function hamTokeniDonustur(token) {
 }
 
 const ALARM_KILIT_ANAHTAR = `lock:${ALARM_KV_ANAHTAR}`;
-const MAKS_AKTIF_ALARM_TOKEN_BASINA = 20;
 const OZ = 31.1034768; // ons → gram dönüşüm sabiti
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MİSAFİR / ÜCRETSİZ / PRO ALARM SINIRI (2026-09-27)
+// ═══════════════════════════════════════════════════════════════════════════
+// SADECE fiyat/yüzde alarmlarına uygulanır (tip:"hedef"|"yuzde") — KAP/endeks
+// abonelikleri ve zekât hatırlatması kendi ayrı tavanlarını (MAKS_KAP_...,
+// MAKS_ENDEKS_...) zaten koruyor, bunlara dokunulmadı.
+//
+// uid gönderilmemişse (misafir — hesap açmamış kullanıcı) en düşük sınır
+// uygulanır. uid gönderilmişse Firestore'daki pro/{uid} dokümanına bakılır:
+// aktif Pro ise HİÇBİR SINIR YOK (kullanıcı isteği, 2026-09-27) — sadece
+// alarmEkle'nin başındaki MAKS_TOPLAM_ALARM küresel tavanı (sistem geneli,
+// 5000) geçerli kalır; değilse ücretsiz üye sınırı uygulanır.
+//
+// NOT: kpProDurumGetir (frontend) Pro'yu İKİ kaynaktan (Firestore VEYA
+// RevenueCat entitlement) belirliyor — burada SADECE Firestore okunuyor.
+// RevenueCat'ten satın alan bir kullanıcının bu limitte tanınması için
+// frontend'in başarılı satın alma sonrası pro/{uid}'yi de yazması gerekiyor
+// (bkz. FiyatlamaPro.tsx ProSatinAl bileşenindeki satinAl/geriYukle).
+const ALARM_LIMIT_MISAFIR = 2;
+const ALARM_LIMIT_UCRETSIZ = 5;
+
+async function kullaniciProMu(uid) {
+  if (!uid) return false;
+  try {
+    const snap = await admin.firestore().collection("pro").doc(uid).get();
+    if (!snap.exists) return false;
+    const d = snap.data() || {};
+    if (!d.aktif) return false;
+    if (d.bitisTarihi && new Date(d.bitisTarihi).getTime() < Date.now()) return false;
+    return true;
+  } catch (e) {
+    // Fail-CLOSED (rate-limit'teki fail-open'ın tersi): bu bir ücretli
+    // özellik kapısı, güvenlik açığı değil abuse-önleme. Firestore'a
+    // ulaşılamazsa en kötü ihtimalle gerçek bir Pro kullanıcı geçici olarak
+    // ücretsiz sınıra düşer — bu, sınırsız alarm oluşturma riskinden iyidir.
+    console.error("Pro durumu (alarm limiti) okunamadi:", e.message);
+    return false;
+  }
+}
+
+async function alarmLimitiVeTierAl(uid) {
+  if (!uid) return { limit: ALARM_LIMIT_MISAFIR, tier: "misafir" };
+  const pro = await kullaniciProMu(uid);
+  if (pro) return { limit: Infinity, tier: "pro" };
+  return { limit: ALARM_LIMIT_UCRETSIZ, tier: "ucretsiz" };
+}
 
 function fetchZamanli(url, opts, msTimeout) {
   const controller = new AbortController();
@@ -702,6 +912,72 @@ async function bistTekFiyat(sembol) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// BANKA ORANI ALARMLARI (2026-09-27) — SADECE PRO
+// ═══════════════════════════════════════════════════════════════════════════
+// "X bankasının Y oranı Z'yi geçince/altına inince haber ver". Fiyat
+// alarmlarıyla AYNI yapıda tek-seferlik bir eşik alarmı (tetiklenince
+// aktif:false) — farkı, fiyatı Yahoo/AltinAPI/BIST yerine repodaki statik
+// kar-payi.json'dan (public/kar-payi.json, KatilimAnaliz reposunda elle
+// güncelleniyor) okuması.
+//
+// VERİ KAYNAĞI: ${API_TABAN}/kar-payi.json — Next/Vercel'de public/ altındaki
+// dosyalar doğrudan kök URL'den servis edilir, /api/ öneki YOK. Dosyanın iki
+// bölümü var: "bankalar" (kâr payı oranları: tl/usd/eur/altin) ve
+// "finansman.bankalar" (konut60/120, tasit12/24, ihtiyac12/24). "urun" alanı
+// hangi bölümden okunacağını belirliyor (bkz. KAR_PAYI_ALANLARI/
+// FINANSMAN_ALANLARI). Şimdilik canlı bir API değil, elle güncellenen bir
+// dosya — bu yüzden Redis'e YAZILMIYOR, her kontrol turunda doğrudan (kısa
+// bellek-içi önbellekle) çekiliyor; BIST'teki gibi bayat-veri riski yok
+// çünkü dosya zaten günde birkaç kez elle güncelleniyor, "an be an" değil.
+const KAR_PAYI_ALANLARI = new Set(["tl", "usd", "eur", "altin"]);
+const FINANSMAN_ALANLARI = new Set(["konut60", "konut120", "tasit12", "tasit24", "ihtiyac12", "ihtiyac24"]);
+const BANKA_ONEK = "BANKA:";
+const MAKS_BANKA_ORANI_ALARM_TOKEN_BASINA = 30; // Pro zaten sınırsız fiyat alarmı kurabiliyor, bu SADECE kötüye kullanım tavanı
+
+let karPayiBellek = { veri: null, ts: 0 };
+const KAR_PAYI_BELLEK_MS = 10 * 60 * 1000; // 10 dk — elle güncellenen bir dosya, sık çekmeye gerek yok
+
+async function karPayiVerisiGetir() {
+  if (karPayiBellek.veri && Date.now() - karPayiBellek.ts < KAR_PAYI_BELLEK_MS) return karPayiBellek.veri;
+  try {
+    const r = await fetchZamanli(`${API_TABAN}/kar-payi.json`, { headers: { Accept: "application/json" } }, 10000);
+    if (!r.ok) return karPayiBellek.veri; // eski (varsa) önbelleği koru
+    const j = await r.json();
+    if (!j || !Array.isArray(j.bankalar)) return karPayiBellek.veri;
+    karPayiBellek = { veri: j, ts: Date.now() };
+    return j;
+  } catch (e) {
+    console.error("kar-payi.json alinamadi:", e.message);
+    return karPayiBellek.veri; // ağ hatasında eski (varsa) veriyle devam
+  }
+}
+
+// banka adını normalize ederek karşılaştırır — "kuveyt türk" == "Kuveyt Türk".
+function bankaAdiEslesir(a, b) {
+  return String(a || "").trim().toLocaleUpperCase("tr-TR") === String(b || "").trim().toLocaleUpperCase("tr-TR");
+}
+
+// { banka, urun } için güncel oranı döner; bulunamazsa/veri null'sa null.
+function bankaOraniOku(veri, banka, urun) {
+  if (!veri) return null;
+  const finansman = KAR_PAYI_ALANLARI.has(urun) ? false : FINANSMAN_ALANLARI.has(urun) ? true : null;
+  if (finansman === null) return null;
+  const liste = finansman ? (veri.finansman?.bankalar || []) : (veri.bankalar || []);
+  const kayit = liste.find((b) => bankaAdiEslesir(b?.ad, banka));
+  if (!kayit) return null;
+  const v = kayit[urun];
+  return typeof v === "number" && isFinite(v) ? v : null;
+}
+
+// ── PRO ADI GÖSTERİMİ İÇİN ürün etiketleri (hata mesajlarında kullanılıyor) ──
+const BANKA_URUN_ETIKET = {
+  tl: "TL Kâr Payı Oranı", usd: "USD Kâr Payı Oranı", eur: "EUR Kâr Payı Oranı", altin: "Altın Kâr Payı Oranı",
+  konut60: "Konut Finansmanı (60 Ay)", konut120: "Konut Finansmanı (120 Ay)",
+  tasit12: "Taşıt Finansmanı (12 Ay)", tasit24: "Taşıt Finansmanı (24 Ay)",
+  ihtiyac12: "İhtiyaç Finansmanı (12 Ay)", ihtiyac24: "İhtiyaç Finansmanı (24 Ay)",
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
 // KAP BİLDİRİM ALARMLARI (2026-07-29)
 // ═══════════════════════════════════════════════════════════════════════════
 // Fiyat alarmından YAPISAL OLARAK FARKLI — bu bir ABONELİK:
@@ -822,7 +1098,9 @@ async function alarmlariOku() {
 }
 
 async function alarmEkle(req, res) {
-  let { token, sembol, ad, tip, yon, hedefFiyat, yuzde } = req.body || {};
+  let { token, sembol, ad, tip, yon, hedefFiyat, yuzde, uid } = req.body || {};
+  // uid isteğe bağlı — göndermeyen (misafir) istemciler eskisi gibi çalışır.
+  if (uid != null && typeof uid !== "string") uid = null;
   if (token && APNS_HEX_REGEX.test(token)) {
     const cevrilen = await hamTokeniDonustur(token);
     if (cevrilen) token = cevrilen;
@@ -875,13 +1153,13 @@ async function alarmEkle(req, res) {
           }
           const mevcut = alarmlar.find((a) => a.token === token && a.tip === "zekat");
           if (mevcut) {
-            const guncel = { ...mevcut, ad, zekatTarihi: gg, aktif: true, kapaliSebep: null };
+            const guncel = { ...mevcut, ad, zekatTarihi: gg, aktif: true, kapaliSebep: null, uid: uid || mevcut.uid || null };
             await redis.set(ALARM_KV_ANAHTAR, alarmlar.map((a) => (a.id === mevcut.id ? guncel : a)));
             return { alarm: guncel, guncellendi: true };
           }
           const yeniAlarm = {
             id: randomUUID(),
-            token, sembol: ZEKAT_SEMBOL, ad,
+            token, uid: uid || null, sembol: ZEKAT_SEMBOL, ad,
             tip: "zekat",
             yon: "tarih",
             zekatTarihi: gg,
@@ -952,7 +1230,7 @@ async function alarmEkle(req, res) {
 
           const yeniAlarm = {
             id: randomUUID(),
-            token, sembol, ad,
+            token, uid: uid || null, sembol, ad,
             tip: "kap",
             yon: "yeni",
             hedefFiyat: null,
@@ -1020,7 +1298,7 @@ async function alarmEkle(req, res) {
 
           const yeniAlarm = {
             id: randomUUID(),
-            token, sembol, ad,
+            token, uid: uid || null, sembol, ad,
             tip: "endeks",
             yon: "degisim",
             endeksDurum: suAnUye,
@@ -1050,6 +1328,97 @@ async function alarmEkle(req, res) {
       });
     } catch (e) {
       res.status(500).json({ hata: "Endeks aboneliği oluşturulamadı", detay: e.message });
+    }
+    return;
+  }
+
+  // ── BANKA ORANI ALARMI (2026-09-27) — SADECE PRO ─────────────────────────
+  // "X bankasının Y oranı Z'yi geçince/altına inince haber ver". Fiyat
+  // alarmlarıyla AYNI mantık (tek seferlik eşik, tetiklenince aktif:false)
+  // ama veri kaynağı kar-payi.json. uid ZORUNLU ve Pro olmalı — misafir/
+  // ücretsiz üye bu alarm tipini hiç kuramaz (403).
+  if (tip === "banka_oran") {
+    if (!uid) {
+      res.status(403).json({ hata: "Banka oranı alarmı için giriş yapmış olman gerekiyor." });
+      return;
+    }
+    const pro = await kullaniciProMu(uid);
+    if (!pro) {
+      res.status(403).json({ hata: "Banka oranı alarmı Pro üyelere özel. Pro'ya geçerek kullanabilirsin." });
+      return;
+    }
+    const banka = req.body?.banka;
+    const urun = req.body?.urun;
+    if (!banka || typeof banka !== "string" || !urun || (!KAR_PAYI_ALANLARI.has(urun) && !FINANSMAN_ALANLARI.has(urun))) {
+      res.status(400).json({ hata: "Geçerli bir 'banka' ve 'urun' (tl|usd|eur|altin|konut60|konut120|tasit12|tasit24|ihtiyac12|ihtiyac24) gerekli" });
+      return;
+    }
+    if (hedefFiyat == null || isNaN(parseFloat(hedefFiyat))) {
+      res.status(400).json({ hata: "Geçerli bir 'hedefFiyat' (hedef oran, %) gerekli" });
+      return;
+    }
+    if (yon !== "ustunde" && yon !== "altinda") {
+      res.status(400).json({ hata: "'yon' 'ustunde' ya da 'altinda' olmalı" });
+      return;
+    }
+
+    const karPayiVeri = await karPayiVerisiGetir();
+    const mevcutOran = bankaOraniOku(karPayiVeri, banka, urun);
+    if (mevcutOran == null) {
+      res.status(502).json({ hata: `${banka} için ${BANKA_URUN_ETIKET[urun] || urun} verisi şu an alınamadı, alarm oluşturulamadı.` });
+      return;
+    }
+
+    const h = parseFloat(hedefFiyat);
+    if (yon === "ustunde" && mevcutOran >= h) {
+      res.status(400).json({ hata: `Oran şu an zaten hedefin üstünde (%${mevcutOran} ≥ %${h}). Güncel oranın üstünde bir hedef girin.`, mevcutFiyat: mevcutOran });
+      return;
+    }
+    if (yon === "altinda" && mevcutOran <= h) {
+      res.status(400).json({ hata: `Oran şu an zaten hedefin altında (%${mevcutOran} ≤ %${h}). Güncel oranın altında bir hedef girin.`, mevcutFiyat: mevcutOran });
+      return;
+    }
+
+    const sembol = `${BANKA_ONEK}${banka}|${urun}`;
+    const adEtiket = ad || `${banka} — ${BANKA_URUN_ETIKET[urun] || urun}`;
+
+    try {
+      const { basarili, sonuc } = await kilitliCalistir(
+        redis, ALARM_KILIT_ANAHTAR, 15,
+        async () => {
+          const alarmlar = await alarmlariOku();
+          const sayisi = alarmlar.filter((a) => a.tip === "banka_oran" && a.aktif && (a.uid === uid || a.token === token)).length;
+          if (sayisi >= MAKS_BANKA_ORANI_ALARM_TOKEN_BASINA) {
+            return { hataKodu: 429, hata: `En fazla ${MAKS_BANKA_ORANI_ALARM_TOKEN_BASINA} aktif banka oranı alarmı kurabilirsiniz.` };
+          }
+          if (alarmlar.length >= MAKS_TOPLAM_ALARM) {
+            console.error("KURESEL ALARM TAVANI ASILDI (banka_oran):", alarmlar.length);
+            return { hataKodu: 503, hata: "Sistem şu anda yeni alarm kabul edemiyor. Lütfen daha sonra tekrar deneyin." };
+          }
+          const yeniAlarm = {
+            id: randomUUID(),
+            token, uid, sembol, ad: adEtiket,
+            tip: "banka_oran",
+            yon,
+            hedefFiyat: h,
+            yuzde: null,
+            baslangicFiyat: mevcutOran,
+            banka, urun,
+            olusturulmaTs: Date.now(),
+            aktif: true,
+            tetiklenmeTs: null,
+            tetiklenmeFiyat: null,
+          };
+          await redis.set(ALARM_KV_ANAHTAR, [...alarmlar, yeniAlarm]);
+          return { alarm: yeniAlarm };
+        },
+        { denemeSayisi: 10, bekleMs: 300 }
+      );
+      if (!basarili) { res.status(409).json({ hata: "Şu anda başka bir alarm işlemi sürüyor, lütfen tekrar deneyin." }); return; }
+      if (sonuc?.hataKodu) { res.status(sonuc.hataKodu).json({ hata: sonuc.hata }); return; }
+      res.status(200).json({ basarili: true, alarm: sonuc.alarm });
+    } catch (e) {
+      res.status(500).json({ hata: "Banka oranı alarmı oluşturulamadı", detay: e.message });
     }
     return;
   }
@@ -1105,9 +1474,21 @@ async function alarmEkle(req, res) {
       async () => {
         const alarmlar = await alarmlariOku();
 
-        const aktifSayisi = alarmlar.filter((a) => a.token === token && a.aktif).length;
-        if (aktifSayisi >= MAKS_AKTIF_ALARM_TOKEN_BASINA) {
-          return { hataKodu: 429, hata: `En fazla ${MAKS_AKTIF_ALARM_TOKEN_BASINA} aktif alarm kurabilirsiniz. Lütfen önce birkaçını silin.` };
+        // ── MİSAFİR/ÜCRETSİZ/PRO SINIRI (2026-09-27) ────────────────────────
+        // uid varsa hesap SAHİBİNİN TÜM CİHAZLARINDAKİ aktif alarmları sayılır
+        // (aksi halde kullanıcı ikinci bir cihazda aynı limiti "yeniden"
+        // kullanabilirdi); uid yoksa (misafir) eskisi gibi sadece bu token.
+        const { limit: alarmLimiti, tier: alarmTier } = await alarmLimitiVeTierAl(uid);
+        const aktifSayisi = alarmlar.filter((a) =>
+          a.aktif && (uid ? (a.uid === uid || a.token === token) : a.token === token)
+        ).length;
+        if (aktifSayisi >= alarmLimiti) {
+          const mesaj = alarmTier === "misafir"
+            ? `Misafir olarak en fazla ${alarmLimiti} aktif alarm kurabilirsiniz. Daha fazlası için hesap açın.`
+            : alarmTier === "ucretsiz"
+            ? `Ücretsiz üyelikte en fazla ${alarmLimiti} aktif alarm kurabilirsiniz. Sınırsız alarm için Pro'ya geçin.`
+            : `En fazla ${alarmLimiti} aktif alarm kurabilirsiniz. Lütfen önce birkaçını silin.`;
+          return { hataKodu: 429, hata: mesaj, tier: alarmTier };
         }
 
         // KÜRESEL TAVAN (2026-08-02): Token başına sınır, sahte token üreten
@@ -1121,6 +1502,7 @@ async function alarmEkle(req, res) {
         const yeniAlarm = {
           id: randomUUID(),
           token,
+          uid: uid || null,
           sembol,
           ad,
           tip, // "hedef" | "yuzde"
@@ -1155,21 +1537,64 @@ async function alarmEkle(req, res) {
   }
 }
 
+// Kullanıcı GİRİŞ YAPTIĞINDA çağrılır (bkz. FiyatlamaPro.tsx'teki hesap
+// senkron effect'i) — bu cihazın token'ına kayıtlı, henüz uid'i olmayan
+// TÜM alarmları o hesaba bağlar. TOKEN TASIMA'daki (tokenKaydet) AYNI
+// desen: kilit altında oku-değiştir-yaz.
+//
+//   POST ?islem=alarm-hesaba-bagla { token, uid }
+//
+// Zaten uid'i OLAN (başka bir hesaba bağlı) alarmlara DOKUNULMAZ — aksi
+// halde paylaşılan bir cihazda A hesabıyla kurulmuş bir alarm, B hesabıyla
+// girişte sessizce B'ye geçerdi.
+async function alarmHesabaBagla(req, res) {
+  const { token, uid } = req.body || {};
+  if (!token || !uid || typeof uid !== "string") {
+    res.status(400).json({ hata: "'token' ve 'uid' alanları zorunlu" });
+    return;
+  }
+  try {
+    const { basarili, sonuc } = await kilitliCalistir(
+      redis, ALARM_KILIT_ANAHTAR, 15,
+      async () => {
+        const alarmlar = await alarmlariOku();
+        let sayi = 0;
+        const yeniListe = alarmlar.map((a) => {
+          if (a.token === token && !a.uid) { sayi++; return { ...a, uid }; }
+          return a;
+        });
+        if (sayi > 0) await redis.set(ALARM_KV_ANAHTAR, yeniListe);
+        return { baglanan: sayi };
+      },
+      { denemeSayisi: 10, bekleMs: 300 }
+    );
+    if (!basarili) {
+      res.status(409).json({ hata: "Şu anda başka bir alarm işlemi sürüyor, lütfen tekrar deneyin." });
+      return;
+    }
+    res.status(200).json({ basarili: true, baglanan: sonuc.baglanan });
+  } catch (e) {
+    res.status(500).json({ hata: "Alarmlar hesaba bağlanamadı", detay: e.message });
+  }
+}
+
 async function alarmListele(req, res) {
-  const { token } = req.body || {};
+  const { token, uid } = req.body || {};
   if (!token) {
     res.status(400).json({ hata: "'token' alanı zorunlu" });
     return;
   }
   const alarmlar = await alarmlariOku();
+  // uid verilmişse hesabın TÜM cihazlarındaki alarmlar da listeye girer
+  // (bkz. portfoy senkronundaki AYNI "hem token hem uid eşleşsin" deseni).
   const kendiAlarmlarim = alarmlar
-    .filter((a) => a.token === token)
+    .filter((a) => a.token === token || (uid && a.uid === uid))
     .sort((a, b) => b.olusturulmaTs - a.olusturulmaTs);
   res.status(200).json({ basarili: true, alarmlar: kendiAlarmlarim });
 }
 
 async function alarmSil(req, res) {
-  const { token, id } = req.body || {};
+  const { token, id, uid } = req.body || {};
   if (!token || !id) {
     res.status(400).json({ hata: "'token' ve 'id' alanları zorunlu" });
     return;
@@ -1182,7 +1607,9 @@ async function alarmSil(req, res) {
       15,
       async () => {
         const alarmlar = await alarmlariOku();
-        const yeniListe = alarmlar.filter((a) => !(a.id === id && a.token === token));
+        // uid eşleşmesi de kabul edilir — listelenen ama BAŞKA bir cihazın
+        // token'ına ait bir alarmı (aynı hesap) buradan silebilmek için.
+        const yeniListe = alarmlar.filter((a) => !(a.id === id && (a.token === token || (uid && a.uid === uid))));
         const silindi = yeniListe.length !== alarmlar.length;
         if (silindi) await redis.set(ALARM_KV_ANAHTAR, yeniListe);
         return { silindi };
@@ -1289,7 +1716,7 @@ async function alarmFiyatTablosu(benzersizSemboller) {
 // yeniden açmak, eşik hâlâ sağlandığı için anında tekrar tetiklenmesine yol
 // açardı — bilinçli olarak reddediliyor.
 async function alarmDurum(req, res) {
-  const { token, id, aktif } = req.body || {};
+  const { token, id, aktif, uid } = req.body || {};
   if (!token || !id || typeof aktif !== "boolean") {
     res.status(400).json({ hata: "'token', 'id' ve boolean 'aktif' alanları zorunlu" });
     return;
@@ -1301,7 +1728,7 @@ async function alarmDurum(req, res) {
   if (aktif) {
     try {
       const alarmlar = await alarmlariOku();
-      const hedef = alarmlar.find((a) => a.id === id && a.token === token);
+      const hedef = alarmlar.find((a) => a.id === id && (a.token === token || (uid && a.uid === uid)));
       if (hedef && hedef.tip === "kap") {
         const kod = String(hedef.sembol || "").slice(BIST_ONEK.length).toUpperCase();
         const tumListe = await kapTumOku();
@@ -1327,7 +1754,7 @@ async function alarmDurum(req, res) {
       redis, ALARM_KILIT_ANAHTAR, 15,
       async () => {
         const alarmlar = await alarmlariOku();
-        const idx = alarmlar.findIndex((a) => a.id === id && a.token === token);
+        const idx = alarmlar.findIndex((a) => a.id === id && (a.token === token || (uid && a.uid === uid)));
         if (idx < 0) return { hataKodu: 404, hata: "Alarm bulunamadı." };
         const mevcut = alarmlar[idx];
         if (mevcut.tip !== "kap") {
@@ -1389,12 +1816,13 @@ async function alarmKontrol(req, res) {
           return { kontrolEdilenAlarm: 0, benzersizSembol: 0, tetiklenen: 0, gonderilenBildirim: 0 };
         }
 
-        // Fiyat alarmları, KAP abonelikleri ve zekât hatırlatmaları ayrı
-        // akışlar — son ikisinde çekilecek bir fiyat yok. Zekât kayıtları bu
-        // filtreye EKLENMEZSE alarmFiyatTablosu "ZEKAT" sembolü için boşuna
-        // fiyat aramaya çalışır ve her turda hata üretir.
+        // Fiyat alarmları, KAP abonelikleri, zekât hatırlatmaları ve banka
+        // oranı alarmları ayrı akışlar — sonuncusu HARİÇ hepsinde çekilecek
+        // bir Yahoo/AltinAPI/BIST fiyatı yok. Bu tipler fiyatAlarmlar
+        // filtresine EKLENMEZSE alarmFiyatTablosu onlar için boşuna fiyat
+        // aramaya çalışır ve her turda hata üretir.
         const kapAlarmlar = aktifAlarmlar.filter((a) => a.tip === "kap");
-        const fiyatAlarmlar = aktifAlarmlar.filter((a) => a.tip !== "kap" && a.tip !== "zekat" && a.tip !== "endeks");
+        const fiyatAlarmlar = aktifAlarmlar.filter((a) => a.tip !== "kap" && a.tip !== "zekat" && a.tip !== "endeks" && a.tip !== "banka_oran");
 
         // Aynı sembolü birden fazla alarm izliyorsa fiyatı TEK kere çekelim.
         const benzersizSemboller = [...new Set(fiyatAlarmlar.map((a) => a.sembol))];
@@ -1417,11 +1845,20 @@ async function alarmKontrol(req, res) {
           if (!endeksUyeler) endeksNot = "Endeks listesi alinamadi — endeks abonelikleri bu turda atlandi";
         }
 
+        // Banka oranı verisi de TEK kere (10 dk'lık bellek-içi önbellekten).
+        const bankaOranAlarmlar = aktifAlarmlar.filter((a) => a.tip === "banka_oran");
+        let karPayiVeri = null, bankaOranNot = null;
+        if (bankaOranAlarmlar.length > 0) {
+          karPayiVeri = await karPayiVerisiGetir();
+          if (!karPayiVeri) bankaOranNot = "kar-payi.json alinamadi — banka orani alarmlari bu turda atlandi";
+        }
+
         let tetiklenen = 0;
         let gonderilenBildirim = 0;
         let kapTetiklenen = 0;
         let zekatTetiklenen = 0;
         let endeksTetiklenen = 0;
+        let bankaOraniTetiklenen = 0;
         let olenAbonelik = 0;   // token gecersiz oldugu icin kapanan abonelik sayisi
         let gecersizKurulumKapatilan = 0;   // kurulusunda kosulu zaten saglanan (eski) hedef alarmlari
         const gonderimHatalari = [];
@@ -1589,6 +2026,46 @@ async function alarmKontrol(req, res) {
             continue;
           }
 
+          // ── BANKA ORANI ALARMI ───────────────────────────────────────────
+          // Fiyat alarmlarıyla AYNI "geçiş" mantığı (tek seferlik, tetiklenince
+          // aktif:false) ama veri kar-payi.json'dan geliyor. Veri o turda hiç
+          // alınamadıysa alarm dokunulmadan bırakılır — bir sonraki turda
+          // tekrar denenir.
+          if (alarm.tip === "banka_oran") {
+            if (!karPayiVeri) { guncelListe.push(alarm); continue; }
+            const guncelOran = bankaOraniOku(karPayiVeri, alarm.banka, alarm.urun);
+            if (guncelOran == null) { guncelListe.push(alarm); continue; }
+
+            let tetiklendiMi = false, mesaj = "";
+            if (alarm.yon === "ustunde" && guncelOran >= alarm.hedefFiyat) {
+              tetiklendiMi = true;
+              mesaj = `${alarm.ad} hedefinize ulaştı/geçti: %${guncelOran} (hedef: %${alarm.hedefFiyat})`;
+            } else if (alarm.yon === "altinda" && guncelOran <= alarm.hedefFiyat) {
+              tetiklendiMi = true;
+              mesaj = `${alarm.ad} hedefinizin altına indi: %${guncelOran} (hedef: %${alarm.hedefFiyat})`;
+            }
+
+            if (!tetiklendiMi) { guncelListe.push(alarm); continue; }
+
+            bankaOraniTetiklenen++;
+            const gonderildi = await tekTokeneGonder(alarm.token, `🏦 Banka Oranı: ${alarm.ad}`, mesaj, {
+              tip: "banka-orani-alarmi", banka: alarm.banka, urun: alarm.urun, alarmId: alarm.id,
+            });
+            if (gonderildi === true) gonderilenBildirim++;
+            else if (gonderildi && gonderildi.hata) {
+              gonderimHatalari.push({ alarm: alarm.ad, tokenIlk10: (alarm.token || "").slice(0, 10), hata: gonderildi.hata });
+            }
+            const olduMu = !!(gonderildi && gonderildi.hata &&
+              String(gonderildi.hata).includes("registration-token-not-registered"));
+            if (olduMu) {
+              olenAbonelik++;
+              guncelListe.push({ ...alarm, aktif: false, kapaliSebep: "token-gecersiz", tetiklenmeTs: Date.now() });
+              continue;
+            }
+            guncelListe.push({ ...alarm, aktif: false, tetiklenmeTs: Date.now(), tetiklenmeFiyat: guncelOran });
+            continue;
+          }
+
           const guncelFiyat = fiyatlar[alarm.sembol];
           if (guncelFiyat == null) {
             guncelListe.push(alarm); // fiyat alınamadıysa bir sonraki kontrole bırak
@@ -1664,6 +2141,8 @@ async function alarmKontrol(req, res) {
           zekatTetiklenen,
           endeksAlarmi: endeksAlarmlar.length,
           endeksTetiklenen,
+          bankaOraniAlarmi: bankaOranAlarmlar.length,
+          bankaOraniTetiklenen,
           olenAbonelik,
           gecersizKurulumKapatilan,
           gonderilenBildirim,
@@ -1674,6 +2153,7 @@ async function alarmKontrol(req, res) {
           ...(bistNot ? { bistNot } : {}),
           ...(kapNot ? { kapNot } : {}),
           ...(endeksNot ? { endeksNot } : {}),
+          ...(bankaOranNot ? { bankaOranNot } : {}),
         };
       },
       { denemeSayisi: 3, bekleMs: 1000 }
@@ -1767,7 +2247,12 @@ export default async function handler(req, res) {
       await alarmTemizle(req, res);
     } else if (islem === "alarm-durum") {
       await alarmDurum(req, res);
-
+    } else if (islem === "alarm-hesaba-bagla") {
+      await alarmHesabaBagla(req, res);
+    } else if (islem === "haber-bildirim-ayarla") {
+      await haberBildirimAyarla(req, res);
+    } else if (islem === "haber-bildirim-gonder") {
+      await haberBildirimGonder(req, res);
     } else {
       res.status(400).json({ hata: "Geçersiz 'islem'." });
     }

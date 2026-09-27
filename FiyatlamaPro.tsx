@@ -2831,7 +2831,7 @@ function KarPayiKarsilastirmaGenis({ nav }: { nav: (sc: string) => void }) {
   );
 }
 
-function KarPayiOranlari({nav}:{nav:any}){
+function KarPayiOranlari({nav,kimlik}:{nav:any;kimlik:ReturnType<typeof useKpKimlik>}){
   const [veri,setVeri]=useState<any>(null);
   const [yukleniyor,setYukleniyor]=useState(true);
   const [hata,setHata]=useState<string|null>(null);
@@ -2856,6 +2856,23 @@ function KarPayiOranlari({nav}:{nav:any}){
   const FIN_KOLONLAR=["konut60","konut120","tasit12","tasit24","ihtiyac12","ihtiyac24"] as const;
   type FinKolon = typeof FIN_KOLONLAR[number];
   const [siralamaKolon,setSiralamaKolon]=useState<FinKolon>("konut120"); // onaylanan varsayılan
+
+  // ── BANKA ORANI ALARMI (2026-09-27, SADECE PRO) ──────────────────────────
+  // Hangi bankaya alarm kurulacağı burada tutuluyor; modal açıkken hangi
+  // sekmeden (katılma/finansman) tıklandığı urunSecenekleri'ni belirliyor.
+  const [bankaAlarmSecili,setBankaAlarmSecili]=useState<{banka:string; urunSecenekleri:{key:string;etiket:string}[]; varsayilanUrun:string}|null>(null);
+  const KAR_PAYI_URUN_SECENEKLERI=[
+    {key:"tl",etiket:"TL"},{key:"usd",etiket:"USD"},{key:"eur",etiket:"EUR"},{key:"altin",etiket:"Altın"},
+  ];
+  const FIN_URUN_SECENEKLERI=[
+    {key:"konut60",etiket:"Konut (60 Ay)"},{key:"konut120",etiket:"Konut (120 Ay)"},
+    {key:"tasit12",etiket:"Taşıt (12 Ay)"},{key:"tasit24",etiket:"Taşıt (24 Ay)"},
+    {key:"ihtiyac12",etiket:"İhtiyaç (12 Ay)"},{key:"ihtiyac24",etiket:"İhtiyaç (24 Ay)"},
+  ];
+  const bankaAlarmAc=(banka:string, secenekler:{key:string;etiket:string}[], varsayilan:string)=>{
+    if(!kpProGerekliMi(kimlik.pro, nav)) return; // Pro değilse ProSatinAl'a yönlendirir, modal açılmaz
+    setBankaAlarmSecili({banka, urunSecenekleri:secenekler, varsayilanUrun:varsayilan});
+  };
 
   // NOT (2026-07): Bu veri artık backend/Redis'te değil, repo içindeki
   // public/kar-payi.json dosyasında — GitHub'dan elle düzenlenip commit
@@ -3013,6 +3030,7 @@ function KarPayiOranlari({nav}:{nav:any}){
                             <BankaLogoRozet ad={b.ad} boyut={22}/>
                             <span>{b.ad}{enIyiMi&&<span style={{display:"block",fontSize:8,fontWeight:700,color:C.green,marginTop:1}}>{CV("EN İYİ")}</span>}</span>
                             <BankaBasvurButonu ad={b.ad} vurgulu={enIyiMi}/>
+                            <button onClick={(e)=>{e.stopPropagation();bankaAlarmAc(b.ad,FIN_URUN_SECENEKLERI,siralamaKolon);}} aria-label={CV("Oran Alarmı Kur")} style={{width:26,height:26,borderRadius:13,border:`1px solid ${WA(0.15)}`,background:"transparent",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0,fontSize:13}}>🔔</button>
                           </div>
                         ) : (
                           <>
@@ -3020,7 +3038,10 @@ function KarPayiOranlari({nav}:{nav:any}){
                               <BankaLogoRozet ad={b.ad} boyut={20}/>
                               <span>{b.ad}{enIyiMi&&<span style={{display:"block",fontSize:8,fontWeight:700,color:C.green,marginTop:1}}>{CV("EN İYİ")}</span>}</span>
                             </div>
-                            <div style={{marginTop:4}}><BankaBasvurButonu ad={b.ad} vurgulu={enIyiMi}/></div>
+                            <div style={{marginTop:4,display:"flex",alignItems:"center",gap:6}}>
+                              <BankaBasvurButonu ad={b.ad} vurgulu={enIyiMi}/>
+                              <button onClick={(e)=>{e.stopPropagation();bankaAlarmAc(b.ad,FIN_URUN_SECENEKLERI,siralamaKolon);}} aria-label={CV("Oran Alarmı Kur")} style={{width:24,height:24,borderRadius:12,border:`1px solid ${WA(0.15)}`,background:"transparent",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0,fontSize:12}}>🔔</button>
+                            </div>
                           </>
                         )}
                       </td>
@@ -3079,6 +3100,7 @@ function KarPayiOranlari({nav}:{nav:any}){
               <span style={{flex:2,fontSize:12.5,fontWeight:700,color:C.label,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingRight:6,display:"flex",alignItems:"center",gap:6}}>
                 <BankaLogoRozet ad={b.ad} boyut={20}/>
                 {b.ad} <BankaBasvurButonu ad={b.ad}/>
+                <button onClick={(e)=>{e.stopPropagation();bankaAlarmAc(b.ad,KAR_PAYI_URUN_SECENEKLERI,siralamaParaBirimi);}} aria-label={CV("Oran Alarmı Kur")} style={{width:22,height:22,borderRadius:11,border:`1px solid ${WA(0.15)}`,background:"transparent",display:"inline-flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0,fontSize:11,marginLeft:2}}>🔔</button>
               </span>
               {([["tl",b.tl],["usd",b.usd],["eur",b.eur],["altin",b.altin]] as const).map(([v,deger])=>(
                 <span key={v} style={{
@@ -3091,6 +3113,14 @@ function KarPayiOranlari({nav}:{nav:any}){
         </div>
       )}
       </>)}
+      {bankaAlarmSecili && (
+        <BankaOranAlarmModal
+          banka={bankaAlarmSecili.banka}
+          urunSecenekleri={bankaAlarmSecili.urunSecenekleri}
+          varsayilanUrun={bankaAlarmSecili.varsayilanUrun}
+          onClose={()=>setBankaAlarmSecili(null)}
+        />
+      )}
     </div>
   );
 }
@@ -17563,7 +17593,7 @@ function ZekatHesabi() {
     setHatirlatmaDurum("gonderiliyor"); setHatirlatmaHata("");
     fetch(`${API_BASE}/api/bildirim?islem=alarm-ekle`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token, tip: "zekat", ad: "Zekât Günü", zekatTarihi: hedef }),
+      body: JSON.stringify({ token, uid: kpAlarmUid, tip: "zekat", ad: "Zekât Günü", zekatTarihi: hedef }),
     }).then(r => r.json().then(d => ({ ok: r.ok, d })))
       .then(({ ok, d }) => {
         if (ok && d?.basarili) {
@@ -22086,9 +22116,46 @@ function gecmisKaydet(gecmis, setGecmis, kayit){
 // dolu olur). Fiyat alarmı kurma/listeleme bunu "kimlik" olarak kullanır —
 // uygulamanın kullanıcı hesabı olmadığı için token, "kime ait" sorusunun
 // tek cevabıdır.
+// Basit ON/OFF anahtar — dosyada hazır bir toggle bileşeni yoktu, bu yüzden
+// küçük, bağımsız bir tane eklendi (haber bildirimi ayarında kullanılıyor).
+function AnahtarToggle({acik,onDegistir,devreDisi}:{acik:boolean;onDegistir:()=>void;devreDisi?:boolean}){
+  return (
+    <button onClick={devreDisi?undefined:onDegistir} disabled={devreDisi} style={{
+      width:44,height:26,borderRadius:13,border:"none",padding:2,flexShrink:0,
+      cursor:devreDisi?"default":"pointer",
+      background:acik?C.blue:WA(0.15),
+      display:"flex",alignItems:"center",justifyContent:acik?"flex-end":"flex-start",
+      opacity:devreDisi?0.6:1,
+    }}>
+      <span style={{width:22,height:22,borderRadius:11,background:"#fff",boxShadow:"0 1px 3px rgba(0,0,0,0.3)",display:"block"}}/>
+    </button>
+  );
+}
+
+// Haber bildirimi kategorileri — api/bildirim.js'deki haber-bildirim-gonder
+// çağrısında ?kategori= olarak kullanılacak sabit anahtar listesi. Yeni bir
+// kategori eklenecekse buraya VE haberlerin gönderildiği yere (ayrı dosya)
+// aynı anahtarla eklenmeli.
+const HABER_KATEGORILERI = [
+  { key: "katilim", etiket: "Katılım Bankacılığı" },
+  { key: "bist", etiket: "BİST / Hisse" },
+  { key: "doviz-altin", etiket: "Döviz & Altın" },
+  { key: "kfk", etiket: "KFK / Kamu Finansmanı" },
+];
+
 function pushTokenAl():string|null{
   try{ return localStorage.getItem("kp_push_token"); }catch{ return null; }
 }
+
+// ── ALARMLAR ↔ HESAP SENKRONU (2026-09-27) ──────────────────────────────
+// portfoyEkle/portfoyYaz'daki kpPortfoySenkronUid ile AYNI desen: alarm
+// kurma ekranları (FiyatAlarmlarim, KurGrafikModal, AltinAlarmModal,
+// HisseAlarmModal — 4 ayrı çağrı noktası) kimlik'i prop olarak almıyor,
+// bu yüzden kök bileşendeki tek bir effect bu modül değişkenini güncelliyor.
+// uid dolu olduğunda alarm-ekle/listele/sil/durum'a otomatik eklenir —
+// backend'de misafir/ücretsiz/Pro alarm sınırı ve çoklu cihaz senkronu
+// bunun üzerine kurulu (bkz. api/bildirim.js).
+let kpAlarmUid: string | null = null;
 
 // Tetiklendikten sonra KAPANMAYAN alarm türleri. Bunlar listede farklı
 // gösterilir (durum metni, ikon) ve duraklat/devam düğmesi yalnızca bunlarda
@@ -22105,7 +22172,7 @@ function FiyatAlarmlarim(){
   const yukle=()=>{
     if(!token){ setAlarmlar([]); return; }
     fetch(`${API_BASE}/api/bildirim?islem=alarm-listele`,{
-      method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token}),
+      method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token, uid: kpAlarmUid}),
     }).then(r=>r.ok?r.json():null).then(d=>setAlarmlar(d?.alarmlar||[])).catch(()=>setAlarmlar([]));
   };
   useEffect(()=>{ yukle(); },[]);
@@ -22114,7 +22181,7 @@ function FiyatAlarmlarim(){
     if(!token) return;
     setSiliniyor(id);
     fetch(`${API_BASE}/api/bildirim?islem=alarm-sil`,{
-      method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token,id}),
+      method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token,id,uid:kpAlarmUid}),
     }).then(()=>{ setSiliniyor(null); yukle(); }).catch(()=>setSiliniyor(null));
   };
 
@@ -22125,7 +22192,7 @@ function FiyatAlarmlarim(){
     if(!token) return;
     setDegisiyor(id);
     fetch(`${API_BASE}/api/bildirim?islem=alarm-durum`,{
-      method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token,id,aktif}),
+      method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token,id,aktif,uid:kpAlarmUid}),
     }).then(()=>{ setDegisiyor(null); yukle(); }).catch(()=>setDegisiyor(null));
   };
 
@@ -22517,7 +22584,7 @@ function KurGrafikModal({kur, onClose}:{kur:any, onClose:()=>void}){
                           fetch(`${API_BASE}/api/bildirim?islem=alarm-ekle`,{
                             method:"POST",headers:{"Content-Type":"application/json"},
                             body:JSON.stringify({
-                              token, sembol, ad: kur.ad||kur.kod,
+                              token, uid: kpAlarmUid, sembol, ad: kur.ad||kur.kod,
                               tip:alarmTip, yon:alarmYon,
                               hedefFiyat: alarmTip==="hedef"?degerNum:undefined,
                               yuzde: alarmTip==="yuzde"?degerNum:undefined,
@@ -23900,7 +23967,7 @@ function AltinAlarmModal({urun, onClose}:{urun:{ad:string, sembol:string, bid:nu
                     fetch(`${API_BASE}/api/bildirim?islem=alarm-ekle`,{
                       method:"POST",headers:{"Content-Type":"application/json"},
                       body:JSON.stringify({
-                        token, sembol: urun.sembol, ad: urun.ad,
+                        token, uid: kpAlarmUid, sembol: urun.sembol, ad: urun.ad,
                         tip:alarmTip, yon:alarmYon,
                         hedefFiyat: alarmTip==="hedef"?degerNum:undefined,
                         yuzde: alarmTip==="yuzde"?degerNum:undefined,
@@ -23990,11 +24057,11 @@ function HisseAlarmModal({hisse, onClose}:{hisse:{ticker:string, sirket?:string,
       setHata(bildirimHataMesaji(neden));
       return;
     }
-    let govde:any={token, sembol, ad, tip:mod, yon};
+    let govde:any={token, uid: kpAlarmUid, sembol, ad, tip:mod, yon};
     if(mod==="kap"){
-      govde={token, sembol, ad, tip:"kap", yon:"yeni"};
+      govde={token, uid: kpAlarmUid, sembol, ad, tip:"kap", yon:"yeni"};
     }else if(mod==="endeks"){
-      govde={token, sembol, ad, tip:"endeks", yon:"degisim"};
+      govde={token, uid: kpAlarmUid, sembol, ad, tip:"endeks", yon:"degisim"};
     }else{
       const n=parseFloat(String(deger).replace(",","."));
       if(!n||n<=0){ setHata("Geçerli bir değer girin."); return; }
@@ -24165,6 +24232,104 @@ function HisseAlarmModal({hisse, onClose}:{hisse:{ticker:string, sirket?:string,
                   background:"#3B82F6",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:"inherit",
                   opacity:durum==="gonderiliyor"?0.7:1,
                 }}>{durum==="gonderiliyor"?"Kuruluyor…":((mod==="kap"||mod==="endeks")?"Aboneliği Kur":"Alarm Kur")}</button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BANKA ORANI ALARM MODALI (2026-09-27) — SADECE PRO
+// ═══════════════════════════════════════════════════════════════════════════
+// AltinAlarmModal/HisseAlarmModal'daki AYNI desen, tek farkla: sembol/fiyat
+// yerine banka+ürün (kâr payı ya da finansman kolonu) seçiliyor — asıl
+// doğrulama (aynı banka+ürün için "zaten geçilmiş hedef" reddi, Pro
+// kontrolü) backend'de (api/bildirim.js) yapılıyor, bu modal sadece formu
+// toplayıp gönderiyor. Açılmadan ÖNCE kpProGerekliMi ile kapı kontrolü
+// yapılıyor (bkz. KarPayiOranlari'ndaki 🔔 butonu) — modal SADECE Pro'ysa
+// hiç açılmıyor.
+function BankaOranAlarmModal({banka, urunSecenekleri, varsayilanUrun, onClose}:{
+  banka:string;
+  urunSecenekleri:{key:string; etiket:string}[];
+  varsayilanUrun:string;
+  onClose:()=>void;
+}){
+  const [urun,setUrun]=useState(varsayilanUrun);
+  const [yon,setYon]=useState<"ustunde"|"altinda">("ustunde");
+  const [deger,setDeger]=useState("");
+  const [durum,setDurum]=useState<"bos"|"gonderiliyor"|"basarili"|"hata">("bos");
+  const [hata,setHata]=useState("");
+
+  const gonder=()=>{
+    const token=pushTokenAl();
+    if(!token){
+      let neden=""; try{ neden=localStorage.getItem("kp_push_hata")||""; }catch{}
+      setHata(bildirimHataMesaji(neden));
+      return;
+    }
+    const n=parseFloat(String(deger).replace(",","."));
+    if(!n||n<=0){ setHata("Geçerli bir hedef oran girin."); return; }
+    const urunEtiket=urunSecenekleri.find(u=>u.key===urun)?.etiket||urun;
+    setDurum("gonderiliyor"); setHata("");
+    fetch(`${API_BASE}/api/bildirim?islem=alarm-ekle`,{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        token, uid: kpAlarmUid, sembol:"x", ad:`${banka} — ${urunEtiket}`,
+        tip:"banka_oran", banka, urun, yon, hedefFiyat:n,
+      }),
+    }).then(r=>r.json().then(d=>({ok:r.ok,d})))
+      .then(({ok,d})=>{
+        if(ok&&d?.basarili){ setDurum("basarili"); olayGonder("alarm_kuruldu",{tip:"banka_oran",banka,urun}); }
+        else { setDurum("bos"); setHata(d?.hata||"Alarm kurulamadı."); }
+      })
+      .catch(()=>{ setDurum("bos"); setHata("Bağlantı hatası, tekrar deneyin."); });
+  };
+
+  return(
+    <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.7)",zIndex:600,display:"flex",alignItems:"flex-end",...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}}>
+      <div style={{background:C.card,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",maxHeight:"85vh",display:"flex",flexDirection:"column"}}>
+        <div style={{padding:"16px 20px 12px",borderBottom:`1px solid ${WA(0.1)}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,gap:10}}>
+          <div style={{minWidth:0}}>
+            <p style={{margin:0,fontSize:15,fontWeight:700,color:C.label}}>🏦 {CV("Banka Oranı Alarmı")}</p>
+            <p style={{margin:"2px 0 0",fontSize:12,color:WA(0.55),overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{banka}</p>
+          </div>
+          <button onClick={onClose} style={{background:WA(0.1),border:"none",width:32,height:32,borderRadius:16,fontSize:20,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>×</button>
+        </div>
+
+        <div style={{flex:1,overflowY:"auto",padding:"16px 20px 32px"}}>
+          {durum==="basarili"?(
+            <div style={{textAlign:"center",padding:"10px 0"}}>
+              <p style={{margin:0,fontSize:24}}>✅</p>
+              <p style={{margin:"6px 0 0",fontSize:13,fontWeight:700,color:C.green}}>{CV("Alarm kuruldu!")}</p>
+              <p style={{margin:"5px 2px 0",fontSize:11.5,color:WA(0.5)}}>{CV("Oran hedefinize ulaşınca bildirim alacaksınız.")}</p>
+              <button onClick={onClose} style={{marginTop:14,width:"100%",padding:"11px",borderRadius:10,border:"none",background:"#3B82F6",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>{CV("Tamam")}</button>
+            </div>
+          ):(
+            <div>
+              <p style={{margin:"0 0 6px",fontSize:11,fontWeight:700,color:WA(0.5)}}>{CV("Ürün")}</p>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:14}}>
+                {urunSecenekleri.map(u=>(
+                  <button key={u.key} onClick={()=>{setUrun(u.key);setHata("");}} style={{
+                    padding:"7px 12px",borderRadius:9,border:`1.5px solid ${urun===u.key?"#3B82F6":WA(0.15)}`,
+                    background:urun===u.key?"rgba(59,130,246,0.15)":"transparent",
+                    color:urun===u.key?(TEMA==="acik"?"#2E6DA8":"#7DB2FF"):WA(0.6),
+                    fontWeight:700,fontSize:11.5,cursor:"pointer",fontFamily:"inherit",
+                  }}>{u.etiket}</button>
+                ))}
+              </div>
+              <div style={{display:"flex",gap:6,marginBottom:8}}>
+                <button onClick={()=>{setYon("ustunde");setHata("");}} style={{flex:1,padding:"7px",borderRadius:8,border:`1px solid ${yon==="ustunde"?C.green:WA(0.15)}`,background:yon==="ustunde"?"rgba(74,222,128,0.12)":"transparent",color:yon==="ustunde"?C.green:WA(0.6),fontWeight:700,fontSize:11.5,cursor:"pointer",fontFamily:"inherit"}}>▲ {CV("Üstüne çıkarsa")}</button>
+                <button onClick={()=>{setYon("altinda");setHata("");}} style={{flex:1,padding:"7px",borderRadius:8,border:`1px solid ${yon==="altinda"?C.red:WA(0.15)}`,background:yon==="altinda"?"rgba(248,113,113,0.12)":"transparent",color:yon==="altinda"?C.red:WA(0.6),fontWeight:700,fontSize:11.5,cursor:"pointer",fontFamily:"inherit"}}>▼ {CV("Altına inerse")}</button>
+              </div>
+              <Field label="Hedef Oran (%)" value={deger} onChange={setDeger} type="text" suffix="%"/>
+              <p style={{margin:"5px 2px 0",fontSize:10.5,color:WA(0.4)}}>{CV("Kar payı/finansman oranları elle güncellenir, anlık değişmez.")}</p>
+              {hata&&<p style={{margin:"8px 2px 0",fontSize:11.5,color:C.red}}>{hata}</p>}
+              <div style={{display:"flex",gap:8,marginTop:12}}>
+                <button onClick={onClose} style={{flex:1,padding:"11px",borderRadius:10,border:`1px solid ${WA(0.15)}`,background:"transparent",color:WA(0.6),fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>{CV("Vazgeç")}</button>
+                <button onClick={gonder} disabled={durum==="gonderiliyor"} style={{flex:1,padding:"11px",borderRadius:10,border:"none",background:"#3B82F6",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>{durum==="gonderiliyor"?CV("Kuruluyor..."):CV("Alarm Kur")}</button>
               </div>
             </div>
           )}
@@ -28771,6 +28936,73 @@ function App(){
     return () => { iptal = true; };
   }, [kimlik.kullanici?.uid]);
 
+  // ── ALARMLAR ↔ HESAP SENKRONU (2026-09-27) ───────────────────────────────
+  // Portföy senkron effect'iyle AYNI tetikleyici (kullanici?.uid), ama ayrı
+  // bir effect — ikisi bağımsız kaygılar, biri başarısız olursa diğerini
+  // etkilememeli. Giriş yapılınca bu cihazın push token'ına kayıtlı, henüz
+  // hiçbir hesaba bağlı olmayan alarmlar backend'de bu uid'e bağlanır
+  // (alarm-hesaba-bagla) — TEK SEFERLİK bir "iddia etme" işlemi, sonrasında
+  // kpAlarmUid dolu olduğu için yeni kurulan her alarm zaten uid ile gidiyor.
+  useEffect(() => {
+    const uid = kimlik.kullanici?.uid || null;
+    kpAlarmUid = uid;
+    if (!uid) return;
+    const token = pushTokenAl();
+    if (!token) return;
+    fetch(`${API_BASE}/api/bildirim?islem=alarm-hesaba-bagla`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, uid }),
+    }).catch(() => {}); // sessizce yut — bir sonraki girişte tekrar denenir
+  }, [kimlik.kullanici?.uid]);
+
+  // ── HABER BİLDİRİMLERİ (2026-09-27) ──────────────────────────────────────
+  // Genel anahtar misafir dahil herkese açık; kategori seçimi SADECE giriş
+  // yapmış kullanıcıya gösteriliyor (bkz. Profil ekranı JSX'i). Tercih hem
+  // localStorage'da (cihazda anında görünsün) hem backend'de (Redis) tutulur.
+  const [haberBildirimAcik,setHaberBildirimAcik]=useState<boolean>(()=>{
+    try{ return localStorage.getItem("kp_haber_bildirim_acik")==="1"; }catch{ return false; }
+  });
+  const [haberKategoriler,setHaberKategoriler]=useState<string[]>(()=>{
+    try{ return JSON.parse(localStorage.getItem("kp_haber_kategoriler")||"[]"); }catch{ return []; }
+  });
+  const [haberBildirimIslemde,setHaberBildirimIslemde]=useState(false);
+  const [haberBildirimHata,setHaberBildirimHata]=useState("");
+
+  const haberBildirimGonderSunucuya=(acik:boolean, kategoriler:string[])=>{
+    const token=pushTokenAl();
+    if(!token){
+      let neden=""; try{ neden=localStorage.getItem("kp_push_hata")||""; }catch{}
+      setHaberBildirimHata(bildirimHataMesaji(neden));
+      return;
+    }
+    setHaberBildirimIslemde(true); setHaberBildirimHata("");
+    fetch(`${API_BASE}/api/bildirim?islem=haber-bildirim-ayarla`,{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({ token, acik, kategoriler: (kimlik.kullanici && kategoriler.length) ? kategoriler : undefined }),
+    }).then(r=>r.json().then(d=>({ok:r.ok,d})))
+      .then(({ok,d})=>{
+        setHaberBildirimIslemde(false);
+        if(!ok||!d?.basarili) setHaberBildirimHata(d?.hata||"Bildirim tercihi kaydedilemedi.");
+      })
+      .catch(()=>{ setHaberBildirimIslemde(false); setHaberBildirimHata("Bağlantı hatası, tekrar deneyin."); });
+  };
+  const haberBildirimToggle=()=>{
+    setHaberBildirimAcik(yeni=>{
+      const y=!yeni;
+      try{ localStorage.setItem("kp_haber_bildirim_acik", y?"1":"0"); }catch{}
+      haberBildirimGonderSunucuya(y, haberKategoriler);
+      return y;
+    });
+  };
+  const haberKategoriDegistir=(kat:string)=>{
+    setHaberKategoriler(liste=>{
+      const yeni = liste.includes(kat) ? liste.filter(k=>k!==kat) : [...liste, kat];
+      try{ localStorage.setItem("kp_haber_kategoriler", JSON.stringify(yeni)); }catch{}
+      if(haberBildirimAcik) haberBildirimGonderSunucuya(true, yeni);
+      return yeni;
+    });
+  };
+
   // ⚠️ 2026-09-21 (kullanıcı isteği: "hesap oluştur veya giriş yap alanı
   // ekleyelim"): Profil'deki "Hesap Oluştur" ve "Giriş Yap" butonları
   // HesapGiris ekranını hangi sekmeyle (kayıt/giriş) açacağını buradan
@@ -30985,6 +31217,40 @@ function App(){
               </div>
             )}
 
+            {/* ── HABER BİLDİRİMLERİ (2026-09-27) — misafir dahil herkese
+                açık genel anahtar; kategori daraltması sadece hesaplı
+                kullanıcıya gösteriliyor (bkz. haberBildirimGonderSunucuya). */}
+            <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"14px 16px",marginBottom:12}}>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <span style={{fontSize:20}}>🔔</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <p style={{margin:0,fontSize:14,fontWeight:700,color:C.label}}>{CV("Piyasa Haberleri Bildirimleri")}</p>
+                  <p style={{margin:"2px 0 0",fontSize:11.5,color:WA(0.5)}}>{CV("Önemli gelişmelerde anlık bildirim al")}</p>
+                </div>
+                <AnahtarToggle acik={haberBildirimAcik} onDegistir={haberBildirimToggle} devreDisi={haberBildirimIslemde}/>
+              </div>
+              {haberBildirimHata && <p style={{margin:"8px 0 0",fontSize:11.5,color:C.red}}>{haberBildirimHata}</p>}
+              {haberBildirimAcik && kimlik.kullanici && (
+                <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${WA(0.08)}`}}>
+                  <p style={{margin:"0 0 8px",fontSize:11,fontWeight:700,color:WA(0.5)}}>{CV("Yalnızca şu kategorilerde bildirim al (hiçbiri seçilmezse tümü)")}</p>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                    {HABER_KATEGORILERI.map(k=>(
+                      <button key={k.key} onClick={()=>haberKategoriDegistir(k.key)} style={{
+                        padding:"6px 12px",borderRadius:20,
+                        border:`1px solid ${haberKategoriler.includes(k.key)?C.blue:C.border}`,
+                        background:haberKategoriler.includes(k.key)?C.blueLight:"transparent",
+                        color:haberKategoriler.includes(k.key)?C.blue:WA(0.6),
+                        fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit",
+                      }}>{CV(k.etiket)}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {haberBildirimAcik && !kimlik.kullanici && (
+                <p style={{margin:"8px 0 0",fontSize:11,color:WA(0.4)}}>{CV("Belirli kategorilere daraltmak için hesap açabilirsin.")}</p>
+              )}
+            </div>
+
             {/* ⚠️ 2026-09-21 (kullanıcı isteği: "İsim Rumuz Gir alanını
                 kaldıralım"): cihaz bazlı takma ad girişi kaldırıldı —
                 artık gerçek hesaplarda Ad Soyad zaten Firebase'den
@@ -31106,7 +31372,7 @@ function App(){
         {screen==="verimlilikAnalizi"&&<VerimlilikAnalizi s={settings} evdsMakro={evdsMakro}/>
         }
         {screen==="fonGetiriIzleme"&&<FonGetiriIzleme settings={settings} initialKod={pendingFonSecim} onInitialTuketildi={()=>setPendingFonSecim(null)} genisEkran={genisEkran} onFonGrafikAc={(fon:any)=>{setPendingFonDetay(fon); nav("fonDetay","fonGetiriIzleme");}}/>}
-        {screen==="karPayiOranlari"&&<KarPayiOranlari nav={nav}/>}
+        {screen==="karPayiOranlari"&&<KarPayiOranlari nav={nav} kimlik={kimlik}/>}
         {screen==="fiyatAlarmlarim"&&<FiyatAlarmlarim/>}
         {screen==="bistHisseTarayici"&&<BistHisseTarayici initialTicker={pendingHisseSecim} onInitialTuketildi={()=>setPendingHisseSecim(null)} onDisaridanGeri={back}/>}
         {screen==="getiridenAnapara"&&<GetiridenAnapara s={settings}/>}
