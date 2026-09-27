@@ -24486,6 +24486,62 @@ function TakipYildizi({ tur, kod, ad, birim, fiyat, paraOnek, dec, g, h, a, y, b
   );
 }
 
+// ── PORTFÖY BULUT SENKRONU (2026-09-27) ─────────────────────────────────
+// Portföy hâlâ birincil olarak localStorage'da yaşıyor (hız + misafir
+// kullanım için) — bu sadece giriş yapılmışken localStorage'ın YANINA
+// Firestore'a da yazan/oradan okuyan ince bir katman. kpPortfoySenkronUid
+// modül seviyesinde tutuluyor çünkü portfoyYaz() (ve onu çağıran onlarca
+// yer: portfoyEkle, portfoySil, takipDegistir, fiyat tazeleme...) React
+// state'ine değil düz bir fonksiyona bağlı — uid'i her çağrı zincirinde
+// prop olarak taşımak yerine, kök bileşendeki tek bir effect bu değişkeni
+// güncelliyor (bkz. useEffect([kullanici?.uid]) — kök bileşende, kimlik
+// tanımından hemen sonra).
+let kpPortfoySenkronUid: string | null = null;
+
+async function kpPortfoyFirestoreOku(uid: string): Promise<PortfoyKalemi[] | null> {
+  try {
+    const app = await kpFirebaseWebApp();
+    const { getFirestore, doc, getDoc } = await import("firebase/firestore");
+    const snap = await getDoc(doc(getFirestore(app), "portfoy", uid));
+    if (!snap.exists()) return null;
+    const d = snap.data() as any;
+    return Array.isArray(d?.kalemler) ? d.kalemler : null;
+  } catch (e) {
+    console.error("Portföy buluttan okunamadı:", e);
+    return null;
+  }
+}
+
+// Fire-and-forget — portfoyYaz senkron/hızlı kalmalı, Firestore yazım
+// hatası sessizce loglanır (bkz. kpProDurumGetir'deki AYNI desen).
+function kpPortfoyFirestoreYaz(uid: string, liste: PortfoyKalemi[]) {
+  (async () => {
+    try {
+      const app = await kpFirebaseWebApp();
+      const { getFirestore, doc, setDoc } = await import("firebase/firestore");
+      await setDoc(doc(getFirestore(app), "portfoy", uid), {
+        kalemler: liste,
+        sonGuncelleme: new Date().toISOString(),
+      });
+    } catch (e) {
+      console.error("Portföy buluta yazılamadı:", e);
+    }
+  })();
+}
+
+// İlk giriş anındaki BİR SEFERLİK birleştirme: id'ye göre birleşim. Aynı id
+// iki tarafta da varsa YEREL (bu cihazdaki) sürüm kazanır — kalem bazında
+// bir "son düzenleme" alanı olmadığı için (eklenmeTarihi sadece OLUŞTURULMA
+// anını tutuyor, düzenlemeyi değil) güvenilir bir zaman karşılaştırması
+// yapılamıyor; bunun yerine "aktif kullanılan cihaz kazanır" kuralı
+// uygulanıyor. Buluttaki, yerelde olmayan kalemler (başka cihazda eklenmiş)
+// listeye EKLENİYOR — hiçbir kalem sessizce kaybolmuyor.
+function portfoyBulutIleBirlestir(yerel: PortfoyKalemi[], bulut: PortfoyKalemi[]): PortfoyKalemi[] {
+  const yerelIdler = new Set(yerel.map(k => k.id));
+  const sadeceBulutta = bulut.filter(k => !yerelIdler.has(k.id));
+  return [...yerel, ...sadeceBulutta];
+}
+
 function portfoyOku(): PortfoyKalemi[] {
   try {
     const raw = localStorage.getItem(PORTFOY_LS_KEY);
@@ -24512,6 +24568,7 @@ function portfoyOku(): PortfoyKalemi[] {
 }
 function portfoyYaz(liste: PortfoyKalemi[]) {
   try { localStorage.setItem(PORTFOY_LS_KEY, JSON.stringify(liste)); } catch {}
+  if (kpPortfoySenkronUid) kpPortfoyFirestoreYaz(kpPortfoySenkronUid, liste);
 }
 
 // Altın alt türleri (2026-07-24: eski sabit-çarpan sisteminden gerçek
@@ -28687,6 +28744,32 @@ function App(){
   // Hesap/kimlik doğrulama — kök seviyede BİR KERE (bkz. useKpKimlik tanımı,
   // dosya başında). Profil ekranı ve HesapGiris ekranı bunu prop olarak alır.
   const kimlik=useKpKimlik();
+
+  // ── PORTFÖY ↔ HESAP SENKRONU (2026-09-27) ────────────────────────────────
+  // Giriş yapılınca (misafirden hesaba geçiş): cihazdaki liste ile buluttaki
+  // liste birleştirilir, sonuç hem localStorage'a hem Firestore'a yazılır.
+  // Çıkış yapılınca: SADECE senkronu durdurur (kpPortfoySenkronUid=null) —
+  // cihazdaki veri SİLİNMEZ, bir sonraki girişte tekrar birleştirilir.
+  useEffect(() => {
+    const uid = kimlik.kullanici?.uid || null;
+    if (!uid) { kpPortfoySenkronUid = null; return; }
+    let iptal = false;
+    (async () => {
+      const bulut = await kpPortfoyFirestoreOku(uid);
+      if (iptal) return;
+      kpPortfoySenkronUid = uid;
+      if (bulut === null) {
+        if (portfoy.length) kpPortfoyFirestoreYaz(uid, portfoy);
+        return;
+      }
+      const birlesmis = portfoyBulutIleBirlestir(portfoy, bulut);
+      if (birlesmis.length !== portfoy.length) {
+        setPortfoy(birlesmis);
+        portfoyYaz(birlesmis);
+      }
+    })();
+    return () => { iptal = true; };
+  }, [kimlik.kullanici?.uid]);
 
   // ⚠️ 2026-09-21 (kullanıcı isteği: "hesap oluştur veya giriş yap alanı
   // ekleyelim"): Profil'deki "Hesap Oluştur" ve "Giriş Yap" butonları
