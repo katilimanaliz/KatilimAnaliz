@@ -975,7 +975,7 @@ function ProSatinAl({kimlik,nav}:{kimlik:ReturnType<typeof useKpKimlik>;nav:(sc:
           <span style={{fontSize:19,fontWeight:700,letterSpacing:"-0.01em",whiteSpace:"nowrap"}}>
             <span style={{color:TEMA==="acik"?"#16222E":"#EAF1FA"}}>{TR("Katılım")}</span>
             {" "}<span style={{color:"#1B9E7A"}}>{TR("Plus")}</span>
-            {" "}<span style={{color:"#D8A94E"}}>{TR("Pro")}</span>
+            {" "}<span style={{color:"#1B9E7A"}}>{TR("Pro")}</span>
           </span>
         </div>
         <p style={{fontSize:19,fontWeight:700,color:C.label,margin:"0 0 6px",lineHeight:1.3}}>{CV("Daha fazla veri, daha rahat karar")}</p>
@@ -21540,10 +21540,10 @@ function PiyasaHaberleri({kimlik,nav,haberBildirimAcik,haberKategoriler,haberBil
               <AnahtarToggle acik={haberBildirimAcik} onDegistir={onHaberBildirimToggle} devreDisi={haberBildirimIslemde}/>
             </div>
             {!kimlik.kullanici && (
-              <p style={{margin:"8px 0 0",fontSize:11,color:"rgba(255,255,255,0.55)"}}>
-                {CV("Bildirim almak için hesap açman gerekiyor.")}{" "}
-                <span onClick={()=>nav("hesapGiris")} style={{color:"#9FC1EA",fontWeight:700,cursor:"pointer"}}>{CV("Giriş Yap")}</span>
-              </p>
+              <button onClick={()=>nav("hesapGiris")} style={{
+                marginTop:10,width:"100%",padding:"9px 0",borderRadius:10,border:"none",
+                background:"rgba(255,255,255,0.14)",color:"#fff",fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit",
+              }}>{CV("Üye Ol / Giriş Yap")}</button>
             )}
             {haberBildirimHata && <p style={{margin:"8px 0 0",fontSize:11,color:"#FCA5A5"}}>{haberBildirimHata}</p>}
             {haberBildirimAcik && kimlik.pro.aktif && (
@@ -31333,14 +31333,15 @@ function App(){
                 <span style={{fontSize:20}}>🔔</span>
                 <div style={{flex:1,minWidth:0}}>
                   <p style={{margin:0,fontSize:14,fontWeight:700,color:C.label}}>{CV("Piyasa Haberleri Bildirimleri")}</p>
-                  <p style={{margin:"2px 0 0",fontSize:11.5,color:WA(0.5)}}>{CV(kimlik.kullanici?"Önemli gelişmelerde anlık bildirim al":"Bildirim almak için hesap açman gerekiyor")}</p>
+                  <p style={{margin:"2px 0 0",fontSize:11.5,color:WA(0.5)}}>{CV("Önemli gelişmelerde anlık bildirim al")}</p>
                 </div>
                 <AnahtarToggle acik={haberBildirimAcik} onDegistir={haberBildirimToggle} devreDisi={haberBildirimIslemde}/>
               </div>
               {!kimlik.kullanici && (
-                <p style={{margin:"8px 0 0",fontSize:11,color:WA(0.4)}}>
-                  <span onClick={()=>{ setGirisBaslangicModu("giris"); nav("hesapGiris"); }} style={{color:C.blue,fontWeight:700,cursor:"pointer"}}>{CV("Giriş Yap")}</span>
-                </p>
+                <button onClick={()=>{ setGirisBaslangicModu("giris"); nav("hesapGiris"); }} style={{
+                  marginTop:12,width:"100%",padding:"10px 0",borderRadius:10,border:"none",
+                  background:C.blueLight,color:C.blue,fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit",
+                }}>{CV("Üye Ol / Giriş Yap")}</button>
               )}
               {haberBildirimHata && <p style={{margin:"8px 0 0",fontSize:11.5,color:C.red}}>{haberBildirimHata}</p>}
               {haberBildirimAcik && kimlik.pro.aktif && (
@@ -31825,11 +31826,11 @@ function App(){
               }}>
                 <span style={{fontSize:16,lineHeight:1,marginTop:-1}}>‹</span><span>Geri</span>
               </button>
-              {/* ── PRO EKRANI MARKA VURGUSU (2026-09-27) ────────────────
-                  Bu, 55 ekranın PAYLAŞTIĞI TEK başlık bileşeni — SADECE
-                  proSatinAl ekranında koşullu olarak altın/Pro rengine
-                  dönüyor, diğer 54 ekran hiç etkilenmiyor. */}
-              <div style={{width:3,height:16,borderRadius:2,background:screen==="proSatinAl"?"linear-gradient(180deg,#D8A94E,#F0CB7A)":"linear-gradient(180deg,#9FC1EA,#5B9BD8)",flexShrink:0}}/>
+              {/* ── PRO EKRANI MARKA VURGUSU (2026-09-27 eklendi, AYNI GÜN
+                  geri alındı — kullanıcı isteği: "en üst başlık eskisi gibi
+                  mavi olsun"). Marka vurgusu artık SADECE ikinci sıradaki
+                  gerçek logo rozetinde (aşağıda, hero kartında). */}
+              <div style={{width:3,height:16,borderRadius:2,background:"linear-gradient(180deg,#9FC1EA,#5B9BD8)",flexShrink:0}}/>
               {/* ⚠️ 2026-09-17 (kullanıcı isteği: "menü listesi sırasına göre
                   ilerle, sırayla hepsini bitir") — bu, 55 MENU ekranının
                   HEPSİNİN paylaştığı TEK başlık bileşeni (meta?.title). Tek
@@ -31838,9 +31839,9 @@ function App(){
                   "kart/panel başlığı" ölçeğine (mobil H3: 17-18px/600) göre
                   hafifçe güncellendi. */}
               <span style={{
-                fontSize:17,fontWeight:600,color:screen==="proSatinAl"?"#D8A94E":(TEMA==="acik"?"#16222E":"#EAF1FA"),letterSpacing:"-0.01em",
+                fontSize:17,fontWeight:600,color:(TEMA==="acik"?"#16222E":"#EAF1FA"),letterSpacing:"-0.01em",
                 overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,minWidth:0,
-              }}>{screen==="proSatinAl"&&"⭐ "}{CV(meta?.title)}</span>
+              }}>{CV(meta?.title)}</span>
             </div>
             {aramaliSekmeMi&&(
               screen==="hesaplaMenu"?(
