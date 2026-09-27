@@ -2,35 +2,18 @@
 // Kaynaklar: CNBC-e + Investing.com Türkiye "Ekonomi Haberleri" RSS feed'leri
 // (Sözcü Ekonomi ve Bloomberg HT 2026-07'de kaldırıldı — bkz. v3/v4 notları)
 // REDIS/KV + KİLİT KORUMASI (2026-07) — bkz. kripto.js'deki aynı not.
+// ⚠️ 2026-09-27: taze() artık gerçekten yeni bir başlık tespit edince
+// otomatik push bildirimi de gönderiyor — bkz. aşağıdaki "OTOMATİK BİLDİRİM"
+// bölümü ve ./_lib/haberBildirimi.js (api/bildirim.js ile PAYLAŞILAN kod).
 import { Redis } from "@upstash/redis";
 import { kilitliGetir } from "./_lib/kilitliOnbellek.js";
+import { admin } from "./_lib/firebaseAdmin.js";
+import { haberleriGonder } from "./_lib/haberBildirimi.js";
 
 const redis = new Redis({
   url: process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL,
   token: process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN,
 });
-// NOT (2026-07-05): v1 → v2 → v3 → v4 → v5 sürüm geçmişi:
-//  v2: TARİH PARSE DÜZELTMESİ eklendi (aşağıda) — Sözcü kaynağının entity-encode
-//      edilmiş pubDate'i parseRSS()'i çökertip o kaynağın TÜM haberlerini
-//      sessizce siliyordu.
-//  v3: Sözcü Ekonomi kaynak listesinden tamamen çıkarıldı (yalnızca Bloomberg
-//      HT + CNBC-e kullanılıyor).
-//  v4: Bloomberg HT de kaldırıldı — kendi RSS'i kaynağın sunucusunda donmuş
-//      durumda (lastBuildDate günlerdir ilerlemiyor, en yeni madde ~3 gün
-//      öncesine sabit kalmış). Bizim koddan bağımsız, kaynağın kendi tarafında
-//      bir sorun; düzeltilebilecek bir şey olmadığı için tamamen çıkarıldı.
-//  v5: Investing.com Türkiye "Ekonomi Haberleri" (news_14) eklendi — CNBC-e
-//      gece/hafta sonu sessiz kaldığı saatlerde boşluğu dolduruyor (test
-//      sırasında gece 01:59'da bile taze haber verdiği doğrulandı). NOT: Bu
-//      kaynağın pubDate'i standart RSS formatında DEĞİL ("YYYY-MM-DD HH:MM:SS",
-//      saat dilimi belirtilmemiş). new Date(...) bunu UTC olarak yorumluyor;
-//      gerçekte Türkiye saati (UTC+3) ise sıralama/"X saat önce" etiketinde
-//      ~3 saatlik bir sapma olabilir — kritik değil ama bilinen bir sınırlama.
-//      Diğer investing.com alt-feed'leri (BİST Haberleri, Borsa Haberleri, Son
-//      Finans Haberleri) test edildi: ya donuk (haftalar/aylar eski) ya da
-//      kırık (404) çıktığı için EKLENMEDİ.
-//      Kaynak seti her değiştiğinde eski cache'in taşınmadan taze hesaplanması
-//      için versiyon artırılıyor.
 const KV_ANAHTAR = "finans-haberleri:v5";
 const KV_TTL_SANIYE = 15 * 60;
 
@@ -48,23 +31,6 @@ function htmlEntityCoz(metin) {
     .replace(/&([a-zA-Z]+);/g, (m, ad) => (NAMED[ad] !== undefined ? NAMED[ad] : m));
 }
 
-// ── TARİH PARSE DÜZELTMESİ (2026-07-05) ─────────────────────────────────────
-// Kök neden (o zamanki kaynak listesinde Sözcü de vardı): Sözcü'nün RSS'i
-// <pubDate> içinde "+0300" yerine HTML/XML numerik karakter referansı
-// kullanıyordu: "Sun, 05 Jul 2026 05:30:13 &#x2B;0300". Eski kod xmlEtiketAl()
-// ile bu metni ÇÖZÜMLEMEDEN (yalnızca <tag> temizleyerek) doğrudan
-// `new Date(tarihStr).toISOString()`'e veriyordu. "&#x2B;0300" geçerli bir
-// saat dilimi değil → new Date(...) "Invalid Date" döner → .toISOString()
-// RangeError FIRLATIR. Bu hata parseRSS() içinde YAKALANMADIĞI için
-// kaynaktanCek() dışına taşıyor, oradaki try/catch tüm kaynağı (o kaynağın
-// TÜM haberlerini) sessizce [] olarak yutuyordu.
-//
-// Sözcü artık kaynak listesinde değil (bkz. KAYNAKLAR), ama bu savunma kodu
-// bilerek KORUNUYOR: CNBC-e ileride benzer bir entity/format
-// tuhaflığı gönderirse, TEK bir bozuk tarih yine o kaynağın TÜM haberlerini
-// silmesin diye. Düzeltme: (1) tarih metnini önce htmlEntityCoz ile çöz,
-// (2) Invalid Date durumunda throw etmek yerine null döndür — haberin tarihi
-// null kalır (sıralamada en sona düşer), ama liste düşmez.
 function guvenliTarihISO(tarihStr) {
   if (!tarihStr) return null;
   const cozulmus = htmlEntityCoz(tarihStr);
@@ -106,11 +72,20 @@ function parseRSS(xml, kaynakAdi) {
   return items;
 }
 
+// Başlığı normalize edip kısa bir "parmak izi" üretir — hem tekillestir()
+// (aynı haberin iki kaynaktan gelen farklı yazımlarını birleştirmek için)
+// hem de OTOMATİK BİLDİRİM (aşağıda) "bu başlığı daha önce gördük mü?"
+// kontrolü için AYNI fonksiyonu kullanıyor — ikisi ayrı ayrı normalize
+// etseydi, aynı haber birinde "yeni" birinde "eski" sayılabilirdi.
+function haberAnahtari(baslik) {
+  return baslik.toLowerCase().replace(/[^a-z0-9ığüşöç]/gi, "").slice(0, 60);
+}
+
 function tekillestir(items) {
   const gorulen = new Set();
   const sonuc = [];
   for (const it of items) {
-    const anahtar = it.baslik.toLowerCase().replace(/[^a-z0-9ığüşöç]/gi, "").slice(0, 60);
+    const anahtar = haberAnahtari(it.baslik);
     if (gorulen.has(anahtar)) continue;
     gorulen.add(anahtar);
     sonuc.push(it);
@@ -138,10 +113,6 @@ function originIzinliMi(origin) {
   if (!origin) return false;
   if (/^https:\/\/katilim-analiz(-[a-z0-9-]+)?\.vercel\.app$/i.test(origin)) return true;
   if (/^https:\/\/(www\.)?katilimplus\.com$/i.test(origin)) return true;
-  // Native uygulama (Capacitor iOS/Android) origin'leri — 2026-07-23:
-  // native WebView istekleri capacitor://localhost veya ionic://localhost
-  // origin'iyle gelir; beyaz listede olmadıklari için BIST/haber/grafik
-  // verileri native'de "Load failed" veriyordu.
   if (/^(capacitor|ionic):\/\/localhost$/i.test(origin)) return true;
   if (/^https?:\/\/localhost(:\d+)?$/i.test(origin)) return true;
   return false;
@@ -150,6 +121,79 @@ function corsAyarla(req, res) {
   const origin = req.headers.origin;
   res.setHeader("Access-Control-Allow-Origin", originIzinliMi(origin) ? origin : "https://katilim-analiz.vercel.app");
   res.setHeader("Vary", "Origin");
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// OTOMATİK BİLDİRİM (2026-09-27) ─ Yeni bir başlık tespit edilince push
+// ═══════════════════════════════════════════════════════════════════════════
+// taze() SADECE kilitliGetir'in KV_TTL_SANIYE (15 dk) önbelleği dolduğunda
+// VE en az bir istemci bu uca uğradığında çalışır (bkz. dosya başındaki
+// Redis/kilit notu) — yani otomatik bildirim de dolaylı olarak bu ritme
+// bağlı: ayrı bir cron YOK, organik trafiğe (uygulamayı açan kullanıcılar)
+// biniyor. Aktif bir kullanıcı tabanında bu, çoğu zaman 15 dk'dan daha sık
+// tetiklenir; uzun süre kimse uğramazsa o dönemde bildirim de gecikir —
+// bilinçli bir basitlik tercihi (alarm-kontrol'deki gibi ayrı bir dış
+// zamanlayıcı KURULMADI).
+//
+// "Daha önce görülen" başlıkların parmak izleri TEK bir Redis anahtarında
+// (dizi, en yeni başta) tutuluyor — duyuruArsiv/DUYURU_ARSIV_ANAHTAR
+// (api/bildirim.js) ile AYNI desen. İLK ÇALIŞTIRMADA (anahtar boşsa) hiçbir
+// şey GÖNDERİLMEZ, sadece mevcut başlıklar "görülmüş" olarak kaydedilir —
+// aksi halde ilk deploy'da (veya cache tamamen temizlendiğinde) elimizdeki
+// 40 haberin TAMAMI "yeni" sayılıp herkese 40 ayrı push giderdi.
+//
+// Kategori GÖNDERİLMİYOR (haberleriGonder'e kategori:undefined): RSS
+// kaynaklarının <category> alanı temiz/tutarlı değil, uygulamadaki 4
+// kategoriye (katilim/bist/doviz-altin/kfk) güvenilir eşlenemiyor. Bu
+// yüzden bu genel piyasa haberleri, kategori seçmiş kullanıcılar dahil
+// TÜM abonelere gidiyor — bkz. api/bildirim.js'deki "HABER BİLDİRİMLERİ"
+// bölümündeki "kategorisiz gönderim herkese gider" kuralı.
+const KV_BILDIRILEN_ANAHTAR = "finans-haberleri:bildirilenler:v1";
+const BILDIRILEN_MAKS_SAKLA = 200;   // saklanan parmak izi sayısı (bellek/Redis boyutu için tavan)
+const YENI_HABER_MAKS_BILDIRIM = 3;  // bir turda en fazla kaç YENİ başlık için push gönderilsin (spam koruması)
+
+async function yeniHaberleriBildir(hepsi) {
+  try {
+    let bilinenler = [];
+    const ham = await redis.get(KV_BILDIRILEN_ANAHTAR);
+    if (Array.isArray(ham)) bilinenler = ham;
+
+    const ilkCalistirma = bilinenler.length === 0;
+    const bilinenSet = new Set(bilinenler);
+    const yeniOlanlar = ilkCalistirma ? [] : hepsi.filter((h) => !bilinenSet.has(haberAnahtari(h.baslik)));
+
+    if (!ilkCalistirma && yeniOlanlar.length > 0) {
+      // hepsi zaten en yeniden eskiye sıralı geliyor (taze() bunu garanti
+      // ediyor) — bu yüzden İLK N eleman otomatik olarak "en yeni N".
+      const gonderilecekler = yeniOlanlar.slice(0, YENI_HABER_MAKS_BILDIRIM);
+      for (const h of gonderilecekler) {
+        try {
+          await haberleriGonder({
+            redis, admin,
+            baslik: `📰 ${h.baslik}`,
+            govde: h.ozet || h.kaynak || "Yeni haber",
+            veri: { tip: "finans-haberi", link: h.link || "", kaynak: h.kaynak || "" },
+          });
+        } catch (e) {
+          // TEK bir haberin gönderimi başarısız olsa bile diğerleri denenmeye
+          // devam etsin — bkz. dosyanın genelindeki "biri patlarsa hepsini
+          // düşürme" prensibi.
+          console.error("Haber bildirimi gonderilemedi:", h.baslik?.slice(0, 60), e.message);
+        }
+      }
+    }
+
+    // Görülenler listesi HER turda güncellenir (ilk çalıştırma dahil) —
+    // yeni turdaki TÜM başlıklar (sadece gönderilenler değil) parmak izi
+    // listesine eklenir, en yeni BILDIRILEN_MAKS_SAKLA kadarı saklanır.
+    const guncelParmakIzleri = hepsi.map((h) => haberAnahtari(h.baslik));
+    const birlesik = [...new Set([...guncelParmakIzleri, ...bilinenler])].slice(0, BILDIRILEN_MAKS_SAKLA);
+    await redis.set(KV_BILDIRILEN_ANAHTAR, birlesik);
+  } catch (e) {
+    // Bildirim akışındaki HERHANGİ bir hata, ana haber verisini (kullanıcıya
+    // dönen yanıtı) ASLA etkilememeli — bu yüzden en dış katmanda da yutuluyor.
+    console.error("Otomatik haber bildirimi turu basarisiz:", e.message);
+  }
 }
 
 async function taze() {
@@ -164,6 +208,13 @@ async function taze() {
     .map((k, i) => (sonuclar[i].length > 0 ? k.ad : null))
     .filter(Boolean);
 
+  // Yanıtı geciktirmemek İÇİN DEĞİL — tam tersi, kilitliGetir'in ZATEN
+  // sağladığı "bu ağır iş en fazla 15 dk'da bir, TEK bir istekte çalışır"
+  // garantisinden yararlanmak için burada, taze() BAŞARIYLA sonuçlandıktan
+  // hemen sonra çağrılıyor. Kendi içinde try/catch'li (yukarı bkz.), bu
+  // yüzden burada await edilmesi ana yanıtı asla riske atmıyor.
+  await yeniHaberleriBildir(hepsi);
+
   return {
     success: true,
     count: hepsi.length,
@@ -177,19 +228,6 @@ export default async function handler(req, res) {
   corsAyarla(req, res);
   const debug = req.query.debug === "1";
 
-  // ── CDN/EDGE CACHE DÜZELTMESİ (2026-07-05) ────────────────────────────────
-  // Kök neden: kilitliGetir()'in kendi debug=1 baypası (bkz. _lib/kilitliOnbellek.js)
-  // DOĞRU çalışıyor — Redis'i atlayıp taze() her seferinde gerçekten çalışıyor.
-  // Ama bu Cache-Control başlığı debug'dan BAĞIMSIZ olarak HER istekte
-  // "s-maxage=900" set ediliyordu — bu, Vercel'in Edge/CDN ağına "bu URL'i
-  // 15 dk önbellekle" talimatı verir. Sonuç: aynı "?debug=1" URL'ine ikinci
-  // istek geldiğinde Vercel fonksiyonu HİÇ ÇALIŞTIRMADAN ilk seferki yanıtı
-  // kenar ağından tekrar sunuyordu — Redis'e, dolayısıyla taze()'e hiç
-  // uğramadan. (Kanıt: iki ayrı testte "guncelleme" alanı milisaniyesine
-  // kadar birebirdi — gerçekten yeniden hesaplansaydı bu imkansızdı.)
-  // Düzeltme: debug=1 iken CDN/tarayıcı önbelleğini de "no-store" ile
-  // tamamen kapatıyoruz; yalnızca normal (debug'sız) istekler 15 dk
-  // CDN'de önbelleklenmeye devam ediyor.
   res.setHeader("Cache-Control", debug ? "no-store" : "s-maxage=900, stale-while-revalidate=300");
 
   try {

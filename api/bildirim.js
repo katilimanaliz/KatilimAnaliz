@@ -85,7 +85,10 @@
 //   POST ?islem=haber-bildirim-ayarla { token, acik, kategoriler?, uid? }
 //   POST ?islem=haber-bildirim-gonder { baslik, govde, kategori? } (ADMIN)
 //
-// Detaylar için aşağıdaki "HABER BİLDİRİMLERİ" bölümüne bakın.
+// Detaylar için aşağıdaki "HABER BİLDİRİMLERİ" bölümüne bakın. Gönderim
+// mantığının kendisi ./_lib/haberBildirimi.js'e taşındı — api/finans-
+// haberleri.js de AYNI fonksiyonu, yeni bir başlık geldiğinde OTOMATİK
+// çağırıyor (bkz. o dosyadaki "OTOMATİK BİLDİRİM" bölümü).
 //
 // ── 7) BANKA ORANI ALARMI (2026-09-27 eklendi) — SADECE PRO ──
 //
@@ -101,6 +104,7 @@ import { Redis } from "@upstash/redis";
 import { randomUUID } from "crypto";
 import { admin } from "./_lib/firebaseAdmin.js";
 import { kilitliCalistir } from "./_lib/kilitliOnbellek.js";
+import { haberleriGonder, HABER_BILDIRIM_TOKENS_KEY, HABER_BILDIRIM_KATEGORI_PREFIX } from "./_lib/haberBildirimi.js";
 
 // NOT: Vercel KV entegrasyonu, Upstash'in standart isimlendirmesi olan
 // UPSTASH_REDIS_REST_URL/TOKEN yerine KV_REST_API_URL/KV_REST_API_TOKEN
@@ -538,13 +542,18 @@ async function duyurulariListele(req, res) {
 // gönderilen haberlerde bildirim alır — genel (kategorisiz) bir gönderimde
 // DAHİL EDİLMEZ, çünkü kullanıcı bilinçli olarak daraltmış demektir.
 //
-// ⚠️ OTOMATİK TETİKLEME BU DOSYADA YOK: "yeni bir haber yayınlandığında"
-// haber-bildirim-gonder'ı otomatik çağıracak parça, haberlerin çekildiği ayrı
-// bir dosyada (muhtemelen /api/finans-haberleri.js benzeri) olmalı — o dosya
-// bu turda elimizde değildi. Şimdilik yalnızca ADMIN elle (veya ileride o
-// dosyadan) tetikleyebiliyor; abone kaydı/kaldırma tarafı tam çalışıyor.
-const HABER_BILDIRIM_TOKENS_KEY = "haberBildirimTokens";        // Set<token>
-const HABER_BILDIRIM_KATEGORI_PREFIX = "haberBildirimKategori:"; // + token → string[]
+// ✅ OTOMATİK TETİKLEME (2026-09-27, aynı gün eklendi): api/finans-
+// haberleri.js, taze() içinde gerçekten YENİ bir başlık tespit ettiğinde
+// haberleriGonder()'i (bkz. ./_lib/haberBildirimi.js) doğrudan çağırıyor —
+// kategori VERİLMEDEN (genel duyuru gibi, tüm abonelere ulaşır; RSS
+// kaynaklarının kategori alanı güvenilir/temiz olmadığı için kategoriye
+// eşlenmiyor). Bu tetikleme, o dosyanın 15 dk'lık kilitli önbelleğine bağlı
+// çalışıyor — ayrı bir cron GEREKMİYOR, ama kimse 15 dk içinde /api/finans-
+// haberleri'ni ziyaret etmezse o turda tetiklenmez (organik trafiğe bağlı).
+// HABER_BILDIRIM_TOKENS_KEY / HABER_BILDIRIM_KATEGORI_PREFIX artık
+// ./_lib/haberBildirimi.js'den import ediliyor (2026-09-27) — o modül,
+// api/finans-haberleri.js'in de kullandığı TEK gerçek kaynak; burada
+// tekrar tanımlanırsa iki dosya sessizce birbirinden sapabilirdi.
 
 async function haberBildirimAyarla(req, res) {
   const { token, acik, kategoriler } = req.body || {};
@@ -588,72 +597,10 @@ async function haberBildirimGonder(req, res) {
   }
 
   const { baslik, govde, kategori, veri } = req.body || {};
-  if (!baslik || !govde) {
-    res.status(400).json({ hata: "'baslik' ve 'govde' alanları zorunlu" });
-    return;
-  }
-
-  const tokenlar = await redis.smembers(HABER_BILDIRIM_TOKENS_KEY);
-  if (!tokenlar || tokenlar.length === 0) {
-    res.status(200).json({ basarili: true, gonderilen: 0, mesaj: "Kayıtlı haber bildirimi abonesi yok" });
-    return;
-  }
-
-  // kategori verilmişse: yalnızca "genel abone" (kategori kaydı yok) VEYA
-  // o kategoriyi seçmiş token'lara git. Redis'e N ayrı istek atmamak için
-  // önce hepsinin kategori kayıtlarını TEK seferde (mget) çekiyoruz.
-  let hedefTokenlar = tokenlar;
-  if (kategori) {
-    const anahtarlar = tokenlar.map((t) => HABER_BILDIRIM_KATEGORI_PREFIX + t);
-    const kayitlar = anahtarlar.length ? await redis.mget(...anahtarlar) : [];
-    hedefTokenlar = tokenlar.filter((t, i) => {
-      const k = kayitlar[i];
-      if (!Array.isArray(k) || k.length === 0) return true; // genel abone
-      return k.includes(kategori);
-    });
-  }
-
-  if (hedefTokenlar.length === 0) {
-    res.status(200).json({ basarili: true, gonderilen: 0, mesaj: "Bu kategoriye abone kimse yok" });
-    return;
-  }
-
-  const GRUP_BOYU = 500;
-  let gonderilenToplam = 0;
-  let gecersizTokenlar = [];
-
-  for (let i = 0; i < hedefTokenlar.length; i += GRUP_BOYU) {
-    const grup = hedefTokenlar.slice(i, i + GRUP_BOYU);
-    const mesaj = {
-      notification: { title: baslik, body: govde },
-      data: veri || {},
-      tokens: grup,
-      android: { notification: { sound: "default", channelId: "default" } },
-      apns: { payload: { aps: { sound: "default" } } },
-    };
-    const sonuc = await admin.messaging().sendEachForMulticast(mesaj);
-    gonderilenToplam += sonuc.successCount;
-    sonuc.responses.forEach((r, idx) => {
-      if (!r.success) {
-        const kod = r.error?.code || "";
-        if (kod.includes("registration-token-not-registered") || kod.includes("invalid-argument")) {
-          gecersizTokenlar.push(grup[idx]);
-        }
-      }
-    });
-  }
-
-  if (gecersizTokenlar.length > 0) {
-    await redis.srem(HABER_BILDIRIM_TOKENS_KEY, ...gecersizTokenlar);
-    for (const t of gecersizTokenlar) await redis.del(HABER_BILDIRIM_KATEGORI_PREFIX + t);
-  }
-
-  res.status(200).json({
-    basarili: true,
-    hedefTokenSayisi: hedefTokenlar.length,
-    basariylaGonderilen: gonderilenToplam,
-    temizlenenGecersizToken: gecersizTokenlar.length,
-  });
+  // Asıl gönderim mantığı ./_lib/haberBildirimi.js'de — api/finans-haberleri.js
+  // ile PAYLAŞILAN tek kopya (bkz. o dosyanın başındaki gerekçe).
+  const sonuc = await haberleriGonder({ redis, admin, baslik, govde, kategori, veri });
+  res.status(sonuc.basarili ? 200 : 400).json(sonuc);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
