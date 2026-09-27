@@ -21386,7 +21386,16 @@ function turkiyeStatikTakvim(){
   return liste.filter(e=>new Date(e.tarih)>=bugun).sort((a,b)=>new Date(a.tarih).getTime()-new Date(b.tarih).getTime());
 }
 
-function PiyasaHaberleri(){
+function PiyasaHaberleri({kimlik,haberBildirimAcik,haberKategoriler,haberBildirimIslemde,haberBildirimHata,onHaberBildirimToggle,onHaberKategoriDegistir}:{
+  kimlik:ReturnType<typeof useKpKimlik>;
+  haberBildirimAcik:boolean;
+  haberKategoriler:string[];
+  haberBildirimIslemde:boolean;
+  haberBildirimHata:string;
+  onHaberBildirimToggle:()=>void;
+  onHaberKategoriDegistir:(kat:string)=>void;
+}){
+  const [bildirimPanelAcik,setBildirimPanelAcik]=useState(false);
   const [ekranModu,setEkranModu]=useState<"haberler"|"takvim">("haberler");
   const [haberlerAPI,setHaberlerAPI]=useState<any[]>([]);
   const [yukleniyor,setYukleniyor]=useState(true);
@@ -21496,8 +21505,47 @@ function PiyasaHaberleri(){
         <p style={{margin:"0 0 2px",fontSize:11,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:"0.07em"}}>{TR("Katılım Plus")}</p>
         <h2 style={{margin:0,fontSize:18,fontWeight:700,color:"#fff",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
           <span style={{display:"flex",alignItems:"center",gap:8}}>📡 Piyasa Haberleri</span>
-          <button onClick={manuelYenile} style={{background:"rgba(255,255,255,0.08)",border:"none",width:30,height:30,borderRadius:15,fontSize:15,color:"#fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"transform 0.6s",transform:yenileDonuyor?"rotate(360deg)":"none"}}>↻</button>
+          <span style={{display:"flex",alignItems:"center",gap:6}}>
+            {/* ── HABER BİLDİRİMİ (2026-09-27) — Profil'deki AYNI ayarın
+                buradaki kısayolu. Tam olarak burada, kullanıcı haberleri
+                zaten okurken "bunları bildirim olarak da istiyorum"
+                diyebileceği en doğal an — kullanıcı isteğiyle Profil'deki
+                kart KALDIRILMADI, ikisi de aynı state'i paylaşıyor. */}
+            <button onClick={()=>setBildirimPanelAcik(a=>!a)} aria-label={CV("Haber Bildirimleri")} style={{
+              background: bildirimPanelAcik||haberBildirimAcik ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.08)",
+              border:"none",width:30,height:30,borderRadius:15,fontSize:14,color:"#fff",cursor:"pointer",
+              display:"flex",alignItems:"center",justifyContent:"center",
+            }}>🔔</button>
+            <button onClick={manuelYenile} style={{background:"rgba(255,255,255,0.08)",border:"none",width:30,height:30,borderRadius:15,fontSize:15,color:"#fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"transform 0.6s",transform:yenileDonuyor?"rotate(360deg)":"none"}}>↻</button>
+          </span>
         </h2>
+        {bildirimPanelAcik && (
+          <div style={{marginTop:12,background:"rgba(255,255,255,0.08)",borderRadius:12,padding:"12px 14px"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <span style={{flex:1,fontSize:12.5,fontWeight:700,color:"#fff"}}>{CV("Piyasa Haberleri Bildirimleri")}</span>
+              <AnahtarToggle acik={haberBildirimAcik} onDegistir={onHaberBildirimToggle} devreDisi={haberBildirimIslemde}/>
+            </div>
+            {haberBildirimHata && <p style={{margin:"8px 0 0",fontSize:11,color:"#FCA5A5"}}>{haberBildirimHata}</p>}
+            {haberBildirimAcik && kimlik.kullanici && (
+              <div style={{marginTop:10,paddingTop:10,borderTop:"1px solid rgba(255,255,255,0.12)"}}>
+                <p style={{margin:"0 0 8px",fontSize:10.5,fontWeight:700,color:"rgba(255,255,255,0.6)"}}>{CV("Yalnızca şu kategorilerde bildirim al (hiçbiri seçilmezse tümü)")}</p>
+                <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                  {HABER_KATEGORILERI.map(k=>(
+                    <button key={k.key} onClick={()=>onHaberKategoriDegistir(k.key)} style={{
+                      padding:"5px 11px",borderRadius:20,
+                      border:`1px solid ${haberKategoriler.includes(k.key)?"#7DB2FF":"rgba(255,255,255,0.25)"}`,
+                      background:haberKategoriler.includes(k.key)?"rgba(59,130,246,0.35)":"transparent",
+                      color:"#fff",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit",
+                    }}>{CV(k.etiket)}</button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {haberBildirimAcik && !kimlik.kullanici && (
+              <p style={{margin:"8px 0 0",fontSize:10.5,color:"rgba(255,255,255,0.55)"}}>{CV("Belirli kategorilere daraltmak için hesap açabilirsin.")}</p>
+            )}
+          </div>
+        )}
         <p style={{margin:"4px 0 0",fontSize:11,color:"rgba(255,255,255,0.55)"}}>
           {ekranModu==="haberler"
             ? `Bloomberg HT${haberGuncelleme?` · Güncelleme: ${new Date(haberGuncelleme).toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"})}`:""}`
@@ -28661,6 +28709,22 @@ function App(){
           console.log("Bildirime tıklandı:", event);
           const n = event?.notification?.notification || event?.notification;
           bildirimEkle(n?.title||"Bildirim", n?.body||"");
+          // ── BİLDİRİME DOKUNUNCA İLGİLİ EKRANA GİT (2026-09-27) ───────────
+          // Sunucu (api/bildirim.js / _lib/haberBildirimi.js) her bildirimde
+          // "data" alanına bir "tip" gönderiyor (fiyat-alarmi, kap-bildirimi,
+          // zekat-hatirlatma, endeks-degisimi, banka-orani-alarmi, finans-
+          // haberi...) — şimdilik SADECE "finans-haberi" için yönlendirme
+          // eklendi (kullanıcı isteği: bildirime basınca Piyasa Haberleri
+          // açılsın). Diğer tipler için de ileride aynı desenle (yeni bir
+          // case eklenerek) genişletilebilir.
+          // NOT: data, native tarafta bazen event.notification.data'da,
+          // bazen event.notification.notification.data'da geliyor — üç
+          // olası konumu da deniyoruz, hiçbiri yoksa sessizce hiçbir şey
+          // yapılmıyor (bildirim geçmişine ekleme yukarıda zaten oldu).
+          const veri = n?.data || event?.notification?.data || event?.data;
+          if (veri?.tip === "finans-haberi") {
+            navRef.current?.("piyasaHaberleri"); // PiyasaHaberleri ekranı varsayılan olarak "haberler" sekmesinde açılıyor
+          }
         });
 
         ilerleme("dinleyiciler eklendi, izin durumu kontrol ediliyor (checkPermissions)");
@@ -29296,6 +29360,16 @@ function App(){
   // Örn. ana sayfadaki Favorilerim'den açılan araçlar "home"a geri döner;
   // aynı araç Hesaplamalar menüsünden açılırsa normal menüsüne döner.
   const backHedefOzel=useRef<string|null>(null);
+  // ── navRef (2026-09-27) ───────────────────────────────────────────────
+  // Push bildirim dinleyicisi (kök seviyede BİR KERE — [] bağımlılıklı —
+  // kurulan efekt) "nav"ı DOĞRUDAN çağıramaz: nav aşağıda tanımlanıyor ve
+  // kendi içinde kimlik.pro.aktif gibi her render'da değişebilen değerlere
+  // bakıyor — [] efekti nav'ı doğrudan yakalasaydı sonsuza dek İLK
+  // render'daki (muhtemelen henüz Pro durumu yüklenmeden önceki) bayat
+  // kopyasını kullanırdı. navRef, her render'da en güncel nav'ı taşıyan
+  // SABİT bir kutu — push dinleyicisi navRef'in KENDİSİNİ (stabil)
+  // yakalıyor, çağırırken .current'taki GÜNCEL nav'ı kullanıyor.
+  const navRef=useRef<((sc:string,geriHedefi?:string)=>void)|null>(null);
   // ⚠️ 2026-09-26: hesaplama araçlarına girişte günlük ücretsiz limiti
   // burada, TEK merkezden kontrol ediliyor — bir araca nasıl ulaşılırsa
   // ulaşılsın (Favoriler, Hesaplamalar menüsü, arama, Son Kullanılanlar…)
@@ -29313,6 +29387,7 @@ function App(){
     }
     backHedefOzel.current=geriHedefi||null;setScreen(sc);
   };
+  useEffect(()=>{ navRef.current=nav; }); // deps YOK — her render sonrasi calisip navRef'i taze tutar
   const irHisseFonDetay=(tur:"hisse"|"fon", sembol:string, geriHedefi?:string)=>{
     if(tur==="hisse"){ setPendingHisseSecim(sembol); nav("bistHisseTarayici", geriHedefi); }
     else { setPendingFonSecim(sembol); nav("fonGetiriIzleme", geriHedefi); }
@@ -31422,7 +31497,15 @@ function App(){
         {screen==="hazineSwap"&&<HtSwapHesaplama/>}
         {screen==="hazineBono"&&<HtHazineBonosu/>}
         {screen==="hazineSenaryo"&&<HtKurSenaryo/>}
-        {screen==="piyasaHaberleri"&&<PiyasaHaberleri/>}
+        {screen==="piyasaHaberleri"&&<PiyasaHaberleri
+          kimlik={kimlik}
+          haberBildirimAcik={haberBildirimAcik}
+          haberKategoriler={haberKategoriler}
+          haberBildirimIslemde={haberBildirimIslemde}
+          haberBildirimHata={haberBildirimHata}
+          onHaberBildirimToggle={haberBildirimToggle}
+          onHaberKategoriDegistir={haberKategoriDegistir}
+        />}
         {screen==="finansalGostergeler"&&<FinansalGostergeler onKurTikla={(k:any)=>setSeciliKur(k)}/>}
         {screen==="ayarlar"&&<Ayarlar settings={settings} onSave={handleSave}/>}
         {screen==="hesapGiris"&&<HesapGiris kimlik={kimlik} onBasarili={()=>nav("profil")} nav={nav} baslangicModu={girisBaslangicModu}/>}
