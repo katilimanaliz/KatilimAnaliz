@@ -7,7 +7,7 @@ import {
   ArrowRightLeft, FileSpreadsheet, TrendingUp, TrendingDown, ArrowUp, ArrowDown, Activity, Droplets, ShieldCheck,
   Search, Landmark, Gem, Package, Bell, ClipboardList, FileText, Star,
   Settings, Headphones, BookOpen, Bot, User, Clock, Briefcase,
-  Bitcoin, Banknote, Plus, Eye, EyeOff, Calendar, Tag, Info, Pencil, Trash2, Bookmark, CheckCircle2, ExternalLink,
+  Bitcoin, Banknote, Plus, Eye, EyeOff, Calendar, Tag, Info, Pencil, Trash2, Bookmark, CheckCircle2, ExternalLink, Mail,
 } from "lucide-react";
 // NOT: @capacitor-firebase/messaging bilinçli olarak burada static import
 // EDİLMİYOR — modül, aşağıdaki push useEffect'i içinde dinamik import ile
@@ -797,6 +797,12 @@ function EpostaDogrula({kimlik,onBasarili,nav}:{kimlik:ReturnType<typeof useKpKi
 // linkti, buraya TAŞINDI (Profil'deki eski konumundan kaldırıldı).
 function ProfilAyarlari({kimlik,nav}:{kimlik:ReturnType<typeof useKpKimlik>;nav:(sc:string)=>void}){
   const [ad,setAd]=useState(kimlik.kullanici?.ad||"");
+  // ── KALEM İKONUYLA DÜZENLEME (2026-09-27) ────────────────────────────────
+  // Önceden "Ad Soyad" her zaman açık bir input'tu (+ ayrı "Adı Kaydet"
+  // butonu). Kullanıcı isteğiyle: satır varsayılan olarak SALT OKUNUR
+  // gösteriliyor, yanındaki kalem ikonuna dokununca düzenleme moduna geçiyor
+  // (yeşil onay ikonuna dokununca kaydedip tekrar salt okunura dönüyor).
+  const [adDuzenleModu,setAdDuzenleModu]=useState(false);
   const [adGonderiliyor,setAdGonderiliyor]=useState(false);
   const [adKaydedildi,setAdKaydedildi]=useState(false);
 
@@ -817,7 +823,7 @@ function ProfilAyarlari({kimlik,nav}:{kimlik:ReturnType<typeof useKpKimlik>;nav:
     setAdKaydedildi(false);
     const basarili=await kimlik.adGuncelle(ad.trim());
     setAdGonderiliyor(false);
-    if(basarili) setAdKaydedildi(true);
+    if(basarili){ setAdKaydedildi(true); setAdDuzenleModu(false); }
   };
 
   const sifreKaydet=async()=>{
@@ -829,32 +835,71 @@ function ProfilAyarlari({kimlik,nav}:{kimlik:ReturnType<typeof useKpKimlik>;nav:
     if(basarili){ setSifreDegisti(true); setMevcutSifre(""); setYeniSifre(""); }
   };
 
+  // Küçük başlık etiketi (Hesap / Güvenlik / Hesap Silme) — üç yerde de
+  // aynı stil, tek yerden yönetilsin diye.
+  const BolumBasligi=({children}:{children:string})=>(
+    <p style={{margin:"18px 2px 8px",fontSize:11,fontWeight:700,color:WA(0.45),letterSpacing:0.5,textTransform:"uppercase"}}>{CV(children)}</p>
+  );
+  // Satır simgesi için renkli, yuvarlak köşeli ikon kutusu.
+  const IkonKutu=({Icon,renk,zemin}:{Icon:any;renk:string;zemin:string})=>(
+    <div style={{width:38,height:38,borderRadius:10,background:zemin,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+      <Icon size={18} color={renk}/>
+    </div>
+  );
+
   return(
     <div style={{padding:"0 16px 32px"}}>
+      <BolumBasligi>Hesap</BolumBasligi>
       <Card>
-        <SecTitle>Hesap</SecTitle>
-        <Field label="Ad Soyad" value={ad} onChange={setAd} type="text"/>
-        <p style={{margin:"-6px 2px 10px",fontSize:11.5,color:WA(0.45)}}>{CV("E-posta")}: {kimlik.kullanici?.email}</p>
-        {adKaydedildi && <p style={{margin:"0 2px 10px",fontSize:12.5,color:C.green,fontWeight:600}}>{CV("Kaydedildi.")}</p>}
-        <button onClick={adKaydet} disabled={adGonderiliyor} style={{width:"100%",padding:"12px 0",borderRadius:12,border:"none",background:C.blue,color:"#fff",fontSize:14,fontWeight:700,cursor:adGonderiliyor?"default":"pointer",opacity:adGonderiliyor?0.6:1}}>
-          {adGonderiliyor?"…":CV("Adı Kaydet")}
-        </button>
+        <div style={{display:"flex",alignItems:"center",gap:12,padding:"4px 0"}}>
+          <IkonKutu Icon={User} renk={C.blue} zemin={C.blueLight}/>
+          <div style={{flex:1,minWidth:0}}>
+            <p style={{margin:0,fontSize:10.5,fontWeight:700,color:WA(0.45),textTransform:"uppercase",letterSpacing:0.4}}>{CV("Görünen ad")}</p>
+            {adDuzenleModu ? (
+              <input value={ad} onChange={e=>setAd(e.target.value)} autoFocus placeholder={CV("Ad Soyad")}
+                style={{width:"100%",marginTop:2,padding:"5px 0",border:"none",borderBottom:`1.5px solid ${C.blue}`,background:"transparent",color:C.label,fontSize:15,fontWeight:600,outline:"none",fontFamily:"inherit"}}/>
+            ) : (
+              <p style={{margin:"1px 0 0",fontSize:15,fontWeight:600,color:C.label,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ad||"—"}</p>
+            )}
+          </div>
+          {adDuzenleModu ? (
+            <button onClick={adKaydet} disabled={adGonderiliyor} aria-label={CV("Kaydet")} style={{background:"none",border:"none",cursor:adGonderiliyor?"default":"pointer",flexShrink:0,padding:4,opacity:adGonderiliyor?0.5:1}}>
+              <CheckCircle2 size={20} color={C.green}/>
+            </button>
+          ) : (
+            <button onClick={()=>setAdDuzenleModu(true)} aria-label={CV("Düzenle")} style={{background:"none",border:"none",cursor:"pointer",flexShrink:0,padding:4}}>
+              <Pencil size={17} color={WA(0.4)}/>
+            </button>
+          )}
+        </div>
+        <div style={{height:1,background:WA(0.08),margin:"10px 0"}}/>
+        <div style={{display:"flex",alignItems:"center",gap:12,padding:"4px 0"}}>
+          <IkonKutu Icon={Mail} renk={C.green} zemin={C.greenLight}/>
+          <div style={{flex:1,minWidth:0}}>
+            <p style={{margin:0,fontSize:10.5,fontWeight:700,color:WA(0.45),textTransform:"uppercase",letterSpacing:0.4}}>{CV("E-posta")}</p>
+            <p style={{margin:"1px 0 0",fontSize:15,fontWeight:600,color:C.label,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{kimlik.kullanici?.email}</p>
+          </div>
+        </div>
+        {adKaydedildi && <p style={{margin:"10px 2px 0",fontSize:12.5,color:C.green,fontWeight:600}}>{CV("Kaydedildi.")}</p>}
       </Card>
 
-      {epostaSifreliMi && <Card>
-        <SecTitle>Şifre Değiştir</SecTitle>
-        <Field label="Mevcut Şifre" value={mevcutSifre} onChange={setMevcutSifre} type="password"/>
-        <Field label="Yeni Şifre" value={yeniSifre} onChange={setYeniSifre} type="password"/>
-        {sifreDegisti && <p style={{margin:"0 2px 10px",fontSize:12.5,color:C.green,fontWeight:600}}>{CV("Şifren değiştirildi.")}</p>}
-        <button onClick={sifreKaydet} disabled={sifreGonderiliyor} style={{width:"100%",padding:"12px 0",borderRadius:12,border:"none",background:C.blue,color:"#fff",fontSize:14,fontWeight:700,cursor:sifreGonderiliyor?"default":"pointer",opacity:sifreGonderiliyor?0.6:1}}>
-          {sifreGonderiliyor?"…":CV("Şifreyi Değiştir")}
-        </button>
-      </Card>}
+      {epostaSifreliMi && (<>
+        <BolumBasligi>Güvenlik</BolumBasligi>
+        <Card>
+          <SecTitle>{CV("Şifre Değiştir")}</SecTitle>
+          <Field label="Mevcut Şifre" value={mevcutSifre} onChange={setMevcutSifre} type="password"/>
+          <Field label="Yeni Şifre" value={yeniSifre} onChange={setYeniSifre} type="password"/>
+          {sifreDegisti && <p style={{margin:"0 2px 10px",fontSize:12.5,color:C.green,fontWeight:600}}>{CV("Şifren değiştirildi.")}</p>}
+          <button onClick={sifreKaydet} disabled={sifreGonderiliyor} style={{width:"100%",padding:"12px 0",borderRadius:12,border:"none",background:C.blue,color:"#fff",fontSize:14,fontWeight:700,cursor:sifreGonderiliyor?"default":"pointer",opacity:sifreGonderiliyor?0.6:1}}>
+            {sifreGonderiliyor?"…":CV("Şifreyi Değiştir")}
+          </button>
+        </Card>
+      </>)}
 
       {kimlik.kimlikHata && <p style={{margin:"0 2px 12px",fontSize:12.5,color:C.red,fontWeight:600,textAlign:"center"}}>{kimlik.kimlikHata}</p>}
 
+      <BolumBasligi>Hesap Silme</BolumBasligi>
       <Card>
-        <SecTitle>Hesap Silme</SecTitle>
         <div onClick={async()=>{
             if(hesapSilOnay){ setHesapSilOnay(false); if(await kimlik.hesabimiSil()) nav("home"); }
             else setHesapSilOnay(true);
