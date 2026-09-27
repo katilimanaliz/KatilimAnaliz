@@ -968,7 +968,7 @@ function ProSatinAl({kimlik,nav}:{kimlik:ReturnType<typeof useKpKimlik>;nav:(sc:
       <Card style={{textAlign:"center",padding:"22px 18px"}}>
         <span style={{display:"inline-block",fontSize:11.5,fontWeight:700,color:"#06120E",background:"linear-gradient(90deg,#D8A94E,#F0CB7A)",padding:"5px 12px",borderRadius:20,marginBottom:12}}>{TR("Katılım Plus Pro")}</span>
         <p style={{fontSize:19,fontWeight:700,color:C.label,margin:"0 0 6px",lineHeight:1.3}}>{CV("Daha fazla veri, daha rahat karar")}</p>
-        <p style={{fontSize:13,color:C.sub,margin:0,lineHeight:1.5}}>{CV("Fon Karşılaştırma'da birden fazla fon ekle, sınırsız alarm kur, hesaplamalarını PDF/WhatsApp ile paylaş.")}</p>
+        <p style={{fontSize:13,color:C.sub,margin:0,lineHeight:1.5}}>{CV("Fon Karşılaştırma'da birden fazla fon ekle, sınırsız alarm kur, banka oranı alarmı kur, hesaplamalarını PDF/WhatsApp ile paylaş.")}</p>
       </Card>
 
       <Card>
@@ -994,7 +994,8 @@ function ProSatinAl({kimlik,nav}:{kimlik:ReturnType<typeof useKpKimlik>;nav:(sc:
         </div>
         {satir("Fon Karşılaştırma'da çoklu fon ekleme", false, true)}
         {satir("AI Finans Asistanı", "7/gün", "Sınırsız")}
-        {satir("Fiyat alarmları", "3 adet", "Sınırsız")}
+        {satir("Fiyat alarmları", "5 adet", "Sınırsız")}
+        {satir("Banka oranı alarmı", false, true)}
         {satir("Hesaplamaları PDF/WhatsApp ile paylaş", false, true)}
         {satir("Hesaplayıcılar, BİST & fon tarama", true, true)}
       </Card>
@@ -31783,7 +31784,11 @@ function App(){
               }}>
                 <span style={{fontSize:16,lineHeight:1,marginTop:-1}}>‹</span><span>Geri</span>
               </button>
-              <div style={{width:3,height:16,borderRadius:2,background:"linear-gradient(180deg,#9FC1EA,#5B9BD8)",flexShrink:0}}/>
+              {/* ── PRO EKRANI MARKA VURGUSU (2026-09-27) ────────────────
+                  Bu, 55 ekranın PAYLAŞTIĞI TEK başlık bileşeni — SADECE
+                  proSatinAl ekranında koşullu olarak altın/Pro rengine
+                  dönüyor, diğer 54 ekran hiç etkilenmiyor. */}
+              <div style={{width:3,height:16,borderRadius:2,background:screen==="proSatinAl"?"linear-gradient(180deg,#D8A94E,#F0CB7A)":"linear-gradient(180deg,#9FC1EA,#5B9BD8)",flexShrink:0}}/>
               {/* ⚠️ 2026-09-17 (kullanıcı isteği: "menü listesi sırasına göre
                   ilerle, sırayla hepsini bitir") — bu, 55 MENU ekranının
                   HEPSİNİN paylaştığı TEK başlık bileşeni (meta?.title). Tek
@@ -31792,9 +31797,9 @@ function App(){
                   "kart/panel başlığı" ölçeğine (mobil H3: 17-18px/600) göre
                   hafifçe güncellendi. */}
               <span style={{
-                fontSize:17,fontWeight:600,color:(TEMA==="acik"?"#16222E":"#EAF1FA"),letterSpacing:"-0.01em",
+                fontSize:17,fontWeight:600,color:screen==="proSatinAl"?"#D8A94E":(TEMA==="acik"?"#16222E":"#EAF1FA"),letterSpacing:"-0.01em",
                 overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,minWidth:0,
-              }}>{CV(meta?.title)}</span>
+              }}>{screen==="proSatinAl"&&"⭐ "}{CV(meta?.title)}</span>
             </div>
             {aramaliSekmeMi&&(
               screen==="hesaplaMenu"?(
