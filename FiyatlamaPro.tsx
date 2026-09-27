@@ -966,7 +966,18 @@ function ProSatinAl({kimlik,nav}:{kimlik:ReturnType<typeof useKpKimlik>;nav:(sc:
   return(
     <div style={{padding:"0 16px 32px"}}>
       <Card style={{textAlign:"center",padding:"22px 18px"}}>
-        <span style={{display:"inline-block",fontSize:11.5,fontWeight:700,color:"#06120E",background:"linear-gradient(90deg,#D8A94E,#F0CB7A)",padding:"5px 12px",borderRadius:20,marginBottom:12}}>{TR("Katılım Plus Pro")}</span>
+        {/* ── PRO MARKA ROZETİ (2026-09-27) — gerçek Katılım Plus logosu
+            (KATILIM_LOGO_B64, sol menü/App Store kartıyla AYNI görsel)
+            + sonuna altın "Pro" eklendi. Eski, düz altın haplı metin
+            ("KATILIM PLUS PRO") yerine gerçek marka görseli kullanılıyor. */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginBottom:14}}>
+          <img src={TEMA==="koyu"?KATILIM_LOGO_KOYU_B64:KATILIM_LOGO_B64} alt="" style={{height:30,width:"auto",display:"block"}}/>
+          <span style={{fontSize:19,fontWeight:700,letterSpacing:"-0.01em",whiteSpace:"nowrap"}}>
+            <span style={{color:TEMA==="acik"?"#16222E":"#EAF1FA"}}>{TR("Katılım")}</span>
+            {" "}<span style={{color:"#1B9E7A"}}>{TR("Plus")}</span>
+            {" "}<span style={{color:"#D8A94E"}}>{TR("Pro")}</span>
+          </span>
+        </div>
         <p style={{fontSize:19,fontWeight:700,color:C.label,margin:"0 0 6px",lineHeight:1.3}}>{CV("Daha fazla veri, daha rahat karar")}</p>
         <p style={{fontSize:13,color:C.sub,margin:0,lineHeight:1.5}}>{CV("Fon Karşılaştırma'da birden fazla fon ekle, sınırsız alarm kur, banka oranı alarmı kur, hesaplamalarını PDF/WhatsApp ile paylaş.")}</p>
       </Card>
@@ -996,6 +1007,7 @@ function ProSatinAl({kimlik,nav}:{kimlik:ReturnType<typeof useKpKimlik>;nav:(sc:
         {satir("AI Finans Asistanı", "7/gün", "Sınırsız")}
         {satir("Fiyat alarmları", "5 adet", "Sınırsız")}
         {satir("Banka oranı alarmı", false, true)}
+        {satir("Haber bildirimi kategorileri", false, true)}
         {satir("Hesaplamaları PDF/WhatsApp ile paylaş", false, true)}
         {satir("Hesaplayıcılar, BİST & fon tarama", true, true)}
       </Card>
@@ -21387,8 +21399,9 @@ function turkiyeStatikTakvim(){
   return liste.filter(e=>new Date(e.tarih)>=bugun).sort((a,b)=>new Date(a.tarih).getTime()-new Date(b.tarih).getTime());
 }
 
-function PiyasaHaberleri({kimlik,haberBildirimAcik,haberKategoriler,haberBildirimIslemde,haberBildirimHata,onHaberBildirimToggle,onHaberKategoriDegistir}:{
+function PiyasaHaberleri({kimlik,nav,haberBildirimAcik,haberKategoriler,haberBildirimIslemde,haberBildirimHata,onHaberBildirimToggle,onHaberKategoriDegistir}:{
   kimlik:ReturnType<typeof useKpKimlik>;
+  nav:(sc:string)=>void;
   haberBildirimAcik:boolean;
   haberKategoriler:string[];
   haberBildirimIslemde:boolean;
@@ -21526,8 +21539,14 @@ function PiyasaHaberleri({kimlik,haberBildirimAcik,haberKategoriler,haberBildiri
               <span style={{flex:1,fontSize:12.5,fontWeight:700,color:"#fff"}}>{CV("Piyasa Haberleri Bildirimleri")}</span>
               <AnahtarToggle acik={haberBildirimAcik} onDegistir={onHaberBildirimToggle} devreDisi={haberBildirimIslemde}/>
             </div>
+            {!kimlik.kullanici && (
+              <p style={{margin:"8px 0 0",fontSize:11,color:"rgba(255,255,255,0.55)"}}>
+                {CV("Bildirim almak için hesap açman gerekiyor.")}{" "}
+                <span onClick={()=>nav("hesapGiris")} style={{color:"#9FC1EA",fontWeight:700,cursor:"pointer"}}>{CV("Giriş Yap")}</span>
+              </p>
+            )}
             {haberBildirimHata && <p style={{margin:"8px 0 0",fontSize:11,color:"#FCA5A5"}}>{haberBildirimHata}</p>}
-            {haberBildirimAcik && kimlik.kullanici && (
+            {haberBildirimAcik && kimlik.pro.aktif && (
               <div style={{marginTop:10,paddingTop:10,borderTop:"1px solid rgba(255,255,255,0.12)"}}>
                 <p style={{margin:"0 0 8px",fontSize:10.5,fontWeight:700,color:"rgba(255,255,255,0.6)"}}>{CV("Yalnızca şu kategorilerde bildirim al (hiçbiri seçilmezse tümü)")}</p>
                 <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
@@ -21542,8 +21561,11 @@ function PiyasaHaberleri({kimlik,haberBildirimAcik,haberKategoriler,haberBildiri
                 </div>
               </div>
             )}
-            {haberBildirimAcik && !kimlik.kullanici && (
-              <p style={{margin:"8px 0 0",fontSize:10.5,color:"rgba(255,255,255,0.55)"}}>{CV("Belirli kategorilere daraltmak için hesap açabilirsin.")}</p>
+            {haberBildirimAcik && !kimlik.pro.aktif && (
+              <p style={{margin:"8px 0 0",fontSize:10.5,color:"rgba(255,255,255,0.55)"}}>
+                {CV("Belirli kategorilere daraltmak Pro'ya özel.")}{" "}
+                <span onClick={()=>nav("proSatinAl")} style={{color:"#F0CB7A",fontWeight:700,cursor:"pointer"}}>{CV("Pro'ya Geç")}</span>
+              </p>
             )}
           </div>
         )}
@@ -29043,7 +29065,7 @@ function App(){
     setHaberBildirimIslemde(true); setHaberBildirimHata("");
     fetch(`${API_BASE}/api/bildirim?islem=haber-bildirim-ayarla`,{
       method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({ token, acik, kategoriler: (kimlik.kullanici && kategoriler.length) ? kategoriler : undefined }),
+      body:JSON.stringify({ token, uid: kpAlarmUid, acik, kategoriler: (kimlik.pro.aktif && kategoriler.length) ? kategoriler : undefined }),
     }).then(r=>r.json().then(d=>({ok:r.ok,d})))
       .then(({ok,d})=>{
         setHaberBildirimIslemde(false);
@@ -29054,6 +29076,15 @@ function App(){
   const haberBildirimToggle=()=>{
     setHaberBildirimAcik(yeni=>{
       const y=!yeni;
+      // ── HESAP ZORUNLU (2026-09-27) ────────────────────────────────────
+      // Misafir bildirimi AÇAMAZ — sadece KAPATABILIR (zaten kapalıysa bu
+      // dal hiç tetiklenmez). Açmaya çalışırsa state hiç değişmeden Giriş
+      // Yap ekranına yönlendiriyoruz; backend de aynı kuralı ayrıca
+      // uyguluyor (bkz. api/bildirim.js — istemciye güvenmiyoruz).
+      if(y && !kimlik.kullanici){
+        navRef.current?.("hesapGiris");
+        return yeni; // state DEĞİŞMEDİ — toggle görsel olarak da kapalı kalır
+      }
       try{ localStorage.setItem("kp_haber_bildirim_acik", y?"1":"0"); }catch{}
       haberBildirimGonderSunucuya(y, haberKategoriler);
       return y;
@@ -31293,20 +31324,26 @@ function App(){
               </div>
             )}
 
-            {/* ── HABER BİLDİRİMLERİ (2026-09-27) — misafir dahil herkese
-                açık genel anahtar; kategori daraltması sadece hesaplı
-                kullanıcıya gösteriliyor (bkz. haberBildirimGonderSunucuya). */}
+            {/* ── HABER BİLDİRİMLERİ (2026-09-27) — HESAP ZORUNLU (aynı gün
+                sonradan eklendi): misafir artık açamıyor, sadece hesaplı
+                kullanıcı. Kategori daraltması ayrıca Pro gerektiriyor
+                (bkz. haberBildirimGonderSunucuya + api/bildirim.js). */}
             <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"14px 16px",marginBottom:12}}>
               <div style={{display:"flex",alignItems:"center",gap:10}}>
                 <span style={{fontSize:20}}>🔔</span>
                 <div style={{flex:1,minWidth:0}}>
                   <p style={{margin:0,fontSize:14,fontWeight:700,color:C.label}}>{CV("Piyasa Haberleri Bildirimleri")}</p>
-                  <p style={{margin:"2px 0 0",fontSize:11.5,color:WA(0.5)}}>{CV("Önemli gelişmelerde anlık bildirim al")}</p>
+                  <p style={{margin:"2px 0 0",fontSize:11.5,color:WA(0.5)}}>{CV(kimlik.kullanici?"Önemli gelişmelerde anlık bildirim al":"Bildirim almak için hesap açman gerekiyor")}</p>
                 </div>
                 <AnahtarToggle acik={haberBildirimAcik} onDegistir={haberBildirimToggle} devreDisi={haberBildirimIslemde}/>
               </div>
+              {!kimlik.kullanici && (
+                <p style={{margin:"8px 0 0",fontSize:11,color:WA(0.4)}}>
+                  <span onClick={()=>{ setGirisBaslangicModu("giris"); nav("hesapGiris"); }} style={{color:C.blue,fontWeight:700,cursor:"pointer"}}>{CV("Giriş Yap")}</span>
+                </p>
+              )}
               {haberBildirimHata && <p style={{margin:"8px 0 0",fontSize:11.5,color:C.red}}>{haberBildirimHata}</p>}
-              {haberBildirimAcik && kimlik.kullanici && (
+              {haberBildirimAcik && kimlik.pro.aktif && (
                 <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${WA(0.08)}`}}>
                   <p style={{margin:"0 0 8px",fontSize:11,fontWeight:700,color:WA(0.5)}}>{CV("Yalnızca şu kategorilerde bildirim al (hiçbiri seçilmezse tümü)")}</p>
                   <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
@@ -31322,8 +31359,11 @@ function App(){
                   </div>
                 </div>
               )}
-              {haberBildirimAcik && !kimlik.kullanici && (
-                <p style={{margin:"8px 0 0",fontSize:11,color:WA(0.4)}}>{CV("Belirli kategorilere daraltmak için hesap açabilirsin.")}</p>
+              {haberBildirimAcik && !kimlik.pro.aktif && (
+                <p style={{margin:"8px 0 0",fontSize:11,color:WA(0.4)}}>
+                  {CV("Belirli kategorilere daraltmak Pro'ya özel.")}{" "}
+                  <span onClick={()=>nav("proSatinAl")} style={{color:"#D8A94E",fontWeight:700,cursor:"pointer"}}>{CV("Pro'ya Geç")}</span>
+                </p>
               )}
             </div>
 
@@ -31500,6 +31540,7 @@ function App(){
         {screen==="hazineSenaryo"&&<HtKurSenaryo/>}
         {screen==="piyasaHaberleri"&&<PiyasaHaberleri
           kimlik={kimlik}
+          nav={nav}
           haberBildirimAcik={haberBildirimAcik}
           haberKategoriler={haberKategoriler}
           haberBildirimIslemde={haberBildirimIslemde}

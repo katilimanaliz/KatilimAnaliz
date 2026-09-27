@@ -525,22 +525,27 @@ async function duyurulariListele(req, res) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// HABER BİLDİRİMLERİ (2026-09-27)
+// HABER BİLDİRİMLERİ (2026-09-27; hesap zorunluluğu SONRADAN aynı gün eklendi)
 // ═══════════════════════════════════════════════════════════════════════════
 // Fiyat alarmlarından FARKLI: kullanıcı bir EŞİK kurmuyor, sadece "yeni önemli
-// haber/bildirimlerimi haber ver" diye ABONE oluyor — genel (misafir dahil)
-// veya kategori bazlı (yalnızca hesaplı kullanıcı).
+// haber/bildirimlerimi haber ver" diye ABONE oluyor — HESAP GEREKTİRİR
+// (misafir açamaz), kategori seçimi ise ayrıca Pro gerektirir.
 //
 //   POST ?islem=haber-bildirim-ayarla
-//        { token, acik:true|false, kategoriler?:string[], uid? }
+//        { token, acik:true|false, uid (acik:true iken ZORUNLU), kategoriler? }
 //   POST ?islem=haber-bildirim-gonder   (ADMIN — x-admin-key/?anahtar=)
 //        { baslik, govde, kategori?, veri?, anahtar? }
 //
-// kategoriler VERİLMEMİŞSE (veya boş dizi) o token "genel abone" sayılır —
-// her haber-bildirim-gonder çağrısında (kategori filtresi ne olursa olsun)
-// bildirim alır. kategoriler VERİLMİŞSE, yalnızca o kategorilerden biriyle
-// gönderilen haberlerde bildirim alır — genel (kategorisiz) bir gönderimde
-// DAHİL EDİLMEZ, çünkü kullanıcı bilinçli olarak daraltmış demektir.
+// acik:true iken uid YOKSA 403 döner — misafir bildirim AÇAMAZ (ama
+// acik:false her zaman serbest, eski misafir abonelerin çıkabilmesi için).
+// uid VARSA (hesaplı kullanıcı) ama Pro DEĞİLSE: genel abonelik kurulur,
+// kategoriler VERİLMİŞSE bile sessizce yok sayılır (bkz. aşağıdaki Pro
+// kontrolü). kategoriler VERİLMEMİŞSE (veya boş dizi) o token "genel abone"
+// sayılır — her haber-bildirim-gonder çağrısında (kategori filtresi ne
+// olursa olsun) bildirim alır. kategoriler VERİLMİŞ VE Pro'ysa, yalnızca o
+// kategorilerden biriyle gönderilen haberlerde bildirim alır — genel
+// (kategorisiz) bir gönderimde DAHİL EDİLMEZ, çünkü kullanıcı bilinçli
+// olarak daraltmış demektir.
 //
 // ✅ OTOMATİK TETİKLEME (2026-09-27, aynı gün eklendi): api/finans-
 // haberleri.js, taze() içinde gerçekten YENİ bir başlık tespit ettiğinde
@@ -556,7 +561,7 @@ async function duyurulariListele(req, res) {
 // tekrar tanımlanırsa iki dosya sessizce birbirinden sapabilirdi.
 
 async function haberBildirimAyarla(req, res) {
-  const { token, acik, kategoriler } = req.body || {};
+  const { token, acik, kategoriler, uid } = req.body || {};
   if (!token || typeof acik !== "boolean") {
     res.status(400).json({ hata: "'token' ve boolean 'acik' alanları zorunlu" });
     return;
@@ -568,12 +573,31 @@ async function haberBildirimAyarla(req, res) {
       res.status(200).json({ basarili: true, abone: false });
       return;
     }
+    // ── BİLDİRİM AÇMA HESAP GEREKTİRİR (2026-09-27) ──────────────────────
+    // Misafir (uid yok) artık haber bildirimini AÇAMIYOR — kapatma
+    // (acik:false, yukarıda) hâlâ herkese açık (zaten hiçbir zarar yok,
+    // ayrıca eski misafir abonelerinin çıkabilmesi lazım). Frontend zaten
+    // bu durumda toggle'ı hiç çağırmıyor (nav("hesapGiris")'e yönlendiriyor)
+    // — burası ikinci savunma hattı, istemciye güvenmiyoruz.
+    if (!uid || typeof uid !== "string") {
+      res.status(403).json({ hata: "Haber bildirimi almak için hesap açman/giriş yapman gerekiyor." });
+      return;
+    }
     await redis.sadd(HABER_BILDIRIM_TOKENS_KEY, token);
-    if (Array.isArray(kategoriler) && kategoriler.length > 0) {
+    // ── KATEGORİ SEÇİMİ SADECE PRO (2026-09-27) ─────────────────────────
+    // Genel bildirim (acik:true) misafir dahil herkese açık kalıyor;
+    // yalnızca hangi KATEGORİLERİ göreceğini DARALTMAK Pro'ya özel.
+    // Frontend zaten bu seçeneği Pro olmayana göstermiyor, ama backend'de
+    // de gerçek denetim yapılıyor (banka_oran'daki AYNI ilke: istemciye
+    // güvenme). Pro değilse kategoriler SESSİZCE yok sayılır (hata
+    // döndürmüyoruz) — genel abonelik yine de kurulmuş olur, sadece
+    // daraltma uygulanmaz.
+    const pro = Array.isArray(kategoriler) && kategoriler.length > 0 ? await kullaniciProMu(uid) : false;
+    if (pro) {
       const temiz = kategoriler.filter((k) => typeof k === "string" && k.length > 0 && k.length < 50).slice(0, 20);
       await redis.set(HABER_BILDIRIM_KATEGORI_PREFIX + token, temiz);
     } else {
-      // Kategori verilmemiş/boşaltılmış → "tüm kategoriler" (genel abone).
+      // Kategori verilmemiş/boşaltılmış/Pro değil → "tüm kategoriler" (genel abone).
       await redis.del(HABER_BILDIRIM_KATEGORI_PREFIX + token);
     }
     res.status(200).json({ basarili: true, abone: true });
