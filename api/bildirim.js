@@ -101,6 +101,14 @@
 // haber kategorileri) gerçek aboneleri Pro sayar. Yeni bir /api dosyası
 // açılmadı (12 fonksiyon sınırı) — bu dosyanın bir işlemi olarak eklendi.
 // Ayrıntı için aşağıdaki "REVENUECAT WEBHOOK" bölümüne bakın.
+// ── 9) YÖNETİM SAYAÇLARI (2026-09-28 eklendi) ──
+//
+//   GET  ?islem=yonetim      → telefonda açılabilen küçük HTML sayfa (anahtar kutusu)
+//   POST ?islem=istatistik   → JSON, ADMIN anahtarı SADECE header'da (x-admin-key)
+//                              veya gövdede — URL'de (?anahtar=) KABUL EDİLMEZ.
+// Toplu sayılar döner (e-posta adresi/uid DÖNMEZ): kayıtlı üye sayısı ve giriş
+// yöntemi (e-posta/Google/Apple), son 7/30 gün yeni ve aktif üye, Pro sayısı
+// (ücretli/deneme/elle), haber bildirimi abone sayısı.
 // ── 7) BANKA ORANI ALARMI (2026-09-27 eklendi) — SADECE PRO ──
 //
 //   POST ?islem=alarm-ekle { token, uid, tip:"banka_oran", banka, urun,
@@ -2200,7 +2208,7 @@ function rcGecerliUid(id) {
   return typeof id === "string" && !id.startsWith("$RCAnonymousID") && /^[A-Za-z0-9_-]{6,128}$/.test(id);
 }
 
-async function revenueCatProKaydiGuncelle(uid, { aktif, bitisMs, urun, tip, olayTs, kesinPasif }) {
+async function revenueCatProKaydiGuncelle(uid, { aktif, bitisMs, urun, tip, olayTs, kesinPasif, donem }) {
   const ref = admin.firestore().collection("pro").doc(uid);
   const snap = await ref.get();
   const mevcut = snap.exists ? (snap.data() || {}) : null;
@@ -2214,6 +2222,7 @@ async function revenueCatProKaydiGuncelle(uid, { aktif, bitisMs, urun, tip, olay
     bitisTarihi: bitisMs ? new Date(bitisMs).toISOString() : null,
     kaynak: "revenuecat",
     urun: urun || null,
+    donem: donem || null,   // RevenueCat period_type: TRIAL | INTRO | NORMAL (yönetim sayaçlarında deneme/ücretli ayrımı)
     sonOlay: tip,
     sonOlayTs: olayTs,
     guncelleme: new Date().toISOString(),
@@ -2280,13 +2289,142 @@ async function revenueCatWebhook(req, res) {
     const bitisMs = olay.expiration_at_ms ? Number(olay.expiration_at_ms) : null;
     const kesinPasif = olay.type === "EXPIRATION";
     const aktif = kesinPasif ? false : (bitisMs ? bitisMs > Date.now() : true);
-    const sonuc = await revenueCatProKaydiGuncelle(uid, { aktif, bitisMs, urun: olay.product_id, tip: olay.type, olayTs, kesinPasif });
+    const sonuc = await revenueCatProKaydiGuncelle(uid, { aktif, bitisMs, urun: olay.product_id, tip: olay.type, olayTs, kesinPasif, donem: olay.period_type });
     res.status(200).json({ basarili: true, ...sonuc });
   } catch (e) {
     console.error("revenuecat-webhook hatasi:", e);
     res.status(500).json({ hata: "Webhook islenemedi", detay: e.message });
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// YÖNETİM SAYAÇLARI (2026-09-28)
+// ═══════════════════════════════════════════════════════════════════════════
+// Firebase Authentication kullanıcıları admin SDK ile sayfa sayfa (1000'er)
+// okunur; en fazla 20 sayfa (20.000 üye) — aşılırsa "kesildi:true" döner.
+// Pro sayısı Firestore pro/{uid} kayıtlarından: aktif = aktif:true VE bitiş
+// tarihi yok/gelecekte. deneme = RevenueCat period_type TRIAL (webhook'ta
+// "donem" alanına yazılıyor; bu alan eklenmeden ÖNCE yazılmış kayıtlar
+// "ücretli" sayılır).
+const ISTATISTIK_MAKS_SAYFA = 20;
+
+async function yonetimIstatistik(req, res) {
+  const secret = process.env.ADMIN_GIZLI_ANAHTAR;
+  const gelen = req.headers["x-admin-key"] || req.body?.anahtar || "";
+  if (!secret || !gelen || !rcGuvenliEsitMi(gelen, secret)) {
+    res.status(401).json({ hata: "Yetkisiz istek" });
+    return;
+  }
+  res.setHeader("Cache-Control", "no-store");
+
+  const simdi = Date.now();
+  const G7 = 7 * 86400000, G30 = 30 * 86400000;
+
+  // ── Üyeler (Firebase Authentication) ──
+  const uyeler = { toplam: 0, eposta: 0, google: 0, apple: 0, diger: 0, epostaDogrulanmamis: 0, yeni7g: 0, yeni30g: 0, aktif30g: 0, kesildi: false };
+  let sayfaToken;
+  let sayfa = 0;
+  do {
+    const r = await admin.auth().listUsers(1000, sayfaToken);
+    for (const u of r.users || []) {
+      uyeler.toplam++;
+      const idler = new Set((u.providerData || []).map((x) => x.providerId));
+      if (idler.has("password")) {
+        uyeler.eposta++;
+        if (!u.emailVerified) uyeler.epostaDogrulanmamis++;
+      }
+      if (idler.has("google.com")) uyeler.google++;
+      if (idler.has("apple.com")) uyeler.apple++;
+      if ([...idler].some((id) => id !== "password" && id !== "google.com" && id !== "apple.com")) uyeler.diger++;
+      const kayit = Date.parse(u.metadata?.creationTime || "");
+      if (kayit > simdi - G7) uyeler.yeni7g++;
+      if (kayit > simdi - G30) uyeler.yeni30g++;
+      const son = Date.parse(u.metadata?.lastSignInTime || "");
+      if (son > simdi - G30) uyeler.aktif30g++;
+    }
+    sayfaToken = r.pageToken;
+    sayfa++;
+  } while (sayfaToken && sayfa < ISTATISTIK_MAKS_SAYFA);
+  if (sayfaToken) uyeler.kesildi = true;
+
+  // ── Pro (Firestore pro/{uid}) ──
+  const pro = { aktif: 0, ucretli: 0, deneme: 0, manuel: 0, pasif: 0, kayit: 0 };
+  const snap = await admin.firestore().collection("pro").get();
+  snap.forEach((d) => {
+    const x = d.data() || {};
+    pro.kayit++;
+    const bitis = x.bitisTarihi ? Date.parse(x.bitisTarihi) : null;
+    const aktifMi = x.aktif === true && (!bitis || bitis > simdi);
+    if (!aktifMi) { pro.pasif++; return; }
+    pro.aktif++;
+    if (x.kaynak === "manuel") pro.manuel++;
+    else if (x.donem === "TRIAL") pro.deneme++;
+    else pro.ucretli++;
+  });
+
+  // ── Haber bildirimi aboneleri (cihaz/token sayısı) ──
+  const haberAbone = await redis.scard(HABER_BILDIRIM_TOKENS_KEY);
+
+  res.status(200).json({ olusturma: new Date(simdi).toISOString(), uyeler, pro, bildirim: { haberAbone: Number(haberAbone) || 0 } });
+}
+
+// Anahtarı SORAN, veri İÇERMEYEN sayfa: sayılar anahtarla POST edilince gelir,
+// anahtar URL'ye/geçmişe yazılmaz. Değerler textContent ile yazılır (HTML enjeksiyonu yok).
+const YONETIM_SAYFASI = `<!doctype html>
+<html lang="tr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Katılım Plus · Yönetim</title>
+<style>
+:root{--bg:#F1F4F8;--kart:#fff;--fg:#12263A;--sub:#5A7999;--cizgi:#E1E8F0;--vurgu:#1B9E7A}
+@media (prefers-color-scheme:dark){:root{--bg:#0E141B;--kart:#17212C;--fg:#EAF1FA;--sub:#8FA6BE;--cizgi:#26323F}}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",Arial,sans-serif;padding:20px 16px 40px}
+h1{font-size:18px;margin:0 0 16px}
+.kart{background:var(--kart);border-radius:16px;padding:14px 16px;margin:0 0 12px;max-width:480px}
+.kart h2{font-size:12px;letter-spacing:.6px;text-transform:uppercase;color:var(--sub);margin:0 0 6px}
+.satir{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid var(--cizgi);font-size:14px}
+.satir:first-of-type{border-top:none}
+.satir b{font-variant-numeric:tabular-nums}
+.alt{padding-left:14px;color:var(--sub)}
+input{width:100%;max-width:480px;box-sizing:border-box;padding:12px;border-radius:12px;border:1px solid var(--cizgi);background:var(--kart);color:var(--fg);font-size:16px}
+button{margin-top:10px;padding:12px 18px;border:none;border-radius:12px;background:var(--vurgu);color:#06120E;font-weight:700;font-size:15px}
+#hata{color:#C0392B;font-size:13px;min-height:18px}
+.not{font-size:12px;color:var(--sub);max-width:480px;line-height:1.5}
+</style></head><body>
+<h1>Katılım Plus · Yönetim</h1>
+<div id="giris"><input id="anahtar" type="password" placeholder="Yönetim anahtarı" autocomplete="off"><br><button id="git">Göster</button><p id="hata"></p></div>
+<div id="sonuc"></div>
+<script>
+function n(x){return Number(x||0).toLocaleString('tr-TR');}
+function kart(baslik,satirlar){
+  var d=document.createElement('div');d.className='kart';
+  var h=document.createElement('h2');h.textContent=baslik;d.appendChild(h);
+  satirlar.forEach(function(s){
+    var r=document.createElement('div');r.className='satir'+(s[2]?' alt':'');
+    var a=document.createElement('span');a.textContent=s[0];
+    var b=document.createElement('b');b.textContent=n(s[1]);
+    r.appendChild(a);r.appendChild(b);d.appendChild(r);
+  });
+  return d;
+}
+function goster(v){
+  var kok=document.getElementById('sonuc');kok.textContent='';
+  var u=v.uyeler,p=v.pro;
+  kok.appendChild(kart('Üyeler',[['Toplam kayıtlı üye',u.toplam],['E-posta ile',u.eposta,1],['Google ile',u.google,1],['Apple ile',u.apple,1],['E-postası doğrulanmamış',u.epostaDogrulanmamis,1],['Son 7 günde katılan',u.yeni7g],['Son 30 günde katılan',u.yeni30g],['Son 30 günde giriş yapan',u.aktif30g]]));
+  kok.appendChild(kart('Pro',[['Aktif Pro',p.aktif],['Ücretli',p.ucretli,1],['Deneme (7 gün)',p.deneme,1],['Elle verilen',p.manuel,1],['Süresi dolmuş / pasif kayıt',p.pasif]]));
+  kok.appendChild(kart('Bildirim',[['Haber bildirimi abonesi (cihaz)',v.bildirim.haberAbone]]));
+  var t=document.createElement('p');t.className='not';
+  t.textContent='Giriş yöntemi sayıları, bir hesap birden fazla yöntem bağladıysa birden çok kez sayılabilir.'+(u.kesildi?' Üye sayısı ilk 20.000 ile sınırlı (kesildi).':'')+' Güncelleme: '+new Date(v.olusturma).toLocaleString('tr-TR');
+  kok.appendChild(t);
+}
+document.getElementById('git').onclick=function(){
+  var k=document.getElementById('anahtar').value,hata=document.getElementById('hata');hata.textContent='';
+  fetch('/api/bildirim?islem=istatistik',{method:'POST',headers:{'Content-Type':'application/json','x-admin-key':k},body:'{}'})
+   .then(function(r){return r.json().then(function(d){return {ok:r.ok,d:d};});})
+   .then(function(x){if(!x.ok){hata.textContent=x.d&&x.d.hata?x.d.hata:'Hata';return;}document.getElementById('giris').style.display='none';goster(x.d);})
+   .catch(function(){hata.textContent='Bağlantı hatası';});
+};
+</script></body></html>`;
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -2347,6 +2485,15 @@ export default async function handler(req, res) {
     return;
   }
 
+  // Yönetim sayfası (GET): veri içermez, yalnızca anahtar kutusu + istatistik çağrısı.
+  if (islem === "yonetim" && req.method === "GET") {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("X-Robots-Tag", "noindex, nofollow");
+    res.status(200).send(YONETIM_SAYFASI);
+    return;
+  }
+
   if (req.method !== "POST") {
     res.status(405).json({ hata: "Sadece POST kabul edilir" });
     return;
@@ -2375,6 +2522,8 @@ export default async function handler(req, res) {
       await haberBildirimGonder(req, res);
     } else if (islem === "revenuecat-webhook") {
       await revenueCatWebhook(req, res);
+    } else if (islem === "istatistik") {
+      await yonetimIstatistik(req, res);
     } else {
       res.status(400).json({ hata: "Geçersiz 'islem'." });
     }
