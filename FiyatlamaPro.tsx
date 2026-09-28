@@ -5080,6 +5080,18 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri 
   const [veriZamani, setVeriZamani] = useState<Date|null>(null);
   const [siraGorunum, setSiraGorunum]   = useState<"tumu"|"yukselen"|"dusen"|"hacim">("tumu");
   const [hareketlilerTip, setHareketlilerTip] = useState<"yukselen"|"dusen">("yukselen");
+  // ── MASAÜSTÜ SAĞ SÜTUN (2026-09-28) — kullanıcı isteği: "BİST veri izleme
+  // ekranında sağ tarafa sütun koyup günün hareketlileri alanını oraya
+  // taşıyalım". Kök bileşendeki eşikle (1024px, native değil) AYNI.
+  const [genisEkran, setGenisEkran] = useState(
+    () => !IS_NATIVE && typeof window !== "undefined" && window.innerWidth >= 1024
+  );
+  useEffect(() => {
+    if (IS_NATIVE) return;
+    const guncelle = () => setGenisEkran(window.innerWidth >= 1024);
+    window.addEventListener("resize", guncelle);
+    return () => window.removeEventListener("resize", guncelle);
+  }, []);
   const [endeksVeri, setEndeksVeri]     = useState<{[k:string]:{deger:number,degisim:number}}>({});
   const [endeksFiltre, setEndeksFiltre] = useState<"tumu"|"100"|"30"|"50">("tumu");
   // ── BİST 100/50/30 RESMİ(-YE YAKIN) ÜYELİK (2026-09-15) ─────────────────
@@ -5298,8 +5310,84 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri 
     else { setDetayHisse(null); }
   }} />;
 
+  // ── GÜNÜN HAREKETLİLERİ (2026-09-28: iki görünüm, tek kaynak) ─────────────
+  //  • dikey=false → mobil: yatay kaydırmalı kartlar (eski görünüm, aynen).
+  //  • dikey=true  → masaüstü sağ sütunu: numaralı, ayraçlı dikey liste.
+  // Aynı veri (top10) ve aynı tıklama davranışı (hisse detayı) iki görünümde de.
+  const hareketlilerBlok = (dikey:boolean) => {
+    if (!(hisseler.length>0)) return null;
+    const siraliTum=[...hisseler].filter(h=>h.degisim1g!=null).sort((a,b)=>(b.degisim1g||0)-(a.degisim1g||0));
+    const top10=hareketlilerTip==="yukselen" ? siraliTum.slice(0,10) : [...siraliTum].reverse().slice(0,10);
+    const baslik=(
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,gap:8}}>
+        <span style={{fontSize:12,fontWeight:700,color:C.label}}>⚡ Günün Hareketlileri</span>
+        <div style={{display:"flex",background:WA(0.05),borderRadius:10,padding:2}}>
+          {([["yukselen","Yükselenler"],["dusen","Düşenler"]] as const).map(([key,lbl])=>(
+            <div key={key} onClick={()=>setHareketlilerTip(key)} style={{
+              padding:"5px 10px",borderRadius:8,fontSize:11,fontWeight:700,cursor:"pointer",
+              background:hareketlilerTip===key?C.card:"transparent",
+              color:hareketlilerTip===key?(key==="yukselen"?C.green:C.red):C.sub,
+            }}>{lbl}</div>
+          ))}
+        </div>
+      </div>
+    );
+    const ac=(h:any)=>{detayPendingKaynakli.current=false;setDetayHisse(h);};
+    if (!dikey) return (
+      <div style={{marginBottom:14}}>
+        {baslik}
+        <div className="piyasa-scroll" style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:2}}>
+          {top10.map(h=>(
+            <div key={h.ticker} onClick={()=>ac(h)} className="press-card" style={{
+              flex:"0 0 auto",minWidth:104,background:C.card,border:`1px solid ${C.border}`,
+              borderRadius:12,padding:"10px 12px",cursor:"pointer",
+            }}>
+              <HisseAvatar ticker={h.ticker} sirket={h.sirket} boyut={22}/>
+              <div style={{fontSize:12,fontWeight:700,color:h.katilimEndeksi?C.green:C.blue,marginTop:6}}>{h.ticker}</div>
+              <div style={{fontSize:13,fontWeight:700,color:C.text,marginTop:2,fontVariantNumeric:"tabular-nums"}}>
+                {h.fiyat ? h.fiyat.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}) : "—"}
+              </div>
+              <div style={{fontSize:11,fontWeight:700,color:h.degisim1g>0?C.green:h.degisim1g<0?C.red:C.sub,marginTop:2}}>
+                {h.degisim1g!=null?(h.degisim1g>0?"+":"")+h.degisim1g.toFixed(2)+"%":"—"}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+    return (
+      <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"12px 12px 6px"}}>
+        {baslik}
+        {top10.map((h,i)=>(
+          <div key={h.ticker} onClick={()=>ac(h)} className="kp-side-item" style={{
+            display:"flex",alignItems:"center",gap:10,padding:"9px 4px",cursor:"pointer",
+            borderTop:i===0?"none":`1px solid ${WA(0.07)}`,
+          }}>
+            <span style={{width:16,flexShrink:0,fontSize:11,fontWeight:700,color:WA(0.35),textAlign:"center"}}>{i+1}</span>
+            <HisseAvatar ticker={h.ticker} sirket={h.sirket} boyut={26}/>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:12.5,fontWeight:700,color:h.katilimEndeksi?C.green:C.blue}}>{h.ticker}</div>
+              <div style={{fontSize:10.5,color:WA(0.45),overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{h.sirket}</div>
+            </div>
+            <div style={{textAlign:"right",flexShrink:0}}>
+              <div style={{fontSize:12.5,fontWeight:700,color:C.text,fontVariantNumeric:"tabular-nums"}}>
+                {h.fiyat ? h.fiyat.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}) : "—"}
+              </div>
+              <div style={{fontSize:11,fontWeight:700,color:h.degisim1g>0?C.green:h.degisim1g<0?C.red:C.sub,marginTop:1}}>
+                {h.degisim1g!=null?(h.degisim1g>0?"+":"")+h.degisim1g.toFixed(2)+"%":"—"}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div style={{background:C.bg, padding:"12px 14px 80px", minHeight:"100%"}}>
+      {/* MASAÜSTÜ: ana kolon + sağ ray (Günün Hareketlileri); mobilde tek kolon */}
+      <div style={genisEkran?{display:"grid",gridTemplateColumns:"minmax(0,1fr) 320px",gap:20,alignItems:"start"}:undefined}>
+      <div style={{minWidth:0}}>
       {/* Hero Kart */}
       <div style={{
         background:"linear-gradient(160deg, rgba(91,155,216,0.10), rgba(45,212,191,0.04))",
@@ -5442,47 +5530,9 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri 
         {arama && <button style={{background:"none",border:"none",color:C.sub,cursor:"pointer",fontSize:12,fontFamily:"inherit"}} onClick={() => setArama("")}>✕</button>}
       </div>
 
-      {/* Günün Hareketlileri — ilk 10 yükselen/düşen, seçmeli */}
-      {hisseler.length>0 && (()=>{
-        const siraliTum=[...hisseler].filter(h=>h.degisim1g!=null).sort((a,b)=>(b.degisim1g||0)-(a.degisim1g||0));
-        const top10=hareketlilerTip==="yukselen" ? siraliTum.slice(0,10) : [...siraliTum].reverse().slice(0,10);
-        return(
-        <div style={{marginBottom:14}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-            <span style={{fontSize:12,fontWeight:700,color:C.label}}>⚡ Günün Hareketlileri</span>
-            <div style={{display:"flex",background:WA(0.05),borderRadius:10,padding:2}}>
-              {([["yukselen","Yükselenler"],["dusen","Düşenler"]] as const).map(([key,lbl])=>(
-                <div key={key} onClick={()=>setHareketlilerTip(key)} style={{
-                  padding:"5px 10px",borderRadius:8,fontSize:11,fontWeight:700,cursor:"pointer",
-                  background:hareketlilerTip===key?C.card:"transparent",
-                  color:hareketlilerTip===key?(key==="yukselen"?C.green:C.red):C.sub,
-                }}>{lbl}</div>
-              ))}
-            </div>
-          </div>
-          <div className="piyasa-scroll" style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:2}}>
-            {top10.map(h=>(
-              <div key={h.ticker} onClick={()=>{detayPendingKaynakli.current=false;setDetayHisse(h);}} className="press-card" style={{
-                flex:"0 0 auto",minWidth:104,background:C.card,border:`1px solid ${C.border}`,
-                borderRadius:12,padding:"10px 12px",cursor:"pointer",
-              }}>
-                {/* 2026-09-15 (kullanıcı isteği: "burada da boşluk var, ikon
-                    koyalım") — HisseAvatar zaten ana listede kullanılıyor,
-                    burada da AYNI bileşen, küçük boyutta. */}
-                <HisseAvatar ticker={h.ticker} sirket={h.sirket} boyut={22}/>
-                <div style={{fontSize:12,fontWeight:700,color:h.katilimEndeksi?C.green:C.blue,marginTop:6}}>{h.ticker}</div>
-                <div style={{fontSize:13,fontWeight:700,color:C.text,marginTop:2,fontVariantNumeric:"tabular-nums"}}>
-                  {h.fiyat ? h.fiyat.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}) : "—"}
-                </div>
-                <div style={{fontSize:11,fontWeight:700,color:h.degisim1g>0?C.green:h.degisim1g<0?C.red:C.sub,marginTop:2}}>
-                  {h.degisim1g!=null?(h.degisim1g>0?"+":"")+h.degisim1g.toFixed(2)+"%":"—"}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-        );
-      })()}
+      {/* Günün Hareketlileri — mobilde akışın kendi yerinde (yatay kaydırmalı);
+          masaüstünde sağ sütunda (bkz. hareketlilerBlok(true)). */}
+      {!genisEkran && hareketlilerBlok(false)}
 
       {/* Tümü / Yükselenler / Düşenler / Hacim Segmenti */}
       <div style={{display:"flex",background:WA(0.05),borderRadius:12,padding:3,marginBottom:10}}>
@@ -5622,6 +5672,11 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri 
           ))}
         </div>
       )}
+      </div>
+      {genisEkran && (
+        <div style={{minWidth:0}}>{hareketlilerBlok(true)}</div>
+      )}
+      </div>
     </div>
   );
 }
