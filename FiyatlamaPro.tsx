@@ -8412,19 +8412,21 @@ function RaporModal({baslik, satirlar, plan, onClose, showKdv=false, bsmvOran=0,
   };
 
   const pdfOlusturVePaylas = async () => {
-    // ⚠️ 2026-09-26 (kullanıcı isteği: "Paylaş aksiyonu Pro yapalım"):
-    // fonksiyonun EN BAŞINDA kontrol — kimlik/nav prop olarak yoksa
-    // (kullanılmayan/eski bir çağrı noktası kalırsa) opsiyonel zincirleme
-    // ile FAIL-OPEN yerine burada AÇIKÇA "pro değilse dur" davranışını
-    // yalnızca kimlik gerçekten mevcutsa uyguluyoruz — kimlik hiç
-    // gelmezse (unutulan bir 8. çağrı noktası gibi) kilitlemek yerine
-    // eski (kısıtlanmamış) davranışa düşüyor; bu, "hiç çalışmayan bir
-    // paylaş butonu" yerine "gözden kaçmış bir yerde hâlâ ücretsiz
-    // paylaşım" riskini tercih eder — kullanıcı deneyimi güvenlik
-    // sınırından önemli.
-    if(kimlik && !kimlik.pro.aktif){
+    // ⚠️ 2026-09-27 (kullanıcı raporu: "ziyaretçi PDF paylaşa basınca tepki
+    // vermiyor"): 2026-09-26'daki ilk kapı `kimlik`/`nav`'a bakıyordu ama
+    // BU fonksiyon RaporModal'ın içinde ve RaporModal'a bu prop'lar HİÇ
+    // GEÇMİYOR (RaporButon ~25 ayrı hesaplayıcıdan, prop'suz çağrılıyor) —
+    // `kimlik` tanımsız olduğundan tıklanınca ReferenceError fırlıyor,
+    // async fonksiyon sessizce reddediliyordu: ziyaretçide de, Pro üyede de
+    // buton hiçbir şey yapmıyordu. Çağrı noktalarına tek tek prop taşımak
+    // yerine (kpAlarmUid ile AYNI desen) kök bileşendeki bir effect'in her
+    // render'da güncellediği modül değişkenlerini okuyoruz.
+    // Pro durumu henüz yükleniyorsa (giriş yapmış kullanıcıda birkaç yüz ms)
+    // geçici olarak izin veriliyor — gerçek Pro üyeyi yanlışlıkla Pro
+    // ekranına atmamak için.
+    if(!kpGuncelPro.aktif && !kpProYukleniyorMu){
       onClose();
-      kpProGerekliMi(kimlik.pro, nav);
+      kpGuncelNav?.("proSatinAl");
       return;
     }
     setYukleniyor(true);
@@ -22273,6 +22275,14 @@ function pushTokenAl():string|null{
 // bunun üzerine kurulu (bkz. api/bildirim.js).
 let kpAlarmUid: string | null = null;
 
+// ── PRO DURUMU + nav — KÖK BİLEŞEN DIŞINDAKİ bileşenler için (2026-09-27) ──
+// RaporModal gibi prop almayan/çok yerden çağrılan bileşenler Pro durumuna
+// ve nav'a buradan erişiyor; kök bileşendeki bir effect her render'da
+// güncelliyor (bkz. "PRO DURUMU SENKRONU"). Varsayılan: Pro DEĞİL.
+let kpGuncelPro: KpProDurum = KP_PRO_VARSAYILAN;
+let kpProYukleniyorMu = false;
+let kpGuncelNav: ((sc:string)=>void)|null = null;
+
 // Tetiklendikten sonra KAPANMAYAN alarm türleri. Bunlar listede farklı
 // gösterilir (durum metni, ikon) ve duraklat/devam düğmesi yalnızca bunlarda
 // vardır — tetiklenmiş bir fiyat alarmını yeniden açmak eşik hâlâ sağlandığı
@@ -29465,6 +29475,8 @@ function App(){
     backHedefOzel.current=geriHedefi||null;setScreen(sc);
   };
   useEffect(()=>{ navRef.current=nav; }); // deps YOK — her render sonrasi calisip navRef'i taze tutar
+  // ── PRO DURUMU SENKRONU (2026-09-27) — bkz. kpGuncelPro açıklaması ─────
+  useEffect(()=>{ kpGuncelPro=kimlik.pro; kpProYukleniyorMu=kimlik.proYukleniyor; kpGuncelNav=nav; });
   const irHisseFonDetay=(tur:"hisse"|"fon", sembol:string, geriHedefi?:string)=>{
     if(tur==="hisse"){ setPendingHisseSecim(sembol); nav("bistHisseTarayici", geriHedefi); }
     else { setPendingFonSecim(sembol); nav("fonGetiriIzleme", geriHedefi); }

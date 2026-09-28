@@ -90,6 +90,17 @@
 // haberleri.js de AYNI fonksiyonu, yeni bir başlık geldiğinde OTOMATİK
 // çağırıyor (bkz. o dosyadaki "OTOMATİK BİLDİRİM" bölümü).
 //
+// ── 8) REVENUECAT WEBHOOK (2026-09-27 eklendi) ──
+//
+//   POST ?islem=revenuecat-webhook   (RevenueCat panelinden çağrılır)
+//   Authorization: <REVENUECAT_WEBHOOK_SECRET ortam değişkeniyle AYNI değer>
+//
+// Gerçek satın alma/yenileme/iptal/süre dolumu olaylarını Firestore'daki
+// pro/{uid} kaydına yazar — böylece mobilde alınan Pro web'de/masaüstünde de
+// tanınır ve sunucu tarafı kontroller (alarm sınırı, banka oranı alarmı,
+// haber kategorileri) gerçek aboneleri Pro sayar. Yeni bir /api dosyası
+// açılmadı (12 fonksiyon sınırı) — bu dosyanın bir işlemi olarak eklendi.
+// Ayrıntı için aşağıdaki "REVENUECAT WEBHOOK" bölümüne bakın.
 // ── 7) BANKA ORANI ALARMI (2026-09-27 eklendi) — SADECE PRO ──
 //
 //   POST ?islem=alarm-ekle { token, uid, tip:"banka_oran", banka, urun,
@@ -101,7 +112,7 @@
 // aşağıdaki "BANKA ORANI ALARMLARI" bölümüne bakın.
 
 import { Redis } from "@upstash/redis";
-import { randomUUID } from "crypto";
+import { randomUUID, timingSafeEqual } from "crypto";
 import { admin } from "./_lib/firebaseAdmin.js";
 import { kilitliCalistir } from "./_lib/kilitliOnbellek.js";
 import { haberleriGonder, HABER_BILDIRIM_TOKENS_KEY, HABER_BILDIRIM_KATEGORI_PREFIX } from "./_lib/haberBildirimi.js";
@@ -2141,6 +2152,134 @@ async function alarmKontrol(req, res) {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// REVENUECAT WEBHOOK (2026-09-27)
+// ═══════════════════════════════════════════════════════════════════════════
+// SORUN: Gerçek satın almalar yalnızca RevenueCat'te duruyordu; web/masaüstü
+// ve bu dosyadaki sunucu kontrolleri yalnızca Firestore'daki pro/{uid}'ye
+// bakıyor. Sonuç: iPhone'dan Pro alan biri masaüstünde "ücretsiz" görünüyor,
+// alarm sınırı ve banka oranı alarmı da onu Pro saymıyordu.
+//
+// ÇÖZÜM: RevenueCat her abonelik olayında bu uca POST atar; biz de pro/{uid}
+// kaydını güncelleriz. app_user_id = Firebase uid'i (istemci Purchases.logIn
+// ile eşliyor). Kimlik doğrulama: RevenueCat panelindeki "Authorization
+// header value" alanına yazılan değer = REVENUECAT_WEBHOOK_SECRET.
+//
+// KURALLAR
+//  • Aktiflik = bitiş zamanı gelecekteyse (iptal edilse bile dönem sonuna
+//    kadar Pro sürer); EXPIRATION olayı kesin olarak pasife çeker.
+//  • Elle verilmiş Pro (kaynak:"manuel", beta testi) RevenueCat'in süre
+//    dolumuyla SİLİNMEZ — aksi halde beta kullanıcıları sessizce düşerdi.
+//  • Sıra dışı gelen ESKİ olaylar yok sayılır (sonOlayTs karşılaştırması).
+//  • Hesapsız (anonim "$RCAnonymousID:") alıcılar için alias'lardaki gerçek
+//    uid aranır; yoksa olay yok sayılır (200 döner, tekrar denenmesin).
+//  • İşleme hatasında 500 döner — RevenueCat otomatik yeniden dener.
+const REVENUECAT_ENTITLEMENT = "katılım_plus_pro";
+const RC_ISLENEN_TIPLER = new Set([
+  "INITIAL_PURCHASE", "RENEWAL", "PRODUCT_CHANGE", "UNCANCELLATION",
+  "NON_RENEWING_PURCHASE", "CANCELLATION", "BILLING_ISSUE", "EXPIRATION",
+  "SUBSCRIPTION_EXTENDED", "SUBSCRIPTION_PAUSED",
+]);
+
+function rcGuvenliEsitMi(a, b) {
+  const x = Buffer.from(String(a));
+  const y = Buffer.from(String(b));
+  return x.length === y.length && timingSafeEqual(x, y);
+}
+
+// Firebase uid'i biçimi (doküman yoluna sızmasın: "/" vb. kabul edilmez).
+function rcGecerliUid(id) {
+  return typeof id === "string" && !id.startsWith("$RCAnonymousID") && /^[A-Za-z0-9_-]{6,128}$/.test(id);
+}
+
+async function revenueCatProKaydiGuncelle(uid, { aktif, bitisMs, urun, tip, olayTs, kesinPasif }) {
+  const ref = admin.firestore().collection("pro").doc(uid);
+  const snap = await ref.get();
+  const mevcut = snap.exists ? (snap.data() || {}) : null;
+
+  if (mevcut && Number(mevcut.sonOlayTs) > olayTs) return { uid, atlandi: "eski-olay" };
+  if (!aktif && mevcut && mevcut.kaynak === "manuel" && mevcut.aktif === true) {
+    return { uid, atlandi: "manuel-pro-korundu" };
+  }
+  await ref.set({
+    aktif,
+    bitisTarihi: bitisMs ? new Date(bitisMs).toISOString() : null,
+    kaynak: "revenuecat",
+    urun: urun || null,
+    sonOlay: tip,
+    sonOlayTs: olayTs,
+    guncelleme: new Date().toISOString(),
+  }, { merge: true });
+  return { uid, aktif };
+}
+
+async function revenueCatWebhook(req, res) {
+  const secret = process.env.REVENUECAT_WEBHOOK_SECRET;
+  const gelen = req.headers["authorization"] || "";
+  if (!secret || !(rcGuvenliEsitMi(gelen, secret) || rcGuvenliEsitMi(gelen, `Bearer ${secret}`))) {
+    res.status(401).json({ hata: "Yetkisiz istek" });
+    return;
+  }
+
+  const olay = req.body?.event;
+  if (!olay || typeof olay.type !== "string") {
+    res.status(400).json({ hata: "Geçersiz webhook gövdesi" });
+    return;
+  }
+  if (olay.type === "TEST") {
+    res.status(200).json({ basarili: true, not: "test olayi alindi" });
+    return;
+  }
+
+  // Bizim entitlement'ımız dışındaki olaylar (varsa) yok sayılır.
+  const ent = Array.isArray(olay.entitlement_ids) ? olay.entitlement_ids
+    : (olay.entitlement_id ? [olay.entitlement_id] : []);
+  if (ent.length > 0 && !ent.includes(REVENUECAT_ENTITLEMENT)) {
+    res.status(200).json({ basarili: true, atlandi: "baska-entitlement" });
+    return;
+  }
+
+  const olayTs = Number(olay.event_timestamp_ms) || Date.now();
+
+  try {
+    // ── TRANSFER: abonelik bir kullanıcıdan diğerine geçti ────────────────
+    if (olay.type === "TRANSFER") {
+      const sonuclar = [];
+      for (const uid of (olay.transferred_from || []).filter(rcGecerliUid)) {
+        sonuclar.push(await revenueCatProKaydiGuncelle(uid, { aktif: false, bitisMs: null, urun: null, tip: "TRANSFER_FROM", olayTs }));
+      }
+      for (const uid of (olay.transferred_to || []).filter(rcGecerliUid)) {
+        // Bitiş bilinmiyor — sonraki EXPIRATION/RENEWAL olayı bunu düzeltir.
+        sonuclar.push(await revenueCatProKaydiGuncelle(uid, { aktif: true, bitisMs: null, urun: null, tip: "TRANSFER_TO", olayTs }));
+      }
+      res.status(200).json({ basarili: true, sonuclar });
+      return;
+    }
+
+    if (!RC_ISLENEN_TIPLER.has(olay.type)) {
+      res.status(200).json({ basarili: true, atlandi: "ilgisiz-tip", tip: olay.type });
+      return;
+    }
+
+    // Alıcının gerçek (Firebase) uid'i: önce app_user_id, anonimse alias'lar.
+    const adaylar = [olay.app_user_id, ...(Array.isArray(olay.aliases) ? olay.aliases : []), olay.original_app_user_id];
+    const uid = adaylar.find(rcGecerliUid);
+    if (!uid) {
+      res.status(200).json({ basarili: true, atlandi: "hesapsiz-alici" });
+      return;
+    }
+
+    const bitisMs = olay.expiration_at_ms ? Number(olay.expiration_at_ms) : null;
+    const kesinPasif = olay.type === "EXPIRATION";
+    const aktif = kesinPasif ? false : (bitisMs ? bitisMs > Date.now() : true);
+    const sonuc = await revenueCatProKaydiGuncelle(uid, { aktif, bitisMs, urun: olay.product_id, tip: olay.type, olayTs, kesinPasif });
+    res.status(200).json({ basarili: true, ...sonuc });
+  } catch (e) {
+    console.error("revenuecat-webhook hatasi:", e);
+    res.status(500).json({ hata: "Webhook islenemedi", detay: e.message });
+  }
+}
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -2154,13 +2293,15 @@ export default async function handler(req, res) {
   const islem = req.query?.islem;
 
   // ── HIZ SINIRI ─────────────────────────────────────────────────────────
-  // "gonder" ve "alarm-kontrol" MUAF: ikisi de admin anahtarıyla korunuyor
+  // "gonder", "alarm-kontrol" ve "revenuecat-webhook" MUAF: üçü de gizli anahtarla korunuyor
+  // (webhook: RevenueCat sunucularından gelir, olay yoğunluğu IP başına sınırlanmamalı) —
+  // eski not: "gonder" ve "alarm-kontrol" MUAF: ikisi de admin anahtarıyla korunuyor
   // ve alarm-kontrol dış zamanlayıcıdan hep AYNI IP ile geliyor. Sınıra
   // dahil edilirlerse meşru cron turu engellenebilirdi.
   //
   // Geri kalan uçlar (kaydet, alarm-ekle/sil/listele/durum/temizle,
   // duyurular) kimlik doğrulamasız olduğu için sınıra tabi.
-  if (islem !== "gonder" && islem !== "alarm-kontrol") {
+  if (islem !== "gonder" && islem !== "alarm-kontrol" && islem !== "revenuecat-webhook") {
     if (await hizSiniriAsildiMi(req)) {
       res.setHeader("Retry-After", String(HIZ_SINIRI_PENCERE));
       res.setHeader("Cache-Control", "no-store");
@@ -2224,6 +2365,8 @@ export default async function handler(req, res) {
       await haberBildirimAyarla(req, res);
     } else if (islem === "haber-bildirim-gonder") {
       await haberBildirimGonder(req, res);
+    } else if (islem === "revenuecat-webhook") {
+      await revenueCatWebhook(req, res);
     } else {
       res.status(400).json({ hata: "Geçersiz 'islem'." });
     }
