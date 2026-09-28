@@ -5745,9 +5745,16 @@ const SERIT_YUKSEKLIK = 34;
 // olarak veriliyor; sabit başlıklar zoom'suz olduğundan doğrudan bu değer.
 // Sabit başlıklar ile içerik AYNI sınırı kullanmalı, yoksa başlık sol kenarda
 // kalıp içerik ortada dururdu. Tam ekran hisse/fon detay katmanları etkilenmez.
-// İSTİSNA (kullanıcı isteği, aynı gün): Ana Sayfa, Piyasa ve Hesapla ANA
-// MENÜLERİ eskisi gibi tam genişlikte kalıyor (bkz. icerikSinirli).
+// İSTİSNA (kullanıcı isteği, aynı gün): aşağıdaki ekranlar ESKİSİ GİBİ tam
+// genişlikte kalıyor (bkz. icerikSinirli): Ana Sayfa, Piyasa ve Hesapla ana
+// menüleri + geniş tablo/kart düzenli 4 ekran (BİST Hisse Veri İzleme,
+// Yatırım Fonları Getiri İzleme, Kâr Payı Oran Karşılaştırma, Piyasa
+// Haberleri). Başka bir ekranı geniş tutmak için buraya anahtarını ekleyin.
 const MASAUSTU_ICERIK_MAKS_W = 1240;
+const MASAUSTU_TAM_GENISLIK_EKRANLARI = new Set([
+  "home","hesaplaMenu","piyasaMenu",
+  "bistHisseTarayici","fonGetiriIzleme","karPayiOranlari","piyasaHaberleri",
+]);
 function UstPiyasaSeridi({kalemler,onTikla}:{kalemler:any[];onTikla:(k:any)=>void}){
   const [tik,setTik]=useState(0);
   // ⚠️ 2026-09-21 (kullanıcı raporu: "üzerine mause gelince kayma
@@ -28586,9 +28593,9 @@ function App(){
   // yerine geçer). Native uygulama ve mobil web hiç etkilenmez.
   const SIDEBAR_W=genisEkran?264:0;
   const icerikOlcek=!IS_NATIVE&&ekranW>=1680?1.22:(genisEkran&&ekranW>=1360?1.12:1);
-  // İçerik genişliği sınırı SADECE bu ekranlar DIŞINDA uygulanıyor: Ana Sayfa,
-  // Piyasa ve Hesapla ana menüleri tam genişlikte kalır (kullanıcı isteği).
-  const icerikSinirli=genisEkran && screen!=="home" && screen!=="hesaplaMenu" && screen!=="piyasaMenu";
+  // İçerik genişliği sınırı MASAUSTU_TAM_GENISLIK_EKRANLARI DIŞINDAKİ ekranlara
+  // uygulanır (Ana Sayfa/Piyasa/Hesapla menüleri + 4 geniş ekran tam genişlikte).
+  const icerikSinirli=genisEkran && !MASAUSTU_TAM_GENISLIK_EKRANLARI.has(screen);
   const kolonW=IS_NATIVE?680:(genisEkran?640:430);
   const altBarW=IS_NATIVE?560:402;
   // ── ANA SAYFA SABİT ÜST BLOK — YÜKSEKLİK ÖLÇÜMÜ ─────────────────────────
