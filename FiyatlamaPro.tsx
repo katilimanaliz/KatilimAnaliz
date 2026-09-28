@@ -20046,13 +20046,27 @@ function GostergeTabloModal({ad,seri,birim,onClose}:{ad:string,seri:{tarih:strin
 
   const [tooltip,setTooltip]=useState<number|null>(null);
   const degerler=seri.map(s=>s.deger);
-  const minV=seri.length? (isYuzde ? Math.min(0,...degerler) : Math.min(...degerler)*0.98) : 0;
-  const maxV=seri.length? (isYuzde ? Math.max(...degerler) : Math.max(...degerler)*1.02) : 1;
-  const aralik=(maxV-minV)||1;
+  // ── ÇİZGİ GRAFİK + EKSENLER (2026-09-28, kullanıcı isteği: "sütun değil
+  // çizgi olsun, solda oran altta tarih olacak şekilde") ────────────────
+  // Eskiden sütun grafikti, hiç eksen etiketi yoktu. Artık solda 3 kademeli
+  // Y ekseni (en yüksek/orta/en düşük değer) ve altta birkaç X ekseni tarih
+  // etiketi (GG-AA, kalabalık olmasın diye tüm 24 nokta değil) var.
+  const minV=seri.length? Math.min(...degerler) : 0;
+  const maxV=seri.length? Math.max(...degerler) : 1;
+  const araPad=(maxV-minV)*0.08 || Math.abs(maxV)*0.02 || 1; // üst/alt biraz nefes payı
+  const minVE=minV-araPad, maxVE=maxV+araPad;
+  const aralik=(maxVE-minVE)||1;
   const [grafikRef,grafikW]=useOlculenGenislik(320);
-  const GW=grafikW,GH=110,GPAD=8,barGenislik=seri.length?(GW-GPAD*2)/seri.length:0;
-  const getY=(v:number)=>GH-GPAD-((v-minV)/aralik)*(GH-GPAD*2);
-  const sifirY=isYuzde ? getY(0) : GH-GPAD;
+  const YETIKET_GENISLIK=40; // solda oran etiketleri için ayrılan alan
+  const XETIKET_YUKSEKLIK=16; // altta tarih etiketleri için ayrılan alan
+  const GW=grafikW,GH=126,GPAD=6;
+  const cizimSolX=YETIKET_GENISLIK, cizimSagX=GW-GPAD, cizimUstY=GPAD, cizimAltY=GH-XETIKET_YUKSEKLIK-GPAD;
+  const cizimGenislik=Math.max(1,cizimSagX-cizimSolX);
+  const getX=(i:number)=> seri.length>1 ? cizimSolX+(i/(seri.length-1))*cizimGenislik : cizimSolX+cizimGenislik/2;
+  const getY=(v:number)=>cizimAltY-((v-minVE)/aralik)*(cizimAltY-cizimUstY);
+  // X ekseninde en fazla 5 tarih etiketi (baş, son ve arada eşit aralıklarla) — 24 noktanın hepsi sığmaz.
+  const xEtiketIdx = seri.length<=1 ? [0] : (()=>{ const n=Math.min(5,seri.length); const idx=new Set<number>(); for(let k=0;k<n;k++) idx.add(Math.round(k*(seri.length-1)/(n-1))); return [...idx]; })();
+  const kisaTarih=(t:string)=> t.split("-").slice(0,2).join("-"); // "DD-MM-YYYY" -> "DD-MM"
 
   return(
     <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.7)",zIndex:600,display:"flex",alignItems:"flex-end",...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}} onClick={onClose}>
@@ -20070,23 +20084,38 @@ function GostergeTabloModal({ad,seri,birim,onClose}:{ad:string,seri:{tarih:strin
           <div style={{flex:1,overflowY:"auto"}}>
             <div ref={grafikRef} style={{padding:"16px 20px 4px"}}>
               <svg viewBox={`0 0 ${GW} ${GH}`} style={{width:"100%",height:GH,display:"block",overflow:"visible"}}>
-                <line x1={GPAD} y1={sifirY} x2={GW-GPAD} y2={sifirY} stroke={WA(0.15)} strokeWidth={1}/>
-                {seri.map((s,i)=>{
-                  const x=GPAD+i*barGenislik;
-                  const y=getY(s.deger);
-                  const yukseklik=Math.abs(sifirY-y);
-                  const pozitif=s.deger>=0;
+                {/* Y ekseni — 3 kademeli (üst/orta/alt) yatay kılavuz çizgi + oran etiketi, solda */}
+                {[maxVE,(maxVE+minVE)/2,minVE].map((v,gi)=>{
+                  const y=getY(v);
                   return (
-                    <rect key={i}
-                      x={x+barGenislik*0.15} y={isYuzde?(pozitif?y:sifirY):y}
-                      width={Math.max(1,barGenislik*0.7)} height={Math.max(1,yukseklik)}
-                      fill={tooltip===i?C.blue:(isYuzde?(pozitif?C.green:C.red):C.blue)}
-                      opacity={tooltip===null||tooltip===i?1:0.55}
-                      onClick={()=>setTooltip(tooltip===i?null:i)}
-                      style={{cursor:"pointer"}}
-                    />
+                    <g key={gi}>
+                      <line x1={cizimSolX} y1={y} x2={cizimSagX} y2={y} stroke={WA(0.1)} strokeWidth={1}/>
+                      <text x={cizimSolX-6} y={y+3} fontSize={9} textAnchor="end" fill={C.sub}>{fmtDeger(v)}</text>
+                    </g>
                   );
                 })}
+                {/* Çizgi + veri noktaları */}
+                {seri.length>0 && (
+                  <polyline
+                    points={seri.map((s,i)=>`${getX(i)},${getY(s.deger)}`).join(" ")}
+                    fill="none" stroke={C.blue} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round"
+                  />
+                )}
+                {seri.map((s,i)=>(
+                  <circle key={i}
+                    cx={getX(i)} cy={getY(s.deger)}
+                    r={tooltip===i?5:3}
+                    fill={tooltip===i?C.blue:C.card}
+                    stroke={C.blue} strokeWidth={2}
+                    opacity={tooltip===null||tooltip===i?1:0.7}
+                    onClick={()=>setTooltip(tooltip===i?null:i)}
+                    style={{cursor:"pointer"}}
+                  />
+                ))}
+                {/* X ekseni — altta birkaç tarih etiketi (GG-AA) */}
+                {xEtiketIdx.map(i=>(
+                  <text key={i} x={getX(i)} y={GH-2} fontSize={9} textAnchor="middle" fill={C.sub}>{kisaTarih(seri[i].tarih)}</text>
+                ))}
               </svg>
               {tooltip!=null&&seri[tooltip]&&(
                 <div style={{marginTop:8,textAlign:"center",background:WA(0.06),borderRadius:10,padding:"6px 10px"}}>
