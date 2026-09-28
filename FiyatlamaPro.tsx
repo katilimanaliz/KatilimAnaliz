@@ -923,7 +923,7 @@ function ProfilAyarlari({kimlik,nav}:{kimlik:ReturnType<typeof useKpKimlik>;nav:
 // hesapGiris'teki AYNI basit "sabit geri hedefi" deseni; nereden açıldığını
 // hatırlayıp oraya dönmek istersen ayrı bir state (örn. geriDonulecekEkran)
 // eklemek gerekir.
-function ProSatinAl({kimlik,nav}:{kimlik:ReturnType<typeof useKpKimlik>;nav:(sc:string)=>void}){
+function ProSatinAl({kimlik,nav,onHesapGerekli}:{kimlik:ReturnType<typeof useKpKimlik>;nav:(sc:string)=>void;onHesapGerekli:(mod:"giris"|"kayit")=>void}){
   const [donem,setDonem]=useState<"aylik"|"yillik">("yillik");
   const [gonderiliyor,setGonderiliyor]=useState(false);
   const [geriYukleniyor,setGeriYukleniyor]=useState(false);
@@ -960,6 +960,12 @@ function ProSatinAl({kimlik,nav}:{kimlik:ReturnType<typeof useKpKimlik>;nav:(sc:
   // paketlerin dahili tipleri MONTHLY/ANNUAL, bu daha güvenilir bir eşleşme
   // (panel taraflı bir isim değişikliği kodu bozmaz).
   const satinAl=async()=>{
+    // ── PRO İÇİN HESAP ŞARTI (2026-09-28, kullanıcı isteği) ─────────────────
+    // Hesapsız satın alma RevenueCat'te anonim bir kimliğe bağlanıyordu:
+    // Pro yalnızca o cihazda çalışır, masaüstü/web ve sunucu (webhook) onu
+    // tanıyamazdı. Artık satın almadan önce hesap açılıyor/giriş yapılıyor;
+    // hesap açılınca kullanıcı Pro ekranına geri döndürülüyor.
+    if(!kimlik.kullanici){ onHesapGerekli("kayit"); return; }
     setGonderiliyor(true);
     kimlik.setKimlikHata(null);
     const gercekIsNative=(window as any).Capacitor?.isNativePlatform?.() ?? false;
@@ -1054,14 +1060,29 @@ function ProSatinAl({kimlik,nav}:{kimlik:ReturnType<typeof useKpKimlik>;nav:(sc:
         {satir("Banka oranı alarmı", false, true)}
         {satir("Haber bildirimi kategorileri", false, true)}
         {satir("Hesaplamaları PDF/WhatsApp ile paylaş", false, true)}
-        {satir("Hesaplayıcılar, BİST & fon tarama", true, true)}
+        {satir("Hesaplama araçları (günlük)", "5 farklı", "Sınırsız")}
+        {satir("BİST & fon tarama", true, true)}
       </Card>
 
       {kimlik.kimlikHata && <p style={{margin:"0 2px 12px",fontSize:12.5,color:C.red,fontWeight:600,textAlign:"center"}}>{kimlik.kimlikHata}</p>}
 
+      {!kimlik.kullanici && (
+        <div style={{display:"flex",gap:10,alignItems:"flex-start",background:C.blueLight,borderRadius:12,padding:"10px 12px",margin:"0 0 10px"}}>
+          <span style={{fontSize:15,lineHeight:"18px"}}>👤</span>
+          <p style={{margin:0,fontSize:12,color:C.text,lineHeight:1.5}}>
+            {CV("Pro üyelik hesabına bağlanır; telefonda ve masaüstünde aynı Pro'yu kullanırsın. Satın almak için önce hesap açman gerekiyor.")}
+          </p>
+        </div>
+      )}
       <button onClick={satinAl} disabled={gonderiliyor} style={{width:"100%",padding:"15px 0",borderRadius:14,border:"none",background:"linear-gradient(135deg,#1B9E7A,#2CCB9A)",color:"#06120E",fontSize:15,fontWeight:700,cursor:gonderiliyor?"default":"pointer",opacity:gonderiliyor?0.6:1,marginTop:4}}>
-        {gonderiliyor?"…":CV("7 Gün Ücretsiz Dene")}
+        {gonderiliyor?"…":CV(kimlik.kullanici?"7 Gün Ücretsiz Dene":"Hesap Aç ve 7 Gün Ücretsiz Dene")}
       </button>
+      {!kimlik.kullanici && (
+        <p style={{textAlign:"center",fontSize:12,color:WA(0.55),margin:"10px 0 0"}}>
+          {CV("Zaten hesabın var mı?")}{" "}
+          <span onClick={()=>onHesapGerekli("giris")} style={{color:C.blue,fontWeight:700,cursor:"pointer"}}>{CV("Giriş Yap")}</span>
+        </p>
+      )}
       <p style={{textAlign:"center",fontSize:10.5,color:WA(0.4),margin:"10px 10px 0",lineHeight:1.5}}>
         {CV("Deneme sonrası")} {donem==="yillik"?"yıllık ₺999,99":"aylık ₺99,99"} {CV("olarak devam eder. Dönem bitmeden en az 24 saat önce iptal etmezsen abonelik App Store/Google Play hesabın üzerinden otomatik yenilenir.")}
       </p>
@@ -20766,15 +20787,17 @@ const HESAPLA_ARAC_LISTESI = [
 ];
 
 // ⚠️ 2026-09-26 (kullanıcı isteği: "hesaplama modüllerinde de ücretsiz
-// seçeneğinde günde 5 tane ile sınırla"): hesaplama araçları reaktif
-// (girdi değiştikçe sonuç anında güncelleniyor) — ayrı bir "Hesapla"
-// düğmesi YOK, dolayısıyla "kaç hesaplama yapıldığı" sayılamaz. Bunun
-// yerine EKRAN AÇMA sayılıyor: bir aracı bugün İLK kez açmak sayaca 1
-// ekler, AYNI aracı bugün tekrar tekrar açmak (girdileri değiştirip
-// yeniden bakmak) ÜCRETSİZ — portfoyEkle'deki "sadece gerçekten yeni
-// olan sayılır" mantığının aynısı. Cihaz/localStorage bazlı (AI
-// Asistan'ın cihazId limitiyle AYNI felsefe — hesap yerine cihaz, çünkü
-// bu tamamen istemci tarafında, backend'e hiç gitmiyor).
+// seçeneğinde günde 5 tane ile sınırla") — 2026-09-28'de kısa süre kaldırılıp
+// AYNI GÜN geri getirildi (kullanıcı isteği: "sadece uyarı versin, daha fazla
+// hesaplama için Pro üyelik almanız gerekmektedir, o şekilde Pro ekranına
+// yönlendirsin"). FARK: limit dolunca artık kullanıcı SESSİZCE Pro ekranına
+// atılmıyor; önce nav() içinde bir UYARI penceresi çıkıyor (bkz.
+// hesaplamaLimitUyari), "Pro'ya Geç" denirse Pro ekranı açılıyor.
+// Hesaplama araçları reaktif (girdi değiştikçe sonuç anında güncelleniyor) —
+// ayrı bir "Hesapla" düğmesi YOK, dolayısıyla "kaç hesaplama yapıldığı"
+// sayılamaz. Bunun yerine EKRAN AÇMA sayılıyor: bir aracı bugün İLK kez açmak
+// sayaca 1 ekler, AYNI aracı bugün tekrar açmak ÜCRETSİZ. Cihaz/localStorage
+// bazlı (AI Asistan'ın cihazId limitiyle AYNI felsefe).
 const KP_HESAPLAMA_ANAHTARLARI = new Set(HESAPLA_ARAC_LISTESI.map(h=>h.key));
 const KP_HESAPLAMA_UCRETSIZ_LIMIT = 5;
 const KP_HESAPLAMA_LS_KEY = "kp_hesaplama_kullanim_v1";
@@ -29214,6 +29237,14 @@ function App(){
   // HesapGiris ekranını hangi sekmeyle (kayıt/giriş) açacağını buradan
   // belirliyor.
   const [girisBaslangicModu,setGirisBaslangicModu]=useState<"giris"|"kayit">("giris");
+  // ── GİRİŞ SONRASI HEDEF (2026-09-28) ──────────────────────────────────────
+  // Pro ekranından hesap açmaya/giriş yapmaya gönderilen kullanıcı, işlem
+  // bitince Profil'e değil Pro ekranına dönsün. girisHedefIsteniyor bayrağı,
+  // hedefin YALNIZCA Pro ekranı tarafından (onHesapGerekli) kurulmasını
+  // sağlıyor: hesapGiris'e başka herhangi bir yoldan gelinirse eski (bayat)
+  // hedef nav() içinde temizleniyor.
+  const girisSonrasiHedef=useRef<string|null>(null);
+  const girisHedefIsteniyor=useRef(false);
   const [piyasaTabloFiltre,setPiyasaTabloFiltre]=useState("gostergeler");
   // "Göstergeler" sekmesi içi alt-kategori (2026-07-23 kategorileştirme):
   // aktivite / enflasyon / para / karpayi / risk. Bankanın kendi makro veri
@@ -29505,31 +29536,39 @@ function App(){
   // ── navRef (2026-09-27) ───────────────────────────────────────────────
   // Push bildirim dinleyicisi (kök seviyede BİR KERE — [] bağımlılıklı —
   // kurulan efekt) "nav"ı DOĞRUDAN çağıramaz: nav aşağıda tanımlanıyor ve
-  // kendi içinde kimlik.pro.aktif gibi her render'da değişebilen değerlere
-  // bakıyor — [] efekti nav'ı doğrudan yakalasaydı sonsuza dek İLK
-  // render'daki (muhtemelen henüz Pro durumu yüklenmeden önceki) bayat
-  // kopyasını kullanırdı. navRef, her render'da en güncel nav'ı taşıyan
-  // SABİT bir kutu — push dinleyicisi navRef'in KENDİSİNİ (stabil)
-  // yakalıyor, çağırırken .current'taki GÜNCEL nav'ı kullanıyor.
+  // her render'da yeniden oluşuyor — [] efekti nav'ı doğrudan yakalasaydı
+  // sonsuza dek İLK render'daki kopyasını kullanırdı. navRef, her render'da
+  // en güncel nav'ı taşıyan SABİT bir kutu — push dinleyicisi navRef'in
+  // KENDİSİNİ (stabil) yakalıyor, çağırırken .current'taki GÜNCEL nav'ı kullanıyor.
   const navRef=useRef<((sc:string,geriHedefi?:string)=>void)|null>(null);
-  // ⚠️ 2026-09-26: hesaplama araçlarına girişte günlük ücretsiz limiti
-  // burada, TEK merkezden kontrol ediliyor — bir araca nasıl ulaşılırsa
-  // ulaşılsın (Favoriler, Hesaplamalar menüsü, arama, Son Kullanılanlar…)
-  // HEPSİ bu nav() fonksiyonundan geçiyor, ayrı ayrı her tıklama noktasını
-  // değiştirmeye gerek kalmıyor (Paylaş/alarm'da kaçındığımız "çok sayıda
-  // çağrı noktası" riskinin AKSİNE, burada TEK bir çağrı noktası var).
-  // setScreen("proSatinAl") DOĞRUDAN çağrılıyor (kpProGerekliMi değil) —
-  // kpProGerekliMi kendi içinde nav() çağırır, nav()'un kendi gövdesinden
-  // nav()'u çağırmak gereksiz bir dolaylama olurdu.
+  // ── HESAPLAMA LİMİTİ UYARISI (2026-09-28) ───────────────────────────────
+  // Ücretsiz/misafir kullanıcı günün 6. FARKLI hesaplama aracını açmaya
+  // çalışınca sayfa DEĞİŞMİYOR, uyarı penceresi açılıyor. "Pro'ya Geç"
+  // Pro satın alma ekranına götürüyor. Kapı TEK merkezde (nav): bir araca
+  // Favoriler/menü/arama/Son Kullanılanlar — hangi yoldan gidilirse gidilsin
+  // buradan geçiyor. Pro durumu hâlâ yükleniyorsa (giriş yapmış kullanıcı,
+  // ilk yüzlerce ms) kapı UYGULANMIYOR ve sayaç artmıyor — gerçek Pro üyeyi
+  // yanlışlıkla engellememek için.
+  const [hesaplamaLimitUyari,setHesaplamaLimitUyari]=useState(false);
   const nav=(sc,geriHedefi?:string)=>{
-    if(!kimlik.pro.aktif && !kpHesaplamaIzinVer(sc)){
-      backHedefOzel.current=null;
-      setScreen("proSatinAl");
+    if(sc==="hesapGiris"){
+      if(!girisHedefIsteniyor.current) girisSonrasiHedef.current=null;
+      girisHedefIsteniyor.current=false;
+    }
+    if(!kimlik.pro.aktif && !kimlik.proYukleniyor && !kpHesaplamaIzinVer(sc)){
+      setHesaplamaLimitUyari(true);
       return;
     }
     backHedefOzel.current=geriHedefi||null;setScreen(sc);
   };
   useEffect(()=>{ navRef.current=nav; }); // deps YOK — her render sonrasi calisip navRef'i taze tutar
+  const girisTamamlandi=()=>{ const h=girisSonrasiHedef.current; girisSonrasiHedef.current=null; nav(h||"profil"); };
+  const proIcinHesapAc=(mod:"giris"|"kayit")=>{
+    setGirisBaslangicModu(mod);
+    girisSonrasiHedef.current="proSatinAl";
+    girisHedefIsteniyor.current=true;
+    nav("hesapGiris");
+  };
   // ── PRO DURUMU SENKRONU (2026-09-27) — bkz. kpGuncelPro açıklaması ─────
   useEffect(()=>{ kpGuncelPro=kimlik.pro; kpProYukleniyorMu=kimlik.proYukleniyor; kpGuncelNav=nav; });
   const irHisseFonDetay=(tur:"hisse"|"fon", sembol:string, geriHedefi?:string)=>{
@@ -29663,6 +29702,30 @@ function App(){
           hazır bekliyor), tur kapanır kapanmaz (onboardingAcik false olunca)
           otomatik olarak ortaya çıkıyor. Diğer kullanıcılarda onboardingAcik
           zaten hep false olduğu için davranış değişmiyor. */}
+      {/* ── HESAPLAMA LİMİTİ UYARI PENCERESİ (2026-09-28) ── */}
+      {hesaplamaLimitUyari && (
+        <div onClick={()=>setHesaplamaLimitUyari(false)} style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.55)",zIndex:9998,
+          display:"flex",alignItems:"center",justifyContent:"center",padding:20,
+          ...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:C.card,borderRadius:18,maxWidth:340,width:"100%",
+            padding:"24px 22px 18px",textAlign:"center",boxShadow:"0 8px 32px rgba(0,0,0,0.35)"}}>
+            <div style={{fontSize:34,marginBottom:10}}>⭐</div>
+            <div style={{fontSize:16,fontWeight:700,color:C.label,marginBottom:6}}>{CV("Günlük hesaplama sınırına ulaştın")}</div>
+            <p style={{margin:"0 0 18px",fontSize:12.5,color:C.sub,lineHeight:1.55}}>
+              {CV("Ücretsiz kullanımda günde 5 farklı hesaplama aracı açılabilir. Daha fazla hesaplama için Pro üyelik almanız gerekmektedir.")}
+            </p>
+            <button onClick={()=>{ setHesaplamaLimitUyari(false); nav("proSatinAl"); }} style={{width:"100%",padding:"12px 0",borderRadius:12,border:"none",
+              background:"linear-gradient(135deg,#1B9E7A,#2CCB9A)",color:"#06120E",fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginBottom:8}}>
+              {CV("Pro'ya Geç")}
+            </button>
+            <button onClick={()=>setHesaplamaLimitUyari(false)} style={{width:"100%",padding:"10px 0",borderRadius:12,border:"none",
+              background:"transparent",color:C.sub,fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
+              {CV("Vazgeç")}
+            </button>
+          </div>
+        </div>
+      )}
+
       {guncellemeHazir && !onboardingAcik && (
         <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.6)",zIndex:9999,
           display:"flex",alignItems:"center",justifyContent:"center",padding:20,
@@ -31408,13 +31471,14 @@ function App(){
             </div>
             )}
 
-            {/* ⚠️ 2026-09-26: Pro'ya Geç kartı — sadece GİRİŞ YAPMIŞ ve
-                HENÜZ PRO OLMAYAN kullanıcıya gösteriliyor. proYukleniyor
+            {/* ⚠️ 2026-09-26: Pro'ya Geç kartı — HENÜZ PRO OLMAYAN herkese
+                gösteriliyor (2026-09-28: misafirler de dahil, kullanıcı isteği
+                "profil ekranında da Pro satın alma ekranı koyalım"). proYukleniyor
                 true iken (Firestore sorgusu sürerken) hiç göstermiyoruz —
                 aksi halde "Ücretsiz" varsayılanıyla bir an için yanlışlıkla
                 Pro olmayan biri gibi görünüp, sorgu bitince kart aniden
                 kaybolabilir (Pro kullanıcılar için rahatsız edici titreme). */}
-            {kimlik.kullanici && !kimlik.proYukleniyor && !kimlik.pro.aktif && (
+            {!kimlik.proYukleniyor && !kimlik.pro.aktif && (
               <div onClick={()=>nav("proSatinAl")} style={{cursor:"pointer",display:"flex",alignItems:"center",gap:12,background:"linear-gradient(135deg,#1B9E7A,#2CCB9A)",borderRadius:16,padding:"14px 16px",marginBottom:12}}>
                 <span style={{width:36,height:36,borderRadius:18,background:"rgba(6,18,14,0.15)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:16}}>⭐</span>
                 <div style={{flex:1,minWidth:0}}>
@@ -31663,10 +31727,10 @@ function App(){
         />}
         {screen==="finansalGostergeler"&&<FinansalGostergeler onKurTikla={(k:any)=>setSeciliKur(k)}/>}
         {screen==="ayarlar"&&<Ayarlar settings={settings} onSave={handleSave}/>}
-        {screen==="hesapGiris"&&<HesapGiris kimlik={kimlik} onBasarili={()=>nav("profil")} nav={nav} baslangicModu={girisBaslangicModu}/>}
-        {screen==="epostaDogrula"&&<EpostaDogrula kimlik={kimlik} onBasarili={()=>nav("profil")} nav={nav}/>}
+        {screen==="hesapGiris"&&<HesapGiris kimlik={kimlik} onBasarili={girisTamamlandi} nav={nav} baslangicModu={girisBaslangicModu}/>}
+        {screen==="epostaDogrula"&&<EpostaDogrula kimlik={kimlik} onBasarili={girisTamamlandi} nav={nav}/>}
         {screen==="profilAyarlari"&&<ProfilAyarlari kimlik={kimlik} nav={nav}/>}
-        {screen==="proSatinAl"&&<ProSatinAl kimlik={kimlik} nav={nav}/>}
+        {screen==="proSatinAl"&&<ProSatinAl kimlik={kimlik} nav={nav} onHesapGerekli={proIcinHesapAc}/>}
         {screen==="kvkkAydinlatma"&&<KvkkAydinlatma/>}
         {screen==="gizlilikPolitikasi"&&<GizlilikPolitikasi/>}
 
