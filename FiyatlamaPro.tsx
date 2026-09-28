@@ -803,6 +803,10 @@ function ProfilAyarlari({kimlik,nav}:{kimlik:ReturnType<typeof useKpKimlik>;nav:
   // gösteriliyor, yanındaki kalem ikonuna dokununca düzenleme moduna geçiyor
   // (yeşil onay ikonuna dokununca kaydedip tekrar salt okunura dönüyor).
   const [adDuzenleModu,setAdDuzenleModu]=useState(false);
+  // /profil-ayarlari artık doğrudan açılıp yenilenebiliyor: Firebase oturumu
+  // birkaç yüz ms geç geldiği için useState ilk değeri boş kalırdı. Kullanıcı
+  // adı sonradan gelince (ve düzenleme modunda DEĞİLKEN) alanı güncelle.
+  useEffect(()=>{ if(!adDuzenleModu) setAd(kimlik.kullanici?.ad||""); },[kimlik.kullanici?.ad]);
   const [adGonderiliyor,setAdGonderiliyor]=useState(false);
   const [adKaydedildi,setAdKaydedildi]=useState(false);
 
@@ -20628,6 +20632,22 @@ const SCREEN_TO_PATH: Record<string,string> = {
   hazineSenaryo: "/kur-hareketi-senaryo",
   piyasaHaberleri: "/piyasa-haberleri",
   finansalGostergeler: "/finansal-gostergeler",
+  // 2026-09-28: KVKK/Gizlilik sayfaları uygulama İÇİ ekran olduğundan adres
+  // çubuğu "katilimplus.com"da takılı kalıyordu. (Eski statik /gizlilik
+  // sayfasıyla ÇAKIŞMAMASI için yol "/gizlilik-politikasi".)
+  kvkkAydinlatma: "/kvkk-aydinlatma-metni",
+  gizlilikPolitikasi: "/gizlilik-politikasi",
+  // 2026-09-28: adres çubuğu HİÇ değişmeyen kalan statik ekranlar.
+  // BİLİNÇLİ OLARAK YOK: fonDetay (hangi fon → state'e bağlı), hesapGiris ve
+  // epostaDogrula (geçici oturum-açma adımları: adresleri olsaydı giriş
+  // yaptıktan sonra tarayıcı "Geri"si oturum açık halde giriş formunu
+  // gösterirdi — tam da şikâyet edilen davranış). Yeni bir MENU ekranı
+  // eklenince buraya da eklenmeli — doğrulama script'i bunu denetliyor.
+  profilAyarlari: "/profil-ayarlari",
+  proSatinAl: "/katilim-plus-pro",
+  katilimSektoru: "/katilim-bankaciligi-sektoru",
+  ekonomiSozluk: "/ekonomi-sozlugu",
+  taksitKarsilastirma: "/taksit-karsilastirma",
 };
 const PATH_TO_SCREEN: Record<string,string> = Object.fromEntries(
   Object.entries(SCREEN_TO_PATH).map(([ekran,yol])=>[yol,ekran])
@@ -29558,6 +29578,15 @@ function App(){
   // yanlışlıkla engellememek için.
   const [hesaplamaLimitUyari,setHesaplamaLimitUyari]=useState(false);
   const nav=(sc,geriHedefi?:string)=>{
+    // ── KVKK/GİZLİLİK'TEN GERİ DÖNÜŞ (2026-09-28, kullanıcı raporu: giriş
+    // yapılmış olduğu halde "Geri" üyelik giriş sayfasına atıyordu) ────────
+    // Bu iki sayfanın varsayılan geri hedefi (MENU) hesapGiris'ti — kayıt
+    // formundaki linkler için doğru, ama Footer/sol menüden açılınca yanlış.
+    // Artık hesapGiris DIŞINDA bir ekrandan açılırsa geri hedefi O EKRAN.
+    if((sc==="kvkkAydinlatma"||sc==="gizlilikPolitikasi") && !geriHedefi
+       && screen!=="hesapGiris" && screen!=="kvkkAydinlatma" && screen!=="gizlilikPolitikasi"){
+      geriHedefi=screen;
+    }
     if(sc==="hesapGiris"){
       if(!girisHedefIsteniyor.current) girisSonrasiHedef.current=null;
       girisHedefIsteniyor.current=false;
@@ -29615,7 +29644,11 @@ function App(){
   };
   const back=()=>{
     if(backHedefOzel.current){ const h=backHedefOzel.current; backHedefOzel.current=null; setScreen(h); return; }
-    const b=MENU[screen]?.back;if(b)setScreen(b);
+    let b=MENU[screen]?.back;
+    // Giriş zaten yapılmışsa üyelik giriş sayfasına DÖNÜLMEZ (ör. tarayıcıdan
+    // /gizlilik-politikasi'na doğrudan gelen üye) — Profil'e dön.
+    if(b==="hesapGiris" && kimlik.kullanici) b="profil";
+    if(b)setScreen(b);
   };
   const meta=MENU[screen];
 
