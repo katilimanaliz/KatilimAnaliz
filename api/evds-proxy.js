@@ -115,8 +115,16 @@ const redis = new Redis({
 // hemen değiştirmez). Versiyon artırılmadan bırakılırsa eski (9 günlük
 // pencereyle hesaplanmış) önbellek 6 saat daha eski/yüksek değeri döndürmeye
 // devam ederdi.
-const KV_ANLIK_KEY = "evds:anlik:v21";
-const KV_TARIHSEL_PREFIX = "evds:tarihsel:v21:";
+// v22 (2026-09-28, kullanıcı isteği: "Finansman Kâr Oranları satırlarına
+// basınca tablo ve grafik çıksın"): HAFTALIK_KBK zaten haftalık frekansta
+// ~90/200 günlük bir aralık çekiyordu, ama yalnızca SON değer (sonDeger)
+// çıkarılıyordu — dizinin geri kalanı atılıyordu. Ekstra TCMB isteği
+// GEREKMEDİ: aynı yanıttan (hkbkJson) her kod için _SERI de çıkarıldı (bkz.
+// TP.APIFON4_SERI ile aynı desen). Pencere de 90 → 200 güne genişletildi
+// (diğer "isHaftalik" seriler gibi), daha uzun bir grafik için. Versiyon
+// artırılmazsa eski önbellek 6 saat boyunca yeni _SERI alanlarını göstermez.
+const KV_ANLIK_KEY = "evds:anlik:v22";
+const KV_TARIHSEL_PREFIX = "evds:tarihsel:v22:";
 
 // Vercel'in varsayılan fonksiyon süresi (Hobby planda genelde 10sn) artık 8 dış
 // isteğe (5 EVDS + 3 FRED) yetmiyor — bu yüzden ERR_CONNECTION_CLOSED alınıyordu
@@ -348,8 +356,8 @@ function spkIhraccilariGrupla(kayitlar){
 //
 // NEDEN BU KAYNAK: SPK'nın kendi servislerinde (tür bazı, ihraççı bazı, özel
 // durum açıklamaları) kira sertifikası ihraçlarının HANGİ KURUM ADINA
-// yapıldığı bilgisi yok — `kaynakKurulus` alanı canlı veride hep null.
-// KAP'ta ise `relatedStocks` alanı bu bilgiyi veriyor (örn. KATILIM VARLIK
+// yapıldığı bilgisi yok — `kaynakKurulus` alanı canlı veride hep null. KAP'ta
+// ise `relatedStocks` alanı bu bilgiyi veriyor (örn. KATILIM VARLIK
 // KİRALAMA'nın bildiriminde relatedStocks="HDFFL" → fon kullanıcısı).
 //
 // ⚠️ KIRILGANLIK UYARISI: Bu BELGELENMEMİŞ bir iç uçtur. KAP arayüzünü
@@ -1797,7 +1805,7 @@ export default async function handler(req,res){
       guvenliCek("rezerv_standby", `${BASE}/series=${REZERV_STANDBY.join("-")}&startDate=${onceki(400)}&endDate=${tarihStr(new Date())}&type=json&frequency=3`),
       guvenliCek("disticaret", `${BASE}/series=${DISTICARET.join("-")}&startDate=${onceki(1150)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
       guvenliCek("gosterge", `${BASE}/series=${GOSTERGE.join("-")}&startDate=${onceki(760)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
-      guvenliCek("haftalik_kbk", `${BASE}/series=${HAFTALIK_KBK.join("-")}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=3`),
+      guvenliCek("haftalik_kbk", `${BASE}/series=${HAFTALIK_KBK.join("-")}&startDate=${onceki(200)}&endDate=${tarihStr(new Date())}&type=json&frequency=3`),
       guvenliCek("test_gsyh_ceyrek", `${BASE}/series=${TEST_GSYH.join("-")}&startDate=${onceki(2000)}&endDate=${tarihStr(new Date())}&type=json&frequency=6`),
     ]);
 
@@ -1919,6 +1927,7 @@ export default async function handler(req,res){
     };
 
     for(const s of HAFTALIK_KBK) sonuclar[s]=sonDeger(hkbkJson?.items||[],s);
+    for(const s of HAFTALIK_KBK) sonuclar[s+"_SERI"]=tumDegerler(hkbkJson?.items||[],s).slice(-24);
 
     const gostItems = gostJson?.items||[];
     sonuclar["GOSTERGE_KKO"]=sonDeger(gostItems, "TP.KKO2.IS.TOP");

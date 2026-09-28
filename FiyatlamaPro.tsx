@@ -20026,6 +20026,13 @@ function GostergeGrafikModal({ad,seri,birim,onClose}:{ad:string,seri:{tarih:stri
 // Grafik yerine geçmiş verileri satır satır (tarih | değer) gösteren tablo
 // tarzı modal. Ana ekrandaki "Finansal Göstergeler" mini listesindeki bir
 // satıra dokunulunca açılır.
+// ── TABLO + GRAFİK BİRLEŞTİRİLDİ (2026-09-28, kullanıcı isteği: "satıra
+// basınca aşağıda bir tablo ve grafik çıksa nasıl olur") — bu modal
+// "Piyasa & Veriler" ekranındaki HER kategori (aktivite/enflasyon/para/
+// kâr payı/risk) için ortak; grafik eklemesi hepsine birden yayılıyor.
+// Grafik GostergeGrafikModal ile AYNI çubuk-grafik mantığını kullanıyor
+// (kod tekrarını önlemek için ayrı bir fonksiyona çıkarılmadı — ikisinin
+// layout'u/state'i yeterince farklı; birleştirmek daha büyük bir riskti).
 function GostergeTabloModal({ad,seri,birim,onClose}:{ad:string,seri:{tarih:string,deger:number}[],birim?:string,onClose:()=>void}){
   // birim: undefined → yüzde | "milyon$" → Milyar $ (negatifler cari açık/dış
   // ticaret açığı için işaretli gösterilir) | "endeks" → düz sayı (REK gibi)
@@ -20037,9 +20044,19 @@ function GostergeTabloModal({ad,seri,birim,onClose}:{ad:string,seri:{tarih:strin
     : `%${v.toFixed(2).replace(".",",")}`;
   const siraliSeri=[...seri].reverse(); // en yeni veri en üstte
 
+  const [tooltip,setTooltip]=useState<number|null>(null);
+  const degerler=seri.map(s=>s.deger);
+  const minV=seri.length? (isYuzde ? Math.min(0,...degerler) : Math.min(...degerler)*0.98) : 0;
+  const maxV=seri.length? (isYuzde ? Math.max(...degerler) : Math.max(...degerler)*1.02) : 1;
+  const aralik=(maxV-minV)||1;
+  const [grafikRef,grafikW]=useOlculenGenislik(320);
+  const GW=grafikW,GH=110,GPAD=8,barGenislik=seri.length?(GW-GPAD*2)/seri.length:0;
+  const getY=(v:number)=>GH-GPAD-((v-minV)/aralik)*(GH-GPAD*2);
+  const sifirY=isYuzde ? getY(0) : GH-GPAD;
+
   return(
     <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.7)",zIndex:600,display:"flex",alignItems:"flex-end",...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}} onClick={onClose}>
-      <div style={{background:C.card,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",maxHeight:"80vh",display:"flex",flexDirection:"column"}} onClick={e=>e.stopPropagation()}>
+      <div style={{background:C.card,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",maxHeight:"85vh",display:"flex",flexDirection:"column"}} onClick={e=>e.stopPropagation()}>
         <div style={{padding:"16px 20px 12px",borderBottom:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
           <div>
             <p style={{margin:0,fontSize:16,fontWeight:700,color:C.label}}>{ad}</p>
@@ -20051,7 +20068,36 @@ function GostergeTabloModal({ad,seri,birim,onClose}:{ad:string,seri:{tarih:strin
           <p style={{margin:0,padding:"24px 20px",fontSize:13,color:C.sub,textAlign:"center"}}>Geçmiş veri bulunamadı.</p>
         ) : (
           <div style={{flex:1,overflowY:"auto"}}>
-            <div style={{display:"grid",gridTemplateColumns:"1fr auto",padding:"9px 20px",background:C.thead,position:"sticky",top:0,zIndex:1}}>
+            <div ref={grafikRef} style={{padding:"16px 20px 4px"}}>
+              <svg viewBox={`0 0 ${GW} ${GH}`} style={{width:"100%",height:GH,display:"block",overflow:"visible"}}>
+                <line x1={GPAD} y1={sifirY} x2={GW-GPAD} y2={sifirY} stroke={WA(0.15)} strokeWidth={1}/>
+                {seri.map((s,i)=>{
+                  const x=GPAD+i*barGenislik;
+                  const y=getY(s.deger);
+                  const yukseklik=Math.abs(sifirY-y);
+                  const pozitif=s.deger>=0;
+                  return (
+                    <rect key={i}
+                      x={x+barGenislik*0.15} y={isYuzde?(pozitif?y:sifirY):y}
+                      width={Math.max(1,barGenislik*0.7)} height={Math.max(1,yukseklik)}
+                      fill={tooltip===i?C.blue:(isYuzde?(pozitif?C.green:C.red):C.blue)}
+                      opacity={tooltip===null||tooltip===i?1:0.55}
+                      onClick={()=>setTooltip(tooltip===i?null:i)}
+                      style={{cursor:"pointer"}}
+                    />
+                  );
+                })}
+              </svg>
+              {tooltip!=null&&seri[tooltip]&&(
+                <div style={{marginTop:8,textAlign:"center",background:WA(0.06),borderRadius:10,padding:"6px 10px"}}>
+                  <span style={{fontSize:11.5,color:C.sub}}>{seri[tooltip].tarih}</span>
+                  <span style={{fontSize:13.5,fontWeight:700,color:isYuzde?(seri[tooltip].deger>=0?C.green:C.red):C.blue,marginLeft:8}}>
+                    {fmtDeger(seri[tooltip].deger)}
+                  </span>
+                </div>
+              )}
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr auto",padding:"9px 20px",background:C.thead,position:"sticky",top:0,zIndex:1,marginTop:8}}>
               <span style={{fontSize:10,fontWeight:700,color:"#fff",letterSpacing:"0.04em"}}>TARİH</span>
               <span style={{fontSize:10,fontWeight:700,color:"#fff",letterSpacing:"0.04em"}}>DEĞER</span>
             </div>
@@ -31142,6 +31188,9 @@ function App(){
                 // ORANTISAL olduğu için (bileşik gibi üstel değil), yıllık basit
                 // oranın aylık karşılığı basitçe 12'ye bölünerek elde edilir.
                 const basitAylik = basit!=null ? basit/12 : null;
+                // ⚠️ 2026-09-28: seri/seriAd eklendi — backend artık HAFTALIK_KBK_SERI
+                // alanlarını da dolduruyor (bkz. api/evds-proxy.js v22). Bu satırlar
+                // artık diğer kategoriler gibi tıklanınca tablo+grafik açıyor.
                 return {
                   ad, kod,
                   bilesik: bilesik!=null?bilesik.toFixed(2).replace(".",","):null,
@@ -31149,6 +31198,7 @@ function App(){
                   basitAylik: basitAylik!=null?basitAylik.toFixed(2).replace(".",","):null,
                   tarih: v?.tarih?`${v.tarih} · Haftalık Akım`:"TCMB EVDS",
                   canli: v!=null,
+                  seri: evdsMakro?.[kod+"_SERI"], seriAd: ad,
                 };
               };
               const KAR_PAYI:any[] = [
@@ -31275,8 +31325,10 @@ function App(){
 
                   <div style={{marginTop:2}}>
                     {aktifSekme.id==="karpayi" ? (
-                      KAR_PAYI.map((g,i)=>(
-                        <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+                      KAR_PAYI.map((g,i)=>{
+                        const tiklanabilirKp = g.seri && g.seri.length>0;
+                        return (
+                        <div key={i} onClick={()=>tiklanabilirKp&&setPiyasaGostergeTablo({ad:g.seriAd,seri:g.seri,birim:g.seriBirim})} style={{display:"flex",justifyContent:"space-between",alignItems:"center",cursor:tiklanabilirKp?"pointer":"default",
                           ...(TEMA==="acik"
                             ? {padding:"11px 14px",borderRadius:12,marginBottom:8,
                                background:(i%2===1?"#F3F6FA":"#E9EEF4"),
@@ -31301,7 +31353,8 @@ function App(){
                             {g.basitAylik!=null&&<p style={{margin:"1px 0 0",fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#3D5771":"rgba(255,255,255,0.72)"),fontFamily:"monospace"}}>aylık ≈ %{g.basitAylik}</p>}
                           </div>
                         </div>
-                      ))
+                        );
+                      })
                     ) : (
                       aktifSekme.veri.map((g:any,i:number)=>{
                         const tiklanabilir = g.seri && g.seri.length>0;
