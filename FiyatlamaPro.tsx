@@ -5737,6 +5737,17 @@ function HaberGorseli({link}:{link?:string}){
 // açıldığında kartlar henüz veriyi yazmamışsa şerit BOŞ görünür ve birkaç
 // saniye sonra dolar — bilerek kabul edildi.
 const SERIT_YUKSEKLIK = 34;
+// ── MASAÜSTÜ İÇERİK GENİŞLİĞİ SINIRI (2026-09-28, kullanıcı isteği: HangiKredi
+// gibi geniş monitörde içerik ekranın sonuna kadar uzamasın, ortada kalsın) ──
+// Sol menü + üst şerit aynı; yalnızca ORTADAKİ içerik alanı bu genişlikte
+// (EKRAN pikseli) sınırlanıp ortalanıyor, iki yanda aynı arka plan devam ediyor.
+// İçerik kapsayıcısı CSS zoom taşıdığı için orada sınır bu değer / icerikOlcek
+// olarak veriliyor; sabit başlıklar zoom'suz olduğundan doğrudan bu değer.
+// Sabit başlıklar ile içerik AYNI sınırı kullanmalı, yoksa başlık sol kenarda
+// kalıp içerik ortada dururdu. Tam ekran hisse/fon detay katmanları etkilenmez.
+// İSTİSNA (kullanıcı isteği, aynı gün): Ana Sayfa, Piyasa ve Hesapla ANA
+// MENÜLERİ eskisi gibi tam genişlikte kalıyor (bkz. icerikSinirli).
+const MASAUSTU_ICERIK_MAKS_W = 1240;
 function UstPiyasaSeridi({kalemler,onTikla}:{kalemler:any[];onTikla:(k:any)=>void}){
   const [tik,setTik]=useState(0);
   // ⚠️ 2026-09-21 (kullanıcı raporu: "üzerine mause gelince kayma
@@ -28575,6 +28586,9 @@ function App(){
   // yerine geçer). Native uygulama ve mobil web hiç etkilenmez.
   const SIDEBAR_W=genisEkran?264:0;
   const icerikOlcek=!IS_NATIVE&&ekranW>=1680?1.22:(genisEkran&&ekranW>=1360?1.12:1);
+  // İçerik genişliği sınırı SADECE bu ekranlar DIŞINDA uygulanıyor: Ana Sayfa,
+  // Piyasa ve Hesapla ana menüleri tam genişlikte kalır (kullanıcı isteği).
+  const icerikSinirli=genisEkran && screen!=="home" && screen!=="hesaplaMenu" && screen!=="piyasaMenu";
   const kolonW=IS_NATIVE?680:(genisEkran?640:430);
   const altBarW=IS_NATIVE?560:402;
   // ── ANA SAYFA SABİT ÜST BLOK — YÜKSEKLİK ÖLÇÜMÜ ─────────────────────────
@@ -30008,7 +30022,7 @@ function App(){
         </div>
       )}
     <div style={{paddingLeft:SIDEBAR_W}}>
-    <div style={{fontFamily:genisEkran?FONT_STACK_MASAUSTU:FONT_STACK_MOBIL,background:C.bg,minHeight:"100dvh",maxWidth:genisEkran?"none":kolonW,margin:"0 auto",
+    <div style={{fontFamily:genisEkran?FONT_STACK_MASAUSTU:FONT_STACK_MOBIL,background:C.bg,minHeight:"100dvh",maxWidth:icerikSinirli?MASAUSTU_ICERIK_MAKS_W/icerikOlcek:(genisEkran?"none":kolonW),margin:"0 auto",
       ...(icerikOlcek!==1?{zoom:icerikOlcek}:{})} as any}>
       <div key={screen} className="screen-anim">
       {/* header */}
@@ -32033,7 +32047,7 @@ function App(){
           position:"fixed",top:genisEkran?SERIT_YUKSEKLIK:0,left:SIDEBAR_W,right:0,zIndex:45,
           background:C.bg,
         }}>
-          <div style={{maxWidth:genisEkran?"none":kolonW,margin:"0 auto",padding:"calc(44px + env(safe-area-inset-top,0px)) 20px 12px"}}>
+          <div style={{maxWidth:icerikSinirli?MASAUSTU_ICERIK_MAKS_W:(genisEkran?"none":kolonW),margin:"0 auto",padding:"calc(44px + env(safe-area-inset-top,0px)) 20px 12px"}}>
             <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
               <button onClick={back} style={{
                 background:"rgba(91,155,216,0.12)",border:"1px solid rgba(91,155,216,0.35)",
