@@ -22332,11 +22332,18 @@ function AnahtarToggle({acik,onDegistir,devreDisi}:{acik:boolean;onDegistir:()=>
 // çağrısında ?kategori= olarak kullanılacak sabit anahtar listesi. Yeni bir
 // kategori eklenecekse buraya VE haberlerin gönderildiği yere (ayrı dosya)
 // aynı anahtarla eklenmeli.
+// ⚠️ 2026-09-28: 3 yeni kategori eklendi (merkez-bankasi, enflasyon, global)
+// ve backend haberi başlığından sınıflandırıp yalnızca eşleşen kategoriyi
+// seçmiş Pro abonelere gönderiyor (api/_lib/haberBildirimi.js
+// HABER_KATEGORI_ANAHTARLARI ile AYNI anahtarlar — biri değişirse diğeri de).
 const HABER_KATEGORILERI = [
   { key: "katilim", etiket: "Katılım Bankacılığı" },
   { key: "bist", etiket: "BİST / Hisse" },
   { key: "doviz-altin", etiket: "Döviz & Altın" },
   { key: "kfk", etiket: "KFK / Kamu Finansmanı" },
+  { key: "merkez-bankasi", etiket: "Merkez Bankası & Faiz" },
+  { key: "enflasyon", etiket: "Enflasyon & Ekonomik Veriler" },
+  { key: "global", etiket: "Global Piyasalar" },
 ];
 
 function pushTokenAl():string|null{

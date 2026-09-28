@@ -8,7 +8,7 @@
 import { Redis } from "@upstash/redis";
 import { kilitliGetir } from "./_lib/kilitliOnbellek.js";
 import { admin } from "./_lib/firebaseAdmin.js";
-import { haberleriGonder } from "./_lib/haberBildirimi.js";
+import { haberleriGonder, haberKategorileriBul } from "./_lib/haberBildirimi.js";
 
 const redis = new Redis({
   url: process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL,
@@ -142,12 +142,13 @@ function corsAyarla(req, res) {
 // aksi halde ilk deploy'da (veya cache tamamen temizlendiğinde) elimizdeki
 // 40 haberin TAMAMI "yeni" sayılıp herkese 40 ayrı push giderdi.
 //
-// Kategori GÖNDERİLMİYOR (haberleriGonder'e kategori:undefined): RSS
-// kaynaklarının <category> alanı temiz/tutarlı değil, uygulamadaki 4
-// kategoriye (katilim/bist/doviz-altin/kfk) güvenilir eşlenemiyor. Bu
-// yüzden bu genel piyasa haberleri, kategori seçmiş kullanıcılar dahil
-// TÜM abonelere gidiyor — bkz. api/bildirim.js'deki "HABER BİLDİRİMLERİ"
-// bölümündeki "kategorisiz gönderim herkese gider" kuralı.
+// KATEGORİ (2026-09-28): RSS <category> alanı güvenilir olmadığı için haber,
+// BAŞLIĞINDAKİ anahtar kelimelerle sınıflandırılıyor (haberKategorileriBul,
+// bkz. _lib/haberBildirimi.js) ve haberleriGonder'e kategoriler:[...] olarak
+// veriliyor: filtre seçmemiş aboneler her haberi alır, filtre seçmiş (Pro)
+// aboneler yalnızca kesişen kategorideki haberi alır, hiçbir kategoriye
+// uymayan haber SADECE filtre seçmemiş abonelere gider. (Önceden kategori
+// gönderilmiyordu → kategori seçimi bu bildirimlerde etkisizdi.)
 const KV_BILDIRILEN_ANAHTAR = "finans-haberleri:bildirilenler:v1";
 const BILDIRILEN_MAKS_SAKLA = 200;   // saklanan parmak izi sayısı (bellek/Redis boyutu için tavan)
 const YENI_HABER_MAKS_BILDIRIM = 3;  // bir turda en fazla kaç YENİ başlık için push gönderilsin (spam koruması)
@@ -172,6 +173,7 @@ async function yeniHaberleriBildir(hepsi) {
             redis, admin,
             baslik: `📰 ${h.baslik}`,
             govde: h.ozet || h.kaynak || "Yeni haber",
+            kategoriler: haberKategorileriBul(h.baslik, h.ozet),
             veri: { tip: "finans-haberi", link: h.link || "", kaynak: h.kaynak || "" },
           });
         } catch (e) {

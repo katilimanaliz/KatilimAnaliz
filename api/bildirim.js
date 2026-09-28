@@ -552,18 +552,26 @@ async function duyurulariListele(req, res) {
 // uid VARSA (hesaplı kullanıcı) ama Pro DEĞİLSE: genel abonelik kurulur,
 // kategoriler VERİLMİŞSE bile sessizce yok sayılır (bkz. aşağıdaki Pro
 // kontrolü). kategoriler VERİLMEMİŞSE (veya boş dizi) o token "genel abone"
-// sayılır — her haber-bildirim-gonder çağrısında (kategori filtresi ne
-// olursa olsun) bildirim alır. kategoriler VERİLMİŞ VE Pro'ysa, yalnızca o
-// kategorilerden biriyle gönderilen haberlerde bildirim alır — genel
-// (kategorisiz) bir gönderimde DAHİL EDİLMEZ, çünkü kullanıcı bilinçli
-// olarak daraltmış demektir.
+// sayılır: filtresi yoktur, her haberi alır. kategoriler VERİLMİŞ VE Pro'ysa
+// (bkz. _lib/haberBildirimi.js HABER_KATEGORI_ANAHTARLARI: katilim, bist,
+// doviz-altin, kfk, merkez-bankasi, enflasyon, global) yalnızca o
+// kategorilerle eşleşen haberleri alır.
+//
+// TESLİM KURALLARI (2026-09-28 düzeltildi — önceki yorum "kategorisiz
+// gönderimde kategorili aboneler DAHİL EDİLMEZ" diyordu, KOD ise tam tersini
+// yapıyordu; doğrusu şu):
+//  • haber-bildirim-gonder (ADMIN, elle) kategori VERİLMEDEN → HERKESE gider
+//    (genel duyuru, filtreden muaf); kategori verilirse genel aboneler +
+//    o kategoriyi seçenler.
+//  • Otomatik haber akışı (finans-haberleri.js) haberi başlığından
+//    sınıflandırıp kategoriler:[...] ile gönderir: filtresizler her haberi,
+//    filtreliler yalnızca kesişeni alır; hiçbir kategoriye uymayan haber
+//    SADECE filtresiz abonelere gider.
 //
 // ✅ OTOMATİK TETİKLEME (2026-09-27, aynı gün eklendi): api/finans-
 // haberleri.js, taze() içinde gerçekten YENİ bir başlık tespit ettiğinde
-// haberleriGonder()'i (bkz. ./_lib/haberBildirimi.js) doğrudan çağırıyor —
-// kategori VERİLMEDEN (genel duyuru gibi, tüm abonelere ulaşır; RSS
-// kaynaklarının kategori alanı güvenilir/temiz olmadığı için kategoriye
-// eşlenmiyor). Bu tetikleme, o dosyanın 15 dk'lık kilitli önbelleğine bağlı
+// haberleriGonder()'i (bkz. ./_lib/haberBildirimi.js) doğrudan çağırıyor.
+// Bu tetikleme, o dosyanın 15 dk'lık kilitli önbelleğine bağlı
 // çalışıyor — ayrı bir cron GEREKMİYOR, ama kimse 15 dk içinde /api/finans-
 // haberleri'ni ziyaret etmezse o turda tetiklenmez (organik trafiğe bağlı).
 // HABER_BILDIRIM_TOKENS_KEY / HABER_BILDIRIM_KATEGORI_PREFIX artık
