@@ -1065,6 +1065,7 @@ function ProSatinAl({kimlik,nav,onHesapGerekli}:{kimlik:ReturnType<typeof useKpK
         {satir("Haber bildirimi kategorileri", false, true)}
         {satir("Hesaplamaları PDF/WhatsApp ile paylaş", false, true)}
         {satir("Hesaplama araçları (günlük)", "5 farklı", "Sınırsız")}
+        {satir("Gösterge geçmişi (tarihsel tablo/grafik)", "Son 3 dönem", "Tüm geçmiş")}
         {satir("BİST & fon tarama", true, true)}
       </Card>
 
@@ -19961,16 +19962,20 @@ function KatkiPayiHesaplama(){
 
 // ─── FİNANSAL GÖSTERGELER ───────────────────────────────────────────────────
 // ─── GÖSTERGE (TÜFE vb.) GEÇMİŞ SERİ GRAFİK MODAL ───────────────────────────
-function GostergeGrafikModal({ad,seri,birim,onClose}:{ad:string,seri:{tarih:string,deger:number}[],birim?:string,onClose:()=>void}){
+function GostergeGrafikModal({ad,seri,birim,proAktif,onClose,onProGerekli}:{ad:string,seri:{tarih:string,deger:number}[],birim?:string,proAktif:boolean,onClose:()=>void,onProGerekli:()=>void}){
   const [tooltip,setTooltip]=useState<number|null>(null);
-  const degerler=seri.map(s=>s.deger);
+  // ── SON 3 DÖNEM ÜCRETSİZ, TÜM GEÇMİŞ PRO (2026-09-28, kullanıcı isteği) ──
+  // GostergeTabloModal ile AYNI ilke, bu (sütun grafikli, tablosuz) modalde.
+  const kirpilmisMi = !proAktif && seri.length > 3;
+  const gosterilecekSeri = proAktif ? seri : seri.slice(-3);
+  const degerler=gosterilecekSeri.map(s=>s.deger);
   const isYuzde = birim!=="milyon$";
-  const minV=isYuzde ? Math.min(0,...degerler) : Math.min(...degerler)*0.98;
-  const maxV=isYuzde ? Math.max(...degerler) : Math.max(...degerler)*1.02;
+  const minV=gosterilecekSeri.length ? (isYuzde ? Math.min(0,...degerler) : Math.min(...degerler)*0.98) : 0;
+  const maxV=gosterilecekSeri.length ? (isYuzde ? Math.max(...degerler) : Math.max(...degerler)*1.02) : 1;
   const aralik=(maxV-minV)||1;
   // viewBox genisligi kaba gore olculuyor — bkz. useOlculenGenislik notu
   const [modalGrafikRef,modalGrafikW]=useOlculenGenislik(320);
-  const W=modalGrafikW,H=160,PAD=8,barGenislik=(W-PAD*2)/seri.length;
+  const W=modalGrafikW,H=160,PAD=8,barGenislik=gosterilecekSeri.length?(W-PAD*2)/gosterilecekSeri.length:0;
   const getY=(v:number)=>H-PAD-((v-minV)/aralik)*(H-PAD*2);
   const sifirY=isYuzde ? getY(0) : H-PAD;
   const fmtDeger=(v:number)=> isYuzde ? `%${v.toFixed(2).replace(".",",")}` : `$${(v/1000).toFixed(2).replace(".",",")} Mr`;
@@ -19981,14 +19986,20 @@ function GostergeGrafikModal({ad,seri,birim,onClose}:{ad:string,seri:{tarih:stri
         <div style={{padding:"16px 20px 12px",borderBottom:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
           <div>
             <p style={{margin:0,fontSize:16,fontWeight:700,color:C.label}}>{ad}</p>
-            <p style={{margin:"2px 0 0",fontSize:11,color:C.sub}}>Son {seri.length} {isYuzde?"Ay":"Hafta"}</p>
+            <p style={{margin:"2px 0 0",fontSize:11,color:C.sub}}>Geçmiş {gosterilecekSeri.length} veri noktası{kirpilmisMi?` (toplam ${seri.length})`:""}</p>
           </div>
           <button onClick={onClose} style={{background:WA(0.1),border:"none",width:32,height:32,borderRadius:16,fontSize:20,cursor:"pointer",color:C.label}}>×</button>
         </div>
+        {kirpilmisMi && (
+          <div onClick={onProGerekli} style={{margin:"12px 20px 0",padding:"9px 12px",borderRadius:10,background:C.blueLight,display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,cursor:"pointer",flexShrink:0}}>
+            <span style={{fontSize:11.5,color:C.text}}>{CV("Ücretsizde son 3 dönem gösteriliyor")}</span>
+            <span style={{fontSize:11.5,fontWeight:700,color:"#D8A94E"}}>{CV("Pro'ya Geç")} ›</span>
+          </div>
+        )}
         <div ref={modalGrafikRef} style={{padding:"18px 20px 24px",overflowY:"auto"}}>
           <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:H,display:"block",overflow:"visible"}}>
             <line x1={PAD} y1={sifirY} x2={W-PAD} y2={sifirY} stroke={WA(0.15)} strokeWidth={1}/>
-            {seri.map((s,i)=>{
+            {gosterilecekSeri.map((s,i)=>{
               const x=PAD+i*barGenislik;
               const y=getY(s.deger);
               const yukseklik=Math.abs(sifirY-y);
@@ -20005,11 +20016,11 @@ function GostergeGrafikModal({ad,seri,birim,onClose}:{ad:string,seri:{tarih:stri
               );
             })}
           </svg>
-          {tooltip!=null&&seri[tooltip]&&(
+          {tooltip!=null&&gosterilecekSeri[tooltip]&&(
             <div style={{marginTop:10,textAlign:"center",background:WA(0.06),borderRadius:10,padding:"8px 12px"}}>
-              <span style={{fontSize:12,color:C.sub}}>{seri[tooltip].tarih}</span>
-              <span style={{fontSize:15,fontWeight:700,color:isYuzde?(seri[tooltip].deger>=0?C.green:C.red):C.blue,marginLeft:8}}>
-                {fmtDeger(seri[tooltip].deger)}
+              <span style={{fontSize:12,color:C.sub}}>{gosterilecekSeri[tooltip].tarih}</span>
+              <span style={{fontSize:15,fontWeight:700,color:isYuzde?(gosterilecekSeri[tooltip].deger>=0?C.green:C.red):C.blue,marginLeft:8}}>
+                {fmtDeger(gosterilecekSeri[tooltip].deger)}
               </span>
             </div>
           )}
@@ -20033,7 +20044,7 @@ function GostergeGrafikModal({ad,seri,birim,onClose}:{ad:string,seri:{tarih:stri
 // Grafik GostergeGrafikModal ile AYNI çubuk-grafik mantığını kullanıyor
 // (kod tekrarını önlemek için ayrı bir fonksiyona çıkarılmadı — ikisinin
 // layout'u/state'i yeterince farklı; birleştirmek daha büyük bir riskti).
-function GostergeTabloModal({ad,seri,birim,onClose}:{ad:string,seri:{tarih:string,deger:number}[],birim?:string,onClose:()=>void}){
+function GostergeTabloModal({ad,seri,birim,proAktif,onClose,onProGerekli}:{ad:string,seri:{tarih:string,deger:number}[],birim?:string,proAktif:boolean,onClose:()=>void,onProGerekli:()=>void}){
   // birim: undefined → yüzde | "milyon$" → Milyar $ (negatifler cari açık/dış
   // ticaret açığı için işaretli gösterilir) | "endeks" → düz sayı (REK gibi)
   const isYuzde = birim!=="milyon$" && birim!=="endeks";
@@ -20042,17 +20053,22 @@ function GostergeTabloModal({ad,seri,birim,onClose}:{ad:string,seri:{tarih:strin
     : birim==="endeks"
     ? v.toFixed(2).replace(".",",")
     : `%${v.toFixed(2).replace(".",",")}`;
-  const siraliSeri=[...seri].reverse(); // en yeni veri en üstte
+  // ── SON 3 DÖNEM ÜCRETSİZ, TÜM GEÇMİŞ PRO (2026-09-28, kullanıcı isteği) ──
+  // Tıklama HERKESE açık — kısıtlama burada, GÖSTERİLEN VERİ miktarında:
+  // ücretsiz/misafir yalnızca en yeni 3 dönemi görür, Pro tüm geçmişi.
+  const kirpilmisMi = !proAktif && seri.length > 3;
+  const gosterilecekSeri = proAktif ? seri : seri.slice(-3);
+  const siraliSeri=[...gosterilecekSeri].reverse(); // en yeni veri en üstte
 
   const [tooltip,setTooltip]=useState<number|null>(null);
-  const degerler=seri.map(s=>s.deger);
+  const degerler=gosterilecekSeri.map(s=>s.deger);
   // ── ÇİZGİ GRAFİK + EKSENLER (2026-09-28, kullanıcı isteği: "sütun değil
   // çizgi olsun, solda oran altta tarih olacak şekilde") ────────────────
   // Eskiden sütun grafikti, hiç eksen etiketi yoktu. Artık solda 3 kademeli
   // Y ekseni (en yüksek/orta/en düşük değer) ve altta birkaç X ekseni tarih
   // etiketi (GG-AA, kalabalık olmasın diye tüm 24 nokta değil) var.
-  const minV=seri.length? Math.min(...degerler) : 0;
-  const maxV=seri.length? Math.max(...degerler) : 1;
+  const minV=gosterilecekSeri.length? Math.min(...degerler) : 0;
+  const maxV=gosterilecekSeri.length? Math.max(...degerler) : 1;
   const araPad=(maxV-minV)*0.08 || Math.abs(maxV)*0.02 || 1; // üst/alt biraz nefes payı
   const minVE=minV-araPad, maxVE=maxV+araPad;
   const aralik=(maxVE-minVE)||1;
@@ -20062,10 +20078,10 @@ function GostergeTabloModal({ad,seri,birim,onClose}:{ad:string,seri:{tarih:strin
   const GW=grafikW,GH=126,GPAD=6;
   const cizimSolX=YETIKET_GENISLIK, cizimSagX=GW-GPAD, cizimUstY=GPAD, cizimAltY=GH-XETIKET_YUKSEKLIK-GPAD;
   const cizimGenislik=Math.max(1,cizimSagX-cizimSolX);
-  const getX=(i:number)=> seri.length>1 ? cizimSolX+(i/(seri.length-1))*cizimGenislik : cizimSolX+cizimGenislik/2;
+  const getX=(i:number)=> gosterilecekSeri.length>1 ? cizimSolX+(i/(gosterilecekSeri.length-1))*cizimGenislik : cizimSolX+cizimGenislik/2;
   const getY=(v:number)=>cizimAltY-((v-minVE)/aralik)*(cizimAltY-cizimUstY);
   // X ekseninde en fazla 5 tarih etiketi (baş, son ve arada eşit aralıklarla) — 24 noktanın hepsi sığmaz.
-  const xEtiketIdx = seri.length<=1 ? [0] : (()=>{ const n=Math.min(5,seri.length); const idx=new Set<number>(); for(let k=0;k<n;k++) idx.add(Math.round(k*(seri.length-1)/(n-1))); return [...idx]; })();
+  const xEtiketIdx = gosterilecekSeri.length<=1 ? [0] : (()=>{ const n=Math.min(5,gosterilecekSeri.length); const idx=new Set<number>(); for(let k=0;k<n;k++) idx.add(Math.round(k*(gosterilecekSeri.length-1)/(n-1))); return [...idx]; })();
   const kisaTarih=(t:string)=> t.split("-").slice(0,2).join("-"); // "DD-MM-YYYY" -> "DD-MM"
 
   return(
@@ -20074,14 +20090,20 @@ function GostergeTabloModal({ad,seri,birim,onClose}:{ad:string,seri:{tarih:strin
         <div style={{padding:"16px 20px 12px",borderBottom:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
           <div>
             <p style={{margin:0,fontSize:16,fontWeight:700,color:C.label}}>{ad}</p>
-            <p style={{margin:"2px 0 0",fontSize:11,color:C.sub}}>Geçmiş {seri.length} veri noktası</p>
+            <p style={{margin:"2px 0 0",fontSize:11,color:C.sub}}>Geçmiş {gosterilecekSeri.length} veri noktası{kirpilmisMi?` (toplam ${seri.length})`:""}</p>
           </div>
           <button onClick={onClose} style={{background:WA(0.1),border:"none",width:32,height:32,borderRadius:16,fontSize:20,cursor:"pointer",color:C.label}}>×</button>
         </div>
-        {seri.length===0 ? (
+        {gosterilecekSeri.length===0 ? (
           <p style={{margin:0,padding:"24px 20px",fontSize:13,color:C.sub,textAlign:"center"}}>Geçmiş veri bulunamadı.</p>
         ) : (
           <div style={{flex:1,overflowY:"auto"}}>
+            {kirpilmisMi && (
+              <div onClick={onProGerekli} style={{margin:"12px 20px 0",padding:"9px 12px",borderRadius:10,background:C.blueLight,display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,cursor:"pointer"}}>
+                <span style={{fontSize:11.5,color:C.text}}>{CV("Ücretsizde son 3 dönem gösteriliyor")}</span>
+                <span style={{fontSize:11.5,fontWeight:700,color:"#D8A94E"}}>{CV("Pro'ya Geç")} ›</span>
+              </div>
+            )}
             <div ref={grafikRef} style={{padding:"16px 20px 4px"}}>
               <svg viewBox={`0 0 ${GW} ${GH}`} style={{width:"100%",height:GH,display:"block",overflow:"visible"}}>
                 {/* Y ekseni — 3 kademeli (üst/orta/alt) yatay kılavuz çizgi + oran etiketi, solda */}
@@ -20095,13 +20117,13 @@ function GostergeTabloModal({ad,seri,birim,onClose}:{ad:string,seri:{tarih:strin
                   );
                 })}
                 {/* Çizgi + veri noktaları */}
-                {seri.length>0 && (
+                {gosterilecekSeri.length>0 && (
                   <polyline
-                    points={seri.map((s,i)=>`${getX(i)},${getY(s.deger)}`).join(" ")}
+                    points={gosterilecekSeri.map((s,i)=>`${getX(i)},${getY(s.deger)}`).join(" ")}
                     fill="none" stroke={C.blue} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round"
                   />
                 )}
-                {seri.map((s,i)=>(
+                {gosterilecekSeri.map((s,i)=>(
                   <circle key={i}
                     cx={getX(i)} cy={getY(s.deger)}
                     r={tooltip===i?5:3}
@@ -20114,7 +20136,7 @@ function GostergeTabloModal({ad,seri,birim,onClose}:{ad:string,seri:{tarih:strin
                 ))}
                 {/* X ekseni — altta birkaç tarih etiketi (GG-AA) */}
                 {xEtiketIdx.map(i=>(
-                  <text key={i} x={getX(i)} y={GH-2} fontSize={9} textAnchor="middle" fill={C.sub}>{kisaTarih(seri[i].tarih)}</text>
+                  <text key={i} x={getX(i)} y={GH-2} fontSize={9} textAnchor="middle" fill={C.sub}>{kisaTarih(gosterilecekSeri[i].tarih)}</text>
                 ))}
               </svg>
               {tooltip!=null&&seri[tooltip]&&(
@@ -20537,7 +20559,7 @@ function FinansalGostergeler({onKurTikla}:any){
           </div>
         </div>
       ))}
-      {gostergeGrafik&&<GostergeGrafikModal ad={gostergeGrafik.ad} seri={gostergeGrafik.seri} birim={gostergeGrafik.birim} onClose={()=>setGostergeGrafik(null)}/>}
+      {gostergeGrafik&&<GostergeGrafikModal ad={gostergeGrafik.ad} seri={gostergeGrafik.seri} birim={gostergeGrafik.birim} proAktif={kpGuncelPro.aktif} onClose={()=>setGostergeGrafik(null)} onProGerekli={()=>{ setGostergeGrafik(null); kpGuncelNav?.("proSatinAl"); }}/>}
     </div>
   );
 }
@@ -31070,7 +31092,7 @@ function App(){
                   <p style={{margin:"10px 4px 0",fontSize:10,color:WA(0.35),lineHeight:1.5}}>
                     Kaynak: TCMB EVDS (TÜİK dış ticaret, ödemeler dengesi, reel efektif kur). 12 aylık değerler son 12 ayın hareketli toplamıdır. Satıra dokunarak geçmiş verileri görebilirsiniz.
                   </p>
-                  {piyasaGostergeTablo&&<GostergeTabloModal ad={piyasaGostergeTablo.ad} seri={piyasaGostergeTablo.seri||[]} birim={piyasaGostergeTablo.birim} onClose={()=>setPiyasaGostergeTablo(null)}/>}
+                  {piyasaGostergeTablo&&<GostergeTabloModal ad={piyasaGostergeTablo.ad} seri={piyasaGostergeTablo.seri||[]} birim={piyasaGostergeTablo.birim} proAktif={kimlik.pro.aktif} onClose={()=>setPiyasaGostergeTablo(null)} onProGerekli={()=>{ setPiyasaGostergeTablo(null); nav("proSatinAl"); }}/>}
                 </div>
               );
             })():piyasaTabloFiltre==="gostergeler"?(()=>{
@@ -31409,7 +31431,7 @@ function App(){
                       })
                     )}
                   </div>
-                  {piyasaGostergeTablo&&<GostergeTabloModal ad={piyasaGostergeTablo.ad} seri={piyasaGostergeTablo.seri||[]} birim={piyasaGostergeTablo.birim} onClose={()=>setPiyasaGostergeTablo(null)}/>}
+                  {piyasaGostergeTablo&&<GostergeTabloModal ad={piyasaGostergeTablo.ad} seri={piyasaGostergeTablo.seri||[]} birim={piyasaGostergeTablo.birim} proAktif={kimlik.pro.aktif} onClose={()=>setPiyasaGostergeTablo(null)} onProGerekli={()=>{ setPiyasaGostergeTablo(null); nav("proSatinAl"); }}/>}
 
                   {/* Piyasa Duyarlılığı — VIX/DXY: diğerleri gibi EVDS/FRED üzerinden
                       değil, doğrudan Yahoo Finance'ten canlı çekilir (PiyasaSatiri,

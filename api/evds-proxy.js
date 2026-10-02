@@ -123,7 +123,16 @@ const redis = new Redis({
 // TP.APIFON4_SERI ile aynı desen). Pencere de 90 → 200 güne genişletildi
 // (diğer "isHaftalik" seriler gibi), daha uzun bir grafik için. Versiyon
 // artırılmazsa eski önbellek 6 saat boyunca yeni _SERI alanlarını göstermez.
-const KV_ANLIK_KEY = "evds:anlik:v22";
+// v23 (2026-09-28, kullanıcı isteği: "geçmiş veri setlerinde bütün veriler
+// günlük yansıyor; son veri günlük kalsın ama öncekiler arasında makul süre
+// olsun"): GÜNLÜK kaynaklı seriler (AOFM, TLREF/TLREFK, FED/ECB/SOFR, ABD
+// tahvilleri) eskiden son 24 İŞ GÜNÜNÜ (~5 hafta) veriyordu — politika faizi
+// gibi nadir değişen serilerde tablo düz çizgi, ücretsiz kullanıcının "son 3
+// dönemi" de ardışık 3 gün (hepsi aynı değer) oluyordu. Artık: SON nokta her
+// zaman en güncel günlük değer; öncekiler haftalık (piyasa serileri) ya da
+// aylık (politika faizleri) aralıkla seçiliyor (bkz. seyreklestirSeri).
+// Versiyon artırılmazsa eski (ardışık günlük) önbellek 6 saat daha döner.
+const KV_ANLIK_KEY = "evds:anlik:v23";
 const KV_TARIHSEL_PREFIX = "evds:tarihsel:v22:";
 
 // Vercel'in varsayılan fonksiyon süresi (Hobby planda genelde 10sn) artık 8 dış
@@ -1119,14 +1128,31 @@ const DISTICARET = [
   "TP.RK.T1.Y",
 ];
 
-const FRED_API_URL = (seri, apiKey) =>
-  `https://api.stlouisfed.org/fred/series/observations?series_id=${seri}&api_key=${apiKey}&file_type=json&sort_order=desc&limit=30`;
+// ── GEÇMİŞ SERİ ARALIKLARI (gün) — 2026-09-28 ───────────────────────────────
+//  7  → piyasa serileri (günlük değişen): AOFM, TLREF/TLREFK, SOFR, ABD tahvilleri
+//  30 → politika faizleri / yavaş değişenler: FED bantları ve gerçekleşen oran,
+//       ECB mevduat faizi, SOFR 3M/6M ortalamaları
+//  0  → doğal sıklık (zaten aylık/haftalık): EURIBOR 3M, TÜFE vb.
+const SERI_ARALIK_PIYASA   = 7;
+const SERI_ARALIK_POLITIKA = 30;
+const SERI_MAKS_NOKTA      = 24;
 
-function fredJsonParse(json) {
+// Pencere: 24 nokta × aralık + pay. (günlük 0 ise 24 aylık seri için 760 gün)
+function seriPenceresiGun(aralikGun){ return aralikGun>1 ? aralikGun*SERI_MAKS_NOKTA + 45 : 760; }
+
+// observation_start ile tarihe göre çekiyoruz (eskiden limit=30: son 30 gözlem).
+const FRED_API_URL = (seri, apiKey, baslangicISO) =>
+  `https://api.stlouisfed.org/fred/series/observations?series_id=${seri}&api_key=${apiKey}&file_type=json&sort_order=desc&observation_start=${baslangicISO}`;
+
+function isoGunOnce(gun){ const d=new Date(); d.setDate(d.getDate()-gun); return d.toISOString().slice(0,10); }
+
+function fredJsonParse(json, aralikGun=0) {
   const obs = (json?.observations || []).filter(o => o.value !== "." && !isNaN(parseFloat(o.value)));
   if (obs.length === 0) return { son: null, seri: [] };
-  const son = { deger: parseFloat(obs[0].value), tarih: obs[0].date };
-  const seri = obs.slice(0, 24).reverse().map(o => ({ tarih: o.date, deger: parseFloat(o.value) }));
+  const son = { deger: parseFloat(obs[0].value), tarih: fredTarihCevir(obs[0].date) };
+  // obs: yeniden eskiye. Eskiden yeniye çevirip seyrekleştir.
+  const tum = obs.slice().reverse().map(o => ({ tarih: fredTarihCevir(o.date), deger: parseFloat(o.value) }));
+  const seri = seyreklestirSeri(tum, aralikGun, SERI_MAKS_NOKTA);
   return { son, seri };
 }
 
@@ -1219,6 +1245,33 @@ function tarihParseDDMMYYYY(s) {
   if(!d||!m||!y) return null;
   return new Date(Date.UTC(y, m-1, d));
 }
+// ── SERİ SEYREKLEŞTİRME (2026-09-28) ────────────────────────────────────────
+// dizi: ESKİDEN YENİYE, {tarih:"GG-AA-YYYY", deger}. SON nokta HER ZAMAN korunur
+// (en güncel günlük değer); geriye doğru yürürken bir nokta ancak bir önceki
+// seçilen noktadan EN AZ aralikGun gün önceyse seçilir; en fazla maksNokta
+// nokta döner (eskiden yeniye). Tatil/boş gün nedeniyle tam 7/30. gün yoksa
+// ondan bir önceki gün seçilir — tarihler tabloda zaten görünür.
+// aralikGun <= 1 ise seyreltme YOK (doğal sıklık korunur: aylık/haftalık seriler).
+function seyreklestirSeri(dizi, aralikGun, maksNokta=24){
+  if(!Array.isArray(dizi) || dizi.length===0) return [];
+  if(!aralikGun || aralikGun<=1) return dizi.slice(-maksNokta);
+  let sonTarih = tarihParseDDMMYYYY(dizi[dizi.length-1].tarih);
+  if(!sonTarih) return dizi.slice(-maksNokta);
+  const secilen=[dizi[dizi.length-1]];
+  for(let i=dizi.length-2;i>=0 && secilen.length<maksNokta;i--){
+    const t = tarihParseDDMMYYYY(dizi[i].tarih);
+    if(!t) continue;
+    if((sonTarih - t)/86400000 >= aralikGun){ secilen.push(dizi[i]); sonTarih=t; }
+  }
+  return secilen.reverse();
+}
+// FRED "YYYY-MM-DD" döndürür; uygulamanın geri kalanı (EVDS) "GG-AA-YYYY"
+// kullanıyor ve grafik ekseni etiketi bu biçime göre kısaltılıyor.
+function fredTarihCevir(iso){
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso||""));
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : iso;
+}
+
 function gunFarki(tarihSonStr, tarihOncekiStr) {
   const a = tarihParseDDMMYYYY(tarihSonStr);
   const b = tarihParseDDMMYYYY(tarihOncekiStr);
@@ -1766,18 +1819,18 @@ export default async function handler(req,res){
       return { items: [] };
     }
   }
-  async function guvenliCekFred(ad, seri) {
+  async function guvenliCekFred(ad, seri, aralikGun=0) {
     const fredKey = process.env.FRED_API_KEY;
     if (!fredKey) {
       teshis[ad] = { basarili: false, hata: "FRED_API_KEY ortam değişkeni tanımlı değil" };
       return { son: null, seri: [] };
     }
     try {
-      const r = await fetchZamanli(FRED_API_URL(seri, fredKey), {}, 15000);
+      const r = await fetchZamanli(FRED_API_URL(seri, fredKey, isoGunOnce(seriPenceresiGun(aralikGun))), {}, 15000);
       const text = await r.text();
       if (r.status < 200 || r.status >= 300) throw new Error(`HTTP ${r.status}: ${text.slice(0,200)}`);
       const json = JSON.parse(text);
-      const { son, seri: seriDizi } = fredJsonParse(json);
+      const { son, seri: seriDizi } = fredJsonParse(json, aralikGun);
       teshis[ad] = { basarili: son != null, httpStatus: r.status, sonDeger: son };
       return { son, seri: seriDizi };
     } catch (err) {
@@ -1797,9 +1850,9 @@ export default async function handler(req,res){
       guvenliCek("aylik_bkr", `${BASE}/series=${AYLIK_BKR.join("-")}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
       guvenliCek("aylik_kbk", `${BASE}/series=${AYLIK_KBK.join("-")}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
       guvenliCek("aylik_kkp", `${BASE}/series=${AYLIK_KKP.join("-")}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
-      guvenliCek("gunluk_tlref", `${BASE}/series=${GUNLUK.join("-")}&startDate=${onceki(30)}&endDate=${tarihStr(new Date())}&type=json&frequency=1`),
+      guvenliCek("gunluk_tlref", `${BASE}/series=${GUNLUK.join("-")}&startDate=${onceki(seriPenceresiGun(SERI_ARALIK_PIYASA))}&endDate=${tarihStr(new Date())}&type=json&frequency=1`),
       guvenliCek("enflasyon", `${BASE}/series=${ENFLASYON.join("-")}&startDate=${onceki(820)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
-      guvenliCek("politika_aofm", `${BASE}/series=${POLITIKA.join("-")}&startDate=${onceki(60)}&endDate=${tarihStr(new Date())}&type=json&frequency=1`),
+      guvenliCek("politika_aofm", `${BASE}/series=${POLITIKA.join("-")}&startDate=${onceki(seriPenceresiGun(SERI_ARALIK_PIYASA))}&endDate=${tarihStr(new Date())}&type=json&frequency=1`),
       guvenliCek("rezerv", `${BASE}/series=${REZERV.join("-")}&startDate=${onceki(180)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
       guvenliCek("rezerv_haftalik", `${BASE}/series=${REZERV_HAFTALIK.join("-")}&startDate=${onceki(400)}&endDate=${tarihStr(new Date())}&type=json&frequency=3`),
       guvenliCek("rezerv_standby", `${BASE}/series=${REZERV_STANDBY.join("-")}&startDate=${onceki(400)}&endDate=${tarihStr(new Date())}&type=json&frequency=3`),
@@ -1810,17 +1863,17 @@ export default async function handler(req,res){
     ]);
 
     const [sofr,eur3m,us2y,us5y,us10y,fedFonlama,ecbMevduat,sofr3m,sofr6m,fedUst,fedAlt]=await Promise.all([
-      guvenliCekFred("fred_sofr", "SOFR"),
-      guvenliCekFred("fred_euribor3m", "IR3TIB01EZM156N"),
-      guvenliCekFred("fred_us2y", "DGS2"),
-      guvenliCekFred("fred_us5y", "DGS5"),
-      guvenliCekFred("fred_us10y", "DGS10"),
-      guvenliCekFred("fred_fedfunds", "DFF"),
-      guvenliCekFred("fred_ecb", "ECBDFR"),
-      guvenliCekFred("fred_sofr3m", "SOFR90DAYAVG"),
-      guvenliCekFred("fred_sofr6m", "SOFR180DAYAVG"),
-      guvenliCekFred("fred_fed_ust", "DFEDTARU"),
-      guvenliCekFred("fred_fed_alt", "DFEDTARL"),
+      guvenliCekFred("fred_sofr", "SOFR", SERI_ARALIK_PIYASA),
+      guvenliCekFred("fred_euribor3m", "IR3TIB01EZM156N", 0),
+      guvenliCekFred("fred_us2y", "DGS2", SERI_ARALIK_PIYASA),
+      guvenliCekFred("fred_us5y", "DGS5", SERI_ARALIK_PIYASA),
+      guvenliCekFred("fred_us10y", "DGS10", SERI_ARALIK_PIYASA),
+      guvenliCekFred("fred_fedfunds", "DFF", SERI_ARALIK_POLITIKA),
+      guvenliCekFred("fred_ecb", "ECBDFR", SERI_ARALIK_POLITIKA),
+      guvenliCekFred("fred_sofr3m", "SOFR90DAYAVG", SERI_ARALIK_POLITIKA),
+      guvenliCekFred("fred_sofr6m", "SOFR180DAYAVG", SERI_ARALIK_POLITIKA),
+      guvenliCekFred("fred_fed_ust", "DFEDTARU", SERI_ARALIK_POLITIKA),
+      guvenliCekFred("fred_fed_alt", "DFEDTARL", SERI_ARALIK_POLITIKA),
     ]);
 
     const sonuclar={};
@@ -1853,7 +1906,7 @@ export default async function handler(req,res){
     sonuclar["FRED_FED_ALT"]=fedAlt.son;
     sonuclar["FRED_FED_ALT_SERI"]=fedAlt.seri;
 
-    sonuclar["TP.APIFON4_SERI"]=tumDegerler(polJson?.items||[], "TP.APIFON4").slice(-24);
+    sonuclar["TP.APIFON4_SERI"]=seyreklestirSeri(tumDegerler(polJson?.items||[], "TP.APIFON4"), SERI_ARALIK_PIYASA, SERI_MAKS_NOKTA);
     sonuclar["TP_AB_B6_SERI"]=tumDegerler(rezervJson?.items||[], "TP.AB.B6").slice(-24);
     sonuclar["TP_AB_B1_SERI"]=tumDegerler(rezervJson?.items||[], "TP.AB.B1").slice(-24);
     sonuclar["TP_AB_B2_SERI"]=tumDegerler(rezervJson?.items||[], "TP.AB.B2").slice(-24);
@@ -2052,7 +2105,7 @@ export default async function handler(req,res){
         if(oran==null) continue;
         tlrefSeri.push({tarih:gunlukOranlarDizi[i].tarih, deger:oran});
       }
-      sonuclar["TP.BISTTLREF.KAPANIS_SERI"]=tlrefSeri.slice(-24);
+      sonuclar["TP.BISTTLREF.KAPANIS_SERI"]=seyreklestirSeri(tlrefSeri, SERI_ARALIK_PIYASA, SERI_MAKS_NOKTA);
     } else {
       sonuclar["TP.BISTTLREF.KAPANIS"]=null;
       sonuclar["TP.BISTTLREF.KAPANIS_SERI"]=[];
