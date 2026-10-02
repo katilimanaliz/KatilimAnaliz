@@ -19071,6 +19071,346 @@ function KiraSertifikasiIhraclari(){
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// ── İCAZET BELGELERİ (2026-10-03, kullanıcı isteği: "bir ekran yapsak, orada
+// banka adı ve ürün seçilince icazet belgesi görünse ve link olsa" → önizleme
+// onaylandı, "Araçlar menüsüne eklensin") ──────────────────────────────────
+// Belgeyi Katılım Plus BARINDIRMAZ ve ONAYLAMAZ: seçilen ürünün icazet PDF'ine
+// bankanın KENDİ sitesinden bağlanır (bu yüzden güncel olan her zaman bankadaki
+// belgedir). Veri elle derlendi: her bankanın Türkçe icazet sayfası açılıp
+// ürün bazlı belgeler alındı; YILLIK faaliyet icazetleri, Arapça sürümler ve
+// müşteri bilgilendirme formları BİLİNÇLİ OLARAK alınmadı (kullanıcı: "yıllık
+// icazet olmasına gerek yok, sadece ürünler"). Bağlantılar bankalarca
+// değiştirilebilir — yeni belge/banka eklemek için yalnızca aşağıdaki diziyi
+// güncellemek yeterli. sonKontrol: sayfanın en son elle okunduğu tarih; null =
+// okunmadı. Hiç belgesi olmayan bankada "sayfa" varsa oraya yönlendirilir.
+// Fuzul Katılım henüz faaliyette olmadığı için belgesi yok (2027 hedefleniyor).
+type IcazetBanka = {
+  ad:string; renk:string; alanAdi?:string; sonKontrol?:string|null; sayfa?:string|null;
+  ek?:string; aciklama?:string; durumEtiket?:string; urunler:[string,string][];
+};
+const ICZ_V  = "https://www.vakifkatilim.com.tr/documents/KatilimBankaciligi/";
+const ICZ_Z  = "https://www.ziraatkatilim.com.tr/sites/default/files/";
+const ICZ_D  = "https://dunyakatilim.com.tr/content/files/uploads/3290/";
+const ICZ_T  = "https://www.turkiyefinans.com.tr/";
+const ICZ_KT = "https://www.kuveytturk.com.tr/medium/";
+const ICZ_AB = "https://www.albaraka.com.tr/documents/hakkimizda/icazet-belgeleri/pdf/";
+const ICAZET_BANKALARI:IcazetBanka[] = [
+  { ad:"Vakıf Katılım", renk:"#C4262E", alanAdi:"vakifkatilim.com.tr", sonKontrol:"03.10.2026",
+    sayfa:"https://www.vakifkatilim.com.tr/tr/hakkimizda/vakif-katilimi-taniyin/katilim-bankaciligi/icazet-belgeleri",
+    urunler:[
+      ["Altın ve Kıymetli Maden", ICZ_V+"altin-ve-kiymetli-maden-cazet-belgesi.pdf"],
+      ["Bireysel Emeklilik Sistemi", ICZ_V+"bes-cazet-belgesi.pdf"],
+      ["Elementer Sigortalar", ICZ_V+"elementer-sigortalar-cazet-belgesi.pdf"],
+      ["Finansal Kiralama (Leasing)", ICZ_V+"finansal-kiralama-leasing-cazet-belgesi.pdf"],
+      ["Fon Alım Satımı", ICZ_V+"fon-alim-satimina-liskin-cazet-belgesi.pdf"],
+      ["Garanti", ICZ_V+"garanti-cazet-belgesi.pdf"],
+      ["Hayat ve Ferdi Kaza Sigortaları", ICZ_V+"hayatferdi-kaza-sigortalari-cazet-belgesi.pdf"],
+      ["İsticrar", ICZ_V+"sticrar-cazet-belgesi.pdf"],
+      ["İstisna", ICZ_V+"stisna-cazet-belgesi.pdf"],
+      ["Karz", ICZ_V+"karz-cazet-belgesi.pdf"],
+      ["Kefalet", ICZ_V+"kefalet-cazet-belgesi.pdf"],
+      ["Kira Sertifikası İhracı", ICZ_V+"kira-sertifikasi-hraci-cazet-belgesi.pdf"],
+      ["Kiralama Yöntemleri (İcâre)", ICZ_V+"kiralama-yontemleri-care-cazet-belgesi.pdf"],
+      ["Kredi Kartı", ICZ_V+"kredi-karti-cazet-belgesi.pdf"],
+      ["Mudârebe Fon Kullandırım", ICZ_V+"mudarebe-fon-kullandirim-cazet-belgesi.pdf"],
+      ["Maaş Promosyonu", ICZ_V+"maas-promosyonu-cazet-belgesi.pdf"],
+      ["Mudârebe Katılma Hesapları", ICZ_V+"mudarebe-katilma-hesaplari-cazet-belgesi(1).pdf"],
+      ["Murabaha", ICZ_V+"murabaha-cazet-belgesi(1).pdf"],
+      ["Müsâveme", ICZ_V+"musaveme-cazet-belgesi.pdf"],
+      ["Müşâreke", ICZ_V+"musareke-cazet-belgesi(1).pdf"],
+      ["Selem", ICZ_V+"selem-cazet-belgesi.pdf"],
+      ["Teverruk", ICZ_V+"teverruk-cazet-belgesi.pdf"],
+      ["Vaade Dayalı Para ve Kıymetli Maden Değişim İşlemleri (Forward)", ICZ_V+"vaade-dayali-para-ve-kiymetli-maden-degisim-slemleri-forward-cazet-belgesi.pdf"],
+      ["Yatırım Vekâleti Fon Kullandırım", ICZ_V+"yatirim-vekaleti-fon-kullandirim-cazet-belgesi.pdf"],
+      ["Yatırım Vekâleti Katılma Hesapları", ICZ_V+"yatirim-vekaleti-katilma-hesaplari-cazet-belgesi(1).pdf"],
+      ["Yönetim Sözleşmesine Dayalı Kira Sertifikası İhracı", ICZ_V+"yonetim-sozlesmesine-dayali-kira-sertifikasi-hraci-cazet-belgesi.pdf"]
+    ] },
+  { ad:"Ziraat Katılım", renk:"#B8860B", alanAdi:"ziraatkatilim.com.tr", sonKontrol:"03.10.2026",
+    sayfa:"https://www.ziraatkatilim.com.tr/bizi-taniyin/katilim-bankaciligini-taniyin/katilim-bankaciligi-faaliyet-icazet-belgeleri",
+    urunler:[
+      ["Alım-Satıma Dayalı Kira Sertifikası (Sukuk)", ICZ_Z+"2022-04/Al%C4%B1m-Sat%C4%B1ma%20Dayal%C4%B1%20Kira%20Sertifikas%C4%B1%20%28Sukuk%29%20%C4%B0cazet%20Belgesi.pdf"],
+      ["Altın ve Gümüş İşlemleri", ICZ_Z+"2022-04/Alt%C4%B1n%20ve%20G%C3%BCm%C3%BC%C5%9F%20%C4%B0%C5%9Flemleri%20%C4%B0cazet%20Belgesi.pdf"],
+      ["Doğrudan Borçlandırma Sistemi", ICZ_Z+"2022-04/Do%C4%9Frudan%20Bor%C3%A7land%C4%B1rma%20Sistemi%20%C4%B0cazet%20Belgesi.pdf"],
+      ["Eli Bol Hesap", ICZ_Z+"2022-04/Eli%20Bol%20Hesap%20%C4%B0cazet%20Belgesi.pdf"],
+      ["Enflasyona Endeksli Karz", ICZ_Z+"2022-04/Enflasyona%20Endeksli%20Karz%20%C4%B0cazet%20Belgesi.pdf"],
+      ["Filika Kart", ICZ_Z+"2022-04/Filika%20Kart%20%C4%B0cazet%20Belgesi.pdf"],
+      ["Finansal Kiralama (Leasing)", ICZ_Z+"2022-04/Finansal%20Kiralama%20%28Leasing%29%20%C4%B0cazet%20Belgesi.pdf"],
+      ["İşgücü-Hizmet Kiralaması (İcâre)", ICZ_Z+"2022-04/%C4%B0%C5%9Fg%C3%BCc%C3%BC-Hizmet%20Kiralamas%C4%B1%20%28%C4%B0c%C3%A2re%29%20%C4%B0cazet%20Belgesi.pdf"],
+      ["Katılma Hesapları (Mudârebe)", ICZ_Z+"2022-04/Kat%C4%B1lma%20Hesaplar%C4%B1%20%C4%B0cazet%20Belgesi%20%28Mud%C3%A2rebe%20Akdine%20Dayal%C4%B1%29.pdf"],
+      ["Kısa Süreli Finansman (Karz-ı Hasen)", ICZ_Z+"2022-04/K%C4%B1sa%20S%C3%BCreli%20Finansman%20%28Karz-%C4%B1%20Hasen%29%20%C4%B0cazet%20Belgesi.pdf"],
+      ["Kur Korumalı TL Katılma Hesabı", ICZ_Z+"2022-04/Kur%20Korumal%C4%B1%20TL%20Kat%C4%B1lma%20Hesab%C4%B1%20%C4%B0cazet%20Belgesi.pdf"],
+      ["Mudârebe Akdine Dayalı Ortaklık İşlemleri", ICZ_Z+"2022-04/Mudarebe%20Akdine%20Dayal%C4%B1%20Ortakl%C4%B1k%20%C4%B0%C5%9Flemleri%20%C4%B0cazet%20Belgesi.pdf"],
+      ["Murâbaha (Kâr Beyanıyla Satım)", ICZ_Z+"2022-04/Mur%C3%A2baha%20%28K%C3%A2r%20Beyan%C4%B1yla%20Sat%C4%B1m%29%20%C4%B0cazet%20Belgesi.pdf"],
+      ["Müsâveme (Pazarlık Usulüyle Satım)", ICZ_Z+"2024-07/M%C3%BCs%C3%A2veme%20%28Pazarl%C4%B1k%20Usul%C3%BCyle%20Sat%C4%B1m%29%20%C4%B0cazet%20Belgesi.pdf"],
+      ["Müşâreke", ICZ_Z+"2022-04/M%C3%BC%C5%9F%C3%A2reke%20%C4%B0cazet%20Belgesi.pdf"],
+      ["Özel Cari Hesap", ICZ_Z+"2022-04/%C3%96zel%20Cari%20Hesap%20%C4%B0cazet%20Belgesi.pdf"],
+      ["Vadeli İhracat Finansmanı", ICZ_Z+"2022-04/Vadeli%20%C4%B0hracat%20Finansman%C4%B1%20%C4%B0cazet%20Belgesi.pdf"],
+      ["Yatırım Vekâletine Dayalı Finansman İşlemleri", ICZ_Z+"2022-08/Ziraat%20Kat%C4%B1l%C4%B1m%20Yat%C4%B1r%C4%B1m%20Vek%C3%A2letine%20Dayal%C4%B1%20Finansman%20%C4%B0%C5%9Flemleri%20%C4%B0cazet%20Belgesi.pdf"],
+      ["Yatırım Vekâletine Dayalı Katılma Hesabı", ICZ_Z+"2022-04/Yat%C4%B1r%C4%B1m%20Vek%C3%A2letine%20Dayal%C4%B1%20Kat%C4%B1lma%20Hesab%C4%B1%20%C4%B0cazet%20Belgesi.pdf"],
+      ["Yönetim Sözleşmesine (Yatırım Vekâleti) Dayalı Kira Sertifikası (Sukuk)", ICZ_Z+"2022-04/Y%C3%B6netim%20S%C3%B6zle%C5%9Fmesine%20%28Yat%C4%B1r%C4%B1m%20Vek%C3%A2leti%29%20Dayal%C4%B1%20Kira%20Sertifikas%C4%B1%20%28Sukuk%29%20%C4%B0cazet%20Belgesi.pdf"]
+    ] },
+  { ad:"Dünya Katılım", renk:"#2A7A72", alanAdi:"dunyakatilim.com.tr", sonKontrol:"03.10.2026",
+    sayfa:"https://dunyakatilim.com.tr/hakkimizda/katilim-bankaciligi/icazet-belgeleri",
+    urunler:[
+      ["Karz Akdi Yoluyla Finansman Kullandırılması", ICZ_D+"karz.pdf"],
+      ["Yatırım Vekâletine Dayalı Finansman Kullandırılması", ICZ_D+"yatirim-vekaleti.pdf"],
+      ["Mudârebe Akdine Dayalı Ortaklık Yöntemiyle Finansman", ICZ_D+"mudarebe.pdf"],
+      ["Murâbaha", ICZ_D+"murabaha.pdf"],
+      ["Müşâreke Akdine Dayalı Ortaklık Yöntemiyle Finansman", ICZ_D+"musareke.pdf"],
+      ["Kâr Zarar Ortaklığına Dayalı Katılma Hesabı (Mudârebe)", ICZ_D+"katilma-hesabi.pdf"],
+      ["Özel Cari Hesap", ICZ_D+"ozel-cari-hesap.pdf"],
+      ["Müsâveme", ICZ_D+"musaveme.pdf"],
+      ["Kıymetli Maden Finansmanı", ICZ_D+"kiymetli-maden-finansmani-icazet-belgesi.pdf"],
+      ["Yatırım Fonu Finansmanı", ICZ_D+"yatirim-fonu-finansmani-icazet-belgesi.pdf"],
+      ["Yatırım Vekâleti Sözleşmesine Dayalı Katılma Hesabı", ICZ_D+"yatirim-vekaleti-sozlesmesine-dayali-katilma-hesabi-icazet-belgesi.pdf"],
+      ["Forward", ICZ_D+"forward-icazet-belgesi.pdf"],
+      ["Altın ve Gümüş Alım Satımı", ICZ_D+"324-1-altin-ve-gu-mu-s-alim-satimi-icazet-belgesi.pdf"]
+    ] },
+  { ad:"Türkiye Finans", renk:"#00436A", alanAdi:"turkiyefinans.com.tr", sonKontrol:"03.10.2026",
+    sayfa:"https://www.turkiyefinans.com.tr/tr-tr/hakkimizda/katilim-bankaciligi-sistemi/sayfalar/icazet-belgeri.aspx",
+    urunler:[
+      ["Altın ve Kıymetli Maden", ICZ_T+"Documents/altin-ve-kiymetli-maden-icazet-yazisi-kurumsal-format-imzali.pdf"],
+      ["Bireysel Emeklilik Sistemi", ICZ_T+"Documents/bes-icazet-yazisi.pdf"],
+      ["Bol Kepçe Hesap", ICZ_T+"Documents/bol-kepce-hesap-icazet-belgesi_imzali.pdf"],
+      ["Esnek Destek Finansmanı", ICZ_T+"Documents/esnek-destek-finansmani-icazet-belgesi_imzali.pdf"],
+      ["Finansal Kiralama", ICZ_T+"Documents/finansal-kiralama-icazet-belgesi_imzali.pdf"],
+      ["Finansör", ICZ_T+"Documents/finansor-icazet-yazisi.pdf"],
+      ["Fonlu Çek", ICZ_T+"Documents/fonlu-cek-icazet-belgesi_imzali-30072021.pdf"],
+      ["Forward", ICZ_T+"Documents/forward-icazet-yazisi.pdf"],
+      ["Gecikme Cezası", ICZ_T+"Documents/gecikme-cezasi-icazet-yazisi.pdf"],
+      ["Günlük Hesap", ICZ_T+"SiteAssets/pdf/gunluk-hesap-icazet-belgesi.pdf"],
+      ["Hac ve Umre", ICZ_T+"Documents/hac-umre--icazet-yazisi.pdf"],
+      ["Hizmet Kiralaması Finansmanı", ICZ_T+"Documents/hizmet-kiralama.pdf"],
+      ["İcâre (Adi/Faaliyet/Ürün Kiralama)", ICZ_T+"Documents/icare-adi-faaliyet-urun-kiralama-icazet-belgesi.pdf"],
+      ["İsticrar", ICZ_T+"Documents/isticrar-icazet-belgesi.pdf"],
+      ["İstisna", ICZ_T+"Documents/istisna-icazet-yazisi.pdf"],
+      ["Karz ve Enflasyon Farkı", ICZ_T+"Documents/karz-enflasyon-fark-icazet-belgesi.pdf"],
+      ["Katılma Hesapları", ICZ_T+"Documents/katilma-hesaplari-icazet-yazisi.pdf"],
+      ["Kira Sertifikası İhracı", ICZ_T+"Documents/kira-sertifikasi-ihraci.pdf"],
+      ["Konforlu Hesap", ICZ_T+"Documents/konforlu-hesap-icazet-belgesi_imzali.pdf"],
+      ["Kredi Kartı", ICZ_T+"Documents/kredi-karti-icazet-yazisi.pdf"],
+      ["Murabaha", ICZ_T+"Documents/muharaba-icazet-yazisi.pdf"],
+      ["Müsâveme", ICZ_T+"Documents/musaveme-icazet-belgesi.pdf"],
+      ["Oyak Yatırım", ICZ_T+"Documents/oyak-yatirim-icazet-yazisi.pdf"],
+      ["Satıcı Katkı Paylı Finansmanlar", ICZ_T+"Documents/satici-katki-payli-finansmanlar-%C4%B0cazet-yazisi_imzali.pdf"],
+      ["Selem", ICZ_T+"Documents/selem-icazet-belgesi.pdf"],
+      ["Sigorta (Katılım Sigortacılığı)", ICZ_T+"Documents/tefakul-vekil-model-icazet-yazisi.pdf"],
+      ["Taksitle", ICZ_T+"Documents/taksitle-icazet-yazisi.pdf"],
+      ["Tevliye", ICZ_T+"Documents/tevliye-icazet-belgesi.pdf"],
+      ["TFXTarget", ICZ_T+"Documents/TFX-target-platformu-icazet-Yazisi_imzali.pdf"],
+      ["Yatırım Vekâleti Finansmanı", ICZ_T+"Documents/yatirim-vekaleti-finansman.pdf"],
+      ["Yedek Hesap", ICZ_T+"Documents/yedek-hesap-icazet.pdf"],
+      ["Yönetim Sözleşmesine Dayalı Kira Sertifikası İhracı", ICZ_T+"Documents/yonetim-sozlemesine-dayali-kira-sertifikasi-ihraci.pdf"]
+    ] },
+  { ad:"Kuveyt Türk", renk:"#1F7A4E", alanAdi:"kuveytturk.com.tr", sonKontrol:"03.10.2026",
+    sayfa:"https://www.kuveytturk.com.tr/hakkimizda/katilim-bankaciligi/icazet-belgeleri",
+    urunler:[
+      ["Katılma Hesabı", ICZ_KT+"katilma-hesabi-67.pdf"],
+      ["Murabaha", ICZ_KT+"murabaha-68.pdf"],
+      ["Kredi Kartı", ICZ_KT+"kredi-karti-69.pdf"],
+      ["Altın ve Gümüş Ticareti", ICZ_KT+"altin-ve-gumus-ticareti-70.pdf"],
+      ["Finansal Kiralama (Leasing)", ICZ_KT+"finansal-kiralama-leasing-71.pdf"],
+      ["Kefalet Akdi", ICZ_KT+"kefalet-akdi-72.pdf"],
+      ["Kira Sertifikası (Yönetim Sözleşmesine Dayalı Yapıda)", ICZ_KT+"kira-sertifikasi-yonetim-sozlesmesine-dayali-yapid-73.pdf"],
+      ["Özel Cari Hesap", ICZ_KT+"ozel-cari-hesap-74.pdf"],
+      ["Mudârebe Ortaklığı", ICZ_KT+"mudrebe-ortakligi-2455.pdf"],
+      ["Yatırım Fonu", ICZ_KT+"yatirim-fonu-icazet-belgesi-tr-2513.pdf"],
+      ["POS Hizmetleri", ICZ_KT+"pos-iczet-belgesi-2910.pdf"],
+      ["Stok Finansmanı", ICZ_KT+"stok-finansmani-iczet-belgesi-4067.pdf"]
+    ] },
+  { ad:"Albaraka Türk", renk:"#2E6DA8", alanAdi:"albaraka.com.tr", sonKontrol:"03.10.2026",
+    sayfa:"https://www.albaraka.com.tr/tr/hakkimizda/katilim-bankaciligi/icazet-belgeleri",
+    ek:"Albaraka'nın sayfasında \"Daha fazla görüntüle\" ile açılan ek belgeler de olabilir; burada yalnızca ilk görünenler ve Yuvam hesabı yer alıyor. Tamamı için bankanın icazet sayfasına bak.",
+    urunler:[
+      ["Özel Fon Havuzu Katılma Hesabı", ICZ_AB+"2025-ekim--ozel-fon-havuzu-katilma-hesabi.pdf"],
+      ["Özel Cari Hesap", ICZ_AB+"2025-ekim--ozel-cari-hesap.pdf"],
+      ["Müşteri Geri Satım Taahhütlü Fon (M-GTF)", ICZ_AB+"mgft-icazet.pdf"],
+      ["Fiziki Altın Dönüşümlü Kur Korumalı Katılma Hesabı", ICZ_AB+"fiziki-altin-donusumlu-kur-korumali-katilma-hesabi.pdf"],
+      ["Yuvam Hesabı", ICZ_AB+"yuvam-hesap-icazet-belgesi.pdf"]
+    ] },
+  { ad:"Emlak Katılım", renk:"#C97B4A", alanAdi:"emlakkatilim.com.tr", sonKontrol:"03.10.2026",
+    sayfa:"https://www.emlakkatilim.com.tr/tr/hakkimizda/faizsiz-bankacilik",
+    ek:"Emlak Katılım'ın genel faaliyet icazet belgesi yıllık olduğu için listeye alınmadı; sayfada ayrıca görebilirsin.",
+    urunler:[
+      ["Murabaha", "https://kurumsalcdn.emlakkatilim.com.tr/kurumsal/2026_04_murabaha_cazet_belgesi_218e98cb64.pdf"],
+      ["Katılma Hesapları", "https://kurumsalcdn.emlakkatilim.com.tr/kurumsal/2026_03_katilma_hesaplari_cazet_belgesi_accfa742b1.pdf"]
+    ] },
+  { ad:"Adil Katılım", renk:"#5B8DEF", alanAdi:"adilkatilim.com.tr", sonKontrol:null,
+    sayfa:"https://adilkatilim.com.tr/katilim-bankaciligi", urunler:[],
+    durumEtiket:"Banka sayfası",
+    aciklama:"Adil Katılım, ürün ve hizmetlerinin icazet belgelerine katılım bankacılığı sayfasından erişilebildiğini belirtiyor. Ürün bazlı liste henüz çıkarılmadı." },
+  { ad:"Hayat Finans", renk:"#B45309", alanAdi:"hayatfinans.com.tr", sonKontrol:"03.10.2026",
+    sayfa:"https://hayatfinans.com.tr/hakkimizda/katilim-bankaciligi", urunler:[],
+    durumEtiket:"Banka sayfası",
+    aciklama:"Hayat Finans'ın katılım bankacılığı sayfasında \"İcâzet Belgeleri\" sekmesi var, ama içeriğini okuyamadım; yalnızca müşteri bilgilendirme formları görünüyor. Ürün bazlı liste henüz çıkarılmadı." },
+  { ad:"Fuzul Katılım", renk:"#6A3FE0", urunler:[], durumEtiket:"Faaliyette değil",
+    aciklama:"Fuzul Katılım Bankası'nın faaliyet izni süreci sürüyor (2027'de faaliyete geçmesi planlanıyor), henüz icazet belgesi yok." }
+];
+
+function icazetKatla(s:string):string{
+  return String(s).replace(/İ/g,"i").replace(/I/g,"i").toLowerCase()
+    .replace(/[çğıöşüâîû]/g,(c)=>({"ç":"c","ğ":"g","ı":"i","ö":"o","ş":"s","ü":"u","â":"a","î":"i","û":"u"} as any)[c]);
+}
+// Ürün adından otomatik grup (liste uzun olduğu için); eşleşmeyen "Diğer".
+const ICAZET_GRUP_SIRA = ["Hesaplar","Finansman ve işlemler","Kartlar","Yatırım, sukuk ve kıymetli maden","Sigorta ve emeklilik","Diğer"];
+function icazetGrupBul(ad:string):string{
+  const k = icazetKatla(ad);
+  if(/kart/.test(k)) return "Kartlar";
+  if(/sigorta|emeklilik/.test(k)) return "Sigorta ve emeklilik";
+  if(/hesap|hesab|hac ve umre/.test(k)) return "Hesaplar";
+  if(/kira sertifikasi|sukuk|fon alim|yatirim fonu|geri satim|oyak yatirim|tfx|altin|kiymetli|gumus/.test(k)) return "Yatırım, sukuk ve kıymetli maden";
+  if(/murabaha|musaveme|selem|istisna|isticrar|icare|kiralama|musareke|mudarebe|teverruk|tevliye|karz|finansman|finansor|taksitle|kefalet|garanti|forward|vaade|cek|borclandirma|vekalet|promosyon|ceza/.test(k)) return "Finansman ve işlemler";
+  return "Diğer";
+}
+
+function IcazetBelgeleri(){
+  const [bankaIdx,setBankaIdx]=useState<number|null>(null);
+  const [urunIdx,setUrunIdx]=useState<number|null>(null);
+  const [q,setQ]=useState("");
+  const banka:IcazetBanka|null = bankaIdx!=null ? ICAZET_BANKALARI[bankaIdx] : null;
+  const urun:[string,string]|null = (banka && urunIdx!=null) ? banka.urunler[urunIdx] : null;
+  const kartBg = TEMA==="acik" ? "#E9EEF4" : WA(0.05);
+  const baslikRenk = TEMA==="acik" ? C.label : "#fff";
+
+  const gruplar = useMemo(()=>{
+    const m:Record<string,{ad:string;idx:number}[]> = {};
+    if(!banka) return m;
+    const f = icazetKatla(q.trim());
+    banka.urunler.forEach((u,idx)=>{
+      if(f && icazetKatla(u[0]).indexOf(f)<0) return;
+      const g = icazetGrupBul(u[0]);
+      (m[g] = m[g] || []).push({ad:u[0], idx});
+    });
+    return m;
+  },[bankaIdx,q]);
+  const gorunenGrupSayisi = ICAZET_GRUP_SIRA.filter(g=>gruplar[g]).length;
+
+  return (
+    <div style={{padding:"0 14px 26px"}}>
+      <p style={{margin:"0 2px 6px",fontSize:12,lineHeight:1.55,color:WA(0.55)}}>
+        {CV("Banka ve ürünü seç; bankanın kendi yayımladığı resmî icazet belgesine git. Belgeleri Katılım Plus üretmez veya onaylamaz, doğrudan bankanın sitesine yönlendirir.")}
+      </p>
+
+      <div style={{fontSize:10.5,fontWeight:700,letterSpacing:0.6,color:WA(0.45),margin:"16px 2px 8px"}}>{TR("1 · Banka")}</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+        {ICAZET_BANKALARI.map((b,i)=>{
+          const sec = bankaIdx===i;
+          const logo = bankaLogoBul(b.ad);
+          return (
+            <div key={b.ad} className="press-card" onClick={()=>{ setBankaIdx(i); setUrunIdx(null); setQ(""); }}
+              style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",minHeight:56,padding:"10px 11px",borderRadius:14,
+                      background:sec?"rgba(91,155,216,0.16)":kartBg,border:`1.5px solid ${sec?C.blue:WA(0.08)}`}}>
+              {logo
+                ? <img src={logo} alt="" style={{width:32,height:32,objectFit:"contain",flexShrink:0}}/>
+                : <div style={{width:32,height:32,borderRadius:16,flexShrink:0,background:b.renk,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13}}>{b.ad.charAt(0)}</div>}
+              <div style={{minWidth:0}}>
+                <div style={{fontSize:12.5,fontWeight:700,color:baslikRenk,lineHeight:1.25}}>{b.ad}</div>
+                <div style={{fontSize:10,fontWeight:700,marginTop:2,color:b.urunler.length>0?C.green:WA(0.45)}}>
+                  {b.urunler.length>0 ? `${b.urunler.length} belge` : (b.durumEtiket||CV("Yakında"))}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {banka && banka.urunler.length>0 && (
+        <div>
+          <div style={{fontSize:10.5,fontWeight:700,letterSpacing:0.6,color:WA(0.45),margin:"18px 2px 8px"}}>{TR("2 · Ürün")} ({banka.urunler.length})</div>
+          {banka.urunler.length>=8 && (
+            <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:12,background:kartBg,border:`1px solid ${WA(0.08)}`,borderRadius:14,padding:"0 13px"}}>
+              <svg width="15" height="15" viewBox="0 0 24 24" style={{flexShrink:0,stroke:WA(0.4),fill:"none",strokeWidth:2,strokeLinecap:"round"} as any}>
+                <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
+              </svg>
+              <input type="search" inputMode="search" enterKeyHint="search"
+                autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+                data-form-type="other" aria-label="Ürün ara"
+                value={q} onChange={e=>setQ(e.target.value)}
+                placeholder={CV("Ürün ara… (örn. murabaha, kredi kartı)")}
+                style={{flex:1,background:"transparent",border:"none",outline:"none",color:baslikRenk,fontSize:13.5,padding:"12px 0",WebkitAppearance:"none"} as any}/>
+              {q && <span onClick={()=>setQ("")} style={{color:WA(0.4),fontSize:17,cursor:"pointer",padding:"0 2px"}}>×</span>}
+            </div>
+          )}
+          {ICAZET_GRUP_SIRA.filter(g=>gruplar[g]).map(g=>(
+            <div key={g} style={{marginBottom:12}}>
+              <div style={{fontSize:12,fontWeight:700,color:baslikRenk,margin:"0 2px 7px"}}>{g}</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
+                {gruplar[g].map(u=>{
+                  const sec = urunIdx===u.idx;
+                  return (
+                    <span key={u.idx} onClick={()=>setUrunIdx(u.idx)} style={{
+                      cursor:"pointer",borderRadius:20,padding:"8px 13px",fontSize:12.5,fontWeight:600,lineHeight:1.3,
+                      background: sec ? C.blue : kartBg, color: sec ? "#fff" : baslikRenk,
+                      border:`1.5px solid ${sec?C.blue:WA(0.08)}`}}>{u.ad}</span>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+          {gorunenGrupSayisi===0 && (
+            <div style={{padding:"18px 14px",textAlign:"center",fontSize:12.5,color:WA(0.5)}}>{CV("Aramana uyan ürün bulunamadı.")}</div>
+          )}
+          {banka.ek && <p style={{margin:"4px 2px 0",fontSize:11.5,lineHeight:1.55,color:WA(0.55)}}>{banka.ek}</p>}
+        </div>
+      )}
+
+      {banka && banka.urunler.length===0 && (
+        <div style={{marginTop:12,borderRadius:16,padding:16,background:WA(0.05),fontSize:12.5,lineHeight:1.55,color:WA(0.6)}}>
+          <b style={{color:baslikRenk}}>{banka.ad}</b>: {banka.aciklama||CV("icazet belgeleri henüz eklenmedi.")}
+          {banka.sayfa && (
+            <a href={banka.sayfa} target="_blank" rel="noopener noreferrer" style={{display:"block",marginTop:12,textAlign:"center",textDecoration:"none",
+              background:C.green,color:"#06120E",fontWeight:700,fontSize:14,padding:13,borderRadius:13}}>
+              {CV("Bankanın icazet sayfasına git")} ↗
+            </a>
+          )}
+        </div>
+      )}
+
+      {banka && urun && (
+        <div style={{marginTop:10,borderRadius:18,padding:16,background:kartBg,border:`1px solid ${WA(0.08)}`}}>
+          <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
+            <div style={{width:42,height:42,borderRadius:12,flexShrink:0,background:"rgba(27,158,122,0.14)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <svg width="22" height="22" viewBox="0 0 24 24" style={{stroke:C.green,fill:"none",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"} as any}>
+                <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 14l2 2 4-4"/>
+              </svg>
+            </div>
+            <div style={{minWidth:0}}>
+              <div style={{fontSize:15,fontWeight:700,color:baslikRenk,lineHeight:1.3}}>{urun[0]} {CV("icazet belgesi")}</div>
+              <div style={{fontSize:12,color:WA(0.55),marginTop:3}}>{banka.ad}</div>
+            </div>
+          </div>
+          <div style={{margin:"14px 0",borderTop:`1px solid ${WA(0.08)}`}}>
+            {[[CV("Kaynak"),banka.alanAdi||"—"],[CV("Biçim"),"PDF"],[CV("Son kontrol"),banka.sonKontrol||"—"]].map(([e,d])=>(
+              <div key={e} style={{display:"flex",justifyContent:"space-between",gap:12,padding:"9px 0",borderBottom:`1px solid ${WA(0.08)}`,fontSize:12.5}}>
+                <span style={{color:WA(0.55)}}>{e}</span><span style={{fontWeight:600,color:baslikRenk,textAlign:"right"}}>{d}</span>
+              </div>
+            ))}
+          </div>
+          <a href={urun[1]} target="_blank" rel="noopener noreferrer" style={{display:"block",textAlign:"center",textDecoration:"none",
+            background:C.green,color:"#06120E",fontWeight:700,fontSize:14,padding:13,borderRadius:13}}>
+            {CV("Belgeyi aç (PDF)")} ↗
+          </a>
+          {banka.sayfa && (
+            <a href={banka.sayfa} target="_blank" rel="noopener noreferrer" style={{display:"block",textAlign:"center",textDecoration:"none",marginTop:8,
+              background:"rgba(91,155,216,0.16)",color:C.blue,fontWeight:700,fontSize:13,padding:12,borderRadius:13}}>
+              {CV("Bankanın icazet sayfası")} ↗
+            </a>
+          )}
+        </div>
+      )}
+
+      {banka && urun && (
+        <div style={{display:"flex",gap:9,marginTop:16,borderRadius:13,padding:"11px 12px",fontSize:11.5,lineHeight:1.5,
+                     background:TEMA==="acik"?"#FFF6E0":"rgba(227,199,119,0.12)",color:TEMA==="acik"?"#7A5A12":"#E3C777"}}>
+          <span>ⓘ</span>
+          <span>{CV("İcazet belgesi, ürünün bankanın Danışma Komitesi tarafından faizsiz bankacılık ilke ve standartlarına uygun bulunduğunu gösterir. Güncel ve bağlayıcı olan, bankanın kendi sitesindeki belgedir.")}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function KatilimBankalari(){
   const [secili,setSecili]=useState<any>(null);
   const turRenk:any={Kamu:C.green,Özel:C.blue,Dijital:C.purple};
@@ -20044,7 +20384,7 @@ function GostergeGrafikModal({ad,seri,birim,proAktif,onClose,onProGerekli}:{ad:s
 // Grafik GostergeGrafikModal ile AYNI çubuk-grafik mantığını kullanıyor
 // (kod tekrarını önlemek için ayrı bir fonksiyona çıkarılmadı — ikisinin
 // layout'u/state'i yeterince farklı; birleştirmek daha büyük bir riskti).
-function GostergeTabloModal({ad,seri,birim,proAktif,onClose,onProGerekli}:{ad:string,seri:{tarih:string,deger:number}[],birim?:string,proAktif:boolean,onClose:()=>void,onProGerekli:()=>void}){
+function GostergeTabloModal({ad,seri,birim,proAktif,onClose,onProGerekli,karPayi}:{ad:string,seri:{tarih:string,deger:number}[],birim?:string,proAktif:boolean,onClose:()=>void,onProGerekli:()=>void,karPayi?:boolean}){
   // birim: undefined → yüzde | "milyon$" → Milyar $ (negatifler cari açık/dış
   // ticaret açığı için işaretli gösterilir) | "endeks" → düz sayı (REK gibi)
   const isYuzde = birim!=="milyon$" && birim!=="endeks";
@@ -20059,6 +20399,16 @@ function GostergeTabloModal({ad,seri,birim,proAktif,onClose,onProGerekli}:{ad:st
   const kirpilmisMi = !proAktif && seri.length > 3;
   const gosterilecekSeri = proAktif ? seri : seri.slice(-3);
   const siraliSeri=[...gosterilecekSeri].reverse(); // en yeni veri en üstte
+  // ── FİNANSMAN KÂR ORANLARI: tabloya 3 kolon (2026-10-03, kullanıcı isteği:
+  // "değer yazan yere yıllık bileşik, sol tarafa yıllık basit, yanına aylık
+  // basit") ────────────────────────────────────────────────────────────────
+  // Seri TCMB'nin HAM (haftalık akım, bileşik) değeridir; ana kartta altında
+  // gösterilen "yıllık ≈" ve "aylık ≈" burada HER TARİH için aynı formülle
+  // hesaplanır: yıllık basit = bilesikTenBasiteCevir(bileşik), aylık = yıllık/12
+  // (bkz. karPayiSatir — ikisi birebir aynı olmalı). Grafik bileşik kalır.
+  const kpKolon = !!karPayi && isYuzde;
+  const kpGrid = "minmax(0,1fr) 62px 62px 66px";
+  const kpYuzde = (v:number|null)=> v==null||isNaN(v) ? "—" : `%${v.toFixed(2).replace(".",",")}`;
 
   const [tooltip,setTooltip]=useState<number|null>(null);
   const degerler=gosterilecekSeri.map(s=>s.deger);
@@ -20148,16 +20498,44 @@ function GostergeTabloModal({ad,seri,birim,proAktif,onClose,onProGerekli}:{ad:st
                 </div>
               )}
             </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr auto",padding:"9px 20px",background:C.thead,position:"sticky",top:0,zIndex:1,marginTop:8}}>
-              <span style={{fontSize:10,fontWeight:700,color:"#fff",letterSpacing:"0.04em"}}>TARİH</span>
-              <span style={{fontSize:10,fontWeight:700,color:"#fff",letterSpacing:"0.04em"}}>DEĞER</span>
-            </div>
-            {siraliSeri.map((s,i)=>(
-              <div key={i} style={{display:"grid",gridTemplateColumns:"1fr auto",alignItems:"center",padding:"11px 20px",background:i%2===0?WA(0.03):"transparent",borderBottom:`1px solid ${C.border}`}}>
-                <span style={{fontSize:12.5,color:C.label,fontWeight:600}}>{s.tarih}</span>
-                <span style={{fontSize:13,fontWeight:700,fontFamily:"monospace",color:isYuzde?(s.deger>=0?C.green:C.red):C.blue}}>{fmtDeger(s.deger)}</span>
+            {kpKolon ? (
+              <div style={{display:"grid",gridTemplateColumns:kpGrid,columnGap:6,padding:"9px 20px",background:C.thead,position:"sticky",top:0,zIndex:1,marginTop:8}}>
+                <span style={{fontSize:10,fontWeight:700,color:"#fff",letterSpacing:"0.04em"}}>TARİH</span>
+                <span style={{fontSize:9.5,fontWeight:700,color:"#fff",textAlign:"right",whiteSpace:"nowrap"}}>AYLIK ≈</span>
+                <span style={{fontSize:9.5,fontWeight:700,color:"#fff",textAlign:"right",whiteSpace:"nowrap"}}>YILLIK ≈</span>
+                <span style={{fontSize:9.5,fontWeight:700,color:"#fff",textAlign:"right",whiteSpace:"nowrap"}}>BİLEŞİK</span>
               </div>
-            ))}
+            ) : (
+              <div style={{display:"grid",gridTemplateColumns:"1fr auto",padding:"9px 20px",background:C.thead,position:"sticky",top:0,zIndex:1,marginTop:8}}>
+                <span style={{fontSize:10,fontWeight:700,color:"#fff",letterSpacing:"0.04em"}}>TARİH</span>
+                <span style={{fontSize:10,fontWeight:700,color:"#fff",letterSpacing:"0.04em"}}>DEĞER</span>
+              </div>
+            )}
+            {siraliSeri.map((s,i)=>{
+              if(kpKolon){
+                const yb = bilesikTenBasiteCevir(s.deger);
+                const ab = yb!=null ? yb/12 : null;
+                return (
+                  <div key={i} style={{display:"grid",gridTemplateColumns:kpGrid,columnGap:6,alignItems:"center",padding:"11px 20px",background:i%2===0?WA(0.03):"transparent",borderBottom:`1px solid ${C.border}`}}>
+                    <span style={{fontSize:12.5,color:C.label,fontWeight:600}}>{s.tarih}</span>
+                    <span style={{fontSize:12,fontWeight:600,fontFamily:"monospace",textAlign:"right",whiteSpace:"nowrap",color:C.soft}}>{kpYuzde(ab)}</span>
+                    <span style={{fontSize:12,fontWeight:600,fontFamily:"monospace",textAlign:"right",whiteSpace:"nowrap",color:C.soft}}>{kpYuzde(yb)}</span>
+                    <span style={{fontSize:12.5,fontWeight:700,fontFamily:"monospace",textAlign:"right",whiteSpace:"nowrap",color:C.green}}>{fmtDeger(s.deger)}</span>
+                  </div>
+                );
+              }
+              return (
+                <div key={i} style={{display:"grid",gridTemplateColumns:"1fr auto",alignItems:"center",padding:"11px 20px",background:i%2===0?WA(0.03):"transparent",borderBottom:`1px solid ${C.border}`}}>
+                  <span style={{fontSize:12.5,color:C.label,fontWeight:600}}>{s.tarih}</span>
+                  <span style={{fontSize:13,fontWeight:700,fontFamily:"monospace",color:isYuzde?(s.deger>=0?C.green:C.red):C.blue}}>{fmtDeger(s.deger)}</span>
+                </div>
+              );
+            })}
+            {kpKolon && (
+              <p style={{margin:0,padding:"10px 20px 4px",fontSize:10.5,lineHeight:1.5,color:WA(0.5)}}>
+                {CV("Bileşik: TCMB'nin ham (haftalık akım) verisi. Yıllık ≈ ve aylık ≈ haftalık bileşiklemeye dayalı basit karşılıklardır (aylık = yıllık / 12).")}
+              </p>
+            )}
           </div>
         )}
         <p style={{margin:0,padding:"10px 20px calc(10px + env(safe-area-inset-bottom,0px))",fontSize:10,color:WA(0.3),textAlign:"center",flexShrink:0}}>
@@ -20622,6 +21000,7 @@ const MENU = {
   getiriKarsilastirma:{title:"Getiri Karşılaştırma",back:"home"},
   haftalikOzet:{title:"Haftalık Piyasa Özeti",back:"home"},
   katilimBankalari:{title:"Katılım Bankaları",back:"araclarMenu"},
+  icazetBelgeleri:{title:"İcazet Belgeleri",back:"araclarMenu"},
   kfkNedir:{title:"Katılım Finans Kefalet (KFK) Nedir?",back:"araclarMenu"},
   katilimSektoru:{title:"Katılım Bankacılığı Sektörü",back:"araclarMenu"},
   ekonomiSozluk:{title:"Ekonomi Sözlüğü",back:"araclarMenu"},
@@ -20763,6 +21142,7 @@ const SCREEN_TO_PATH: Record<string,string> = {
   katilimSektoru: "/katilim-bankaciligi-sektoru",
   ekonomiSozluk: "/ekonomi-sozlugu",
   taksitKarsilastirma: "/taksit-karsilastirma",
+  icazetBelgeleri: "/icazet-belgeleri",
 };
 const PATH_TO_SCREEN: Record<string,string> = Object.fromEntries(
   Object.entries(SCREEN_TO_PATH).map(([ekran,yol])=>[yol,ekran])
@@ -20856,6 +21236,7 @@ const MENU_ARAMA_LIST=[
   {key:"katilimBankalari",   label:"Katılım Bankaları",                          icon:"🏛️", grup:"Araçlar"},
   {key:"kfkNedir",           label:"Katılım Finans Kefalet (KFK) Nedir?",         icon:"🤝", grup:"Araçlar", alt:["kfk","kefalet","katılım finans kefalet","kgf","teminat","kobi"]},
   {key:"katilimSektoru",     label:"Katılım Bankacılığı Sektörü",               icon:"🏦", grup:"Araçlar", alt:["sektör","bddk","pay","aktif","toplanan fon","kullandırılan fon","katılma hesabı","özel cari","roe","kârlılık"]},
+  {key:"icazetBelgeleri",    label:"İcazet Belgeleri",                          icon:"📑", grup:"Araçlar", alt:["icazet","icazet belgesi","danışma komitesi","faizsiz","uygunluk","fetva","murabaha","katılma hesabı","belge"]},
   {key:"ekonomiSozluk",      label:"Ekonomi Sözlüğü",                           icon:"📚", grup:"Araçlar", alt:["ekonomi","terim","sözlük","enflasyon","gsyh","faiz","tanım","kavram","makro"]},
   {key:"zekatHesabi",        label:"Zekât Hesaplayıcı",                               icon:"🌙", grup:"Araçlar", alt:["zekat","zekât","nisap","nisab","kırkta bir","sadaka","altın nisabı","dini","ibadet","hesapla"]},
   {key:"kiraSertifikasi",    label:"Kira Sertifikası İhraçları",                 icon:"📜", grup:"Araçlar", alt:["kira sertifikası","sukuk","ihraç","vekâlet","murabaha","icare","varlık kiralama","spk"]},
@@ -30020,6 +30401,7 @@ function App(){
               {baslik:"BİLGİ", ogeler:[
                 {key:"kiraSertifikasi",label:"Kira Sertifikası İhraçları"},
                 {key:"katilimBankalari",label:"Katılım Bankaları"},
+                {key:"icazetBelgeleri",label:"İcazet Belgeleri"},
                 {key:"kfkNedir",label:"Katılım Finans Kefalet (KFK) Nedir?"},
                 {key:"katilimSektoru",label:"Katılım Bankacılığı Sektörü"},
                 {key:"ekonomiSozluk",label:"Ekonomi Sözlüğü"},
@@ -31092,7 +31474,7 @@ function App(){
                   <p style={{margin:"10px 4px 0",fontSize:10,color:WA(0.35),lineHeight:1.5}}>
                     Kaynak: TCMB EVDS (TÜİK dış ticaret, ödemeler dengesi, reel efektif kur). 12 aylık değerler son 12 ayın hareketli toplamıdır. Satıra dokunarak geçmiş verileri görebilirsiniz.
                   </p>
-                  {piyasaGostergeTablo&&<GostergeTabloModal ad={piyasaGostergeTablo.ad} seri={piyasaGostergeTablo.seri||[]} birim={piyasaGostergeTablo.birim} proAktif={kimlik.pro.aktif} onClose={()=>setPiyasaGostergeTablo(null)} onProGerekli={()=>{ setPiyasaGostergeTablo(null); nav("proSatinAl"); }}/>}
+                  {piyasaGostergeTablo&&<GostergeTabloModal ad={piyasaGostergeTablo.ad} seri={piyasaGostergeTablo.seri||[]} birim={piyasaGostergeTablo.birim} proAktif={kimlik.pro.aktif} karPayi={piyasaGostergeTablo.karPayi} onClose={()=>setPiyasaGostergeTablo(null)} onProGerekli={()=>{ setPiyasaGostergeTablo(null); nav("proSatinAl"); }}/>}
                 </div>
               );
             })():piyasaTabloFiltre==="gostergeler"?(()=>{
@@ -31379,7 +31761,7 @@ function App(){
                       KAR_PAYI.map((g,i)=>{
                         const tiklanabilirKp = g.seri && g.seri.length>0;
                         return (
-                        <div key={i} onClick={()=>tiklanabilirKp&&setPiyasaGostergeTablo({ad:g.seriAd,seri:g.seri,birim:g.seriBirim})} style={{display:"flex",justifyContent:"space-between",alignItems:"center",cursor:tiklanabilirKp?"pointer":"default",
+                        <div key={i} onClick={()=>tiklanabilirKp&&setPiyasaGostergeTablo({ad:g.seriAd,seri:g.seri,birim:g.seriBirim,karPayi:true})} style={{display:"flex",justifyContent:"space-between",alignItems:"center",cursor:tiklanabilirKp?"pointer":"default",
                           ...(TEMA==="acik"
                             ? {padding:"11px 14px",borderRadius:12,marginBottom:8,
                                background:(i%2===1?"#F3F6FA":"#E9EEF4"),
@@ -31431,7 +31813,7 @@ function App(){
                       })
                     )}
                   </div>
-                  {piyasaGostergeTablo&&<GostergeTabloModal ad={piyasaGostergeTablo.ad} seri={piyasaGostergeTablo.seri||[]} birim={piyasaGostergeTablo.birim} proAktif={kimlik.pro.aktif} onClose={()=>setPiyasaGostergeTablo(null)} onProGerekli={()=>{ setPiyasaGostergeTablo(null); nav("proSatinAl"); }}/>}
+                  {piyasaGostergeTablo&&<GostergeTabloModal ad={piyasaGostergeTablo.ad} seri={piyasaGostergeTablo.seri||[]} birim={piyasaGostergeTablo.birim} proAktif={kimlik.pro.aktif} karPayi={piyasaGostergeTablo.karPayi} onClose={()=>setPiyasaGostergeTablo(null)} onProGerekli={()=>{ setPiyasaGostergeTablo(null); nav("proSatinAl"); }}/>}
 
                   {/* Piyasa Duyarlılığı — VIX/DXY: diğerleri gibi EVDS/FRED üzerinden
                       değil, doğrudan Yahoo Finance'ten canlı çekilir (PiyasaSatiri,
@@ -31523,6 +31905,7 @@ function App(){
               {key:"getiriKarsilastirma", icon:"📊", label:"Getiri Karşılaştırma", desc:"Döviz, altın, gümüş, endeks getirilerini dönemsel karşılaştır", renk:"#F59E0B", bg:"rgba(245,158,11,0.15)"},
               {key:"vadeTakibi", icon:"⏰", label:"Vade Takip & Hatırlatma Ajandam", desc:"Finansman ve ödeme vadelerini takip et, hatırlatma al", renk:C.green, bg:"rgba(74,222,128,0.15)"},
               {key:"katilimBankalari", icon:"🏛️", label:"Katılım Bankaları", desc:"Türkiye'deki katılım bankaları, kuruluş tarihleri ve bilgileri", renk:C.blue, bg:"rgba(91,155,216,0.15)"},
+              {key:"icazetBelgeleri", icon:"📑", label:"İcazet Belgeleri", desc:"Banka ve ürün seç, bankanın kendi yayımladığı icazet belgesine git", renk:"#2CCB9A", bg:"rgba(44,203,154,0.15)"},
               {key:"katilimSektoru", icon:"🏦", label:"Katılım Bankacılığı Sektörü", desc:"Sektör payı, fon büyüklükleri ve kârlılık — BDDK resmî verisiyle", renk:"#5B9BD8", bg:"rgba(91,155,216,0.15)"},
               {key:"ekonomiSozluk", icon:"📚", label:"Ekonomi Sözlüğü", desc:"196 ekonomi ve finans terimi — enflasyondan rezervlere, sade tanımlarla", renk:"#A78BFA", bg:"rgba(167,139,250,0.15)"},
               {key:"kfkNedir", icon:"🤝", label:"Katılım Finans Kefalet (KFK) Nedir?", desc:"9 kefalet paketi, size uygun olanı bulun — Katılım Finans Kefalet A.Ş.", renk:"#2CCB9A", bg:"rgba(44,203,154,0.15)"},
@@ -31865,6 +32248,7 @@ function App(){
         {screen==="finansalTakvim"&&<FinansalTakvim/>}
         {screen==="vadeTakibi"&&<VadeTakibi/>}
         {screen==="katilimBankalari"&&<KatilimBankalari/>}
+        {screen==="icazetBelgeleri"&&<IcazetBelgeleri/>}
         {screen==="kfkNedir"&&<KfkNedir/>}
         {screen==="katilimSektoru"&&<KatilimSektoru/>}
         {screen==="ekonomiSozluk"&&<EkonomiSozluk/>}
