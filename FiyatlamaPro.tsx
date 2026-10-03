@@ -3238,6 +3238,18 @@ function fonFiyatBicimle(v:number){
   return v.toLocaleString("tr-TR",{minimumFractionDigits:basamak,maximumFractionDigits:basamak});
 }
 
+// ── PARA PİYASASI FONU eşleşmesi (2026-10-03) ─────────────────────────
+// Eski kural: adda düz "PARA" geçmesi yeterliydi — "QNB PORTFÖY ENPARA ATAK DEĞİŞKEN..."
+// gibi adında sadece "ENPARA" (banka markası) geçen değişken/şemsiye fonları
+// da Para Piyasası sayıyordu. Artık yalnızca "PARA PİYASASI" ifadesi
+// (kategori veya ad) aranır; "ENPARA" tek başına eşleşmez.
+function fonParaPiyasasiMi(kategori: any, ad: any): boolean {
+  const re = /(^|[^A-ZÇĞİÖŞÜ])PARA\s+P[Iİ]YASASI/;
+  const kat = String(kategori || "").toLocaleUpperCase("tr-TR");
+  const a = String(ad || "").toLocaleUpperCase("tr-TR");
+  return re.test(kat) || re.test(a);
+}
+
 function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran: genisEkranProp, onFonGrafikAc }: { settings?: any; initialKod?: string | null; onInitialTuketildi?: () => void; genisEkran?: boolean; onFonGrafikAc?: (fon:any)=>void } = {}) {
   // Eğer prop gelmezse localStorage'dan oku (standalone kullanım)
   const [localSettings, setLocalSettings] = useState(null);
@@ -3492,7 +3504,7 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
         const ad  = (f.ad||"").toUpperCase();
         const yOk=filtreYon==="Tümü"||(
               filtreYon==="Hisse"    ? (kat.includes("HİSSE")    || ad.includes("HİSSE")):
-              filtreYon==="Para"     ? (kat.includes("PARA")     || ad.includes("PARA")):
+              filtreYon==="Para"     ? fonParaPiyasasiMi(f.kategori, f.ad):
               filtreYon==="Borçlanma"? (kat.includes("BORÇ")     || ad.includes("BORÇ")):
               filtreYon==="Karma"    ? (kat.includes("DEĞİŞKEN") || kat.includes("KARMA") || ad.includes("DEĞİŞKEN") || ad.includes("DİNAMİK")):
               filtreYon==="Sepet"    ? (kat.includes("SEPET")    || ad.includes("SEPET")):
@@ -3700,7 +3712,7 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
 
                     </div>
                     <div onClick={(e)=>{ if(onFonGrafikAc){ e.stopPropagation(); onFonGrafikAc(fon); } }} style={{flex:1,minWidth:0,paddingRight:2,textAlign:"left",cursor:onFonGrafikAc?"pointer":"default"}}>
-                      <div style={{fontSize:11,fontWeight:700,color:FC.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",lineHeight:1.3,textDecoration:onFonGrafikAc?"underline":"none",textDecorationColor:FC.border}}>{fon.ad}</div>
+                      <div style={{fontSize:11,fontWeight:700,color:FC.text,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical" as const,wordBreak:"break-word",lineHeight:1.3,textDecoration:onFonGrafikAc?"underline":"none",textDecorationColor:FC.border}}>{fon.ad}</div>
                       <div style={{fontSize:10.5,fontWeight:600,color:FC.text,marginTop:1.5,display:"flex",alignItems:"baseline",gap:4,overflow:"hidden"}}>
                         <span style={{flexShrink:0}}>{typeof fon.fiyat==="number" ? `${fonFiyatBicimle(fon.fiyat)} ₺` : "—"}</span>
                         {/* ── FİYAT TARİHİ (2026-08-18) ─────────────────────────────
@@ -4655,7 +4667,7 @@ function FonDetay({ fon: fonProp, onGeri, settings }: { fon: any, onGeri: () => 
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
           <div style={{minWidth:0}}>
             <div style={{fontSize:20,fontWeight:700,color:C.text}}>{fon.kod}</div>
-            <div style={{fontSize:12,color:C.sub,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{fon.ad}</div>
+            <div style={{fontSize:12,color:C.sub,marginTop:2,lineHeight:1.3,wordBreak:"break-word"}}>{fon.ad}</div>
             {fon.yonetici && <div style={{fontSize:10.5,color:C.sub2,marginTop:1}}>{fon.yonetici}</div>}
             {/* ── TEFAS'TA İŞLEM GÖRMÜYOR UYARISI (2026-08-06) ──────────────
                 islemDurumu alanı Fonoloji'den geliyordu ama hiçbir yerde
@@ -15076,9 +15088,7 @@ function GetiriKarsilastirma(){
         // Ortalama, yalnızca PARA PİYASASI (katılım) fonlarından hesaplanır —
         // FonGetiriIzleme'deki "Para Piyasası" filtresiyle aynı eşleşme kuralı.
         const paraFonlari=fonlar.filter((f:any)=>{
-          const kat=String(f.kategori||"").toLocaleUpperCase("tr-TR");
-          const ad=String(f.ad||"").toLocaleUpperCase("tr-TR");
-          return kat.includes("PARA")||ad.includes("PARA");
+          return fonParaPiyasasiMi(f.kategori, f.ad);
         });
         const ort=(alan:string)=>{
           const v=paraFonlari.map((f:any)=>f?.[alan]).filter((x:any)=>typeof x==="number"&&isFinite(x)&&x!==0);
