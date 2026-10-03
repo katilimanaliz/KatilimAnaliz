@@ -5095,6 +5095,12 @@ const ABD_SEKMELER: [string, string][] = [["bist", "BİST 100"], ["sp", "S&P 500
 const ABD_ENDEKS_BILGI: Record<string, { ad: string; sembol: string }> = {
   sp: { ad: "S&P 500", sembol: "^GSPC" }, nq: { ad: "Nasdaq 100", sembol: "^NDX" }, dj: { ad: "Dow 30", sembol: "^DJI" },
 };
+// ── SÜTUN BAŞLIKLARI (2026-10-03, kullanıcı: "tablonun parçası gibi olsun, üstte küçük yazı gibi sırıtmasın") ──
+// Başlık bandı ve veri satırları AYNI grid şablonunu kullanır → sütunlar birebir hizalanır (fiyat uzunluğu değişse
+// de kaymaz). ABD: Hisse Adı | Fiyat (96px) | Günlük % (84px). BİST (aşağıda): avatar 42px | Hisse Adı | Fiyat 72px | değişim 84px.
+const ABD_SUTUN = "minmax(0,1fr) 96px 84px";
+const BIST_SUTUN = "42px minmax(0,1fr) 72px 84px";
+const abdBaslikBandi: any = { background: WA(0.09), fontSize: 11.5, fontWeight: 700, color: C.label };
 const abdSekmeDurumu: Record<string, { sira: string; arama: string }> = {};   // oturum boyunca sekme başına arama/sıralama
 
 function AbdPiyasaSekmeleri({ secili, onSec }: { secili: string; onSec: (k: string) => void }) {
@@ -5208,19 +5214,27 @@ function AbdHisseIzleme({ piyasa, onKurAc }: { piyasa: string; onKurAc?: (k: any
 
       {hisseler.length > 0 && (
         <div style={{ background: WA(0.04), border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden" }}>
+          {/* Tablo başlığı: listeyle aynı kutunun içinde, hafif renkli bant + alt çizgi; sütunlar satırlarla aynı grid */}
+          <div style={{ display: "grid", gridTemplateColumns: ABD_SUTUN, columnGap: 10, alignItems: "center", padding: "10px 14px", borderBottom: `1px solid ${C.border}`, ...abdBaslikBandi }}>
+            <div style={{ opacity: 0.75 }}>Hisse Adı</div>
+            <div style={{ textAlign: "right", opacity: 0.75 }}>Fiyat</div>
+            <div style={{ textAlign: "right", opacity: 0.75 }}>Günlük %</div>
+          </div>
           {liste.length === 0 && <p style={{ textAlign: "center", color: C.sub, fontSize: 13, padding: 20, margin: 0 }}>Sonuç bulunamadı</p>}
           {liste.slice(0, gorunen).map((h: any, i: number) => {
             const up = h.degisim1g > 0, notr = h.degisim1g === 0;
             return (
               <div key={h.ticker} onClick={() => onKurAc && onKurAc({ kod: h.ticker, ad: h.ad, sembol: h.yahoo || h.ticker, birim: "$" })}
-                style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", borderTop: i === 0 ? "none" : `1px solid ${C.border}`, cursor: "pointer" }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
+                style={{ display: "grid", gridTemplateColumns: ABD_SUTUN, columnGap: 10, alignItems: "center", padding: "11px 14px", borderTop: i === 0 ? "none" : `1px solid ${C.border}`, cursor: "pointer" }}>
+                <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: C.label }}>{h.ticker}</div>
                   <div style={{ fontSize: 11.5, color: C.sub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{h.ad}</div>
                 </div>
-                <div style={{ fontFamily: "monospace", fontSize: 14, fontWeight: 600, color: C.label, textAlign: "right" }}>$ {fmtN(h.fiyat, 2)}</div>
-                <div style={{ minWidth: 74, textAlign: "center", fontSize: 12, fontWeight: 700, borderRadius: 999, padding: "3px 8px", color: notr ? C.sub : (up ? C.green : C.red), background: notr ? WA(0.08) : (up ? "rgba(27,158,122,0.14)" : "rgba(214,69,69,0.14)") }}>
-                  {notr ? "" : (up ? "▲ " : "▼ ")}%{Math.abs(h.degisim1g).toFixed(2).replace(".", ",")}
+                <div style={{ fontFamily: "monospace", fontSize: 14, fontWeight: 600, color: C.label, textAlign: "right", whiteSpace: "nowrap" }}>$ {fmtN(h.fiyat, 2)}</div>
+                <div style={{ textAlign: "right" }}>
+                  <span style={{ display: "inline-block", minWidth: 76, textAlign: "center", fontSize: 12, fontWeight: 700, borderRadius: 999, padding: "3px 8px", color: notr ? C.sub : (up ? C.green : C.red), background: notr ? WA(0.08) : (up ? "rgba(27,158,122,0.14)" : "rgba(214,69,69,0.14)") }}>
+                    {notr ? "" : (up ? "▲ " : "▼ ")}%{Math.abs(h.degisim1g).toFixed(2).replace(".", ",")}
+                  </span>
                 </div>
               </div>
             );
@@ -5529,7 +5543,7 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri,
   // Tümü/Yükselenler/Düşenler) günlük değişim aynen korunur.
   const perKol: "degisim1g"|"degisim1h"|"degisim1a"|"degisim1y" =
     (siraBy==="degisim1h"||siraBy==="degisim1a"||siraBy==="degisim1y") ? siraBy : "degisim1g";
-  const perEtiket = perKol==="degisim1h" ? "1H" : perKol==="degisim1a" ? "1A" : perKol==="degisim1y" ? "1Y" : "";
+  // (perEtiket — satır içi "1H/1A/1Y" öneki — 2026-10-03'te kaldırıldı: periyot artık tablo başlığında yazıyor)
 
   if (detayHisse) return <HisseDetay hisse={detayHisse} onGeri={() => {
     if (detayPendingKaynakli.current && onDisaridanGeri) { detayPendingKaynakli.current = false; onDisaridanGeri(); }
@@ -5810,12 +5824,19 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri,
         <div style={{textAlign:"center",padding:"40px 0",color:C.sub}}>Sonuç bulunamadı.</div>
       ) : (
         <div>
+          {/* Tablo başlığı (2026-10-03): satır kartlarıyla AYNI kenarlık/iç boşluk/grid; "Günlük %" seçili periyoda göre değişir */}
+          <div style={{display:"grid",gridTemplateColumns:BIST_SUTUN,columnGap:10,alignItems:"center",padding:"10px 12px",background:WA(0.09),border:`1px solid ${C.border}`,borderLeft:"3px solid transparent",borderRadius:10,marginBottom:6,fontSize:11.5,fontWeight:700,color:C.label}}>
+            <div/>
+            <div style={{opacity:0.75}}>Hisse Adı</div>
+            <div style={{textAlign:"right",opacity:0.75}}>Fiyat</div>
+            <div style={{textAlign:"right",opacity:0.75,whiteSpace:"nowrap"}}>{perKol==="degisim1h"?"Haftalık %":perKol==="degisim1a"?"Aylık %":perKol==="degisim1y"?"Yıllık %":"Günlük %"}</div>
+          </div>
           {filtreli.map((h, i) => (
             <div key={h.ticker}>
               <div
                 onClick={() => {detayPendingKaynakli.current=false; setDetayHisse(h);}}
                 style={{
-                  display:"flex",alignItems:"center",gap:10,
+                  display:"grid",gridTemplateColumns:BIST_SUTUN,columnGap:10,alignItems:"center",
                   padding:"10px 12px",
                   background: secilen?.ticker===h.ticker ? C.blueLight
                     : flashMap[h.ticker]==="up" ? "rgba(74,222,128,0.14)"
@@ -5830,7 +5851,7 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri,
                 <HisseAvatar ticker={h.ticker} sirket={h.sirket}/>
 
                 {/* Ticker + Şirket adı */}
-                <div style={{flex:1,minWidth:0}}>
+                <div style={{minWidth:0}}>
                   <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
                     <span style={{fontSize:13,fontWeight:700,color:h.katilimEndeksi?C.green:C.blue,flexShrink:0}}>{h.ticker}</span>
                     {h.katilimEndeksi && <span style={{fontSize:10,color:C.green}}>☪</span>}
@@ -5861,18 +5882,16 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri,
                     değişim yüzdesi ALTTA — iki satır halinde ALT ALTA idi.
                     Artık TEK SATIRDA yan yana: fiyat SOLDA, değişim rozeti
                     SAĞDA. */}
-                <div style={{textAlign:"right",flexShrink:0,display:"flex",alignItems:"center",gap:6}}>
-                  <div style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:"tabular-nums",display:"flex",alignItems:"center",gap:3,whiteSpace:"nowrap"}}>
-                    {h.fiyat ? h.fiyat.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}) : "—"}
-                    {flashMap[h.ticker]&&<span style={{fontSize:10,color:flashMap[h.ticker]==="up"?C.green:C.red}}>{flashMap[h.ticker]==="up"?"▲":"▼"}</span>}
-                  </div>
-                  <div style={{
-                    fontSize:11,fontWeight:700,whiteSpace:"nowrap",
-                    color:h[perKol]>0?C.green:h[perKol]<0?C.red:C.sub,
-                  }}>
-                    {perEtiket&&<span style={{fontSize:8.5,fontWeight:700,color:C.sub,marginRight:3,verticalAlign:"1px"}}>{perEtiket}</span>}
-                    {h[perKol]!=null ? (h[perKol]>0?"▲ +":h[perKol]<0?"▼ ":"")+h[perKol].toFixed(2)+"%" : "—"}
-                  </div>
+                {/* Fiyat ve değişim: AYRI sabit genişlikli sütunlar (başlıkla birebir hizalı), sağa hizalı */}
+                <div style={{fontSize:13,fontWeight:700,color:C.text,fontVariantNumeric:"tabular-nums",display:"flex",alignItems:"center",justifyContent:"flex-end",gap:3,whiteSpace:"nowrap"}}>
+                  {h.fiyat ? h.fiyat.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}) : "—"}
+                  {flashMap[h.ticker]&&<span style={{fontSize:10,color:flashMap[h.ticker]==="up"?C.green:C.red}}>{flashMap[h.ticker]==="up"?"▲":"▼"}</span>}
+                </div>
+                <div style={{
+                  textAlign:"right",fontSize:11,fontWeight:700,whiteSpace:"nowrap",
+                  color:h[perKol]>0?C.green:h[perKol]<0?C.red:C.sub,
+                }}>
+                  {h[perKol]!=null ? (h[perKol]>0?"▲ +":h[perKol]<0?"▼ ":"")+h[perKol].toFixed(2)+"%" : "—"}
                 </div>
               </div>
 
