@@ -563,10 +563,13 @@ async function haftalikNeden(req, res) {
   const sogu = "haftalikNedenSogu:" + hedef;
   try {
     const sonHata = await redis.get(sogu);
+    // ⚠️ Upstash, "1" gibi sayıya benzeyen metni SAYI (1) olarak geri verir (otomatik JSON
+    // ayrıştırma) — bu yüzden sonHata her zaman String()'e çevrilip karşılaştırılır.
     // "1": önceki sürümün sebepsiz soğuma işareti — eski kayıt, YOK sayılır (bir kez yeniden
     // denenir ve gerçek hata sebebi yakalanır); yeni kayıtlar sebep metni taşır.
-    if (sonHata && sonHata !== "1") {
-      res.status(200).json({ basarili: false, beklemede: true, sebep: typeof sonHata === "string" ? sonHata : "bilinmiyor" });
+    const sonHataMetin = sonHata == null ? "" : String(sonHata);
+    if (sonHataMetin && sonHataMetin !== "1") {
+      res.status(200).json({ basarili: false, beklemede: true, sebep: sonHataMetin });
       return;
     }
     const aldi = await redis.set(kilit, "1", { nx: true, ex: 90 });
