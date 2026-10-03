@@ -513,13 +513,84 @@ async function veriHesaplaVeZenginlestir(sembol) {
   return await altinApiIleZenginlestir(sembol, temel);
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// UZUN GEÇMİŞ MODU (2026-10-03) — ?sembol=X&uzun=1y|5y|10y
+// ═══════════════════════════════════════════════════════════════════════════
+// NEDEN: Portföyüm > Performans, her kalemin ALIŞ TARİHİNDEKİ fiyatı/kuru ister (dolar/euro/altın bazında getiri, BIST 100 /
+// dolar / altın kıyası). Normal mod yalnızca ~30 günlük seri veriyor.
+// KURALLAR:
+//  • Normal mod (uzun parametresi YOK) BİREBİR eskisi gibi çalışır — önbellek anahtarı, AltinAPI zenginleştirmesi, hiçbiri değişmedi.
+//  • Uzun modda güncel fiyat AltinAPI'den BİNDİRİLMEZ: geçmiş ve "bugün" AYNI kaynaktan (Yahoo) gelsin, oran tutarlı kalsın
+//    (serbest piyasa fiyatıyla interbank geçmişi karıştırmak getiriye %0,2–1 yapay fark katardı).
+//  • 1y/5y günlük, 10y haftalık nokta (Yahoo'nun doğal çözünürlüğü); seri tarih sırasına göre, yalnız pozitif fiyatlar.
+//  • GRAM_ALTIN = GC=F × USDTRY ÷ 31,1035 (normal moddaki türetmeyle aynı), tarihe göre hizalanır, eksik gün son bilinen kurla.
+//  • Önbellek 6 saat (geçmiş yavaş değişir); ayrı anahtar "gecmis:uzun:v1:" — normal önbelleğe dokunmaz.
+const UZUN_ARALIKLAR = { "1y": { range: "1y", interval: "1d" }, "5y": { range: "5y", interval: "1d" }, "10y": { range: "10y", interval: "1wk" } };
+const UZUN_TTL_SANIYE = 6 * 3600;
+
+async function yahooUzunCek(sembol, aralik) {
+  const a = UZUN_ARALIKLAR[aralik];
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sembol)}?interval=${a.interval}&range=${a.range}`;
+  const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+  if (!r.ok) return null;
+  const json = await r.json();
+  return json?.chart?.result?.[0] || null;
+}
+
+async function uzunVeriHesapla(sembol, aralik) {
+  const GRAM_ONS = 31.1034768;
+  if (sembol === "GRAM_ALTIN" || sembol === "GRAM_GUMUS") {
+    const onsSembol = sembol === "GRAM_ALTIN" ? "GC=F" : "SI=F";
+    const [ons, usd] = await Promise.all([yahooUzunCek(onsSembol, aralik), yahooUzunCek("USDTRY=X", aralik)]);
+    if (!ons || !usd) return { noktalar: [], guncelFiyat: null, aralik };
+    const usdMap = new Map(noktalarCikar(usd).map((n) => [n.tarih, n.fiyat]));
+    const usdTarihleri = [...usdMap.keys()].sort();
+    let sonUsd = null, ui = 0;
+    const noktalar = [];
+    for (const n of noktalarCikar(ons)) {
+      // USDTRY serisinde bu güne kadar (dahil) görülen SON kuru taşı (iki piyasanın tatilleri farklı)
+      while (ui < usdTarihleri.length && usdTarihleri[ui] <= n.tarih) { sonUsd = usdMap.get(usdTarihleri[ui]); ui++; }
+      if (sonUsd == null) continue;
+      const fiyat = Math.round(((n.fiyat * sonUsd) / GRAM_ONS) * 100) / 100;
+      if (fiyat > 0) noktalar.push({ tarih: n.tarih, fiyat });
+    }
+    return { noktalar, guncelFiyat: noktalar.length ? noktalar[noktalar.length - 1].fiyat : null, aralik };
+  }
+  const result = await yahooUzunCek(sembol, aralik);
+  if (!result) return { noktalar: [], guncelFiyat: null, aralik };
+  const noktalar = noktalarCikar(result);
+  const meta = result.meta || {};
+  return { noktalar, guncelFiyat: meta.regularMarketPrice ?? (noktalar.length ? noktalar[noktalar.length - 1].fiyat : null), aralik };
+}
+
 export default async function handler(req, res) {
   corsAyarla(req, res);
   res.setHeader("Cache-Control", "s-maxage=900, stale-while-revalidate=300");
 
-  const { sembol, debug } = req.query;
+  const { sembol, debug, uzun } = req.query;
   if (!sembol) {
     return res.status(400).json({ error: "sembol parametresi gerekli" });
+  }
+
+  // ── UZUN GEÇMİŞ MODU (yukarıdaki nota bak) ──────────────────────────────
+  if (uzun !== undefined) {
+    if (!UZUN_ARALIKLAR[uzun]) {
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(400).json({ error: "uzun parametresi 1y | 5y | 10y olmalı" });
+    }
+    res.setHeader("Cache-Control", "s-maxage=3600, stale-while-revalidate=21600");
+    const uzunAnahtar = `gecmis:uzun:v1:${sembol}:${uzun}`;
+    try {
+      const { veri, cached } = await kilitliGetir(redis, uzunAnahtar, UZUN_TTL_SANIYE, () => uzunVeriHesapla(sembol, uzun), { debug: debug === "1" });
+      return res.status(200).json({ ...veri, cached });
+    } catch (e) {
+      try {
+        const eski = await redis.get(uzunAnahtar);
+        if (eski) return res.status(200).json({ ...eski, cached: true, hata: e.message });
+      } catch {}
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(500).json({ error: e.message, noktalar: [], guncelFiyat: null });
+    }
   }
 
   // v1 → v2 (2026-08-04): Brent kaynak sırası değişti.
