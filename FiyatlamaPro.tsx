@@ -1352,6 +1352,7 @@ const ICON_MAP: Record<string, any> = {
   getiriKarsilastirma: BarChart3,
   haftalikOzet: Newspaper,
   katilimBankalari: Landmark,
+  icazetBelgeleri: FileBadge,   // 2026-10-03: belge/sertifika ikonu; FileBadge zaten import edilmiş (yeni import riski yok). Bu harita yoksa Araçlar kartı ve sol menü İKONSUZ görünür.
   // 2026-08-01: Yeni ekranlar bu haritaya eklenmemişti; Araçlar menüsündeki
   // kartlar ikonsuz görünüyordu. Zaten import edilmiş ikonlar kullanıldı,
   // yeni import riski alınmadı.
@@ -14219,6 +14220,48 @@ function HaftalikPiyasaOzeti(){
     return liste.sort((a:any,b:any)=>b.getiri-a.getiri);
   },[gosterilen,fonHafta]);
   const haberler=gosterilen?.haberler||[];
+
+  // ── "PİYASALARDA NE ETKİLİ OLDU?" (2026-10-03, kullanıcı isteği: özet metninde
+  // "borsa düştü ama neden düştü / Fed kararıyla dolar arttı" gibi sebepler de
+  // olsun) ──────────────────────────────────────────────────────────────────
+  // Sebepler istemcide ÜRETİLMEZ (fiyat verisinden neden çıkarılamaz): backend
+  // (api/getiri.js islem=haftalik-neden) Gemini + Google Search ile yalnızca
+  // haberlerde AÇIKÇA geçen sebepleri yazar ve haftada bir arşive kaydeder.
+  // Ekranda yüzde/ad/yön her zaman haftalik-ozet tablosundan gelir (modelden
+  // değil). Hafta için sebep yoksa istek bir kez tetiklenir (oturum başına);
+  // başarısız/boş olursa bölüm HİÇ görünmez ve mevcut ekran aynen çalışır.
+  const [nedenYukleniyor,setNedenYukleniyor]=useState(false);
+  const nedenHafta=gosterilen?.hafta||null;
+  const nedenVar=!!gosterilen?.nedenler;
+  useEffect(()=>{
+    if(!nedenHafta||nedenVar) return;
+    const ANAHTAR="hp_neden_"+nedenHafta;
+    try{ if(sessionStorage.getItem(ANAHTAR)) return; sessionStorage.setItem(ANAHTAR,"1"); }catch{}
+    setNedenYukleniyor(true);
+    fetch(`${API_BASE}/api/getiri?islem=haftalik-neden&hafta=${encodeURIComponent(nedenHafta)}`)
+      .then(r=>r.ok?r.json():null)
+      .then(d=>{
+        if(!d?.basarili||!d.nedenler) return;
+        setOzet((o:any)=>{
+          if(!o) return o;
+          const yama=(k:any)=>k&&k.hafta===nedenHafta?{...k,nedenler:d.nedenler}:k;
+          const yeni={...o,guncel:yama(o.guncel),arsiv:(o.arsiv||[]).map(yama)};
+          try{sessionStorage.setItem("hp_ozet_v2",JSON.stringify({data:yeni,ts:Date.now()}));}catch{}
+          return yeni;
+        });
+      })
+      .catch(()=>{})
+      .finally(()=>setNedenYukleniyor(false));
+  },[nedenHafta,nedenVar]);
+  const nedenler=gosterilen?.nedenler;
+  const nedenListesi=useMemo(()=>{
+    const harita=new Map<string,any>((gosterilen?.satirlar||[]).map((x:any)=>[x.kod,x] as [string,any]));
+    return ((nedenler?.satirlar||[]) as any[])
+      .map(n=>({...n,satir:harita.get(n.kod)}))
+      .filter(n=>n.satir&&typeof n.metin==="string"&&n.metin.length>0)
+      .sort((a,b)=>Math.abs(b.satir.getiri)-Math.abs(a.satir.getiri));
+  },[nedenler,gosterilen]);
+
   const fmtTarih=(iso:string|null)=>iso?new Date(iso).toLocaleDateString("tr-TR",{day:"numeric",month:"long"}):null;
   const fmtTarihKisa=(iso:string|null)=>iso?new Date(iso).toLocaleDateString("tr-TR",{day:"numeric",month:"short"}):null;
 
@@ -14513,6 +14556,42 @@ function HaftalikPiyasaOzeti(){
               {yorum.map((par:string,i:number)=>(
                 <p key={i} style={{margin:i<yorum.length-1?"0 0 10px":"0",fontSize:13,color:WA(0.75),lineHeight:1.65}}>{par}</p>
               ))}
+            </div>
+          )}
+
+          {/* Piyasalarda ne etkili oldu? — yalnızca haberlerde doğrulanan sebepler */}
+          {nedenYukleniyor&&!nedenler&&(
+            <div style={{marginTop:14,background:WA(0.04),border:`1px solid ${WA(0.07)}`,borderRadius:16,padding:"14px 16px"}}>
+              <p style={{margin:"0 0 6px",fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#2E6DA8":"#9FC1EA")}}>🔎 Piyasalarda Ne Etkili Oldu?</p>
+              <p style={{margin:0,fontSize:12.5,color:WA(0.5),lineHeight:1.55}}>{CV("Haftanın haberleri taranıyor…")}</p>
+            </div>
+          )}
+          {nedenListesi.length>0&&(
+            <div style={{marginTop:14,background:WA(0.04),border:`1px solid ${WA(0.07)}`,borderRadius:16,padding:"14px 16px"}}>
+              <p style={{margin:"0 0 6px",fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#2E6DA8":"#9FC1EA")}}>🔎 Piyasalarda Ne Etkili Oldu?</p>
+              {nedenListesi.map((n:any,i:number)=>{
+                const poz=n.satir.getiri>=0;
+                const kaynaklar:string[]=(n.kaynaklar&&n.kaynaklar.length>0?n.kaynaklar:(nedenler?.kaynaklar||[])).slice(0,3);
+                return(
+                  <div key={n.kod} style={{padding:"11px 0",borderTop:i===0?"none":`1px solid ${WA(0.07)}`}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:5}}>
+                      <span style={{fontSize:13,fontWeight:700,color:C.soft,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n.satir.ad}</span>
+                      <span style={{fontSize:11.5,fontWeight:700,color:poz?C.green:C.red,flexShrink:0,whiteSpace:"nowrap"}}>{poz?"▲":"▼"} %{Math.abs(n.satir.getiri).toFixed(2).replace(".",",")}</span>
+                    </div>
+                    <p style={{margin:0,fontSize:12.8,color:WA(0.72),lineHeight:1.6}}>{n.metin}</p>
+                    {kaynaklar.length>0&&(
+                      <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:7}}>
+                        {kaynaklar.map((k:string)=>(
+                          <span key={k} style={{fontSize:10.5,color:C.blue,background:(TEMA==="acik"?"rgba(46,109,168,0.10)":"rgba(159,193,234,0.14)"),borderRadius:999,padding:"3px 9px"}}>{k}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              <p style={{margin:"10px 0 0",paddingTop:10,borderTop:`1px solid ${WA(0.07)}`,fontSize:10.5,lineHeight:1.5,color:WA(0.45)}}>
+                {CV("Bu bölüm yapay zekâ ile, haftanın haber kaynaklarından derlenir; yalnızca haberlerde açıkça belirtilen sebepler yazılır. Net bir sebep bulunamayan hareketler için açıklama eklenmez. Yatırım tavsiyesi değildir.")}
+              </p>
             </div>
           )}
 
@@ -19221,13 +19300,14 @@ const ICAZET_BANKALARI:IcazetBanka[] = [
     ] },
   { ad:"Albaraka Türk", renk:"#2E6DA8", alanAdi:"albaraka.com.tr", sonKontrol:"03.10.2026",
     sayfa:"https://www.albaraka.com.tr/tr/hakkimizda/katilim-bankaciligi/icazet-belgeleri",
-    ek:"Albaraka'nın sayfasında \"Daha fazla görüntüle\" ile açılan ek belgeler de olabilir; burada yalnızca ilk görünenler ve Yuvam hesabı yer alıyor. Tamamı için bankanın icazet sayfasına bak.",
+    ek:"Albaraka bu sayfada onlarca belge yayımlıyor (emekli maaş promosyonu, kredi kartı, araç ve konut finansmanı, hac-umre, kira sertifikası, teminat mektubu vb.). Sayfa listeyi \"Daha fazla görüntüle\" ile sonradan yüklediği için buradaki liste henüz eksik; tamamını görmek için bankanın icazet sayfasına git.",
     urunler:[
       ["Özel Fon Havuzu Katılma Hesabı", ICZ_AB+"2025-ekim--ozel-fon-havuzu-katilma-hesabi.pdf"],
       ["Özel Cari Hesap", ICZ_AB+"2025-ekim--ozel-cari-hesap.pdf"],
       ["Müşteri Geri Satım Taahhütlü Fon (M-GTF)", ICZ_AB+"mgft-icazet.pdf"],
       ["Fiziki Altın Dönüşümlü Kur Korumalı Katılma Hesabı", ICZ_AB+"fiziki-altin-donusumlu-kur-korumali-katilma-hesabi.pdf"],
-      ["Yuvam Hesabı", ICZ_AB+"yuvam-hesap-icazet-belgesi.pdf"]
+      ["Yuvam Hesabı", ICZ_AB+"yuvam-hesap-icazet-belgesi.pdf"],
+      ["Albaraka Portföy Katılım Serbest (Döviz) Fon", ICZ_AB+"al5---icazet-belgesi-(2).pdf"]
     ] },
   { ad:"Emlak Katılım", renk:"#C97B4A", alanAdi:"emlakkatilim.com.tr", sonKontrol:"03.10.2026",
     sayfa:"https://www.emlakkatilim.com.tr/tr/hakkimizda/faizsiz-bankacilik",
@@ -19259,7 +19339,7 @@ function icazetGrupBul(ad:string):string{
   if(/kart/.test(k)) return "Kartlar";
   if(/sigorta|emeklilik/.test(k)) return "Sigorta ve emeklilik";
   if(/hesap|hesab|hac ve umre/.test(k)) return "Hesaplar";
-  if(/kira sertifikasi|sukuk|fon alim|yatirim fonu|geri satim|oyak yatirim|tfx|altin|kiymetli|gumus/.test(k)) return "Yatırım, sukuk ve kıymetli maden";
+  if(/kira sertifikasi|sukuk|fon alim|yatirim fonu|geri satim|portfoy|oyak yatirim|tfx|altin|kiymetli|gumus/.test(k)) return "Yatırım, sukuk ve kıymetli maden";
   if(/murabaha|musaveme|selem|istisna|isticrar|icare|kiralama|musareke|mudarebe|teverruk|tevliye|karz|finansman|finansor|taksitle|kefalet|garanti|forward|vaade|cek|borclandirma|vekalet|promosyon|ceza/.test(k)) return "Finansman ve işlemler";
   return "Diğer";
 }

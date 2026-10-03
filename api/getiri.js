@@ -1,6 +1,6 @@
 // api/getiri.js
 //
-// İki işlem tek dosyada (Vercel 12 fonksiyon sınırı nedeniyle):
+// Üç işlem tek dosyada (Vercel 12 fonksiyon sınırı nedeniyle):
 //
 // 1) Getiri Karşılaştırma verisi:
 //    GET /api/getiri?aralik=1hafta|1ay|3ay|6ay|1yil|ybb[&ekstra=SYM1,SYM2]
@@ -12,10 +12,20 @@
 //    Bu haftanın anlık verisi hesaplanır ve Redis'te hafta anahtarıyla saklanır;
 //    arşivde HER ZAMAN son 4 hafta tutulur (yeni hafta gelince en eski silinir).
 //
+// 3) Haftalık "Piyasalarda Ne Etkili Oldu?" metni (2026-10-03):
+//    GET /api/getiri?islem=haftalik-neden&hafta=2026-W40
+//    Arşivdeki haftanın hareketlerinin NEDENLERİNİ Gemini + Google Search ile
+//    (yalnızca kaynakta açıkça geçenleri) üretir ve arşiv kaydına `nedenler`
+//    olarak yazar; haftada bir kez üretilir, sonra herkese Redis'ten gelir.
+//    Ekran bunu haftalik-ozet yanıtı geldikten SONRA, eksikse tetikler —
+//    böylece asıl özet yavaşlamaz. Ayrıntı ve güvenlik kuralları:
+//    api/_lib/haftalikNeden.js. Kapatmak için Vercel'de HAFTALIK_NEDEN=kapali.
+//
 // Veri kaynağı: Yahoo Finance v8 chart API. Gram Altın/Gümüş sentetik:
 // (ons USD) × (USD/TRY) / 31.1034768.
 
 import { Redis } from "@upstash/redis";
+import { NEDEN_SURUM, NEDEN_MODEL, nedenPromptlari, nedenCozumle } from "./_lib/haftalikNeden.js";
 
 const redis = new Redis({
   url: process.env.KV_REST_API_URL,
@@ -340,12 +350,149 @@ async function haftalikOzet(req, res) {
   res.status(200).json({ basarili: true, guncel, arsiv: gecmis });
 }
 
+// ── HAFTALIK NEDEN METNİ (2026-10-03) ─────────────────────────────────────
+// Gemini + Google Search ile üretilir. Kurallar ve ayrıştırma: _lib/haftalikNeden.js.
+// Hata durumunda geriye { hata } döner; çağıran taraf kullanıcıya hiçbir şey
+// göstermez (ekran bölümü gizler) ve 30 dk soğuma uygular.
+async function nedenUret(kayit) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return { hata: "anahtar-yok" };
+  const { sistem, kullanici, kodlar } = nedenPromptlari(kayit);
+  if (kodlar.size === 0) return { hata: "veri-yok" };
+
+  const ac = new AbortController();
+  const zamanAsimi = setTimeout(() => ac.abort(), 24000);
+  let r, j;
+  try {
+    r = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${NEDEN_MODEL}:generateContent`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: sistem }] },
+          contents: [{ role: "user", parts: [{ text: kullanici }] }],
+          tools: [{ google_search: {} }],
+          generationConfig: { temperature: 0.2, maxOutputTokens: 1500 },
+        }),
+        signal: ac.signal,
+      }
+    );
+    j = await r.json().catch(() => null);
+  } catch {
+    clearTimeout(zamanAsimi);
+    return { hata: "ag" };
+  }
+  clearTimeout(zamanAsimi);
+  if (!r.ok) return { hata: "gemini-" + r.status };
+
+  const aday = j?.candidates?.[0];
+  // Parçalar "" ile birleştirilir: grounding bayt ofsetleri bu birleşik metne göre
+  const metin = (aday?.content?.parts || [])
+    .filter((p) => p && !p.thought && typeof p.text === "string")
+    .map((p) => p.text)
+    .join("");
+  const sonuc = nedenCozumle(metin, aday?.groundingMetadata, kodlar);
+  if (sonuc.hata) return sonuc;
+  return {
+    nedenler: {
+      v: NEDEN_SURUM,
+      ts: Date.now(),
+      model: NEDEN_MODEL,
+      kaynaklar: sonuc.kaynaklar,
+      satirlar: sonuc.satirlar,
+    },
+  };
+}
+
+async function arsivOku() {
+  try {
+    const ham = await redis.get(ARSIV_ANAHTAR);
+    if (Array.isArray(ham)) return ham;
+    if (typeof ham === "string") return JSON.parse(ham) || [];
+  } catch {}
+  return [];
+}
+
+async function haftalikNeden(req, res) {
+  res.setHeader("Cache-Control", "no-store");
+  if (String(process.env.HAFTALIK_NEDEN || "").toLowerCase() === "kapali") {
+    res.status(200).json({ basarili: false, kapali: true });
+    return;
+  }
+  const hedef = String(req.query?.hafta || "");
+  if (!/^\d{4}-W\d{2}$/.test(hedef)) {
+    res.status(400).json({ basarili: false, hata: "Geçersiz hafta" });
+    return;
+  }
+
+  const bul = (liste) => liste.find((k) => k && k.hafta === hedef && k.v === 3 && Array.isArray(k.satirlar) && k.satirlar.length > 0);
+  const kayit = bul(await arsivOku());
+  if (!kayit) {
+    res.status(404).json({ basarili: false, hata: "Hafta arşivde yok" });
+    return;
+  }
+  // Zaten üretilmişse (boş sonuç dahil) tekrar çağrı YOK — Gemini'ye haftada bir gidilir
+  if (kayit.nedenler && kayit.nedenler.v === NEDEN_SURUM) {
+    res.status(200).json({ basarili: true, nedenler: kayit.nedenler });
+    return;
+  }
+
+  // Herkese açık uç nokta: kötüye kullanımı önle — hafta başına tek eşzamanlı üretim
+  // (kilit) ve başarısızlıktan sonra 30 dk soğuma.
+  const kilit = "haftalikNedenKilit:" + hedef;
+  const sogu = "haftalikNedenSogu:" + hedef;
+  try {
+    if (await redis.get(sogu)) {
+      res.status(200).json({ basarili: false, beklemede: true });
+      return;
+    }
+    const aldi = await redis.set(kilit, "1", { nx: true, ex: 90 });
+    if (!aldi) {
+      res.status(200).json({ basarili: false, uretiliyor: true });
+      return;
+    }
+  } catch {
+    // Redis kilidi okunamazsa üretime GİTME (kontrolsüz Gemini çağrısı riski)
+    res.status(200).json({ basarili: false });
+    return;
+  }
+
+  try {
+    const sonuc = await nedenUret(kayit);
+    if (sonuc.hata) {
+      console.error("haftalik-neden hata:", hedef, sonuc.hata);
+      try { await redis.set(sogu, "1", { ex: 1800 }); } catch {}
+      res.status(200).json({ basarili: false });
+      return;
+    }
+    // Üretim sırasında arşiv değişmiş olabilir → yeniden oku, yalnızca bu haftanın kaydına yaz
+    const guncelArsiv = await arsivOku();
+    const hedefKayit = bul(guncelArsiv);
+    if (hedefKayit) {
+      hedefKayit.nedenler = sonuc.nedenler;
+      try { await redis.set(ARSIV_ANAHTAR, JSON.stringify(guncelArsiv)); } catch {}
+    }
+    res.status(200).json({ basarili: true, nedenler: sonuc.nedenler });
+  } catch (e) {
+    console.error("haftalik-neden istisna:", e);
+    try { await redis.set(sogu, "1", { ex: 1800 }); } catch {}
+    res.status(200).json({ basarili: false });
+  } finally {
+    try { await redis.del(kilit); } catch {}
+  }
+}
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
 
   try {
     if (String(req.query?.islem || "") === "haftalik-ozet") {
       await haftalikOzet(req, res);
+      return;
+    }
+    if (String(req.query?.islem || "") === "haftalik-neden") {
+      await haftalikNeden(req, res);
       return;
     }
 
