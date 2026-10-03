@@ -1,6 +1,8 @@
 // api/finans-haberleri.js
-// Kaynaklar: CNBC-e + Investing.com Türkiye "Ekonomi Haberleri" RSS feed'leri
-// (Sözcü Ekonomi ve Bloomberg HT 2026-07'de kaldırıldı — bkz. v3/v4 notları)
+// Kaynaklar: CNBC-e + Investing.com Türkiye "Ekonomi Haberleri" + Bloomberg HT "Tüm Haberler" RSS feed'leri
+// (Sözcü Ekonomi ve Bloomberg HT 2026-07'de kaldırılmıştı — bkz. v3/v4 notları, kaldırılma nedeni
+//  bu dosyada kayıtlı DEĞİL. Bloomberg HT 2026-10-03'te kullanıcı isteğiyle YENİDEN eklendi; aşağıdaki
+//  "BLOOMBERG HT" notuna bakın. Sözcü Ekonomi hâlâ kapalı.)
 // REDIS/KV + KİLİT KORUMASI (2026-07) — bkz. kripto.js'deki aynı not.
 // ⚠️ 2026-09-27: taze() artık gerçekten yeni bir başlık tespit edince
 // otomatik push bildirimi de gönderiyor — bkz. aşağıdaki "OTOMATİK BİLDİRİM"
@@ -14,13 +16,26 @@ const redis = new Redis({
   url: process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL,
   token: process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN,
 });
-const KV_ANAHTAR = "finans-haberleri:v5";
+// v5 → v6 (2026-10-03): kaynak listesine Bloomberg HT eklendi; önbellek sürümü artırılmazsa liste
+// 15 dk boyunca eski kaynaklarla kalırdı.
+const KV_ANAHTAR = "finans-haberleri:v6";
 const KV_TTL_SANIYE = 15 * 60;
 
+// ═══ BLOOMBERG HT (2026-10-03, kullanıcı isteği: "Haberler alanına Bloomberg HT de eklenebilir mi") ═══
+// Adres https://www.bloomberght.com/rss → /rss/tum-haberler.xml'e yönleniyor; yönlendirme adımı
+// olmasın diye son adres kullanılıyor. Standart RSS 2.0 (CDATA başlık/özet, pubDate GMT) → mevcut
+// parseRSS değişmeden çalışıyor. Feed GENEL "Tüm Haberler" (ekonomi + dış haber + şirket haberi karışık;
+// <category> hep "Haberler"), bu yüzden OTOMATİK PUSH'ta bu kaynağın haberleri yalnızca bir bildirim
+// kategorisine uyuyorsa gönderilir (bkz. SADECE_KATEGORILI_KAYNAKLAR) — aksi halde "Rivian satış
+// rekoru" gibi haberler filtre seçmemiş herkese push olurdu. Liste ekranında hepsi görünür.
+// ⚠️ Temmuz'da neden kaldırıldığı kayıtlı değil (engelleme/boş yanıt olabilir). Kaynak başarısız olursa
+// kaynaktanCek [] döner, diğer kaynaklar etkilenmez; çalıştığını yanıttaki `kaynak` alanı gösterir.
 const KAYNAKLAR = [
   { ad: "CNBC-e", url: "https://www.cnbce.com/rss" },
   { ad: "Investing.com", url: "https://tr.investing.com/rss/news_14.rss" },
+  { ad: "Bloomberg HT", url: "https://www.bloomberght.com/rss/tum-haberler.xml" },
 ];
+const SADECE_KATEGORILI_KAYNAKLAR = ["Bloomberg HT"];
 
 function htmlEntityCoz(metin) {
   if (!metin) return metin;
@@ -149,7 +164,10 @@ function corsAyarla(req, res) {
 // aboneler yalnızca kesişen kategorideki haberi alır, hiçbir kategoriye
 // uymayan haber SADECE filtre seçmemiş abonelere gider. (Önceden kategori
 // gönderilmiyordu → kategori seçimi bu bildirimlerde etkisizdi.)
-const KV_BILDIRILEN_ANAHTAR = "finans-haberleri:bildirilenler:v1";
+// v1 → v2 (2026-10-03): yeni kaynak eklenince onun MEVCUT başlıkları "yeni" sayılıp 3 eski haber push
+// olarak gider; anahtar sıfırlanınca ilk turda (ilkCalistirma) HİÇBİR ŞEY gönderilmez, tüm başlıklar
+// yalnızca "görülmüş" diye kaydedilir.
+const KV_BILDIRILEN_ANAHTAR = "finans-haberleri:bildirilenler:v2";
 const BILDIRILEN_MAKS_SAKLA = 200;   // saklanan parmak izi sayısı (bellek/Redis boyutu için tavan)
 const YENI_HABER_MAKS_BILDIRIM = 3;  // bir turda en fazla kaç YENİ başlık için push gönderilsin (spam koruması)
 
@@ -161,7 +179,10 @@ async function yeniHaberleriBildir(hepsi) {
 
     const ilkCalistirma = bilinenler.length === 0;
     const bilinenSet = new Set(bilinenler);
-    const yeniOlanlar = ilkCalistirma ? [] : hepsi.filter((h) => !bilinenSet.has(haberAnahtari(h.baslik)));
+    const yeniOlanlar = ilkCalistirma ? [] : hepsi
+      .filter((h) => !bilinenSet.has(haberAnahtari(h.baslik)))
+      // Genel akışlı kaynaklarda (Bloomberg HT) yalnızca bir bildirim kategorisine uyan haber push olur
+      .filter((h) => !SADECE_KATEGORILI_KAYNAKLAR.includes(h.kaynak) || haberKategorileriBul(h.baslik, h.ozet).length > 0);
 
     if (!ilkCalistirma && yeniOlanlar.length > 0) {
       // hepsi zaten en yeniden eskiye sıralı geliyor (taze() bunu garanti
