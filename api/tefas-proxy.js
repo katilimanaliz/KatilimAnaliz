@@ -1098,6 +1098,7 @@ async function bistEndeksUyeligiGetirVeGuncelle() {
     try {
       const yanit = await fetch(sayfa.url, {
         headers: { "User-Agent": "Mozilla/5.0 (compatible; KatilimPlusBot/1.0)" },
+        signal: AbortSignal.timeout(15000),   // 2026-10-03: okuma ucu artık bu işi istek içinde yapabiliyor → takılan sayfa isteği asılı bırakmasın
       });
       if (!yanit.ok) throw new Error(`HTTP ${yanit.status}`);
       const html = await yanit.text();
@@ -1144,24 +1145,47 @@ async function bistEndeksUyeligiCronYaz(req, res) {
 // üyelik setini alıyor. Hiç veri yoksa (ilk deploy, cron henüz çalışmadı)
 // `basarili:false` dönüyor — frontend bu durumda ESKİ (piyasa değeri
 // sıralamalı) yaklaşıma düşüyor, boş/yanlış bir liste göstermiyor.
+// ── KENDİ KENDİNİ YENİLEYEN OKUMA (2026-10-03, kullanıcı: "1 Ekim'de endeksler güncellendi, bizde hisseleri
+// güncelleyelim") ───────────────────────────────────────────────────────────────────────────────────
+// ÖNCEKİ DAVRANIŞ: kayıt yalnızca dış cron'un çağırdığı bistEndeksUyeligiCronYaz ile yazılıyordu. Cron çalışmazsa
+// (ya da hiç kurulmadıysa) kayıt 3 günlük TTL'de silinip bu uç "henüz veri yok" döndürüyordu — canlıda tam olarak
+// bu gözlendi (3 Ekim 2026) → BİST 30/50/100 filtresi RESMÎ liste yerine "piyasa değerine göre ilk N" yedeğine
+// düşüyor, 1 Ekim'deki endeks değişiklikleri (BIST 100'de 27 giriş/çıkış) yansımıyordu.
+// ŞİMDİ: kayıt yoksa ya da 24 saatten eskiyse OKUMA UCU kendisi yeniler (cron artık İSTEĞE BAĞLI; çalışıyorsa
+// kayıt zaten taze olduğundan bu dal hiç tetiklenmez). Koruma: 10 dk'lık set-if-absent KİLİDİ → trafik ne olursa
+// olsun getmidas.com'a 10 dakikada en fazla bir deneme gider (başarısız olsa da). Yenileme başarısız olursa
+// (engelleme, bozuk sayfa) eski kayıt varsa o servis edilir, yoksa eskisi gibi "henüz veri yok" döner.
+const BIST_UYELIK_TAZELIK_MS = 24 * 60 * 60 * 1000;
+const BIST_UYELIK_KILIT_ANAHTARI = "bist:endeksUyeligi:kilit";
+const BIST_UYELIK_KILIT_SANIYE = 600;
+
 async function bistEndeksUyeligiOku(req, res) {
   try {
-    const kayit = await kv.get(BIST_UYELIK_KV_ANAHTAR).catch(() => null);
-    // ⚠️ 2026-09-15 (canlı ortamda bulundu): ÖNCEDEN "veri yok" cevabı da
-    // "başarılı" cevapla AYNI CDN önbellek süresini (s-maxage=3600)
-    // kullanıyordu. Cron çalışmadan ÖNCE biri bu ucu bir kez çağırırsa,
-    // Vercel'in CDN'i "henüz veri yok" cevabını 1 SAAT boyunca
-    // önbelleklemiş oluyordu — cron sonradan başarılı olsa bile o süre
-    // boyunca TÜM kullanıcılara eski "veri yok" cevabı gidiyordu (tam da
-    // bu davranış canlıda gözlendi). Artık "veri yok" cevabı HİÇ
-    // önbelleklenmiyor (no-store); sadece GERÇEK veri döndüğünde
-    // önbellekleniyor.
+    let kayit = await kv.get(BIST_UYELIK_KV_ANAHTAR).catch(() => null);
+    const yasMs = kayit && kayit.guncellemeTarihi ? Date.now() - Date.parse(kayit.guncellemeTarihi) : Infinity;
+    let yenileme = null;
+    if (!kayit || !(yasMs < BIST_UYELIK_TAZELIK_MS)) {   // NaN (bozuk tarih) de yenilemeyi tetikler
+      const kilit = await kv.set(BIST_UYELIK_KILIT_ANAHTARI, "1", { nx: true, ex: BIST_UYELIK_KILIT_SANIYE }).catch(() => null);
+      if (kilit) {
+        try {
+          const sonuc = await bistEndeksUyeligiGetirVeGuncelle();
+          yenileme = { basarili: !!sonuc.basarili, detay: sonuc.detay || null };
+          if (sonuc.basarili) kayit = (await kv.get(BIST_UYELIK_KV_ANAHTAR).catch(() => null)) || kayit;
+        } catch (e) {
+          yenileme = { basarili: false, hata: String((e && e.message) || e) };
+        }
+      } else {
+        yenileme = { atlandi: "kilit" };
+      }
+    }
+    // ⚠️ 2026-09-15 (canlı ortamda bulundu): "veri yok" cevabı HİÇ önbelleklenmemeli (no-store); yoksa Vercel CDN'i
+    // 1 SAAT boyunca eski "veri yok" cevabını tüm kullanıcılara verir. Yalnızca GERÇEK veri önbelleklenir.
     if (!kayit) {
       res.setHeader("Cache-Control", "no-store");
-      return res.status(200).json({ success: false, error: "henüz veri yok" });
+      return res.status(200).json({ success: false, error: "henüz veri yok", ...(yenileme ? { yenileme } : {}) });
     }
     res.setHeader("Cache-Control", "max-age=0, s-maxage=3600, stale-while-revalidate=86400");
-    return res.status(200).json({ success: true, ...kayit });
+    return res.status(200).json({ success: true, ...kayit, ...(yenileme ? { yenileme } : {}) });
   } catch (e) {
     return res.status(500).json({ success: false, error: String(e.message || e) });
   }
