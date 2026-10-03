@@ -482,6 +482,49 @@ async function gunlukReferansAlVeYaz(h) {
   return kayit.oncekiKapanis || null;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// GÜN SONU GEÇMİŞİ (2026-10-03) — HAFTALIK ÖZET İÇİN TEK KAYNAK
+// ═══════════════════════════════════════════════════════════════════════════
+// SORUN: Haftalık Piyasa Özeti (api/getiri.js) döviz/altın/gümüşü Yahoo'dan
+// (USDTRY=X, GC=F, SI=F; gram = futures ons × kur) alıyordu; ana menü ise
+// bu dosyadaki Truncgil/Kapalı Çarşı değerlerini gösteriyor. İki ekran aynı
+// varlık için FARKLI sayı veriyordu (GC=F vadeli kontrat spot'tan ~%1,4 sapar;
+// gram altın/gümüş Kapalı Çarşı satışı ile sentetik hesap aynı değildir).
+// Truncgil'in geçmiş verisi yok; bu yüzden ana menünün KENDİ değerlerini her
+// gün kaydediyoruz (günlük kapanış mantığıyla aynı fikir).
+//
+// KAYIT: piyasa:gunsonu:v1 = { gunler:{ "YYYY-MM-DD": {USDTRY,EURTRY,ALTIN,GUMUSTRY,
+// ONS,XAGUSD, ts} } } — TR tarihi anahtar; o günün SON görülen değeri (her istekte
+// bugünün kaydı ezilir), son 28 gün tutulur. Cumartesi/Pazar kayıtları da yazılır:
+// haftalık özet "Cuma kapanışı"nı Cuma 18:00'den sonra görülmüş kayıttan, yoksa
+// hafta sonu kaydından alır (api/getiri.js gunSonuSec).
+// Yazım hatası fiyat akışını ASLA etkilemez (try/catch).
+const KV_GUNSONU = "piyasa:gunsonu:v1";
+const GUNSONU_SEMBOLLER = ["USDTRY", "EURTRY", "ALTIN", "GUMUSTRY", "ONS", "XAGUSD"];
+const GUNSONU_SAKLA = 28;
+
+function bugunTRISO() {
+  return new Date(Date.now() + 3 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+async function gunSonuYaz(h) {
+  try {
+    const deg = {};
+    for (const s of GUNSONU_SEMBOLLER) {
+      const v = satis(h, s);
+      if (v != null) deg[s] = v;
+    }
+    if (Object.keys(deg).length === 0) return;
+    let kayit = null;
+    try { kayit = await redis.get(KV_GUNSONU); } catch {}
+    const gunler = kayit && kayit.gunler && typeof kayit.gunler === "object" ? { ...kayit.gunler } : {};
+    gunler[bugunTRISO()] = { ...deg, ts: Date.now() };
+    const anahtarlar = Object.keys(gunler).sort();
+    while (anahtarlar.length > GUNSONU_SAKLA) delete gunler[anahtarlar.shift()];
+    await redis.set(KV_GUNSONU, { gunler });
+  } catch {}
+}
+
 // Bir sembol için alış/satış/kapanış/değişim paketi
 // Bir sembol için alış/satış/kapanış/değişim paketi.
 // KAPANIŞ ÖNCELİĞİ (2026-08-10): Truncgil "Change" veriyor ve bundan geri
@@ -523,6 +566,7 @@ function cift(h, sembol, ref) {
 async function altinTaze() {
   const h = await altinApiPaylasimli();
   const ref = await gunlukReferansAlVeYaz(h);
+  await gunSonuYaz(h);   // haftalık özet için gün sonu geçmişi (hata fırlatmaz)
 
   const XAU_USD = satis(h, "XAUUSD");
   const XAG_USD = satis(h, "XAGUSD");
@@ -571,6 +615,11 @@ async function kriptoTaze() {
 }
 
 // ─── PETROL (Kaynak: AlphaVantage, yedek Yahoo — AltinAPI'de petrol yok) ───
+// 2026-10-03: sonuca `kaynak` ("alphavantage" | "yahoo") eklendi. Ana menüdeki Brent ile
+// Haftalık Özet'teki Brent'in farklı çıkma sebebini kanıtlamak için: iki kaynak FARKLI
+// enstrümandır (AlphaVantage = EIA spot günlük serisi; Yahoo BZ=F = vadeli kontrat) ve
+// AlphaVantage ücretsiz planı GÜNDE 25 istek sınırlıdır; önbellek 30 dk iken sınır
+// aşılıp Yahoo'ya düşülebiliyordu. Önbellek süresi 3 saate çıkarıldı (seri günlüktür).
 async function petrolTaze() {
   const apiKey = process.env.ALPHA_VANTAGE_KEY;
   if (apiKey) {
@@ -589,6 +638,8 @@ async function petrolTaze() {
             brent_usd: price,
             prev_usd: prev,
             change_pct: ((price - prev) / prev * 100).toFixed(2),
+            kaynak: "alphavantage",
+            veriTarihi: veri[0].date || null,
             ts: new Date().toISOString(),
           };
         }
@@ -610,6 +661,7 @@ async function petrolTaze() {
     brent_usd: price,
     prev_usd: prev,
     change_pct: price && prev ? ((price - prev) / prev * 100).toFixed(2) : null,
+    kaynak: "yahoo",
     ts: new Date().toISOString(),
   };
 }
@@ -710,7 +762,9 @@ const YAPILANDIRMA = {
   // gereksiz yeniden hesaplama olur; eşit tutuldu.
   altin:    { anahtar: "altin:v5",    ttl: 60,   fn: altinTaze,    cacheControl: "s-maxage=60" },
   kripto:   { anahtar: "kripto:v1",   ttl: 300,  fn: kriptoTaze,   cacheControl: "s-maxage=300" },
-  petrol:   { anahtar: "petrol:v1",   ttl: 1800, fn: petrolTaze,   cacheControl: "s-maxage=1800" },
+  // petrol: anahtar v2 (yeni `kaynak` alanı hemen görünsün) ve TTL 30 dk → 3 saat
+  // (AlphaVantage günlük seri + ücretsiz plan günde 25 istek; bkz. petrolTaze notu).
+  petrol:   { anahtar: "petrol:v2",   ttl: 10800, fn: petrolTaze,  cacheControl: "s-maxage=1800" },
   // kur ARTIK merkezi önbelleği kullanıyor (Truncgil döviz de veriyor), yani
   // buradaki TTL dış servise giden istek sayısını belirlemiyor — o iş
   // altinApiTtl() içinde yapılıyor. 300sn yalnızca bu uca özel tazelik.

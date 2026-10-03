@@ -23,6 +23,15 @@
 //
 // Veri kaynağı: Yahoo Finance v8 chart API. Gram Altın/Gümüş sentetik:
 // (ons USD) × (USD/TRY) / 31.1034768.
+//
+// ANA MENÜ İLE TUTARLILIK (2026-10-03): Haftalık özet tablosunda USD/TRY, EUR/TRY,
+// Gram Altın, Gram Gümüş, Ons Altın, Ons Gümüş (ve EUR/USD) satırları, ana menünün
+// kullandığı kaynaktan (Truncgil / Kapalı Çarşı; api/piyasa-fiyatlar.js) gelir.
+// Truncgil'in geçmiş verisi olmadığı için piyasa-fiyatlar her gün kendi değerlerini
+// Redis'e yazar (piyasa:gunsonu:v1); haftalık özet "bu Cuma" ve "önceki Cuma"
+// kayıtlarını oradan okur. İki kayıttan biri yoksa o satır eskisi gibi Yahoo'dan
+// hesaplanır (satır başına `kaynak` alanı hangisi olduğunu gösterir).
+// BIST / Katılım Endeksi / S&P 500 / Brent bu değişikliğin DIŞINDA kaldı.
 
 import { Redis } from "@upstash/redis";
 import { NEDEN_SURUM, NEDEN_MODEL, nedenPromptlari, nedenCozumle } from "./_lib/haftalikNeden.js";
@@ -84,6 +93,7 @@ async function yahooGetiri(sembol, range, p1, p2) {
     son: son.f,
     ilkTs: ilk.t,
     sonTs: son.t,
+    kaynak: "yahoo",
   };
 }
 
@@ -123,11 +133,98 @@ async function alphaVantageBrent(p1, p2) {
       ad: "Brent Petrol",
       ilk: ilk.f, son: son.f,
       ilkTs: ilk.ts, sonTs: son.ts,
+      kaynak: "alphavantage",
     };
   } catch {
     clearTimeout(t);
     return null;
   }
+}
+
+// ── TANI ALANLARI (2026-10-03) ─────────────────────────────────────────────
+// Haftalık tablodaki her satırın SON mumunun (Türkiye) tarihi ve veri kaynağı
+// satıra yazılır: "bu satır gerçekten Cuma kapanışını mı gösteriyor, ana
+// menüdeki değerle neden farklı" sorularını tahminsiz yanıtlamak için.
+// Ekran bu alanları kullanmaz; /api/getiri?islem=haftalik-ozet çıktısında görünür.
+const gunTR = (ts) => (ts ? new Date(ts * 1000 + 3 * 3600 * 1000).toISOString().slice(0, 10) : null);
+
+// ISO hafta anahtarından ("2026-W40") o haftanın CUMA tarihi (YYYY-MM-DD)
+function haftaCumasi(h) {
+  const m = /^(\d{4})-W(\d{2})$/.exec(String(h || ""));
+  if (!m) return null;
+  const y = Number(m[1]), w = Number(m[2]);
+  const gun = new Date(Date.UTC(y, 0, 4)).getUTCDay() || 7;
+  const pzt1 = Date.UTC(y, 0, 4 - (gun - 1)); // ISO 1. haftanın Pazartesisi
+  return new Date(pzt1 + ((w - 1) * 7 + 4) * 86400000).toISOString().slice(0, 10);
+}
+
+// Kayıt, haftanın CUMA kapanışını içeriyor mu? (dönem tarihi BIST'in son mumundan gelir)
+function cumaKapanisiVarMi(k) {
+  const cuma = haftaCumasi(k?.hafta);
+  const sonGun = k?.donem?.sonTarih ? new Date(new Date(k.donem.sonTarih).getTime() + 3 * 3600 * 1000).toISOString().slice(0, 10) : null;
+  return !!cuma && sonGun === cuma;
+}
+
+function tarihEkle(iso, gun) {
+  return new Date(Date.parse(iso + "T00:00:00Z") + gun * 86400000).toISOString().slice(0, 10);
+}
+
+// "Cuma kapanışı" kaydı: Cuma 18:00'den (TR) sonra görülmüş Cuma kaydı varsa o; yoksa
+// Cumartesi, sonra Pazar kaydı (hafta sonu fiyatlar Cuma kapanışında donuk kalır);
+// hiçbiri yoksa (kayıt Cuma gündüzü) Cuma kaydı.
+function gunSonuSec(gunler, cuma) {
+  if (!gunler || !cuma) return null;
+  const f = gunler[cuma];
+  const kapanis = Date.parse(cuma + "T15:00:00Z"); // 18:00 TR
+  if (f && typeof f.ts === "number" && f.ts >= kapanis) return f;
+  return gunler[tarihEkle(cuma, 1)] || gunler[tarihEkle(cuma, 2)] || f || null;
+}
+
+const ANA_MENU_ESLEME = {
+  USDTRY: "USDTRY", EURTRY: "EURTRY",
+  GRAM_ALTIN: "ALTIN", GRAM_GUMUS: "GUMUSTRY",
+  ONS_ALTIN: "ONS", ONS_GUMUS: "XAGUSD",
+};
+const sayiMi = (v) => typeof v === "number" && isFinite(v) && v > 0;
+
+// Yahoo'dan hesaplanan satırların ilk/son/getirisini, mümkünse ana menünün kendi
+// gün sonu kayıtlarıyla DEĞİŞTİRİR. İki kayıt arası 4–10 gün olmalı (haftalık değişim);
+// aksi halde (geçmiş yetersiz) hiçbir satıra dokunulmaz.
+async function anaMenuUygula(satirlar, cuma) {
+  let gunler = null;
+  try {
+    const k = await redis.get("piyasa:gunsonu:v1");
+    gunler = k && k.gunler && typeof k.gunler === "object" ? k.gunler : null;
+  } catch {}
+  if (!gunler || !cuma) return satirlar;
+  const son = gunSonuSec(gunler, cuma);
+  const ilk = gunSonuSec(gunler, tarihEkle(cuma, -7));
+  if (!son || !ilk || typeof son.ts !== "number" || typeof ilk.ts !== "number") return satirlar;
+  const gunFarki = (son.ts - ilk.ts) / 86400000;
+  if (gunFarki < 4 || gunFarki > 10) return satirlar;
+
+  const yeniSatir = (s, i, z) => ({
+    ...s, ilk: i, son: z, getiri: yzd((z - i) / i), sonGun: cuma, kaynak: "ana-menu",
+  });
+  return satirlar.map((s) => {
+    const anahtar = ANA_MENU_ESLEME[s.kod];
+    if (anahtar && sayiMi(ilk[anahtar]) && sayiMi(son[anahtar])) {
+      return yeniSatir(s, ilk[anahtar], son[anahtar]);
+    }
+    if (s.kod === "EURUSD" && sayiMi(ilk.EURTRY) && sayiMi(ilk.USDTRY) && sayiMi(son.EURTRY) && sayiMi(son.USDTRY)) {
+      return yeniSatir(s, ilk.EURTRY / ilk.USDTRY, son.EURTRY / son.USDTRY);
+    }
+    return s;
+  });
+}
+
+// Cuma'yı izleyen SALI 00:00'dan (Türkiye) itibaren kayıt "kararlı" sayılır: o zamana
+// kadar Cuma mumu hâlâ yoksa bu gerçek bir tatil/veri boşluğudur, kayıt artık donar.
+function kayitKararliMi(k) {
+  const cuma = haftaCumasi(k?.hafta);
+  if (!cuma) return true;
+  const trSimdi = Date.now() + 3 * 3600 * 1000;
+  return trSimdi >= Date.parse(cuma + "T00:00:00Z") + 4 * 86400000;
 }
 
 // Ana enstrüman setini verilen aralık (veya sabit p1/p2 penceresi) için hesaplar.
@@ -166,21 +263,21 @@ async function hesaplaGetiriler(range, ekstraSemboller = [], p1, p2, genis = fal
   const gGumusSon = onsGumus && usd ? (onsGumus.son * usd.son) / OZ : null;
 
   const getiriler = [
-    { kod: "USDTRY",     ad: "USD/TRY",          getiri: yzd(usd?.getiri),      ilk: usd?.ilk ?? null,      son: usd?.son ?? null },
-    { kod: "EURTRY",     ad: "EUR/TRY",          getiri: yzd(eur?.getiri),      ilk: eur?.ilk ?? null,      son: eur?.son ?? null },
-    { kod: "ONS_ALTIN",  ad: "Ons Altın ($)",    getiri: yzd(onsAltin?.getiri), ilk: onsAltin?.ilk ?? null, son: onsAltin?.son ?? null },
-    { kod: "GRAM_ALTIN", ad: "Gram Altın (₺)",   getiri: yzd(gramAltin),        ilk: gAltinIlk,             son: gAltinSon },
-    { kod: "ONS_GUMUS",  ad: "Ons Gümüş ($)",    getiri: yzd(onsGumus?.getiri), ilk: onsGumus?.ilk ?? null, son: onsGumus?.son ?? null },
-    { kod: "GRAM_GUMUS", ad: "Gram Gümüş (₺)",   getiri: yzd(gramGumus),        ilk: gGumusIlk,             son: gGumusSon },
-    { kod: "XU100",      ad: "BIST 100",         getiri: yzd(xu100?.getiri),    ilk: xu100?.ilk ?? null,    son: xu100?.son ?? null },
-    { kod: "XK100",      ad: "Katılım Endeksi",  getiri: yzd(xk100?.getiri),    ilk: xk100?.ilk ?? null,    son: xk100?.son ?? null },
+    { kod: "USDTRY",     ad: "USD/TRY",          getiri: yzd(usd?.getiri),      ilk: usd?.ilk ?? null,      son: usd?.son ?? null,      sonGun: gunTR(usd?.sonTs),      kaynak: usd?.kaynak ?? null },
+    { kod: "EURTRY",     ad: "EUR/TRY",          getiri: yzd(eur?.getiri),      ilk: eur?.ilk ?? null,      son: eur?.son ?? null,      sonGun: gunTR(eur?.sonTs),      kaynak: eur?.kaynak ?? null },
+    { kod: "ONS_ALTIN",  ad: "Ons Altın ($)",    getiri: yzd(onsAltin?.getiri), ilk: onsAltin?.ilk ?? null, son: onsAltin?.son ?? null, sonGun: gunTR(onsAltin?.sonTs), kaynak: onsAltin?.kaynak ?? null },
+    { kod: "GRAM_ALTIN", ad: "Gram Altın (₺)",   getiri: yzd(gramAltin),        ilk: gAltinIlk,             son: gAltinSon,             sonGun: gunTR(onsAltin?.sonTs), kaynak: "sentetik (ons × USD/TRY)" },
+    { kod: "ONS_GUMUS",  ad: "Ons Gümüş ($)",    getiri: yzd(onsGumus?.getiri), ilk: onsGumus?.ilk ?? null, son: onsGumus?.son ?? null, sonGun: gunTR(onsGumus?.sonTs), kaynak: onsGumus?.kaynak ?? null },
+    { kod: "GRAM_GUMUS", ad: "Gram Gümüş (₺)",   getiri: yzd(gramGumus),        ilk: gGumusIlk,             son: gGumusSon,             sonGun: gunTR(onsGumus?.sonTs), kaynak: "sentetik (ons × USD/TRY)" },
+    { kod: "XU100",      ad: "BIST 100",         getiri: yzd(xu100?.getiri),    ilk: xu100?.ilk ?? null,    son: xu100?.son ?? null,    sonGun: gunTR(xu100?.sonTs),    kaynak: xu100?.kaynak ?? null },
+    { kod: "XK100",      ad: "Katılım Endeksi",  getiri: yzd(xk100?.getiri),    ilk: xk100?.ilk ?? null,    son: xk100?.son ?? null,    sonGun: gunTR(xk100?.sonTs),    kaynak: xk100?.kaynak ?? null },
   ];
 
   if (genis) {
     getiriler.push(
-      { kod: "BRENT",  ad: "Brent Petrol ($)",  getiri: yzd(brent?.getiri),  ilk: brent?.ilk ?? null,  son: brent?.son ?? null },
-      { kod: "EURUSD", ad: "EUR/USD",           getiri: yzd(eurusd?.getiri), ilk: eurusd?.ilk ?? null, son: eurusd?.son ?? null },
-      { kod: "SP500",  ad: "S&P 500",           getiri: yzd(sp500?.getiri),  ilk: sp500?.ilk ?? null,  son: sp500?.son ?? null },
+      { kod: "BRENT",  ad: "Brent Petrol ($)",  getiri: yzd(brent?.getiri),  ilk: brent?.ilk ?? null,  son: brent?.son ?? null,  sonGun: gunTR(brent?.sonTs),  kaynak: brent?.kaynak ?? null },
+      { kod: "EURUSD", ad: "EUR/USD",           getiri: yzd(eurusd?.getiri), ilk: eurusd?.ilk ?? null, son: eurusd?.son ?? null, sonGun: gunTR(eurusd?.sonTs), kaynak: eurusd?.kaynak ?? null },
+      { kod: "SP500",  ad: "S&P 500",           getiri: yzd(sp500?.getiri),  ilk: sp500?.ilk ?? null,  son: sp500?.son ?? null,  sonGun: gunTR(sp500?.sonTs),  kaynak: sp500?.kaynak ?? null },
     );
   }
 
@@ -309,6 +406,19 @@ async function haftalikOzet(req, res) {
   // kalır ve sekmeler arasında karışık yöntem görünürdü.
   let guncel = arsiv.find((k) => k && k.hafta === hafta && k.v === 3 && Array.isArray(k.satirlar) && k.satirlar.length > 0);
 
+  // ⚠️ CUMA KAPANIŞI KONTROLÜ (2026-10-03, kullanıcı raporu: tablo "25 Eylül – 1 Ekim"
+  // gösteriyordu, oysa hafta 2 Ekim Cuma'da bitiyor). Hafta Cumartesi 00:00'dan
+  // itibaren hesaplanır ama Yahoo, Cuma'nın son mumunu (BIST) o saatte henüz
+  // vermemiş olabilir; kayıt bu eksik veriyle arşive yazılınca "tamamlanmış hafta
+  // değişmez" kuralı yüzünden hep eksik kalıyordu. Artık: kayıtta haftanın CUMA
+  // mumu yoksa ve Cuma'yı izleyen Salı 00:00 (TR) gelmediyse arşivdeki kayıt
+  // KULLANILMAZ, yeniden hesaplanır (Salı'dan sonra hâlâ yoksa gerçek tatil/veri
+  // boşluğu kabul edilip kayıt donar). Yeniden hesaplanan kayıtta eski `nedenler`
+  // otomatik düşer; yeni veriye göre yeniden üretilir.
+  if (guncel && !cumaKapanisiVarMi(guncel) && !kayitKararliMi(guncel)) {
+    guncel = undefined;
+  }
+
   if (!guncel) {
     // Üç ayrı veri kaynağı (Yahoo, kendi tefas-proxy, kendi finans-haberleri)
     // önceden SIRAYLA bekleniyordu — toplam süre Vercel'in fonksiyon zaman
@@ -316,11 +426,14 @@ async function haftalikOzet(req, res) {
     // paralel çalıştırılıyor; haber/fon kaynaklarından biri yavaş/hatalı
     // olsa bile (kendi içlerinde try/catch ile null/[] döner) ana veri
     // etkilenmez.
-    const [{ getiriler, donem }, fonHafta, haberler] = await Promise.all([
+    const [{ getiriler: yahooSatirlar, donem }, fonHafta, haberler] = await Promise.all([
       hesaplaGetiriler(null, [], p1, p2, true), // genis: Brent, EUR/USD, S&P 500 dahil
       fonHaftalikOrt(req.headers.host),
       haftaninHaberleri(req.headers.host),
     ]);
+    // Ana menüyle aynı kaynaktan (Truncgil gün sonu kayıtları) gelen satırlar Yahoo'nun
+    // yerine geçer; Yahoo'su başarısız olmuş (getiri null) ama kaydı olan satır da kurtarılır.
+    const getiriler = await anaMenuUygula(yahooSatirlar, haftaCumasi(hafta));
     guncel = {
       v: 3,
       hafta,
@@ -430,6 +543,11 @@ async function haftalikNeden(req, res) {
   const kayit = bul(await arsivOku());
   if (!kayit) {
     res.status(404).json({ basarili: false, hata: "Hafta arşivde yok" });
+    return;
+  }
+  // Haftanın Cuma kapanışı henüz verilerde yoksa sebep ÜRETME (eksik tabloya sebep yazılmasın)
+  if (!cumaKapanisiVarMi(kayit) && !kayitKararliMi(kayit)) {
+    res.status(200).json({ basarili: false, eksik: true });
     return;
   }
   // Zaten üretilmişse (boş sonuç dahil) tekrar çağrı YOK — Gemini'ye haftada bir gidilir
