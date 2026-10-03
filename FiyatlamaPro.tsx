@@ -8297,8 +8297,15 @@ function OdemePlani({plan, bsmvOran, kkdfOran, onClose, showKomisyon, basitOran,
   const stickyTarih={position:"sticky" as const,left:NO_W,zIndex:2};
   return(
     <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.6)",zIndex:200,display:"flex",alignItems:"flex-end",...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}}>
-      <div style={{background:C.card,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",height:"96dvh",maxHeight:"96dvh",display:"flex",flexDirection:"column"}}>
-        <div style={{padding:"calc(16px + env(safe-area-inset-top,0px)) 16px 14px",borderBottom:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+      {/* ⚠️ DÜZELTME (2026-10-03, kullanıcı raporu: "tüm ödeme planları yukarıda güvenli alan
+            dışına çıkıyor"): bu pencere ALTTAN AÇILAN bir sheet (arkası karartmalı, üst köşeleri
+            yuvarlak) ama yüksekliği sabit 96dvh idi → üst kenarı ekranın %4'ünde (≈34pt) kalıyor,
+            saat/pil ve Dynamic Island alanının ALTINA giriyordu; başlıktaki
+            env(safe-area-inset-top) payı ise (TAM EKRAN modallerden kopyalanmıştı) yalnızca içerik
+            boşluğunu büyütüp sorunu gizliyordu. Artık sheet'in ÜST KENARI güvenli alanın altında
+            başlıyor: yükseklik = 100dvh − max(%4, güvenli alan + 8px); başlık iç boşluğu normal. */}
+      <div style={{background:C.card,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",height:"calc(100dvh - max(4dvh, calc(env(safe-area-inset-top,0px) + 8px)))",maxHeight:"calc(100dvh - max(4dvh, calc(env(safe-area-inset-top,0px) + 8px)))",display:"flex",flexDirection:"column"}}>
+        <div style={{padding:"16px 16px 14px",borderBottom:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
           <span style={{fontSize:17,fontWeight:700,color:C.label}}>📅 Ödeme Planı</span>
           <button onClick={onClose} style={{background:WA(0.1),border:"none",width:38,height:38,borderRadius:19,fontSize:22,cursor:"pointer",color:C.label}}>×</button>
         </div>
