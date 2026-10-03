@@ -497,7 +497,8 @@ async function nedenUret(kayit) {
     return { hata: "ag" };
   }
   clearTimeout(zamanAsimi);
-  if (!r.ok) return { hata: "gemini-" + r.status };
+  // Hata gövdesinin ilk 120 karakteri: neden gizli kaldığını TAHMİNSİZ görmek için (api yanıtındaki `sebep`)
+  if (!r.ok) return { hata: "gemini-" + r.status + ": " + String(j?.error?.message || "").replace(/\s+/g, " ").slice(0, 120) };
 
   const aday = j?.candidates?.[0];
   // Parçalar "" ile birleştirilir: grounding bayt ofsetleri bu birleşik metne göre
@@ -561,8 +562,11 @@ async function haftalikNeden(req, res) {
   const kilit = "haftalikNedenKilit:" + hedef;
   const sogu = "haftalikNedenSogu:" + hedef;
   try {
-    if (await redis.get(sogu)) {
-      res.status(200).json({ basarili: false, beklemede: true });
+    const sonHata = await redis.get(sogu);
+    // "1": önceki sürümün sebepsiz soğuma işareti — eski kayıt, YOK sayılır (bir kez yeniden
+    // denenir ve gerçek hata sebebi yakalanır); yeni kayıtlar sebep metni taşır.
+    if (sonHata && sonHata !== "1") {
+      res.status(200).json({ basarili: false, beklemede: true, sebep: typeof sonHata === "string" ? sonHata : "bilinmiyor" });
       return;
     }
     const aldi = await redis.set(kilit, "1", { nx: true, ex: 90 });
@@ -580,8 +584,8 @@ async function haftalikNeden(req, res) {
     const sonuc = await nedenUret(kayit);
     if (sonuc.hata) {
       console.error("haftalik-neden hata:", hedef, sonuc.hata);
-      try { await redis.set(sogu, "1", { ex: 1800 }); } catch {}
-      res.status(200).json({ basarili: false });
+      try { await redis.set(sogu, String(sonuc.hata).slice(0, 160), { ex: 1800 }); } catch {}
+      res.status(200).json({ basarili: false, sebep: sonuc.hata });
       return;
     }
     // Üretim sırasında arşiv değişmiş olabilir → yeniden oku, yalnızca bu haftanın kaydına yaz
@@ -594,8 +598,8 @@ async function haftalikNeden(req, res) {
     res.status(200).json({ basarili: true, nedenler: sonuc.nedenler });
   } catch (e) {
     console.error("haftalik-neden istisna:", e);
-    try { await redis.set(sogu, "1", { ex: 1800 }); } catch {}
-    res.status(200).json({ basarili: false });
+    try { await redis.set(sogu, "istisna: " + String(e?.message || e).slice(0, 120), { ex: 1800 }); } catch {}
+    res.status(200).json({ basarili: false, sebep: "istisna" });
   } finally {
     try { await redis.del(kilit); } catch {}
   }

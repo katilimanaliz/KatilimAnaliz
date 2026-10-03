@@ -14221,23 +14221,22 @@ function HaftalikPiyasaOzeti(){
   },[gosterilen,fonHafta]);
   const haberler=gosterilen?.haberler||[];
 
-  // ── "PİYASALARDA NE ETKİLİ OLDU?" (2026-10-03, kullanıcı isteği: özet metninde
-  // "borsa düştü ama neden düştü / Fed kararıyla dolar arttı" gibi sebepler de
-  // olsun) ──────────────────────────────────────────────────────────────────
+  // ── ÖZET METNİNDE SEBEPLER (2026-10-03, kullanıcı isteği: özet metninde "borsa
+  // düştü ama neden düştü / Fed kararıyla dolar arttı" gibi sebepler de olsun;
+  // AYRI bir kart/alan istenmedi → sebep cümleleri "Haftanın Özeti" paragraflarının
+  // İÇİNE, ilgili hareketin hemen arkasına gömülür) ─────────────────────────────
   // Sebepler istemcide ÜRETİLMEZ (fiyat verisinden neden çıkarılamaz): backend
   // (api/getiri.js islem=haftalik-neden) Gemini + Google Search ile yalnızca
   // haberlerde AÇIKÇA geçen sebepleri yazar ve haftada bir arşive kaydeder.
   // Ekranda yüzde/ad/yön her zaman haftalik-ozet tablosundan gelir (modelden
   // değil). Hafta için sebep yoksa istek bir kez tetiklenir (oturum başına);
   // başarısız/boş olursa bölüm HİÇ görünmez ve mevcut ekran aynen çalışır.
-  const [nedenYukleniyor,setNedenYukleniyor]=useState(false);
   const nedenHafta=gosterilen?.hafta||null;
   const nedenVar=!!gosterilen?.nedenler;
   useEffect(()=>{
     if(!nedenHafta||nedenVar) return;
     const ANAHTAR="hp_neden_"+nedenHafta;
     try{ if(sessionStorage.getItem(ANAHTAR)) return; sessionStorage.setItem(ANAHTAR,"1"); }catch{}
-    setNedenYukleniyor(true);
     fetch(`${API_BASE}/api/getiri?islem=haftalik-neden&hafta=${encodeURIComponent(nedenHafta)}`)
       .then(r=>r.ok?r.json():null)
       .then(d=>{
@@ -14250,8 +14249,7 @@ function HaftalikPiyasaOzeti(){
           return yeni;
         });
       })
-      .catch(()=>{})
-      .finally(()=>setNedenYukleniyor(false));
+      .catch(()=>{});
   },[nedenHafta,nedenVar]);
   const nedenler=gosterilen?.nedenler;
   const nedenListesi=useMemo(()=>{
@@ -14353,75 +14351,96 @@ function HaftalikPiyasaOzeti(){
     return v.toLocaleString("tr-TR",{minimumFractionDigits:hane,maximumFractionDigits:hane});
   };
 
-  // Otomatik yorum — tamamen tablo verisinden üretilir (enstrüman bazlı, paragraflı)
+  // Otomatik yorum — tablo verisinden üretilir (enstrüman bazlı, paragraflı); hareketin
+  // sebebi haberlerde doğrulanmışsa (backend: islem=haftalik-neden) ilgili cümlenin
+  // hemen arkasına eklenir. Sebep YOKSA metin yalnızca rakamlarla kalır (uydurma yok).
   const yorum=useMemo(()=>{
     if(!satirlar.length) return null;
     const bul=(kod:string)=>satirlar.find((g:any)=>g.kod===kod);
     const y=(g:any)=>`${g.getiri>=0?"+":""}${g.getiri.toFixed(2).replace(".",",")}%`;
     const yon=(g:any,poz:string,neg:string)=>g.getiri>=0?poz:neg;
     // Enstrümanın son fiyatını birimiyle birlikte yazar (örn. "46,7235 TL", "4.113 $/ons")
-    // — yorum metninin yalnızca yüzdesel değişim değil, ulaşılan somut seviyeyi de
-    // vermesi için (profesyonel piyasa notu standardı).
-    const f=(g:any,birim:string)=>g?.son!=null?`${fmtFiyat(g.son)} ${birim}`:null;
+    const f=(g:any,birim:string)=>g?.son!=null?`${fmtFiyat(g.son)} ${birim}`.trim():null;
     const sirali=[...satirlar].sort((a:any,b:any)=>b.getiri-a.getiri);
     const enIyi=sirali[0], enKotu=sirali[sirali.length-1];
     const yukselen=satirlar.filter((g:any)=>g.getiri>0).length;
+    const dusen=satirlar.filter((g:any)=>g.getiri<0).length;
 
     const usd=bul("USDTRY"), eur=bul("EURTRY");
     const onsAu=bul("ONS_ALTIN"), grAu=bul("GRAM_ALTIN"), onsAg=bul("ONS_GUMUS"), grAg=bul("GRAM_GUMUS");
     const xu=bul("XU100"), xk=bul("XK100");
     const brent=bul("BRENT"), eurusd=bul("EURUSD"), sp=bul("SP500");
 
-    const birimBul=(g:any)=>{
-      if(!g) return "";
-      if(g.kod==="USDTRY"||g.kod==="EURTRY") return "TL";
-      if(g.kod==="ONS_ALTIN"||g.kod==="ONS_GUMUS"||g.kod==="BRENT") return "$";
-      if(g.kod==="GRAM_ALTIN"||g.kod==="GRAM_GUMUS") return "TL";
-      return "";
+    // Veri, haftanın son gününden (Cuma) ESKİ mi? (örn. Brent kaynağı 2-4 gün gecikmeli olabiliyor)
+    const parite=(g:any)=>g?.son!=null?g.son.toLocaleString("tr-TR",{minimumFractionDigits:4,maximumFractionDigits:4}):null;
+    const donemSonGun=gosterilen?.donem?.sonTarih?new Date(new Date(gosterilen.donem.sonTarih).getTime()+3*3600*1000).toISOString().slice(0,10):null;
+    const bayatMi=(g:any)=>!!(g&&g.sonGun&&donemSonGun&&g.sonGun<donemSonGun);
+    const gunMetni=(g:any)=>new Date(g.sonGun+"T12:00:00Z").toLocaleDateString("tr-TR",{day:"numeric",month:"long",timeZone:"UTC"});
+
+    // Haberlerde doğrulanmış sebep cümleleri (en fazla 2 / paragraf; verisi bayat satırlar için YAZILMAZ)
+    const kullanilanKaynaklar:string[]=[];
+    const nedenEkle=(kodlar:string[]):string[]=>{
+      const secilen=nedenListesi.filter((n:any)=>kodlar.includes(n.kod)&&!bayatMi(n.satir)).slice(0,2);
+      return secilen.map((n:any,i:number)=>{
+        (n.kaynaklar&&n.kaynaklar.length>0?n.kaynaklar:(nedenler?.kaynaklar||[])).forEach((k:string)=>{ if(!kullanilanKaynaklar.includes(k)) kullanilanKaynaklar.push(k); });
+        return i===0?n.metin:n.metin.replace(/^Haberlere göre\s+/,"Ayrıca ");
+      });
     };
-    const enIyiFiyat=f(enIyi,birimBul(enIyi));
-    const enKotuFiyat=f(enKotu,birimBul(enKotu));
 
     const paragraflar:string[]=[];
 
     // 1) Genel görünüm
     const p1:string[]=[];
-    p1.push(`${donemBas&&donemSon?`${donemBas} – ${donemSon} haftasında`:"Bu hafta"} takip edilen ${satirlar.length} enstrümanın ${yukselen} tanesi değer kazandı.`);
-    p1.push(`Haftanın en güçlü performansı ${y(enIyi)} ile ${enIyi.ad} tarafında gerçekleşti${enIyiFiyat?` ve fiyat ${enIyiFiyat} seviyesine ulaştı`:""}; en zayıf görünüm ise ${y(enKotu)} ile ${enKotu.ad} oldu${enKotuFiyat?`, fiyat ${enKotuFiyat} seviyesinde gerçekleşti`:""}.`);
+    const donemMetni=donemBas&&donemSon?`${donemBas} – ${donemSon} haftasında`:"Bu hafta";
+    p1.push(yukselen===0
+      ?`${donemMetni} takip edilen ${satirlar.length} enstrümanın hiçbiri değer kazanamadı${dusen>0?`, ${dusen} tanesi değer kaybetti`:""}.`
+      :`${donemMetni} takip edilen ${satirlar.length} enstrümanın ${yukselen} tanesi değer kazanırken${dusen>0?` ${dusen} tanesi değer kaybetti`:" hiçbiri değer kaybetmedi"}.`);
+    p1.push(`${enIyi.getiri>=0?"Haftanın en çok yükselen enstrümanı":"Haftanın en az gerileyen enstrümanı"} ${y(enIyi)} ile ${enIyi.ad} oldu; ${enKotu.getiri<0?"en sert düşüş":"en zayıf artış"} ise ${y(enKotu)} ile ${enKotu.ad} tarafında yaşandı.`);
     paragraflar.push(p1.join(" "));
 
     // 2) Döviz
     if(usd||eur||eurusd){
       const p2:string[]=[];
-      if(usd&&eur) p2.push(`Döviz tarafında USD/TRY hafta boyunca ${y(usd)} ${yon(usd,"yükselerek","gerileyerek")}${f(usd,"TL")?` ${f(usd,"TL")} seviyesinden`:""} haftayı tamamlarken, EUR/TRY ${y(eur)} ${yon(eur,"değer kazanarak","değer kaybederek")}${f(eur,"TL")?` ${f(eur,"TL")} seviyesine ulaştı`:""}.`);
-      else if(usd) p2.push(`USD/TRY haftayı ${y(usd)} değişimle${f(usd,"TL")?` ${f(usd,"TL")} seviyesinden`:""} tamamladı.`);
-      if(eurusd) p2.push(`Küresel tarafta EUR/USD paritesi ${y(eurusd)} ${yon(eurusd,"yükselerek","gerileyerek")}${f(eurusd,"")?` ${f(eurusd,"")} seviyesinde işlem gördü`:""}.`);
+      if(usd&&eur) p2.push(`Döviz tarafında USD/TRY haftayı ${y(usd)} ${yon(usd,"yükselişle","düşüşle")}${f(usd,"TL")?` ${f(usd,"TL")} seviyesinde`:""} kapatırken, EUR/TRY ${y(eur)} ${yon(eur,"değer kazanarak","değer kaybederek")}${f(eur,"TL")?` ${f(eur,"TL")} seviyesine`:""} ${yon(eur,"yükseldi","geriledi")}.`);
+      else if(usd) p2.push(`USD/TRY haftayı ${y(usd)} değişimle${f(usd,"TL")?` ${f(usd,"TL")} seviyesinde`:""} tamamladı.`);
+      p2.push(...nedenEkle(["USDTRY","EURTRY"]));
+      if(eurusd) p2.push(`Küresel tarafta EUR/USD paritesi ${y(eurusd)} ${yon(eurusd,"yükselerek","gerileyerek")}${parite(eurusd)?` ${parite(eurusd)} seviyesinde`:""} haftayı kapattı.`);
+      p2.push(...nedenEkle(["EURUSD"]));
       paragraflar.push(p2.join(" "));
     }
 
     // 3) Kıymetli madenler
     if(onsAu||onsAg){
       const p3:string[]=[];
-      if(onsAu&&grAu) p3.push(`Kıymetli madenlerde altının ons fiyatı dolar bazında ${y(onsAu)} ${yon(onsAu,"artarak","gerileyerek")}${f(onsAu,"$")?` ${f(onsAu,"$")} seviyesine`:""} çıktı; kur etkisiyle birlikte gram altın TL bazında ${y(grAu)} ${yon(grAu,"değer kazanarak","değer kaybederek")}${f(grAu,"TL")?` ${f(grAu,"TL")} seviyesinden işlem görmeye başladı`:""}.`);
-      if(onsAg&&grAg) p3.push(`Gümüşte ons fiyatı ${y(onsAg)} değişimle${f(onsAg,"$")?` ${f(onsAg,"$")} seviyesine`:""} ulaşırken, gram gümüş ${y(grAg)} değişimle${f(grAg,"TL")?` ${f(grAg,"TL")} seviyesinde`:""} gerçekleşti.`);
+      if(onsAu&&grAu) p3.push(`Kıymetli madenlerde altının ons fiyatı dolar bazında ${y(onsAu)} ${yon(onsAu,"artarak","gerileyerek")}${f(onsAu,"$")?` ${f(onsAu,"$")} seviyesine`:""} ${yon(onsAu,"yükseldi","indi")}; gram altın ise TL bazında ${y(grAu)} ${yon(grAu,"değer kazanarak","değer kaybederek")}${f(grAu,"TL")?` haftayı ${f(grAu,"TL")} seviyesinde`:" haftayı"} tamamladı.`);
+      p3.push(...nedenEkle(["ONS_ALTIN","GRAM_ALTIN"]));
+      if(onsAg&&grAg) p3.push(`Gümüşte ons fiyatı ${y(onsAg)} değişimle${f(onsAg,"$")?` ${f(onsAg,"$")} seviyesine`:""} ${yon(onsAg,"yükselirken","gerilerken")}, gram gümüş ${y(grAg)} değişimle${f(grAg,"TL")?` ${f(grAg,"TL")} seviyesinde`:""} kapandı.`);
+      p3.push(...nedenEkle(["ONS_GUMUS","GRAM_GUMUS"]));
+      if(onsAu&&onsAg) p3.push(`Gümüş, altına kıyasla ${Math.abs(onsAg.getiri)>Math.abs(onsAu.getiri)?"daha sert":"daha sınırlı"} hareket etti.`);
       paragraflar.push(p3.join(" "));
     }
 
     // 4) Hisse piyasaları
     if(xu||xk||sp){
       const p4:string[]=[];
-      if(xu) p4.push(`Yurt içi hisse piyasasında BIST 100 endeksi haftayı ${y(xu)} ${yon(xu,"yükselişle","düşüşle")}${f(xu,"puan")?` ${f(xu,"puan")} seviyesinden`:""} kapattı${xk?`; Katılım Endeksi (XK100) ${y(xk)} ile ${xk.getiri>(xu?.getiri??0)?"endeksin üzerinde":"endeksin gerisinde"} performans gösterdi`:""}.`);
+      if(xu) p4.push(`Yurt içi hisse piyasasında BIST 100 endeksi haftayı ${y(xu)} ${yon(xu,"yükselişle","düşüşle")}${f(xu,"puan")?` ${f(xu,"puan")} seviyesinde`:""} kapattı${xk?`; Katılım Endeksi (XK100) ${y(xk)} ile BIST 100'ün ${xk.getiri>(xu?.getiri??0)?"üzerinde":"gerisinde"} kaldı`:""}.`);
+      p4.push(...nedenEkle(["XU100","XK100"]));
       if(usd&&xu) p4.push(xu.getiri>usd.getiri
         ?`Borsa, hafta genelinde dolar kurunun (${y(usd)}) üzerinde getiri sağladı.`
         :`Dolar kuru (${y(usd)}), hafta genelinde borsa getirisinin önünde yer aldı.`);
-      if(sp) p4.push(`Küresel hisse tarafında S&P 500 endeksi ${y(sp)} ${yon(sp,"yükselerek","gerileyerek")}${f(sp,"puan")?` ${f(sp,"puan")} seviyesine ulaştı`:""}.`);
+      if(sp) p4.push(`Küresel hisse tarafında S&P 500 endeksi ${y(sp)} ${yon(sp,"yükselerek","gerileyerek")}${f(sp,"puan")?` haftayı ${f(sp,"puan")} seviyesinde`:" haftayı"} tamamladı.`);
+      p4.push(...nedenEkle(["SP500"]));
       paragraflar.push(p4.join(" "));
     }
 
     // 5) Emtia + fonlar
     const p5:string[]=[];
-    if(brent) p5.push(`Enerji tarafında Brent petrolün varil fiyatı haftalık bazda ${y(brent)} ${yon(brent,"artışla","düşüşle")}${f(brent,"$")?` ${f(brent,"$")} seviyesine ${yon(brent,"yükseldi","geriledi")}`:""}.`);
-    if(fonHafta!=null) p5.push(`Katılım esaslı para piyasası fonlarının haftalık ortalama getirisi ${(fonHafta>=0?"+":"")}${fonHafta.toFixed(2).replace(".",",")}% düzeyinde gerçekleşti.`);
+    if(brent){
+      if(bayatMi(brent)) p5.push(`Enerji tarafında Brent petrolün kaynak verisi ${gunMetni(brent)} tarihine kadar güncel; bu tarihe kadar varil fiyatı ${y(brent)} ${yon(brent,"artışla","düşüşle")}${f(brent,"$")?` ${f(brent,"$")} seviyesine`:""} ${yon(brent,"yükseldi","geriledi")}.`);
+      else p5.push(`Enerji tarafında Brent petrolün varil fiyatı haftalık bazda ${y(brent)} ${yon(brent,"artışla","düşüşle")}${f(brent,"$")?` ${f(brent,"$")} seviyesine`:""} ${yon(brent,"yükseldi","geriledi")}.`);
+      p5.push(...nedenEkle(["BRENT"]));
+    }
+    if(fonHafta!=null) p5.push(`Katılım esaslı para piyasası fonlarının haftalık ortalama getirisi ${(fonHafta>=0?"+":"")}${fonHafta.toFixed(2).replace(".",",")}% oldu.`);
     if(p5.length) paragraflar.push(p5.join(" "));
 
     // 6) Küresel merkez bankaları (2026-07-26 eklendi) — sadece canlı veri
@@ -14435,8 +14454,13 @@ function HaftalikPiyasaOzeti(){
       if(p6.length) paragraflar.push(p6.join(" "));
     }
 
+    // Sebep cümlesi eklendiyse tek satırlık kaynak/uyarı notu ("§" öneki → küçük, soluk yazılır)
+    if(kullanilanKaynaklar.length>0){
+      paragraflar.push(`§Sebep cümleleri yapay zekâ ile haber kaynaklarından derlenir (${kullanilanKaynaklar.slice(0,4).join(", ")}); yalnızca haberlerde açıkça belirtilenler yazılır. Yatırım tavsiyesi değildir.`);
+    }
+
     return paragraflar;
-  },[satirlar,fonHafta,donemBas,donemSon,evdsMakro]);
+  },[satirlar,fonHafta,donemBas,donemSon,evdsMakro,gosterilen,nedenListesi,nedenler]);
 
   return(
     <div style={{background:C.bg,minHeight:"100vh",padding:"0 16px 40px",boxSizing:"border-box"}}>
@@ -14554,44 +14578,10 @@ function HaftalikPiyasaOzeti(){
             <div style={{background:WA(0.04),border:`1px solid ${WA(0.07)}`,borderRadius:16,padding:"14px 16px"}}>
               <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#2E6DA8":"#9FC1EA")}}>📝 Haftanın Özeti</p>
               {yorum.map((par:string,i:number)=>(
-                <p key={i} style={{margin:i<yorum.length-1?"0 0 10px":"0",fontSize:13,color:WA(0.75),lineHeight:1.65}}>{par}</p>
+                par.startsWith("§")
+                  ?<p key={i} style={{margin:"4px 0 0",paddingTop:10,borderTop:`1px solid ${WA(0.07)}`,fontSize:10.5,color:WA(0.45),lineHeight:1.5}}>{par.slice(1)}</p>
+                  :<p key={i} style={{margin:i<yorum.length-1?"0 0 10px":"0",fontSize:13,color:WA(0.75),lineHeight:1.65}}>{par}</p>
               ))}
-            </div>
-          )}
-
-          {/* Piyasalarda ne etkili oldu? — yalnızca haberlerde doğrulanan sebepler */}
-          {nedenYukleniyor&&!nedenler&&(
-            <div style={{marginTop:14,background:WA(0.04),border:`1px solid ${WA(0.07)}`,borderRadius:16,padding:"14px 16px"}}>
-              <p style={{margin:"0 0 6px",fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#2E6DA8":"#9FC1EA")}}>🔎 Piyasalarda Ne Etkili Oldu?</p>
-              <p style={{margin:0,fontSize:12.5,color:WA(0.5),lineHeight:1.55}}>{CV("Haftanın haberleri taranıyor…")}</p>
-            </div>
-          )}
-          {nedenListesi.length>0&&(
-            <div style={{marginTop:14,background:WA(0.04),border:`1px solid ${WA(0.07)}`,borderRadius:16,padding:"14px 16px"}}>
-              <p style={{margin:"0 0 6px",fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#2E6DA8":"#9FC1EA")}}>🔎 Piyasalarda Ne Etkili Oldu?</p>
-              {nedenListesi.map((n:any,i:number)=>{
-                const poz=n.satir.getiri>=0;
-                const kaynaklar:string[]=(n.kaynaklar&&n.kaynaklar.length>0?n.kaynaklar:(nedenler?.kaynaklar||[])).slice(0,3);
-                return(
-                  <div key={n.kod} style={{padding:"11px 0",borderTop:i===0?"none":`1px solid ${WA(0.07)}`}}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:5}}>
-                      <span style={{fontSize:13,fontWeight:700,color:C.soft,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n.satir.ad}</span>
-                      <span style={{fontSize:11.5,fontWeight:700,color:poz?C.green:C.red,flexShrink:0,whiteSpace:"nowrap"}}>{poz?"▲":"▼"} %{Math.abs(n.satir.getiri).toFixed(2).replace(".",",")}</span>
-                    </div>
-                    <p style={{margin:0,fontSize:12.8,color:WA(0.72),lineHeight:1.6}}>{n.metin}</p>
-                    {kaynaklar.length>0&&(
-                      <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:7}}>
-                        {kaynaklar.map((k:string)=>(
-                          <span key={k} style={{fontSize:10.5,color:C.blue,background:(TEMA==="acik"?"rgba(46,109,168,0.10)":"rgba(159,193,234,0.14)"),borderRadius:999,padding:"3px 9px"}}>{k}</span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-              <p style={{margin:"10px 0 0",paddingTop:10,borderTop:`1px solid ${WA(0.07)}`,fontSize:10.5,lineHeight:1.5,color:WA(0.45)}}>
-                {CV("Bu bölüm yapay zekâ ile, haftanın haber kaynaklarından derlenir; yalnızca haberlerde açıkça belirtilen sebepler yazılır. Net bir sebep bulunamayan hareketler için açıklama eklenmez. Yatırım tavsiyesi değildir.")}
-              </p>
             </div>
           )}
 

@@ -11,7 +11,7 @@
 // Ekranda gösterilen yüzde/ad/yön her zaman bizim tablomuzdan gelir
 // (modelden değil) — model yalnızca bir cümle ve (grounding'den) kaynak üretir.
 
-export const NEDEN_SURUM = 1;
+export const NEDEN_SURUM = 2; // v2 (2026-10-03): cümleler "Haberlere göre ..." biçiminde, özet metnine gömülür
 export const NEDEN_MODEL = "gemini-3.5-flash"; // api/asistan-ai.js ile aynı; emekli edilirse iki yerde güncelle
 export const NEDEN_MAKS_SATIR = 6;
 
@@ -31,10 +31,10 @@ const SISTEM = `Sen KatılımPlus uygulamasının haftalık piyasa özeti editö
 KURALLAR:
 1. Yalnızca verilen tarih aralığındaki gelişmeleri kullan. Başka bir haftanın haberini kullanma.
 2. Bir hareketin nedeni arama sonuçlarında açıkça belirtilmiyorsa o enstrüman için SATIR YAZMA. Tahmin, çıkarım veya genel piyasa klişesi ancak kaynakta aynen geçiyorsa yazılır.
-3. Yüzde ve seviye rakamlarını yalnızca verilen tablodan al. Haberdeki bir olayı (örn. "Fed faizi sabit tuttu") ancak kaynakta yazdığı kadarıyla ve olayın kendisiyle sınırlı olarak yaz.
+3. Cümlede yüzde veya fiyat rakamını TEKRARLAMA (rakamlar özet metninde zaten var); yalnızca SEBEBİ anlat. Haberdeki bir olayı (örn. "Fed faizi sabit tuttu") ancak kaynakta yazdığı kadarıyla ve olayın kendisiyle sınırlı olarak yaz.
 4. Cümle, hareketin yönüyle tutarlı olmalı (tablodaki işarete göre: eksi = düşüş, artı = yükseliş).
 5. Yatırım tavsiyesi, fiyat tahmini, beklenti, "alınmalı/satılmalı/fırsat" gibi ifadeler YASAK.
-6. Her satır tek cümle, en fazla 220 karakter, Türkçe, düz metin. Markdown, bağlantı, köşeli parantez, kaynak numarası YOK.
+6. Her satır tek cümle, en fazla 200 karakter, Türkçe, düz metin ve "Haberlere göre " ifadesiyle BAŞLAMALI. Markdown, bağlantı, köşeli parantez, kaynak numarası YOK. Örnek: "Haberlere göre düşüşte bankacılık hisselerindeki satışlar öne çıktı."
 7. En fazla ${NEDEN_MAKS_SATIR} satır; en çok değişen enstrümanlara öncelik ver.
 
 ÇIKTI BİÇİMİ: her satır "KOD|cümle". KOD, tablodaki kodlardan biri olmalı. Hiçbir neden doğrulanamıyorsa yalnızca "YOK" yaz. Başka hiçbir şey yazma.`;
@@ -100,6 +100,9 @@ export function nedenCozumle(metin, gm, kodlar) {
     if (adaylar.some((a) => a.kod === kod)) continue; // enstrüman başına tek satır
     const cumle = cumleTemizle(m[2]);
     if (cumle.length < 20 || cumle.length > 260) continue;
+    // Cümle özet paragrafının ortasına gömülecek: biçim "Haberlere göre ..." değilse atılır
+    // (büyük/küçük harf dönüştürerek düzeltmeye ÇALIŞILMAZ: "Fed", "TCMB" gibi özel adlar bozulur)
+    if (!/^Haberlere göre\s/.test(cumle)) continue;
     if (YASAK_DESEN.test(cumle)) continue;
     // grounding segment indeksleri UTF-8 BAYT cinsindendir (Türkçe karakterler 2 bayt)
     const byteBas = Buffer.byteLength(ham.slice(0, baslangic), "utf8");
