@@ -22291,6 +22291,10 @@ function HtParaSecici({value,onChange,haric}:any){
 }
 
 const htFmt2=(n:any)=>isNaN(n)||n===null?"—":new Intl.NumberFormat("tr-TR",{minimumFractionDigits:4,maximumFractionDigits:4}).format(n);
+// Döviz Dönüştürücü SONUÇ tutarı: virgülden sonra 2 hane (kullanıcı isteği 2026-10-03: "49.179,1000" → "49.179,10"). İSTİSNA: 1'den küçük sonuçlarda
+// (örn. 1 ₺ = 0,0203 $) 2 hane anlamı yok ettiği için 4 hane korunur. htFmt2 (4 hane) başka yerlerde de kullanıldığı için DEĞİŞTİRİLMEDİ;
+// kur satırları ("1 USD = 49,1791 TRY") da 4 hane kalır.
+const htFmtSonuc=(n:any)=>isNaN(n)||n===null?"—":Math.abs(n)<1?htFmt2(n):new Intl.NumberFormat("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}).format(n);
 const htFmtTL=(n:any,sembol="₺")=>isNaN(n)||n===null?"—":`${sembol}${new Intl.NumberFormat("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}).format(n)}`;
 
 // 1. DÖVİZ DÖNÜŞTÜRÜCÜ - canlı kur verisiyle
@@ -22361,7 +22365,7 @@ function HtDovizDonusturucu(){
           <div style={{textAlign:"center",padding:"16px 0"}}>
             <p style={{margin:0,fontSize:13,color:C.sub}}>{tutar} {HT_PARA_ETIKET[kaynak]} =</p>
             <p style={{margin:"6px 0 0",fontSize:30,fontWeight:700,color:C.blue,fontFamily:"monospace"}}>
-              {htFmt2(sonuc.hedefDegeri).replace(/,0000$/,"")} {HT_PARA_ETIKET[hedef]}
+              {htFmtSonuc(sonuc.hedefDegeri)} {HT_PARA_ETIKET[hedef]}
             </p>
           </div>
           <HtRRow label={`1 ${HT_PARA_ETIKET[kaynak]} =`} value={`${htFmt2(sonuc.capraKur)} ${HT_PARA_ETIKET[hedef]}`}/>
@@ -30130,21 +30134,6 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onDuzen
         );
       })()}
 
-      {/* ── ZEKÂT ÖZETİ + PERFORMANS (2026-10-03) — yalnız Portföyüm sekmesi, kapalı gelir (ağ isteği AÇILINCA) ── */}
-      {sekme==="portfoy" && portfoyListesi.length>0 && (<>
-        <PortfoyAnalizKaroları onPerformans={()=>setAnalizPencere("performans")} onZekat={()=>setAnalizPencere("zekat")}/>
-        {analizPencere==="performans" && (
-          <PortfoyAltPencere baslik="Performans ve kıyas" altBaslik="Alış tarihinden bugüne" onKapat={()=>setAnalizPencere(null)}>
-            <PortfoyPerformansKarti liste={portfoyListesi}/>
-          </PortfoyAltPencere>
-        )}
-        {analizPencere==="zekat" && (
-          <PortfoyAltPencere baslik="Zekât özeti" altBaslik="Portföyündeki kalemlerden tahmini" onKapat={()=>setAnalizPencere(null)}>
-            <PortfoyZekatKarti liste={portfoyListesi} onZekatAc={onZekatAc ? ()=>{ setAnalizPencere(null); onZekatAc(); } : undefined}/>
-          </PortfoyAltPencere>
-        )}
-      </>)}
-
       {filtreliListe.length===0 && (
         <div style={{textAlign:"center",padding:"20px 0",color:PORTFOY_ETIKET,fontSize:12}}>
           {sekme==="portfoy" ? "Bu sekmede henüz ürün yok — alış bilgisiyle eklediklerin burada görünür." : "Bu sekmede henüz ürün yok — miktar/fiyat girmeden eklediklerin burada görünür."}
@@ -30387,6 +30376,23 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onDuzen
           </div>
         );
       })}
+
+      {/* ── PERFORMANS + ZEKÂT KAROLARI (2026-10-03, kullanıcı: "ürünlerin altına alalım, ürünler ne kadar büyürse büyüsün hep altta olsun") ──
+          Kalem listesinin EN SONUNDA (liste kaç kalem olursa olsun) ve "Pozisyon ekle" boşluğunun hemen üstünde. Yalnız Portföyüm sekmesi;
+          içerik (ağ isteği) karoya dokunulunca açılan pencerede oluşur. */}
+      {sekme==="portfoy" && portfoyListesi.length>0 && (<>
+        <PortfoyAnalizKaroları onPerformans={()=>setAnalizPencere("performans")} onZekat={()=>setAnalizPencere("zekat")}/>
+        {analizPencere==="performans" && (
+          <PortfoyAltPencere baslik="Performans ve kıyas" altBaslik="Alış tarihinden bugüne" onKapat={()=>setAnalizPencere(null)}>
+            <PortfoyPerformansKarti liste={portfoyListesi}/>
+          </PortfoyAltPencere>
+        )}
+        {analizPencere==="zekat" && (
+          <PortfoyAltPencere baslik="Zekât özeti" altBaslik="Portföyündeki kalemlerden tahmini" onKapat={()=>setAnalizPencere(null)}>
+            <PortfoyZekatKarti liste={portfoyListesi} onZekatAc={onZekatAc ? ()=>{ setAnalizPencere(null); onZekatAc(); } : undefined}/>
+          </PortfoyAltPencere>
+        )}
+      </>)}
 
       {/* ── "Pozisyon ekle" — YÜZEN DÜĞME (2026-09-10, kullanıcı isteği,
           referans ekran görüntüsüne göre) ────────────────────────────────
