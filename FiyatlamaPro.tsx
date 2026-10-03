@@ -5075,13 +5075,36 @@ function abdSeansTRMetni(simdi: Date = new Date()): string {
   const bicim = (dk: number) => { const t = ((dk % 1440) + 1440) % 1440; return String(Math.floor(t / 60)).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0"); };
   return bicim(9 * 60 + 30 + fark * 60) + "–" + bicim(16 * 60 + fark * 60);
 }
-// Liste: arama (ticker/şirket adı) + sıralama. "tumu" = backend sırası (piyasa değeri azalan).
-function abdHisseListele(liste: any[], sira: string, arama: string): any[] {
+// Liste: arama (ticker/şirket adı) + filtre (tumu | yukselen | dusen) + SÜTUNA göre sıralama.
+// yon: -1 = yüksekten düşüğe (Z→A), 1 = düşükten yükseğe (A→Z). kolon: degisim1g | fiyat | hacim | ticker.
+function abdHisseListele(liste: any[], filtre: string, kolon: string, yon: number, arama: string): any[] {
   const q = (arama || "").trim().toLocaleLowerCase("en-US");
   let l = (liste || []).filter((h: any) => !q || (String(h.ticker) + " " + String(h.ad)).toLocaleLowerCase("en-US").indexOf(q) >= 0);
-  if (sira === "yukselen") l = l.filter((h: any) => h.degisim1g > 0).sort((a: any, b: any) => b.degisim1g - a.degisim1g);
-  else if (sira === "dusen") l = l.filter((h: any) => h.degisim1g < 0).sort((a: any, b: any) => a.degisim1g - b.degisim1g);
-  else if (sira === "hacim") l = l.slice().sort((a: any, b: any) => (b.hacim || 0) - (a.hacim || 0));
+  if (filtre === "yukselen") l = l.filter((h: any) => h.degisim1g > 0);
+  else if (filtre === "dusen") l = l.filter((h: any) => h.degisim1g < 0);
+  return l.slice().sort((a: any, b: any) => kolon === "ticker"
+    ? String(a.ticker).localeCompare(String(b.ticker), "en") * yon
+    : ((a[kolon] || 0) - (b[kolon] || 0)) * yon);
+}
+// Başlığa dokunma (kullanıcı isteği 2026-10-03): ilk dokunuş SAYISAL sütunlarda yüksekten düşüğe (en yüksek üstte), "Hisse Adı"nda
+// A→Z; AYNI başlığa tekrar dokunmak yönü çevirir. Farklı başlığa geçilince yön o sütunun varsayılanına döner.
+// BİST ve ABD listeleri AYNI fonksiyonu kullanır (iki ekranda davranış birebir aynı).
+function abdBaslikSirala(mevcut: { kolon: string; yon: number }, tiklanan: string): { kolon: string; yon: number } {
+  if (mevcut.kolon === tiklanan) return { kolon: tiklanan, yon: mevcut.yon === 1 ? -1 : 1 };
+  return { kolon: tiklanan, yon: tiklanan === "ticker" ? 1 : -1 };
+}
+// ABD hissesi arama önerileri (Portföyüm / Takip Listem ekleme penceresi): ticker ile BAŞLAYAN ya da şirket adında GEÇEN hisseler.
+// Liste dışı bir sembol yazıldıysa (ör. S&P 500/Nasdaq 100 dışındaki küçük bir hisse) sonuna "bu sembolü dene" satırı eklenir;
+// seçilince fiyat Yahoo'dan doğrulanır (bulunamazsa eklenmez). Büyük harfe çevirme "en-US" — Türkçe locale i→İ yapıp ticker'ı bozardı.
+function abdOneriler(liste: any[], sorgu: string, limit: number): any[] {
+  const q = (sorgu || "").trim().toLocaleUpperCase("en-US");
+  const buyuk = (v: any) => String(v == null ? "" : v).toLocaleUpperCase("en-US");
+  const l = (liste || []).filter((h: any) => !q || buyuk(h.ticker).indexOf(q) === 0 || buyuk(h.yahoo).indexOf(q) === 0 || buyuk(h.ad).indexOf(q) >= 0).slice(0, limit);
+  const sembolMu = /^[A-Z0-9][A-Z0-9.\-]{0,9}$/.test(q);
+  const tam = (liste || []).some((h: any) => buyuk(h.ticker) === q || buyuk(h.yahoo) === q);
+  // "Bu sembolü dene" satırı: hiç sonuç yoksa HER ZAMAN; sonuç varken yalnızca kısa (2–4 harf) ticker benzeri sorgularda — "apple" gibi
+  // bir şirket adı kelimesi için anlamsız bir "APPLE" sembolü önerilmez.
+  if (q && sembolMu && !tam && (l.length === 0 || (q.length >= 2 && q.length <= 4))) l.push({ ticker: q, yahoo: q, ad: "Listede yok — bu sembolü dene", manuel: true });
   return l;
 }
 
@@ -5101,7 +5124,15 @@ const ABD_ENDEKS_BILGI: Record<string, { ad: string; sembol: string }> = {
 const ABD_SUTUN = "minmax(0,1fr) 96px 84px";
 const BIST_SUTUN = "42px minmax(0,1fr) 72px 84px";
 const abdBaslikBandi: any = { background: WA(0.09), fontSize: 11.5, fontWeight: 700, color: C.label };
-const abdSekmeDurumu: Record<string, { sira: string; arama: string }> = {};   // oturum boyunca sekme başına arama/sıralama
+// Tıklanabilir başlık hücresi: aktifse mavi + yön oku (↓ yüksekten düşüğe, ↑ düşükten yükseğe — BİST'teki Gün% ↓ rozetleriyle aynı)
+function AbdBaslikHucre({ metin, aktif, yon, sag, onTikla }: { metin: string; aktif: boolean; yon: number; sag?: boolean; onTikla: () => void }) {
+  return (
+    <div role="button" onClick={onTikla} style={{ textAlign: sag ? "right" : "left", cursor: "pointer", userSelect: "none", whiteSpace: "nowrap", color: aktif ? C.blue : undefined, opacity: aktif ? 1 : 0.75 }}>
+      {metin}{aktif ? (yon === 1 ? " ↑" : " ↓") : ""}
+    </div>
+  );
+}
+const abdSekmeDurumu: Record<string, { filtre: string; kolon: string; yon: number; arama: string }> = {};   // oturum boyunca sekme başına arama/sıralama
 
 function AbdPiyasaSekmeleri({ secili, onSec }: { secili: string; onSec: (k: string) => void }) {
   return (
@@ -5125,8 +5156,12 @@ function AbdHisseIzleme({ piyasa, onKurAc }: { piyasa: string; onKurAc?: (k: any
   const [yukleniyor, setYukleniyor] = useState(true);
   const [hata, setHata] = useState<string | null>(null);
   const [endeks, setEndeks] = useState<{ deger: number; degisim: number } | null>(null);
-  const [sira, setSira] = useState<string>((abdSekmeDurumu[piyasa] && abdSekmeDurumu[piyasa].sira) || "tumu");
-  const [arama, setArama] = useState<string>((abdSekmeDurumu[piyasa] && abdSekmeDurumu[piyasa].arama) || "");
+  // Varsayılan "Tümü": günlük getiriye göre yüksekten düşüğe (kullanıcı isteği 2026-10-03)
+  const kayitliDurum = abdSekmeDurumu[piyasa] || { filtre: "tumu", kolon: "degisim1g", yon: -1, arama: "" };
+  const [filtre, setFiltre] = useState<string>(kayitliDurum.filtre);
+  const [kolon, setKolon] = useState<string>(kayitliDurum.kolon);
+  const [siraYon, setSiraYon] = useState<number>(kayitliDurum.yon);
+  const [arama, setArama] = useState<string>(kayitliDurum.arama);
   const [gorunen, setGorunen] = useState(100);
   const [veriZamani, setVeriZamani] = useState<string | null>(null);
   const acik = abdPiyasaAcikMi();
@@ -5167,9 +5202,19 @@ function AbdHisseIzleme({ piyasa, onKurAc }: { piyasa: string; onKurAc?: (k: any
       .catch(() => {});
   }, [piyasa]);
 
-  const liste = abdHisseListele(hisseler, sira, arama);
-  const sec = (s: string) => { setSira(s); setGorunen(100); abdSekmeDurumu[piyasa] = { sira: s, arama }; };
-  const araDegis = (v: string) => { setArama(v); setGorunen(100); abdSekmeDurumu[piyasa] = { sira, arama: v }; };
+  const liste = abdHisseListele(hisseler, filtre, kolon, siraYon, arama);
+  const durumuKaydet = (f: string, k: string, y: number, a: string) => { setFiltre(f); setKolon(k); setSiraYon(y); setArama(a); setGorunen(100); abdSekmeDurumu[piyasa] = { filtre: f, kolon: k, yon: y, arama: a }; };
+  // Çipler: Tümü = tüm hisseler getiriye göre yüksekten düşüğe · Yükselenler/Düşenler = filtre (+getiri sırası) · Hacim = hacme göre
+  const cipSec = (k: string) => {
+    if (k === "tumu") durumuKaydet("tumu", "degisim1g", -1, arama);
+    else if (k === "yukselen") durumuKaydet("yukselen", "degisim1g", -1, arama);
+    else if (k === "dusen") durumuKaydet("dusen", "degisim1g", 1, arama);
+    else durumuKaydet("tumu", "hacim", -1, arama);
+  };
+  const cipAktif = (k: string) => k === "tumu" ? (filtre === "tumu" && kolon !== "hacim") : k === "yukselen" ? filtre === "yukselen" : k === "dusen" ? filtre === "dusen" : (filtre === "tumu" && kolon === "hacim");
+  // Başlığa dokunma: ilk dokunuş en yüksek üstte (Hisse Adı'nda A→Z), tekrar dokunuş ters yön
+  const baslikTikla = (k: string) => { const r = abdBaslikSirala({ kolon, yon: siraYon }, k); durumuKaydet(filtre, r.kolon, r.yon, arama); };
+  const araDegis = (v: string) => durumuKaydet(filtre, kolon, siraYon, v);
   const yon = endeks ? endeks.degisim >= 0 : true;
 
   return (
@@ -5199,9 +5244,9 @@ function AbdHisseIzleme({ piyasa, onKurAc }: { piyasa: string; onKurAc?: (k: any
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 10 }}>
         {([["tumu", "Tümü"], ["yukselen", "Yükselenler"], ["dusen", "Düşenler"], ["hacim", "Hacim"]] as const).map(([k, ad]) => {
-          const a = sira === k;
+          const a = cipAktif(k);
           return (
-            <button key={k} type="button" aria-pressed={a} onClick={() => sec(k)}
+            <button key={k} type="button" aria-pressed={a} onClick={() => cipSec(k)}
               style={{ border: `1.5px solid ${a ? C.blue : C.border}`, background: a ? C.blueLight : WA(0.05), color: a ? C.blue : C.label, fontFamily: "inherit", fontSize: 12, fontWeight: 600, borderRadius: 999, padding: "7px 12px", cursor: "pointer" }}>{ad}</button>
           );
         })}
@@ -5216,15 +5261,15 @@ function AbdHisseIzleme({ piyasa, onKurAc }: { piyasa: string; onKurAc?: (k: any
         <div style={{ background: WA(0.04), border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden" }}>
           {/* Tablo başlığı: listeyle aynı kutunun içinde, hafif renkli bant + alt çizgi; sütunlar satırlarla aynı grid */}
           <div style={{ display: "grid", gridTemplateColumns: ABD_SUTUN, columnGap: 10, alignItems: "center", padding: "10px 14px", borderBottom: `1px solid ${C.border}`, ...abdBaslikBandi }}>
-            <div style={{ opacity: 0.75 }}>Hisse Adı</div>
-            <div style={{ textAlign: "right", opacity: 0.75 }}>Fiyat</div>
-            <div style={{ textAlign: "right", opacity: 0.75 }}>Günlük %</div>
+            <AbdBaslikHucre metin="Hisse Adı" aktif={kolon === "ticker"} yon={siraYon} onTikla={() => baslikTikla("ticker")} />
+            <AbdBaslikHucre metin="Fiyat" aktif={kolon === "fiyat"} yon={siraYon} sag onTikla={() => baslikTikla("fiyat")} />
+            <AbdBaslikHucre metin="Günlük %" aktif={kolon === "degisim1g"} yon={siraYon} sag onTikla={() => baslikTikla("degisim1g")} />
           </div>
           {liste.length === 0 && <p style={{ textAlign: "center", color: C.sub, fontSize: 13, padding: 20, margin: 0 }}>Sonuç bulunamadı</p>}
           {liste.slice(0, gorunen).map((h: any, i: number) => {
             const up = h.degisim1g > 0, notr = h.degisim1g === 0;
             return (
-              <div key={h.ticker} onClick={() => onKurAc && onKurAc({ kod: h.ticker, ad: h.ad, sembol: h.yahoo || h.ticker, birim: "$" })}
+              <div key={h.ticker} onClick={() => onKurAc && onKurAc({ kod: h.ticker, ad: h.ad, sembol: h.yahoo || h.ticker, birim: "$", alarmSembol: "US:" + h.ticker })}
                 style={{ display: "grid", gridTemplateColumns: ABD_SUTUN, columnGap: 10, alignItems: "center", padding: "11px 14px", borderTop: i === 0 ? "none" : `1px solid ${C.border}`, cursor: "pointer" }}>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: C.label }}>{h.ticker}</div>
@@ -5296,7 +5341,7 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri,
   // Diğer filtreler (siraBy, endeksFiltre) de kalıcı değil; bu da onlarla
   // TUTARLI — ekran her açıldığında varsayılana döner.
   const [sadeceKatilim, setSadeceKatilim] = useState(false);
-  const [siraBy, setSiraBy]             = useState<"degisim1g"|"degisim1h"|"degisim1a"|"degisim1y"|"fk"|"pddd"|"roe"|"temetu"|"hacim">("degisim1g");
+  const [siraBy, setSiraBy]             = useState<"degisim1g"|"degisim1h"|"degisim1a"|"degisim1y"|"fk"|"pddd"|"roe"|"temetu"|"hacim"|"fiyat"|"ticker">("degisim1g");
   const [siraDir, setSiraDir]           = useState<1|-1>(-1); // Değişim için azalan başlasın
   const [secilen, setSecilen]           = useState<any>(null);
   const [detayHisse, setDetayHisse]     = useState<any>(null);
@@ -5524,12 +5569,15 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri,
         return true;
       })
       .sort((a, b) => {
+        if (siraBy === "ticker") return String(a.ticker).localeCompare(String(b.ticker), "tr") * siraDir;   // Hisse Adı başlığı: A→Z / Z→A
         const av = a[siraBy] ?? (siraDir === 1 ? Infinity : -Infinity);
         const bv = b[siraBy] ?? (siraDir === 1 ? Infinity : -Infinity);
         return (av - bv) * siraDir;
       });
   }, [hisseler, arama, sektor, sadeceKatilim, siraBy, siraDir, endeksKumesi]);
 
+  // Tablo başlığına dokunma (2026-10-03): ABD listeleriyle AYNI döngü — ilk dokunuş en yüksek üstte (Hisse Adı: A→Z), tekrar ters yön.
+  const baslikSirala = (col: typeof siraBy) => { const r = abdBaslikSirala({ kolon: siraBy, yon: siraDir }, col); setSiraBy(r.kolon as typeof siraBy); setSiraDir(r.yon as 1 | -1); setSiraGorunum("tumu"); };
   const siraToggle = (col: typeof siraBy) => {
     if (siraBy === col) setSiraDir(d => d === 1 ? -1 : 1);
     else { setSiraBy(col); setSiraDir(1); }
@@ -5784,7 +5832,7 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri,
 
       {/* Tümü / Yükselenler / Düşenler / Hacim Segmenti */}
       <div style={{display:"flex",background:WA(0.05),borderRadius:12,padding:3,marginBottom:10}}>
-        {([["tumu","Tümü",null,null],["yukselen","Yükselenler","degisim1g",-1],["dusen","Düşenler","degisim1g",1],["hacim","Hacim","hacim",-1]] as const).map(([key,lbl,col,dir])=>(
+        {([["tumu","Tümü","degisim1g",-1],["yukselen","Yükselenler","degisim1g",-1],["dusen","Düşenler","degisim1g",1],["hacim","Hacim","hacim",-1]] as const).map(([key,lbl,col,dir])=>(
           <div key={key} onClick={()=>{setSiraGorunum(key);if(col){setSiraBy(col as typeof siraBy);setSiraDir(dir as 1|-1);}}} style={{
             flex:1,textAlign:"center",padding:"8px 0",borderRadius:9,fontSize:12.5,fontWeight:700,cursor:"pointer",
             background:siraGorunum===key?C.card:"transparent",
@@ -5827,9 +5875,9 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri,
           {/* Tablo başlığı (2026-10-03): satır kartlarıyla AYNI kenarlık/iç boşluk/grid; "Günlük %" seçili periyoda göre değişir */}
           <div style={{display:"grid",gridTemplateColumns:BIST_SUTUN,columnGap:10,alignItems:"center",padding:"10px 12px",background:WA(0.09),border:`1px solid ${C.border}`,borderLeft:"3px solid transparent",borderRadius:10,marginBottom:6,fontSize:11.5,fontWeight:700,color:C.label}}>
             <div/>
-            <div style={{opacity:0.75}}>Hisse Adı</div>
-            <div style={{textAlign:"right",opacity:0.75}}>Fiyat</div>
-            <div style={{textAlign:"right",opacity:0.75,whiteSpace:"nowrap"}}>{perKol==="degisim1h"?"Haftalık %":perKol==="degisim1a"?"Aylık %":perKol==="degisim1y"?"Yıllık %":"Günlük %"}</div>
+            <AbdBaslikHucre metin="Hisse Adı" aktif={siraBy==="ticker"} yon={siraDir} onTikla={()=>baslikSirala("ticker")} />
+            <AbdBaslikHucre metin="Fiyat" aktif={siraBy==="fiyat"} yon={siraDir} sag onTikla={()=>baslikSirala("fiyat")} />
+            <AbdBaslikHucre metin={perKol==="degisim1h"?"Haftalık %":perKol==="degisim1a"?"Aylık %":perKol==="degisim1y"?"Yıllık %":"Günlük %"} aktif={siraBy===perKol} yon={siraDir} sag onTikla={()=>baslikSirala(perKol)} />
           </div>
           {filtreli.map((h, i) => (
             <div key={h.ticker}>
@@ -23810,10 +23858,12 @@ function FiyatAlarmlarim(){
     }
     if(a.tip==="hedef"){
       const h=a.hedefFiyat;
-      return `${a.yon==="ustunde"?"≥":"≤"} ${h!=null?h.toLocaleString("tr-TR",{maximumFractionDigits:4}):"—"}`;
+      const po=String(a.sembol||"").startsWith("US:")?"$":"";   // ABD hisse alarmları dolar cinsinden
+      return `${a.yon==="ustunde"?"≥":"≤"} ${h!=null?po+h.toLocaleString("tr-TR",{maximumFractionDigits:4}):"—"}`;
     }
     const bf=a.baslangicFiyat;
-    return `${a.yon==="artis"?"+":"-"}%${a.yuzde ?? "—"}${bf!=null?` (kuruluş: ${bf.toLocaleString("tr-TR",{maximumFractionDigits:4})})`:""}`;
+    const po2=String(a.sembol||"").startsWith("US:")?"$":"";
+    return `${a.yon==="artis"?"+":"-"}%${a.yuzde ?? "—"}${bf!=null?` (kuruluş: ${po2}${bf.toLocaleString("tr-TR",{maximumFractionDigits:4})})`:""}`;
   };
 
   // Abonelikler (KAP) tetiklendikten sonra da aktif kalır; bu yüzden
@@ -23919,6 +23969,8 @@ function KurGrafikModal({kur, onClose}:{kur:any, onClose:()=>void}){
     "Altın/TRY (Gram)":"GRAM_ALTIN","Gümüş/TRY (Gram)":"GRAM_GUMUS","Ons Altın/USD":"GC=F",
   };
   const sembol=kur.sembol||sembolMap[kur.kod]||kur.kod;
+// ABD hissesinde alarm sunucuda "US:AAPL" sembolüyle (hisse-proxy fiyat anlık görüntüsünden) kurulur; grafik ise Yahoo sembolünü ("AAPL", "BRK-B") kullanmaya devam eder.
+const alarmSembol:string=kur.alarmSembol||sembol;
 
   useEffect(()=>{
     setYukleniyor(true);
@@ -24175,7 +24227,7 @@ function KurGrafikModal({kur, onClose}:{kur:any, onClose:()=>void}){
                           fetch(`${API_BASE}/api/bildirim?islem=alarm-ekle`,{
                             method:"POST",headers:{"Content-Type":"application/json"},
                             body:JSON.stringify({
-                              token, uid: kpAlarmUid, sembol, ad: kur.ad||kur.kod,
+                              token, uid: kpAlarmUid, sembol: alarmSembol, ad: kur.ad||kur.kod,
                               tip:alarmTip, yon:alarmYon,
                               hedefFiyat: alarmTip==="hedef"?degerNum:undefined,
                               yuzde: alarmTip==="yuzde"?degerNum:undefined,
@@ -24184,7 +24236,7 @@ function KurGrafikModal({kur, onClose}:{kur:any, onClose:()=>void}){
                             .then(({ok,d})=>{
                               if(ok&&d?.basarili){
                                 setAlarmDurum("basarili");
-                                olayGonder("alarm_kuruldu", { sembol, tip: alarmTip, yon: alarmYon });
+                                olayGonder("alarm_kuruldu", { sembol: alarmSembol, tip: alarmTip, yon: alarmYon });
                               }
                               else { setAlarmDurum("bos"); setAlarmHata(d?.hata||"Alarm kurulamadı."); }
                             })
@@ -26023,8 +26075,8 @@ function AltinUrunleriTablo(){
 // tutarlı (uygulama hesap/kişisel veri toplamıyor).
 type PortfoyKalemi = {
   id: string;
-  tur: "hisse" | "fon" | "altin" | "kripto" | "emtia" | "doviz" | "katilim";
-  kod: string;           // hisse ticker / fon kodu / GRAM_ALTIN vb sembol / kripto-emtia-döviz sembolü
+  tur: "hisse" | "abd" | "fon" | "altin" | "kripto" | "emtia" | "doviz" | "katilim";
+  kod: string;           // hisse ticker / fon kodu / GRAM_ALTIN vb sembol / kripto-emtia-döviz sembolü / ABD hissesi için YAHOO sembolü (BRK.B → "BRK-B")
   ad: string;
   altinCarpan?: number;  // SADECE eski (2026-07-24 öncesi) sabit-çarpan sistemiyle eklenmiş altın kayıtlarında dolu — yeni kayıtlar AltinAPI'den gerçek fiyat kullanır, bu alanı hiç set etmez (bkz. portfoyTarihselFiyat, portfoyKalemTikla)
   birim: string;         // "lot" | "₺ tutar" | "gram" | "adet" | "ons" ...
@@ -26579,7 +26631,7 @@ async function portfoyFiyatlariTazele(liste: PortfoyKalemi[]): Promise<PortfoyKa
     : Promise.resolve(null);
 
   const digerKodlar = Array.from(new Set(
-    liste.filter(k => k.tur === "kripto" || k.tur === "emtia" || k.tur === "doviz").map(k => k.kod)
+    liste.filter(k => k.tur === "kripto" || k.tur === "emtia" || k.tur === "doviz" || k.tur === "abd").map(k => k.kod)
   ));
   const digerIstek = Promise.all(digerKodlar.map(async kod => {
     const v = await portfoyGecmisVeri(kod).catch(() => null);
@@ -27298,6 +27350,9 @@ function sahipYokMu(s: PortfoyKZSonuc){ return s.guncelDeger===0 && s.oncekiDege
 
 const PORTFOY_TUR_META: Record<string, {label:string; Icon:any; renk:string; bg:string}> = {
   hisse:  { label: "Hisse",  Icon: TrendingUp, renk: "#5B9BD8", bg: "rgba(91,155,216,0.15)" },
+  // ABD HİSSESİ (2026-10-03, kullanıcı isteği): fiyat $ cinsinden (paraOnek "$"), TL değeri mevcut USD/TRY çarpanıyla
+  // (portfoyTryCarpani) hesaplanır — kripto/emtia ile AYNI mekanizma. Fiyat/geçmiş Yahoo (/api/gecmis) sembolüyle gelir.
+  abd:    { label: "ABD Hissesi", Icon: Globe, renk: "#818CF8", bg: "rgba(129,140,248,0.15)" },
   fon:    { label: "Fon",    Icon: PieChart,    renk: "#4ADE80", bg: "rgba(74,222,128,0.15)" },
   altin:  { label: "Altın",  Icon: Coins,       renk: "#E0A53D", bg: "rgba(224,165,61,0.15)" },
   kripto: { label: "Kripto", Icon: Bitcoin,     renk: "#F7931A", bg: "rgba(247,147,26,0.15)" },
@@ -27395,6 +27450,7 @@ function portfoyKodGoster(k: PortfoyKalemi): string {
   // gösterilir, aynen emtia/altın deseninde olduğu gibi.
   if (k.tur === "katilim") return k.ad;
   if (k.tur === "sukuk") return k.ad; // aynı desen — anlamsız benzersiz kod yerine k.ad
+  if (k.tur === "abd") return k.kod.replace(/-/g, ".");   // Yahoo biçimi BRK-B → kullanıcıya BRK.B
   return k.kod.replace(/=X$/, "");
 }
 // Her kalemin KENDİ para birimini (paraOnek) ve ondalık hassasiyetini (dec)
@@ -28520,6 +28576,8 @@ function PortfoyEkleModal({onKapat, onEklendi, settings, duzenlenecekKalem}:{onK
   const [altinTuru, setAltinTuru] = useState<{ad:string;sembol:string;birim:string;paraOnek:string}|null>(null);
   const [aramaMetni, setAramaMetni] = useState("");
   const [hisseListesi, setHisseListesi] = useState<any[]>([]);
+  const [abdListesi, setAbdListesi] = useState<any[]>([]);
+  const [abdHata, setAbdHata] = useState<{sembol:string; mesaj:string}|null>(null);   // "Listede yok — bu sembolü dene" doğrulaması başarısızsa
   const [fonListesi, setFonListesi] = useState<any[]>([]);
   const [fonListesiTeshis, setFonListesiTeshis] = useState<string>("");
   const [aramaYukleniyor, setAramaYukleniyor] = useState(false);
@@ -28732,6 +28790,14 @@ function PortfoyEkleModal({onKapat, onEklendi, settings, duzenlenecekKalem}:{onK
       fetch(`${API_BASE}/api/hisse-proxy`).then(r=>r.json()).then(d=>{
         if (d?.success) setHisseListesi(d.data||[]);
       }).catch(()=>{}).finally(()=>setAramaYukleniyor(false));
+    } else if (tur==="abd" && abdListesi.length===0) {
+      // S&P 500 + Nasdaq 100 (Nasdaq'ta olup S&P'de olmayanlar eklenir) — tek sefer, ticker'a göre tekilleştirilir
+      setAramaYukleniyor(true);
+      Promise.all(["sp","nq"].map(p=>fetch(`${API_BASE}/api/hisse-proxy?abd=${p}`).then(r=>r.json()).catch(()=>null))).then(([sp,nq])=>{
+        const gorulen = new Set<string>(); const birlesik:any[] = [];
+        for (const y of [sp,nq]) if (y?.success && Array.isArray(y.data)) for (const h of y.data) if (h?.ticker && !gorulen.has(h.ticker)) { gorulen.add(h.ticker); birlesik.push(h); }
+        setAbdListesi(birlesik);
+      }).finally(()=>setAramaYukleniyor(false));
     } else if (tur==="fon" && fonListesi.length===0) {
       setAramaYukleniyor(true);
       setFonListesiTeshis("");
@@ -28842,15 +28908,19 @@ function PortfoyEkleModal({onKapat, onEklendi, settings, duzenlenecekKalem}:{onK
       setSecilenEnstruman({kod:it.kod, ad:it.ad, fiyat:(typeof it.fiyat==="number"?it.fiyat:null), birim:"₺ tutar", paraOnek:"₺", g:it.gunluk, h:(typeof it.haftalik==="number"?it.haftalik:null), a:it.aylik, y:it.yillik});
       setAsama("miktar");
     } else { // kripto | emtia | doviz
+      const abdMi = tur==="abd";
+      const sembolKod: string = abdMi ? (it.yahoo||it.ticker) : it.sembol;
       setEnstrumanYukleniyor(true);
-      const veri = await portfoyGecmisVeri(it.sembol);
+      const veri = await portfoyGecmisVeri(sembolKod);
       setEnstrumanYukleniyor(false);
+      // Listede olmayan, elle denenen ABD sembolü: Yahoo fiyat vermiyorsa EKLENMEZ (uydurma/yanlış sembol portföye girmesin)
+      if (abdMi && veri.guncelFiyat==null) { setAbdHata({sembol: String(it.ticker||sembolKod).toUpperCase(), mesaj: `“${it.ticker||sembolKod}” için fiyat bulunamadı. Sembolü kontrol et.`}); return; }
       const guncel = veri.guncelFiyat, onceki = veri.oncekiKapanis;
       const haftaOnce = portfoyNGunOnce(veri.noktalar, 7);
       const ayOnce = portfoyNGunOnce(veri.noktalar, 30);
       // Döviz çiftinde "birim" olarak çiftin baz para birimini kullanıyoruz
       // (örn. "USD/TRY" için "USD") — "adet" demekten daha anlamlı.
-      const birim = tur==="kripto" ? "adet" : tur==="doviz" ? (it.ad?.split("/")[0]||"birim") : "ons";
+      const birim = (tur==="kripto"||abdMi) ? "adet" : tur==="doviz" ? (it.ad?.split("/")[0]||"birim") : "ons";
       // PIYASA_TABLO_VERISI.doviz kayıtlarında emtia/kripto'nun aksine
       // paraOnek hiç tanımlı değil — .../TRY çiftleri gerçekten ₺, geri kalanı
       // (EUR/USD, USD/JPY vb.) değil. Burada makul bir eşleme yapıyoruz.
@@ -28864,8 +28934,8 @@ function PortfoyEkleModal({onKapat, onEklendi, settings, duzenlenecekKalem}:{onK
         return "$"; // EUR/USD, GBP/USD, AUD/USD, RUB/USD
       };
       setSecilenEnstruman({
-        kod: it.sembol, ad: it.ad, fiyat: guncel, birim,
-        paraOnek: tur==="doviz" ? dovizParaOnek(it.ad) : it.paraOnek, dec: it.dec,
+        kod: sembolKod, ad: it.ad, fiyat: guncel, birim,
+        paraOnek: tur==="doviz" ? dovizParaOnek(it.ad) : abdMi ? "$" : it.paraOnek, dec: abdMi ? 2 : it.dec,
         g: (guncel!=null && onceki) ? ((guncel-onceki)/onceki*100) : null,
         h: (guncel!=null && haftaOnce) ? ((guncel-haftaOnce)/haftaOnce*100) : null,
         a: (guncel!=null && ayOnce) ? ((guncel-ayOnce)/ayOnce*100) : null,
@@ -29150,6 +29220,7 @@ function PortfoyEkleModal({onKapat, onEklendi, settings, duzenlenecekKalem}:{onK
                 onChange={e=>setAramaMetni(e.target.value)}
                 placeholder={
                   tur==="hisse"?"Kod veya şirket adı — THYAO…":
+              tur==="abd"?"Ticker veya şirket — AAPL, NVDA…":
                   tur==="fon"?"Fon kodu veya adı — VPA…":
                   tur==="kripto"?"BTC, ETH…":
                   tur==="doviz"?"USD, EUR, GBP…":"Ons Altın, Petrol, Bakır…"
@@ -29171,11 +29242,12 @@ function PortfoyEkleModal({onKapat, onEklendi, settings, duzenlenecekKalem}:{onK
               const q = aramaMetni.trim().toLocaleUpperCase("tr-TR");
               // Döviz/Emtia/Kripto/Hisse/Fon: tür seçilir seçilmez liste
               // direkt gösterilir, aramaya gerek yok (kullanıcı isteği).
-              const yerelListeTuru = tur==="doviz" || tur==="emtia" || tur==="kripto" || tur==="hisse" || tur==="fon";
+              const yerelListeTuru = tur==="doviz" || tur==="emtia" || tur==="kripto" || tur==="hisse" || tur==="abd" || tur==="fon";
               if (q.length<1 && !yerelListeTuru) return null;
               const limit = (q.length<1 && yerelListeTuru) ? 20 : 6;
               let oneriler:any[] = [];
-              if (tur==="hisse") oneriler = hisseListesi.filter((h:any)=>h.ticker?.toLocaleUpperCase("tr-TR").startsWith(q)||h.sirket?.toLocaleUpperCase("tr-TR").includes(q)).slice(0,limit);
+              if (tur==="abd") oneriler = abdOneriler(abdListesi, aramaMetni, limit);
+              else if (tur==="hisse") oneriler = hisseListesi.filter((h:any)=>h.ticker?.toLocaleUpperCase("tr-TR").startsWith(q)||h.sirket?.toLocaleUpperCase("tr-TR").includes(q)).slice(0,limit);
               else if (tur==="fon") oneriler = fonListesi.filter((f:any)=>f.kod?.toLocaleUpperCase("tr-TR").startsWith(q)||f.ad?.toLocaleUpperCase("tr-TR").includes(q)).slice(0,limit);
               else if (tur==="doviz") oneriler = (PIYASA_TABLO_VERISI["doviz"]||[]).filter((it:any)=>it.ad?.endsWith("/TRY") && it.ad?.toLocaleUpperCase("tr-TR").includes(q)).slice(0,limit);
               else oneriler = (PIYASA_TABLO_VERISI[tur as string]||[]).filter((it:any)=>it.ad?.toLocaleUpperCase("tr-TR").includes(q)).slice(0,limit);
@@ -29184,11 +29256,13 @@ function PortfoyEkleModal({onKapat, onEklendi, settings, duzenlenecekKalem}:{onK
                 return <p style={{margin:"10px 2px 0",fontSize:11,color:C.sub2}}>Sonuç bulunamadı.</p>;
               }
               return (
+                <>
+                {tur==="abd" && abdHata && abdHata.sembol===aramaMetni.trim().toLocaleUpperCase("en-US") && <p style={{margin:"10px 2px 0",fontSize:11,color:C.red}}>{abdHata.mesaj}</p>}
                 <div style={{marginTop:8,borderRadius:10,overflow:"hidden",border:`1px solid ${WA(0.1)}`,background:TEMA==="acik"?"#FFFFFF":"rgba(15,25,35,0.9)"}}>
                   {oneriler.map((it:any,i:number)=>{
-                    const kod = tur==="hisse"?it.ticker:tur==="fon"?it.kod:it.ad;
-                    const ad = tur==="hisse"?(it.sirket||""):tur==="fon"?(it.ad||""):(it.sembol||"");
-                    const aciklamaGoster = tur==="hisse" || tur==="fon";
+                    const kod = (tur==="hisse"||tur==="abd")?it.ticker:tur==="fon"?it.kod:it.ad;
+                    const ad = tur==="hisse"?(it.sirket||""):tur==="abd"?(it.ad||""):tur==="fon"?(it.ad||""):(it.sembol||"");
+                    const aciklamaGoster = tur==="hisse" || tur==="abd" || tur==="fon";
                     return (
                       <div key={kod+i} onClick={()=>enstrumanSec(it)} style={{
                         display:"flex",alignItems:"center",gap:10,padding:"10px 12px",cursor:"pointer",
@@ -29205,6 +29279,7 @@ function PortfoyEkleModal({onKapat, onEklendi, settings, duzenlenecekKalem}:{onK
                     );
                   })}
                 </div>
+                </>
               );
             })()}
           </>
@@ -31010,7 +31085,7 @@ function App(){
     // ⚠️ Buraya tekrar GRAM_ALTIN yazmayın — yanlış ürünün grafiğini göstermek,
     // grafik göstermemekten kötüdür.
     else if(k.tur==="altin"){ /* grafik verisi yok — bilinçli olarak açılmıyor */ }
-    else { setSeciliKur({kod:k.ad, ad:k.ad, sembol:k.kod, birim: k.paraOnek||"$"}); }
+    else { setSeciliKur({kod:k.ad, ad:k.ad, sembol:k.kod, birim: k.paraOnek||"$", ...(k.tur==="abd"?{alarmSembol:"US:"+portfoyKodGoster(k)}:{})}); }
   };
   const back=()=>{
     if(screen==="proSatinAl") { /* Pro'dan çıkılıyor: hatırlanan çıkış ekranı tüketilir (aşağıdaki geri hedefi onu kullanır) */ proDonusEkrani.current=null; }

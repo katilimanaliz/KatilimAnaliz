@@ -448,7 +448,12 @@ async function abdVeriGetir() {
   try {
     const tv = await abdTradingViewCek(["name", "description", "close", "change", "volume", "market_cap_basic", "sector", "indexes"], 1500);
     const g = abdGrupla(tv);
-    const yeni = { ts: Date.now(), sp: g.sp, nq: g.nq, dj: g.dj };
+    // FİYAT İMZASI (2026-10-03, ABD alarmları için): alarm turu "kaynak donmuş mu?" diye bakabilsin. imza = S&P 500 (yoksa
+    // Nasdaq) fiyatlarının kuruş toplamı + adet; öncekiyle AYNIYSA imzaTs korunur (fiyatlar o zamandır değişmiyor),
+    // farklıysa şimdiye çekilir. bildirim.js seans açıkken imzaTs çok eskiyse ABD alarmlarını o tur atlar.
+    const imzaListe = g.sp.length ? g.sp : g.nq;
+    const imza = imzaListe.length + ":" + imzaListe.reduce((t, h) => t + Math.round((h.fiyat || 0) * 100), 0);
+    const yeni = { ts: Date.now(), imza, imzaTs: (kayit && kayit.imza === imza && typeof kayit.imzaTs === "number") ? kayit.imzaTs : Date.now(), sp: g.sp, nq: g.nq, dj: g.dj };
     if (g.sp.length + g.nq.length + g.dj.length === 0) {
       // Hiçbir endeks eşleşmedi (TradingView proname'leri değişmiş olabilir): ESKİ iyi kaydı EZME, varsa onu servis et
       if (kayit) return { veri: kayit, kaynak: "yedek", hata: "endeks uyeligi eslesmedi (proname degismis olabilir, ?abd=tani)" };

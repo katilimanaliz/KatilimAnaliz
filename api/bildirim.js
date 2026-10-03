@@ -49,6 +49,8 @@
 //   POST ?islem=alarm-durum   { token, id, aktif } → KAP aboneliğini duraklat/başlat
 //   GET  ?islem=duyurular[&sonrasi=<ts>] → son toplu duyurular (geçmiş için)
 //
+//   ABD HİSSE ALARMLARI (2026-10-03 eklendi): Sembol "US:" önekiyle ("US:AAPL", "US:BRK.B"); SADECE fiyat alarmı
+//   (tip "hedef" | "yuzde") — KAP/endeks/diğer tipler reddedilir. Fiyat hisse-proxy `?abd=` kaydından okunur.
 //   BİST HİSSE ALARMLARI (2026-07-29 eklendi): Sembol "BIST:" önekiyle
 //   gelirse (örn. "BIST:ASELS") fiyat /api/hisse-proxy'den okunur. Detaylı
 //   gerekçe ve güvenlik önlemleri için aşağıdaki BİST bölümüne bakın.
@@ -910,6 +912,99 @@ async function bistTekFiyat(sembol) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// ABD HİSSE FİYAT ALARMLARI (2026-10-03) — SADECE fiyat alarmı (hedef | yuzde)
+// ═══════════════════════════════════════════════════════════════════════════
+// SEMBOL BİÇİMİ: "US:AAPL" (BRK.B için "US:BRK.B") — BİST'teki "BIST:" önekinin karşılığı; Yahoo sembolleriyle ("AAPL",
+// "GC=F") ve AltinAPI kodlarıyla çakışmaz. KAP/endeks abonelikleri zaten "BIST:" önekini şart koştuğu için ABD'de
+// kurulamaz; ABD'de yalnızca tip "hedef" ve "yuzde" kabul edilir (alarmEkle'deki koruma).
+//
+// KAYNAK: hisse-proxy.js'in `?abd=` dalının Redis'e yazdığı "abd:hisse:v1" kaydı (S&P 500 + Nasdaq 100 + Dow 30 üyeleri,
+// TradingView america tarayıcısı, ~15 dk gecikmeli). Kaç farklı hisseye alarm kurulursa kurulsun tur başına TEK okuma —
+// hisse başına Yahoo isteği YOK (Yahoo hız sınırı + fonksiyon süresi riski). Şekil:
+//   { ts, imza, imzaTs, sp:[{ticker,yahoo,fiyat,...}], nq:[...], dj:[...] }
+// ⚠️ KV_ABD_HISSE_KEY, hisse-proxy.js'deki KV_ABD_KEY ile AYNI olmak zorunda.
+//
+// TAZELEME: ABD seansı (New York, hafta içi 09:30–16:00) açıkken kayıt ABD_TAZE_ESIK_DK'dan eskiyse hisse-proxy `?abd=sp`
+// HTTP ile çağrılır (o uç kendi 30 sn önbelleği + kilidiyle kaydı yeniler; BİST'teki "HTTP yedek"in karşılığı). Gece TR
+// saatinde ABD uygulamasını kimse açmıyor olabilir — alarm turu kendisi tazeletiyor.
+//
+// ⚠️ BAYAT/DONUK VERİ KORUMASI (BİST'teki 24-28 Temmuz dersi): seans açıkken (1) kayıt ABD_BAYAT_ESIK_DK'dan eskiyse
+// (tazelenemedi) VEYA (2) fiyat imzası (hisse-proxy'nin tuttuğu imzaTs) o kadar süredir DEĞİŞMEDİYSE (kaynak donmuş
+// olabilir) ABD alarmları o tur TAMAMEN ATLANIR ("abdNot"); alarmlar aktif kalır, sonraki turda tekrar bakılır.
+// Bedeli: hafta başı/açılışta veri hareket edene kadar (~15–25 dk) ve ABD resmî tatillerinde alarm değerlendirilmez.
+const ABD_ONEK = "US:";
+const KV_ABD_HISSE_KEY = "abd:hisse:v1";
+const ABD_TAZE_ESIK_DK = 3;
+const ABD_BAYAT_ESIK_DK = 45;
+const ABD_BELLEK_MS = 60 * 1000;
+let abdBellek = { paket: null, ts: 0 };
+
+// hisse-proxy.js'deki abdPiyasaAcikMi() ile BİREBİR aynı mantık; değişirse İKİSİ birlikte güncellenmeli.
+function abdSeansAcikMi() {
+  const ny = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+  const gun = ny.getDay(), dk = ny.getHours() * 60 + ny.getMinutes();
+  return gun >= 1 && gun <= 5 && dk >= 9 * 60 + 30 && dk < 16 * 60;
+}
+
+function abdPaketOlustur(kayit, okuma) {
+  const harita = new Map();
+  for (const liste of [kayit?.sp, kayit?.nq, kayit?.dj]) {
+    if (!Array.isArray(liste)) continue;
+    for (const h of liste) {
+      if (!h || typeof h.fiyat !== "number" || !(h.fiyat > 0)) continue;
+      if (h.ticker) harita.set(String(h.ticker).toUpperCase(), h);
+      if (h.yahoo) harita.set(String(h.yahoo).toUpperCase(), h);   // BRK.B ve BRK-B ikisi de bulunsun
+    }
+  }
+  if (harita.size < 50) return null;   // BİST'teki ">= 100" eşiğinin karşılığı: boş/bozuk kaydı kabul etme
+  return { harita, ts: typeof kayit.ts === "number" ? kayit.ts : null, imzaTs: typeof kayit.imzaTs === "number" ? kayit.imzaTs : (typeof kayit.ts === "number" ? kayit.ts : null), okuma };
+}
+
+async function abdVerisiGetir() {
+  if (abdBellek.paket && Date.now() - abdBellek.ts < ABD_BELLEK_MS) return abdBellek.paket;
+  const oku = async () => {
+    try { const k = await redis.get(KV_ABD_HISSE_KEY); return k && typeof k === "object" ? k : null; }
+    catch (e) { console.error("ABD anlik goruntusu okunamadi:", e.message); return null; }
+  };
+  let kayit = await oku();
+  let okuma = "redis";
+  const yasDk = kayit && typeof kayit.ts === "number" ? (Date.now() - kayit.ts) / 60000 : Infinity;
+  if (!kayit || (abdSeansAcikMi() && yasDk > ABD_TAZE_ESIK_DK)) {
+    try {
+      const r = await fetchZamanli(
+        `${API_TABAN}/api/hisse-proxy?abd=sp`,
+        { headers: { Accept: "application/json", "User-Agent": "KatilimPlus-Alarm/1.0" } },
+        15000
+      );
+      if (r.ok) await r.json().catch(() => null);   // yan etkisi: hisse-proxy Redis kaydını yeniler
+      const yeni = await oku();
+      if (yeni) { kayit = yeni; okuma = "http-tazeleme"; }
+    } catch (e) {
+      console.error("ABD verisi tazelenemedi:", e.message);
+    }
+  }
+  if (!kayit) return null;
+  const paket = abdPaketOlustur(kayit, okuma);
+  if (!paket) return null;
+  abdBellek = { paket, ts: Date.now() };
+  return paket;
+}
+
+function abdVerisiBayatMi(paket) {
+  if (!abdSeansAcikMi()) return false;     // seans dışında eskilik NORMAL
+  if (!paket.ts) return true;              // damga yoksa güvenme
+  if ((Date.now() - paket.ts) / 60000 > ABD_BAYAT_ESIK_DK) return true;                       // tazelenemedi
+  return (Date.now() - (paket.imzaTs || paket.ts)) / 60000 > ABD_BAYAT_ESIK_DK;              // fiyatlar hiç değişmedi
+}
+
+async function abdTekFiyat(sembol) {
+  const paket = await abdVerisiGetir();
+  if (!paket) return null;
+  const h = paket.harita.get(sembol.slice(ABD_ONEK.length).toUpperCase());
+  return (h && typeof h.fiyat === "number" && h.fiyat > 0) ? h.fiyat : null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // BANKA ORANI ALARMLARI (2026-09-27) — SADECE PRO
 // ═══════════════════════════════════════════════════════════════════════════
 // "X bankasının Y oranı Z'yi geçince/altına inince haber ver". Fiyat
@@ -1077,6 +1172,9 @@ async function alarmFiyatGetir(sembol) {
   }
   if (typeof sembol === "string" && sembol.startsWith(BIST_ONEK)) {
     return bistTekFiyat(sembol);
+  }
+  if (typeof sembol === "string" && sembol.startsWith(ABD_ONEK)) {
+    return abdTekFiyat(sembol);
   }
   if (ALTINAPI_SEMBOLLERI.has(sembol)) {
     return altinApiOnbellektenOku(sembol);
@@ -1421,6 +1519,20 @@ async function alarmEkle(req, res) {
     return;
   }
 
+  // ── ABD HİSSE ALARMI (2026-10-03) — SADECE fiyat alarmı ───────────────────
+  // KAP/endeks abonelikleri yukarıda "BIST:" öneki şart koştuğu için zaten reddedildi; zekât/banka_oran kendi
+  // sembollerini kullanır. Buraya "US:" ile ulaşan her şey yalnızca hedef | yuzde olabilir.
+  if (typeof sembol === "string" && sembol.startsWith(ABD_ONEK)) {
+    if (tip !== "hedef" && tip !== "yuzde") {
+      res.status(400).json({ hata: "ABD hisselerinde yalnızca fiyat alarmı (hedef | yuzde) kurulabilir" });
+      return;
+    }
+    if (!/^[A-Z0-9][A-Z0-9.\-]{0,9}$/.test(sembol.slice(ABD_ONEK.length))) {
+      res.status(400).json({ hata: "Geçersiz ABD hisse sembolü" });
+      return;
+    }
+  }
+
   if (tip === "hedef" && (hedefFiyat == null || isNaN(parseFloat(hedefFiyat)))) {
     res.status(400).json({ hata: "tip=hedef için geçerli bir 'hedefFiyat' gerekli" });
     return;
@@ -1432,7 +1544,11 @@ async function alarmEkle(req, res) {
 
   const mevcutFiyat = await alarmFiyatGetir(sembol);
   if (mevcutFiyat == null) {
-    res.status(502).json({ hata: "Bu sembol için güncel fiyat alınamadı, alarm oluşturulamadı" });
+    res.status(502).json({
+      hata: (typeof sembol === "string" && sembol.startsWith(ABD_ONEK))
+        ? "Bu hisse için güncel fiyat alınamadı. Şimdilik yalnızca S&P 500, Nasdaq 100 ve Dow 30 hisselerine alarm kurulabilir."
+        : "Bu sembol için güncel fiyat alınamadı, alarm oluşturulamadı",
+    });
     return;
   }
 
@@ -1663,9 +1779,12 @@ async function alarmFiyatTablosu(benzersizSemboller) {
   const fiyatlar = {};
   let bistNot = null;
   let bistMeta = null;
+  let abdNot = null;
+  let abdMeta = null;
 
   const bistSemboller = benzersizSemboller.filter((s) => typeof s === "string" && s.startsWith(BIST_ONEK));
-  const digerSemboller = benzersizSemboller.filter((s) => !(typeof s === "string" && s.startsWith(BIST_ONEK)));
+  const abdSemboller = benzersizSemboller.filter((s) => typeof s === "string" && s.startsWith(ABD_ONEK));
+  const digerSemboller = benzersizSemboller.filter((s) => !(typeof s === "string" && (s.startsWith(BIST_ONEK) || s.startsWith(ABD_ONEK))));
 
   const isler = [];
 
@@ -1690,12 +1809,36 @@ async function alarmFiyatTablosu(benzersizSemboller) {
     })());
   }
 
+  if (abdSemboller.length > 0) {
+    isler.push((async () => {
+      const paket = await abdVerisiGetir();
+      if (!paket) {
+        abdNot = "ABD verisi alinamadi — ABD alarmlari bu turda atlandi";
+        return;
+      }
+      abdMeta = {
+        veriZamani: paket.ts ? new Date(paket.ts).toISOString() : null,
+        fiyatDegisimZamani: paket.imzaTs ? new Date(paket.imzaTs).toISOString() : null,
+        okuma: paket.okuma,
+      };
+      if (abdVerisiBayatMi(paket)) {
+        // Bilinçli davranış (BİST ile aynı): bayat/donuk fiyatla karar verme. Alarmlar aktif kalır.
+        abdNot = `ABD verisi bayat ya da degismiyor (${abdMeta.veriZamani}) — ABD alarmlari bu turda atlandi`;
+        return;
+      }
+      for (const s of abdSemboller) {
+        const h = paket.harita.get(s.slice(ABD_ONEK.length).toUpperCase());
+        fiyatlar[s] = (h && typeof h.fiyat === "number" && h.fiyat > 0) ? h.fiyat : null;
+      }
+    })());
+  }
+
   for (const s of digerSemboller) {
     isler.push((async () => { fiyatlar[s] = await alarmFiyatGetir(s); })());
   }
 
   await Promise.all(isler);
-  return { fiyatlar, bistNot, bistMeta };
+  return { fiyatlar, bistNot, bistMeta, abdNot, abdMeta };
 }
 
 // Bir KAP ABONELİĞİNİ duraklatır ya da yeniden başlatır (2026-07-30).
@@ -1824,9 +1967,9 @@ async function alarmKontrol(req, res) {
 
         // Aynı sembolü birden fazla alarm izliyorsa fiyatı TEK kere çekelim.
         const benzersizSemboller = [...new Set(fiyatAlarmlar.map((a) => a.sembol))];
-        const { fiyatlar, bistNot, bistMeta } = benzersizSemboller.length
+        const { fiyatlar, bistNot, bistMeta, abdNot, abdMeta } = benzersizSemboller.length
           ? await alarmFiyatTablosu(benzersizSemboller)
-          : { fiyatlar: {}, bistNot: null, bistMeta: null };
+          : { fiyatlar: {}, bistNot: null, bistMeta: null, abdNot: null, abdMeta: null };
 
         // KAP listesi TEK kere okunuyor — kaç abonelik olursa olsun.
         let kapListe = null, kapNot = null;
@@ -2072,6 +2215,7 @@ async function alarmKontrol(req, res) {
 
           let tetiklendiMi = false;
           let mesaj = "";
+          const pOnek = alarm.sembol.startsWith(ABD_ONEK) ? "$" : "";   // ABD fiyatları dolar cinsinden
           if (alarm.tip === "hedef") {
             // GEÇİŞ KORUMASI (2026-07-30): Kuruluş anında koşul ZATEN sağlanan
             // alarmlar artık alarmEkle'de reddediliyor. Burası ikinci savunma
@@ -2090,10 +2234,10 @@ async function alarmKontrol(req, res) {
             }
             if (alarm.yon === "ustunde" && guncelFiyat >= alarm.hedefFiyat) {
               tetiklendiMi = true;
-              mesaj = `${alarm.ad} fiyatı hedefinize ulaştı/geçti: ${guncelFiyat.toLocaleString("tr-TR", { maximumFractionDigits: 4 })} (hedef: ${alarm.hedefFiyat})`;
+              mesaj = `${alarm.ad} fiyatı hedefinize ulaştı/geçti: ${pOnek}${guncelFiyat.toLocaleString("tr-TR", { maximumFractionDigits: 4 })} (hedef: ${pOnek}${alarm.hedefFiyat})`;
             } else if (alarm.yon === "altinda" && guncelFiyat <= alarm.hedefFiyat) {
               tetiklendiMi = true;
-              mesaj = `${alarm.ad} fiyatı hedefinizin altına indi: ${guncelFiyat.toLocaleString("tr-TR", { maximumFractionDigits: 4 })} (hedef: ${alarm.hedefFiyat})`;
+              mesaj = `${alarm.ad} fiyatı hedefinizin altına indi: ${pOnek}${guncelFiyat.toLocaleString("tr-TR", { maximumFractionDigits: 4 })} (hedef: ${pOnek}${alarm.hedefFiyat})`;
             }
           } else if (alarm.tip === "yuzde" && alarm.baslangicFiyat) {
             const degisimYuzde = ((guncelFiyat - alarm.baslangicFiyat) / alarm.baslangicFiyat) * 100;
@@ -2112,6 +2256,8 @@ async function alarmKontrol(req, res) {
             // ki kullanıcı "fiyat değdi ama bildirim geç geldi" diye düşünmesin.
             const govde = alarm.sembol.startsWith(BIST_ONEK)
               ? `${mesaj} · BİST verisi ~15 dk gecikmelidir`
+              : alarm.sembol.startsWith(ABD_ONEK)
+              ? `${mesaj} · ABD verisi ~15 dk gecikmelidir`
               : mesaj;
             const gonderildi = await tekTokeneGonder(alarm.token, `🔔 Fiyat Alarmı: ${alarm.ad}`, govde, {
               tip: "fiyat-alarmi",
@@ -2146,9 +2292,12 @@ async function alarmKontrol(req, res) {
           gonderilenBildirim,
           gonderimHatalari,
           bistSeansAcik: bistSeansAcikMi(),
+          abdSeansAcik: abdSeansAcikMi(),
           ...(kapListe ? { kapKayitSayisi: kapListe.length } : {}),
           ...(bistMeta ? { bistMeta } : {}),
           ...(bistNot ? { bistNot } : {}),
+          ...(abdMeta ? { abdMeta } : {}),
+          ...(abdNot ? { abdNot } : {}),
           ...(kapNot ? { kapNot } : {}),
           ...(endeksNot ? { endeksNot } : {}),
           ...(bankaOranNot ? { bankaOranNot } : {}),
