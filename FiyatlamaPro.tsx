@@ -319,6 +319,17 @@ function kpProGerekliMi(pro:KpProDurum, nav:(ekran:string)=>void): boolean{
   return false;
 }
 
+// ── PRO'DAN GERİ DÖNÜŞ (2026-10-03, kullanıcı raporu: Erken Kapama'da Paylaş → Pro ekranı → Geri
+// dediğinde Profil'e atıyordu; "hangi ekrandan Pro'ya gidilirse o ekrana dönmeli") ─────────────────────
+// MENU'deki sabit geri hedefi (proSatinAl → profil) yüzünden, Pro'ya hangi ekrandan gidilirse gidilsin Geri hep
+// Profil'e götürüyordu. Artık App.nav, Pro'ya gidilen ekranı hatırlar ve Geri oraya döner. Giriş/kayıt akışı
+// ekranlarından (hesapGiris vb.) Pro'ya DÖNÜLÜRSE (giriş sonrası) asıl çıkış ekranı korunur — giriş ekranı
+// "geri hedefi" olmaz. Saf fonksiyon: oncekiDonus = daha önce kaydedilmiş çıkış ekranı.
+const KP_PRO_GIRIS_EKRANLARI = ["hesapGiris","epostaDogrula","kvkkAydinlatma","gizlilikPolitikasi","proSatinAl"];
+function kpProDonusBelirle(mevcutEkran:string, oncekiDonus:string|null): string|null {
+  return KP_PRO_GIRIS_EKRANLARI.includes(mevcutEkran) ? oncekiDonus : mevcutEkran;
+}
+
 // Paylaşılan kimlik hook'u — kök bileşende BİR KERE çağrılıp alt ekranlara
 // prop olarak geçiriliyor (Context yerine — dosyadaki mevcut desen zaten
 // "tek büyük kök bileşen + prop geçişi", örn. KonutFinansman'a s={settings}
@@ -17254,6 +17265,16 @@ function ekRaporSatirlari(g: any, r: any): { label: string; value: string; big?:
   return s;
 }
 
+// ═══ PRO'YA GİDİP GERİ DÖNÜŞTE FORMU KORUMA (2026-10-03, kullanıcı raporu: Paylaş → Pro ekranı → Geri
+// dediğimde hesaplamam gitti) ═══════════════════════════════════════════════════════════════════
+// Ücretsiz kullanıcı Paylaş'a basınca ekran Pro'ya gidip bileşen kapanır (state silinir). Kapanmadan önce form
+// modül seviyesindeki bir kayda yazılır; ekrana dönüldüğünde TEK SEFERLİK okunup geri yüklenir. Kayıt 15 dakika
+// geçerlidir (kullanıcı Pro'dan başka yere gidip çok sonra modülü açarsa eski form hortlamasın).
+const EK_PRO_DONUS_TTL = 15 * 60 * 1000;
+function ekDonusKaydiGecerli(kayit: any, simdi: number): any {
+  return kayit && typeof kayit.ts === "number" && simdi - kayit.ts >= 0 && simdi - kayit.ts < EK_PRO_DONUS_TTL ? kayit : null;
+}
+
 // ── Seçenek listeleri (alana DOKUNUNCA alttan açılan pencerede gösterilir) ──────
 const EK_SECIMLER: Record<string, { baslik: string; secenekler: [any, string, string?][] }> = {
   tur: { baslik: "Finansman türü", secenekler: [["ticari", "Ticari", "TCMB 2020/4 Tebliğ m.11"], ["konut", "Konut (bireysel)", "6502 sayılı Kanun m.37"], ["diger", "Taşıt / İhtiyaç", "Erken ödeme tazminatı yok"]] },
@@ -17416,22 +17437,28 @@ function EkSonucEkrani({ g, r, proDegil, onKapat, onPaylas }: { g: any; r: any; 
   );
 }
 
+// Paylaş → Pro → Geri dönüşünde formun geri yüklenmesi için tek kullanımlık kayıt (bkz. ekDonusKaydiGecerli)
+let ekProDonusKaydi: any = null;
+
 function ErkenKapamaKomisyonu({ s, kimlik, nav }: { s?: any; kimlik?: any; nav?: (ekran: string) => void }) {
-  const [tur, setTur] = useState("ticari");
-  const [aralik, setAralik] = useState("a4");
-  const [doviz, setDoviz] = useState("TL");
-  const [yapi, setYapi] = useState("sabit");
-  const [periyot, setPeriyot] = useState<any>(1);
-  const [aovTipi, setAovTipi] = useState("tarih");
-  const [oranTipi, setOranTipi] = useState("aylik");
-  const [anapara, setAnapara] = useState("");
-  const [kapama, setKapama] = useState(ekBugunISO());
-  const [vadeSonu, setVadeSonu] = useState("");
-  const [aovManuel, setAovManuel] = useState("");
-  const [oran, setOran] = useState("");
-  const [indirim, setIndirim] = useState("");
+  // Render sırasında YALNIZCA okunur (StrictMode'da çift render güvenli); tüketme mount efektinde yapılır.
+  const kayit = ekDonusKaydiGecerli(ekProDonusKaydi, Date.now());
+  useEffect(() => { ekProDonusKaydi = null; }, []);
+  const [tur, setTur] = useState(kayit ? kayit.tur : "ticari");
+  const [aralik, setAralik] = useState(kayit ? kayit.aralik : "a4");
+  const [doviz, setDoviz] = useState(kayit ? kayit.doviz : "TL");
+  const [yapi, setYapi] = useState(kayit ? kayit.yapi : "sabit");
+  const [periyot, setPeriyot] = useState<any>(kayit ? kayit.periyot : 1);
+  const [aovTipi, setAovTipi] = useState(kayit ? kayit.aovTipi : "tarih");
+  const [oranTipi, setOranTipi] = useState(kayit ? kayit.oranTipi : "aylik");
+  const [anapara, setAnapara] = useState(kayit ? kayit.anapara : "");
+  const [kapama, setKapama] = useState(kayit ? kayit.kapama : ekBugunISO());
+  const [vadeSonu, setVadeSonu] = useState(kayit ? kayit.vadeSonu : "");
+  const [aovManuel, setAovManuel] = useState(kayit ? kayit.aovManuel : "");
+  const [oran, setOran] = useState(kayit ? kayit.oran : "");
+  const [indirim, setIndirim] = useState(kayit ? kayit.indirim : "");
   const [sheet, setSheet] = useState<string | null>(null);
-  const [sonucAcik, setSonucAcik] = useState(false);
+  const [sonucAcik, setSonucAcik] = useState(!!(kayit && kayit.sonucAcik));
   const [raporAcik, setRaporAcik] = useState(false);
 
   const ticari = tur === "ticari", konut = tur === "konut", diger = tur === "diger";
@@ -17461,7 +17488,13 @@ function ErkenKapamaKomisyonu({ s, kimlik, nav }: { s?: any; kimlik?: any; nav?:
   // Pro durumu henüz yükleniyorsa kapı AÇIK bırakılır (gerçek Pro üyeyi yanlışlıkla Pro ekranına atmamak için).
   const proDegil = !!kimlik && !!kimlik.pro && !kimlik.pro.aktif && !kimlik.proYukleniyor;
   const paylasTikla = () => {
-    if (proDegil) { setSonucAcik(false); if (nav) kpProGerekliMi(kimlik.pro, nav); return; }
+    if (proDegil) {
+      // Pro'dan Geri'ye basınca bu ekrana dönülür (App.nav: Pro'ya gidilen ekran hatırlanır) ve form + Sonuç Ekranı geri gelir.
+      ekProDonusKaydi = { ts: Date.now(), tur, aralik, doviz, yapi, periyot, aovTipi, oranTipi, anapara, kapama, vadeSonu, aovManuel, oran, indirim, sonucAcik: true };
+      setSonucAcik(false);
+      if (nav) kpProGerekliMi(kimlik.pro, nav);
+      return;
+    }
     setRaporAcik(true);
   };
 
@@ -30671,6 +30704,8 @@ function App(){
   // Örn. ana sayfadaki Favorilerim'den açılan araçlar "home"a geri döner;
   // aynı araç Hesaplamalar menüsünden açılırsa normal menüsüne döner.
   const backHedefOzel=useRef<string|null>(null);
+  // Pro'ya hangi ekrandan gidildiği (bkz. kpProDonusBelirle); Pro'dan Geri ile oraya dönülür.
+  const proDonusEkrani=useRef<string|null>(null);
   // ── navRef (2026-09-27) ───────────────────────────────────────────────
   // Push bildirim dinleyicisi (kök seviyede BİR KERE — [] bağımlılıklı —
   // kurulan efekt) "nav"ı DOĞRUDAN çağıramaz: nav aşağıda tanımlanıyor ve
@@ -30697,6 +30732,11 @@ function App(){
     if((sc==="kvkkAydinlatma"||sc==="gizlilikPolitikasi") && !geriHedefi
        && screen!=="hesapGiris" && screen!=="kvkkAydinlatma" && screen!=="gizlilikPolitikasi"){
       geriHedefi=screen;
+    }
+    // Pro'ya gidiliyorsa Geri, Pro'ya gidilen ekrana döner (giriş akışından gelinirse eski çıkış ekranı korunur).
+    if(sc==="proSatinAl" && !geriHedefi){
+      proDonusEkrani.current=kpProDonusBelirle(screen, proDonusEkrani.current);
+      geriHedefi=proDonusEkrani.current||undefined;
     }
     if(sc==="hesapGiris"){
       if(!girisHedefIsteniyor.current) girisSonrasiHedef.current=null;
@@ -30754,6 +30794,7 @@ function App(){
     else { setSeciliKur({kod:k.ad, ad:k.ad, sembol:k.kod, birim: k.paraOnek||"$"}); }
   };
   const back=()=>{
+    if(screen==="proSatinAl") { /* Pro'dan çıkılıyor: hatırlanan çıkış ekranı tüketilir (aşağıdaki geri hedefi onu kullanır) */ proDonusEkrani.current=null; }
     if(backHedefOzel.current){ const h=backHedefOzel.current; backHedefOzel.current=null; setScreen(h); return; }
     let b=MENU[screen]?.back;
     // Giriş zaten yapılmışsa üyelik giriş sayfasına DÖNÜLMEZ (ör. tarayıcıdan
