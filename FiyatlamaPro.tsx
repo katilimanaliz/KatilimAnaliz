@@ -29549,15 +29549,31 @@ function portfoyNoktaBul(seri: PortfoyNokta[], iso: string): number | null {
   while (lo <= hi) { const m = (lo + hi) >> 1; if (seri[m].tarih <= iso) { bulunan = m; lo = m + 1; } else hi = m - 1; }
   return bulunan >= 0 ? seri[bulunan].fiyat : seri[0].fiyat;   // ilk noktadan ÖNCE ama 10 gün içinde → ilk nokta
 }
-// Alış tarihinden bugüne birikmiş TÜFE (%): tufeAylik = TUFE_AYLIK_SERI ({tarih: AÇIKLANMA tarihi, deger: aylık %}). Alış tarihinden
-// SONRA açıklanan her aylık değişim zincirlenir. Seri 24 ayla sınırlı: alış, serinin başlangıcından önceyse null (yarım enflasyon
-// göstermek yerine "veri yok").
+// TÜFE serisinin tarihi evds-proxy'den "GG-AA-YYYY" (AÇIKLANMA tarihi, örn. "03-10-2026") gelir; alış tarihi ise ISO ("YYYY-AA-GG").
+// İKİSİ DE ISO'ya çevrilip karşılaştırılır — düz metin karşılaştırması ("03-10-2026" > "2026-08-18" → false) tüm ayları "alıştan önce"
+// saydığı için birikim hep %0,0 çıkıyordu (3 Ekim 2026 ekran görüntüsünde yakalandı).
+function portfoyTarihIso(t: any): string | null {
+  const m = String(t == null ? "" : t).trim();
+  let r = /^(\d{2})[-./](\d{2})[-./](\d{4})$/.exec(m);
+  if (r) return `${r[3]}-${r[2]}-${r[1]}`;
+  r = /^(\d{4})-(\d{2})-(\d{2})/.exec(m);
+  return r ? `${r[1]}-${r[2]}-${r[3]}` : null;
+}
+// Alış tarihinden bugüne birikmiş TÜFE (%): alış tarihinden SONRA açıklanan her aylık değişim zincirlenir. Seri 24 ayla sınırlı:
+// alış, serinin başlangıcından önceyse null (yarım enflasyon göstermek yerine "veri yok"). Alıştan sonra HİÇ açıklama yoksa da null
+// ("%0,0" değil — henüz ölçülmüş bir enflasyon yok).
 function portfoyTufeBirikim(tufeAylik: { tarih: string; deger: number }[], alisIso: string): number | null {
-  if (!tufeAylik || tufeAylik.length === 0 || !alisIso) return null;
-  const sirali = tufeAylik.filter((t) => t && t.tarih && typeof t.deger === "number").slice().sort((a, b) => a.tarih.localeCompare(b.tarih));
-  if (sirali.length === 0 || alisIso < sirali[0].tarih.slice(0, 7) + "-01") return null;
+  const alis = portfoyTarihIso(alisIso);
+  if (!tufeAylik || tufeAylik.length === 0 || !alis) return null;
+  const sirali = tufeAylik
+    .map((t) => ({ iso: portfoyTarihIso(t && t.tarih), deger: t && t.deger }))
+    .filter((t): t is { iso: string; deger: number } => t.iso != null && typeof t.deger === "number")
+    .sort((a, b) => a.iso.localeCompare(b.iso));
+  if (sirali.length === 0 || alis < sirali[0].iso.slice(0, 7) + "-01") return null;
+  const sonrakiler = sirali.filter((t) => t.iso > alis);
+  if (sonrakiler.length === 0) return null;
   let carpim = 1;
-  for (const t of sirali) if (t.tarih > alisIso) carpim *= 1 + t.deger / 100;
+  for (const t of sonrakiler) carpim *= 1 + t.deger / 100;
   return (carpim - 1) * 100;
 }
 // seriler: usd/eur/altin/bist — AYNI aralıkta uzun geçmiş serileri. Hem "alış anı" hem "bugün" aynı seriden okunur (kaynak tutarlılığı).
@@ -29573,7 +29589,8 @@ function portfoyPerformansHesapla(
   let cUsd = 0, vUsd = 0, cEur = 0, vEur = 0, cAlt = 0, vAlt = 0, usdOk = true, eurOk = true, altOk = true;
   let vBist = 0, bistOk = true, vDolar = 0, dolarOk = true, vAltin = 0, altinOk = true, vTufe = 0, tufeOk = !!(tufeAylik && tufeAylik.length), cTufe = 0;
   for (const l of lotlar || []) {
-    if (!l || !(l.maliyet > 0) || !l.tarih) { haric++; continue; }
+    // Güncel değeri bilinmeyen lot (örn. fiyatı çekilemeyen fon: değer girilen tutara sabit kalır → sahte "%0,0 getiri") HESABA GİRMEZ
+    if (!l || !(l.maliyet > 0) || !(l.deger > 0) || !l.tarih) { haric++; continue; }
     const usdT = portfoyNoktaBul(seriler.usd, l.tarih);
     let cThen: number | null, cNow: number | null;
     if (l.paraOnek === "₺" || l.paraOnek == null) { cThen = 1; cNow = 1; }
@@ -29701,19 +29718,37 @@ function PortfoyParaMenusu({ para, onSec }: { para: PortfoyPara; onSec: (p: Port
   );
 }
 
-// ── Açılır kart (başlık + içerik) — Zekât özeti / Performans ve kıyas ──────────────────────────────────
-function PortfoyAcilirKart({ baslik, ipucu, children }: { baslik: string; ipucu?: string; children: (acik: boolean) => any }) {
-  const [acik, setAcik] = useState(false);
+// ── Alttan açılan pencere (mevcut Portföy Kâr/Zarar penceresiyle AYNI kalıp) — Zekât özeti / Performans ve kıyas ──────────────────
+// İçerik yalnız pencere AÇILINCA oluşur: ağ isteği (kur, geçmiş fiyat) ekran açılışında değil, kullanıcı isteyince gider.
+function PortfoyAltPencere({ baslik, altBaslik, onKapat, children }: { baslik: string; altBaslik?: string; onKapat: () => void; children: any }) {
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, marginBottom: 14, overflow: "hidden" }}>
-      <div role="button" aria-expanded={acik} onClick={() => setAcik((a) => !a)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "13px 16px", cursor: "pointer" }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: PORTFOY_YAZI }}>{baslik}</div>
-          {ipucu && !acik && <div style={{ fontSize: 11, color: PORTFOY_ETIKET, marginTop: 2 }}>{ipucu}</div>}
+    <div onClick={onKapat} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.7)", zIndex: 600, display: "flex", alignItems: "flex-end", ...(ekranZoomTersi() !== 1 ? { zoom: ekranZoomTersi() } : {}) }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: C.card, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 680, margin: "0 auto", maxHeight: "88vh", display: "flex", flexDirection: "column" }}>
+        <div style={{ padding: "16px 20px 12px", borderBottom: `1px solid ${WA(0.1)}`, display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
+          <div>
+            <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: C.label }}>{baslik}</p>
+            {altBaslik && <p style={{ margin: "2px 0 0", fontSize: 11, color: WA(0.55) }}>{altBaslik}</p>}
+          </div>
+          <button onClick={onKapat} aria-label="Kapat" style={{ background: WA(0.1), border: "none", width: 32, height: 32, borderRadius: 16, fontSize: 20, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
         </div>
-        <span style={{ fontSize: 16, color: PORTFOY_ETIKET, transform: acik ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>›</span>
+        <div style={{ flex: 1, overflowY: "auto", padding: "4px 20px 32px" }}>{children}</div>
       </div>
-      {acik && <div style={{ padding: "0 16px 16px", borderTop: `1px solid ${C.border}` }}>{children(acik)}</div>}
+    </div>
+  );
+}
+// Dağılım grafiğinin altında yan yana iki kompakt karo
+function PortfoyAnalizKaroları({ onPerformans, onZekat }: { onPerformans: () => void; onZekat: () => void }) {
+  const karo = (ikon: string, ad: string, alt: string, tikla: () => void) => (
+    <div role="button" onClick={tikla} style={{ flex: 1, minWidth: 0, background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: "12px 13px", cursor: "pointer" }}>
+      <div style={{ fontSize: 18, lineHeight: 1 }}>{ikon}</div>
+      <div style={{ fontSize: 13, fontWeight: 700, color: PORTFOY_YAZI, marginTop: 6 }}>{ad}</div>
+      <div style={{ fontSize: 10.5, color: PORTFOY_ETIKET, marginTop: 2, lineHeight: 1.35 }}>{alt}</div>
+    </div>
+  );
+  return (
+    <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
+      {karo("📈", "Performans ve kıyas", "TL/USD/EUR/altın bazında, enflasyon ve BIST 100 ile", onPerformans)}
+      {karo("🌙", "Zekât özeti", "Portföyündeki kalemlerden tahmini zekât", onZekat)}
     </div>
   );
 }
@@ -29732,8 +29767,10 @@ function portfoyLotlari(k: any, guncelDeger: (k: any) => number, maliyet: (k: an
   }
   const m = maliyet(k);
   if (m == null) return [];
+  // Fon: güncel fiyat (ya da alış fiyatı) yoksa portfoyGuncelDeger girilen tutarı döndürür → getiri sahte %0,0 çıkardı. Değer "bilinmiyor" (0) say.
+  const fonFiyatsiz = k.tur === "fon" && !(typeof k.fiyat === "number" && k.fiyat > 0 && k.alis.fiyat > 0);
   const tarih = k.tur === "katilim" ? (k.katilimAcilisTarihi || k.alis.tarih) : k.tur === "sukuk" ? (k.sukukAcilisTarihi || k.alis.tarih) : k.alis.tarih;
-  return [{ tarih, paraOnek: onek, maliyet: m, deger: toplamDeger }];
+  return [{ tarih, paraOnek: onek, maliyet: m, deger: fonFiyatsiz ? 0 : toplamDeger }];
 }
 
 // ── ZEKÂT ÖZETİ KARTI ─────────────────────────────────────────────────────────────────────────────────
@@ -29818,7 +29855,7 @@ function PortfoyPerformansKarti({ liste }: { liste: PortfoyKalemi[] }) {
     ]);
     if (usd.length === 0) { setHata("Geçmiş fiyat verisi şu an alınamadı. Biraz sonra tekrar dene."); setDurum("hata"); return; }
     const s = portfoyPerformansHesapla(lotlar, { usd, eur, altin, bist }, tufeYanit?.seriler?.TUFE_AYLIK_SERI || null);
-    if (!s) { setHata("Bu kalemler için alış tarihindeki fiyat bulunamadı."); setDurum("hata"); return; }
+    if (!s) { setHata("Hesaplanabilecek kalem yok: güncel fiyatı olan ve alış tarihindeki fiyatı bulunabilen bir kalem gerekli. (Fiyatı çekilemeyen bir fon varsa onun getirisi hesaplanamaz.)"); setDurum("hata"); return; }
     setSonuc(s); setDurum("hazir");
   };
   const yz = (v: number | null) => (v == null ? "—" : `${v > 0 ? "+" : ""}${v.toLocaleString("tr-TR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`);
@@ -29851,7 +29888,7 @@ function PortfoyPerformansKarti({ liste }: { liste: PortfoyKalemi[] }) {
       <div style={{ fontSize: 11, fontWeight: 700, color: PORTFOY_ETIKET, margin: "14px 0 2px" }}>KIYAS — AYNI TUTAR, AYNI TARİHLERDE</div>
       <Cubuk ad="Portföyün" v={sonuc.getiri.TL} kalin /><Cubuk ad="BIST 100" v={sonuc.kiyas.bist} /><Cubuk ad="Dolar" v={sonuc.kiyas.dolar} /><Cubuk ad="Altın" v={sonuc.kiyas.altin} /><Cubuk ad="TÜFE" v={sonuc.kiyas.tufe} />
       <p style={{ margin: "10px 0 0", fontSize: 10.5, color: PORTFOY_ETIKET, lineHeight: 1.5 }}>
-        {sonuc.kullanilanLot} alış hesaplandı{sonuc.haricLot > 0 ? `, ${sonuc.haricLot} alış hariç (tarih/fiyat verisi yok)` : ""}. Yabancı para kalemlerinde maliyet <b>alış tarihindeki</b> kurla çevrilir; bu yüzden üstteki toplam kâr/zarardan küçük fark olabilir. BIST 100 fiyat endeksidir (temettü dahil değil). Fon ve katılma hesabı geçmiş değerleri alış maliyeti üzerinden hesaplanır. <b>Geçmiş performans gelecek getirinin garantisi değildir.</b> TÜFE verisi son 24 ayla sınırlıdır; daha eski alışlarda "—" görünür.
+        {sonuc.kullanilanLot} alış hesaplandı{sonuc.haricLot > 0 ? `, ${sonuc.haricLot} alış hariç (alış tarihi, alış tarihindeki fiyat ya da güncel fiyat yok)` : ""}. Yabancı para kalemlerinde maliyet <b>alış tarihindeki</b> kurla çevrilir; bu yüzden üstteki toplam kâr/zarardan küçük fark olabilir. BIST 100 fiyat endeksidir (temettü dahil değil). Fon ve katılma hesabı geçmiş değerleri alış maliyeti üzerinden hesaplanır. <b>Geçmiş performans gelecek getirinin garantisi değildir.</b> TÜFE verisi son 24 ayla sınırlıdır; daha eski alışlarda "—" görünür.
       </p>
     </div>
   );
@@ -29871,6 +29908,7 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onDuzen
   const [takvimAcik, setTakvimAcik] = useState(false);
   // PARA BİRİMİ GÖRÜNÜMÜ (2026-10-03): ₺ · $ · € · altın(gr). Seçim hatırlanır ve ana sayfa kartıyla paylaşılır.
   const {para, setPara, kurlar} = usePortfoyPara();
+  const [analizPencere, setAnalizPencere] = useState<"performans"|"zekat"|null>(null);
 
   // Ayrım artık ALIŞ BİLGİSİNE göre: fiyat/tarih girilmişse Portföyüm,
   // girilmemişse (miktar girilmiş olsa bile) Takip Listem.
@@ -30094,12 +30132,17 @@ function PortfoyDetayEkrani({liste, gizli, onGizliToggle, onEkle, onSil, onDuzen
 
       {/* ── ZEKÂT ÖZETİ + PERFORMANS (2026-10-03) — yalnız Portföyüm sekmesi, kapalı gelir (ağ isteği AÇILINCA) ── */}
       {sekme==="portfoy" && portfoyListesi.length>0 && (<>
-        <PortfoyAcilirKart baslik="Zekât özeti" ipucu="Portföyündeki kalemlerden tahmini zekât">
-          {()=><PortfoyZekatKarti liste={portfoyListesi} onZekatAc={onZekatAc}/>}
-        </PortfoyAcilirKart>
-        <PortfoyAcilirKart baslik="Performans ve kıyas" ipucu="TL / USD / EUR / altın bazında getiri, enflasyon ve BIST 100 ile kıyas">
-          {()=><PortfoyPerformansKarti liste={portfoyListesi}/>}
-        </PortfoyAcilirKart>
+        <PortfoyAnalizKaroları onPerformans={()=>setAnalizPencere("performans")} onZekat={()=>setAnalizPencere("zekat")}/>
+        {analizPencere==="performans" && (
+          <PortfoyAltPencere baslik="Performans ve kıyas" altBaslik="Alış tarihinden bugüne" onKapat={()=>setAnalizPencere(null)}>
+            <PortfoyPerformansKarti liste={portfoyListesi}/>
+          </PortfoyAltPencere>
+        )}
+        {analizPencere==="zekat" && (
+          <PortfoyAltPencere baslik="Zekât özeti" altBaslik="Portföyündeki kalemlerden tahmini" onKapat={()=>setAnalizPencere(null)}>
+            <PortfoyZekatKarti liste={portfoyListesi} onZekatAc={onZekatAc ? ()=>{ setAnalizPencere(null); onZekatAc(); } : undefined}/>
+          </PortfoyAltPencere>
+        )}
       </>)}
 
       {filtreliListe.length===0 && (
