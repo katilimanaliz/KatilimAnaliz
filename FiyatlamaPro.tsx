@@ -5067,6 +5067,14 @@ function abdPiyasaAcikMi(simdi: Date = new Date()): boolean {
   const gun = ny.getDay(), dk = ny.getHours() * 60 + ny.getMinutes();
   return gun >= 1 && gun <= 5 && dk >= 9 * 60 + 30 && dk < 16 * 60;
 }
+// Seans saatinin TR karşılığı. TR her zaman UTC+3; New York yaz saatinde (EDT, UTC-4) seans 16:30–23:00, kış saatinde
+// (EST, UTC-5) 17:30–00:00 olur → saat METNİ SABİT YAZILMAZ (ABD'de yaz saati 1 Kasım 2026'da biter).
+function abdSeansTRMetni(simdi: Date = new Date()): string {
+  const nyOfset = Math.round((Date.parse(simdi.toLocaleString("en-US", { timeZone: "America/New_York" })) - Date.parse(simdi.toLocaleString("en-US", { timeZone: "UTC" }))) / 3600000);   // -4 | -5
+  const fark = 3 - nyOfset;   // New York → TR (saat)
+  const bicim = (dk: number) => { const t = ((dk % 1440) + 1440) % 1440; return String(Math.floor(t / 60)).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0"); };
+  return bicim(9 * 60 + 30 + fark * 60) + "–" + bicim(16 * 60 + fark * 60);
+}
 // Liste: arama (ticker/şirket adı) + sıralama. "tumu" = backend sırası (piyasa değeri azalan).
 function abdHisseListele(liste: any[], sira: string, arama: string): any[] {
   const q = (arama || "").trim().toLocaleLowerCase("en-US");
@@ -5097,7 +5105,7 @@ function AbdPiyasaSekmeleri({ secili, onSec }: { secili: string; onSec: (k: stri
         return (
           <button key={k} type="button" role="tab" aria-selected={a} onClick={() => onSec(k)}
             style={{ flex: "0 0 auto", border: `1.5px solid ${a ? C.blue : C.border}`, background: a ? C.blue : WA(0.05), color: a ? "#fff" : C.label,
-              fontFamily: "inherit", fontSize: 13.5, fontWeight: 700, borderRadius: 999, padding: "9px 16px", cursor: "pointer" }}>{ad}</button>
+              fontFamily: "inherit", fontSize: 13, fontWeight: 700, borderRadius: 999, padding: "9px 12px", cursor: "pointer" }}>{ad}</button>
         );
       })}
     </div>
@@ -5174,7 +5182,7 @@ function AbdHisseIzleme({ piyasa, onKurAc }: { piyasa: string; onKurAc?: (k: any
           </div>
         )}
         <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 11, color: C.sub, marginTop: 8 }}>
-          <span>{acik ? "ABD seansı açık" : "ABD seansı kapalı"} · 16:30–23:00 (TR)</span>
+          <span>{acik ? "ABD seansı açık" : "ABD seansı kapalı"} · {abdSeansTRMetni()} (TR)</span>
           <span>15 dk gecikmeli</span>
         </div>
       </div>
@@ -5202,7 +5210,7 @@ function AbdHisseIzleme({ piyasa, onKurAc }: { piyasa: string; onKurAc?: (k: any
         <div style={{ background: WA(0.04), border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden" }}>
           {liste.length === 0 && <p style={{ textAlign: "center", color: C.sub, fontSize: 13, padding: 20, margin: 0 }}>Sonuç bulunamadı</p>}
           {liste.slice(0, gorunen).map((h: any, i: number) => {
-            const up = h.degisim1g >= 0;
+            const up = h.degisim1g > 0, notr = h.degisim1g === 0;
             return (
               <div key={h.ticker} onClick={() => onKurAc && onKurAc({ kod: h.ticker, ad: h.ad, sembol: h.yahoo || h.ticker, birim: "$" })}
                 style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", borderTop: i === 0 ? "none" : `1px solid ${C.border}`, cursor: "pointer" }}>
@@ -5211,8 +5219,8 @@ function AbdHisseIzleme({ piyasa, onKurAc }: { piyasa: string; onKurAc?: (k: any
                   <div style={{ fontSize: 11.5, color: C.sub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{h.ad}</div>
                 </div>
                 <div style={{ fontFamily: "monospace", fontSize: 14, fontWeight: 600, color: C.label, textAlign: "right" }}>$ {fmtN(h.fiyat, 2)}</div>
-                <div style={{ minWidth: 74, textAlign: "center", fontSize: 12, fontWeight: 700, borderRadius: 999, padding: "3px 8px", color: up ? C.green : C.red, background: up ? "rgba(27,158,122,0.14)" : "rgba(214,69,69,0.14)" }}>
-                  {up ? "▲" : "▼"} %{Math.abs(h.degisim1g).toFixed(2).replace(".", ",")}
+                <div style={{ minWidth: 74, textAlign: "center", fontSize: 12, fontWeight: 700, borderRadius: 999, padding: "3px 8px", color: notr ? C.sub : (up ? C.green : C.red), background: notr ? WA(0.08) : (up ? "rgba(27,158,122,0.14)" : "rgba(214,69,69,0.14)") }}>
+                  {notr ? "" : (up ? "▲ " : "▼ ")}%{Math.abs(h.degisim1g).toFixed(2).replace(".", ",")}
                 </div>
               </div>
             );
