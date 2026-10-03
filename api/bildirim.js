@@ -1071,6 +1071,114 @@ const BANKA_URUN_ETIKET = {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
+// BANKA ORANI DEĞİŞİM ABONELİĞİ (2026-10-03) — SADECE PRO
+// ═══════════════════════════════════════════════════════════════════════════
+// "Herhangi bir bankanın herhangi bir oranı değişince haber ver." Eşik yok; KAP gibi bir ABONELİK: tetiklenince
+// kapanmaz, izlemeye devam eder. İki kapsam: "finansman" (konut/taşıt/ihtiyaç) ve "katilma" (TL/USD/EUR/Altın).
+//
+// MİMARİ (alarm başına anlık görüntü TUTULMAZ — 5000 alarmlık tek anahtar şişerdi):
+//  • GLOBAL durum "karpayi:degisim:v1": { kapsamlar:{finansman:{oranlar:{"BANKA|urun":n}}, katilma:{...}}, olaylar:[...] }
+//  • Her alarm turunda kar-payi.json bu durumla karşılaştırılır; fark varsa bir OLAY eklenir
+//    { ts, kapsam, degisimler:[{banka,urun,eski,yeni}] } (son 40 olay, 30 gün).
+//  • Abonelik yalnızca imleç tutar (sonGorulenTs): kendi kapsamındaki, imleçten yeni olayları tek bildirimde özetler.
+// ⚠️ Karşılaştırma yalnızca İKİ tarafta da sayı olan çiftlerde yapılır; kayıt dışı kalan banka/ürün "değişim" sayılmaz.
+// ⚠️ TOPLU DEĞİŞİM KORUMASI: tek turda DEGISIM_SUPHELI_ESIK'ten fazla hücre değişirse (elle düzenlenen dosyada biçim/
+//    ondalık hatası gibi) hemen yayınlanmaz; AYNI değişimler ARDIŞIK ikinci turda da görülürse kabul edilir.
+const KV_BANKA_DEGISIM_KEY = "karpayi:degisim:v1";
+const BANKA_DEGISIM_KAPSAMLAR = new Set(["finansman", "katilma"]);
+const DEGISIM_SUPHELI_ESIK = 24;
+const DEGISIM_OLAY_SINIRI = 40;
+const DEGISIM_OLAY_OMRU_MS = 30 * 24 * 3600 * 1000;
+const MAKS_BANKA_DEGISIM_ABONELIK_TOKEN_BASINA = 2;   // her kapsam için bir tane yeter; bu sadece kötüye kullanım tavanı
+
+// kar-payi.json → { "BANKA|urun": oran } (yalnızca geçerli, pozitif, sonlu sayılar)
+function karPayiOranHaritasi(veri, kapsam) {
+  const harita = {};
+  if (!veri) return harita;
+  const alanlar = kapsam === "finansman" ? FINANSMAN_ALANLARI : KAR_PAYI_ALANLARI;
+  const liste = kapsam === "finansman" ? (veri.finansman?.bankalar || []) : (veri.bankalar || []);
+  for (const b of liste) {
+    const ad = String(b?.ad || "").trim();
+    if (!ad) continue;
+    for (const urun of alanlar) {
+      const v = b[urun];
+      if (typeof v === "number" && isFinite(v) && v > 0) harita[`${ad}|${urun}`] = v;
+    }
+  }
+  return harita;
+}
+
+// Mevcut oranları durumla karşılaştırır; yeni olay(lar) üretip durumu günceller. Saf fonksiyon (Redis'e dokunmaz):
+// { durum, degisti } döner.
+function bankaDegisimHesapla(durum, veri, simdi) {
+  const yeni = JSON.parse(JSON.stringify(durum && typeof durum === "object" ? durum : { kapsamlar: {}, olaylar: [] }));
+  if (!yeni.kapsamlar) yeni.kapsamlar = {};
+  if (!Array.isArray(yeni.olaylar)) yeni.olaylar = [];
+  let degisti = false;
+  for (const kapsam of BANKA_DEGISIM_KAPSAMLAR) {
+    const guncel = karPayiOranHaritasi(veri, kapsam);
+    if (Object.keys(guncel).length === 0) continue;   // o kapsamda veri yok → dokunma
+    const k = yeni.kapsamlar[kapsam] || (yeni.kapsamlar[kapsam] = { oranlar: null, aday: null });
+    if (!k.oranlar) { k.oranlar = guncel; k.aday = null; degisti = true; continue; }   // ilk görüş: taban çizgisi, olay YOK
+    const degisimler = [];
+    for (const [anahtar, yeniOran] of Object.entries(guncel)) {
+      const eski = k.oranlar[anahtar];
+      if (typeof eski === "number" && Math.abs(eski - yeniOran) > 0.0001) {
+        const [banka, urun] = anahtar.split("|");
+        degisimler.push({ banka, urun, eski, yeni: yeniOran });
+      }
+    }
+    if (degisimler.length === 0) { if (k.aday) { k.aday = null; degisti = true; } continue; }
+    if (degisimler.length > DEGISIM_SUPHELI_ESIK) {
+      const imza = degisimler.map((d) => `${d.banka}|${d.urun}|${d.yeni}`).sort().join(";");
+      if (!k.aday || k.aday.imza !== imza) { k.aday = { imza, ts: simdi }; degisti = true; continue; }   // 1. görüş: bekle
+    }
+    // kabul: olay ekle, tabanı ilerlet (kaybolan anahtarlar korunur → geri gelince sahte değişim olmaz)
+    yeni.olaylar.push({ ts: simdi, kapsam, degisimler });
+    k.oranlar = { ...k.oranlar, ...guncel };
+    k.aday = null;
+    degisti = true;
+  }
+  const sinir = simdi - DEGISIM_OLAY_OMRU_MS;
+  const once = yeni.olaylar.length;
+  yeni.olaylar = yeni.olaylar.filter((o) => o && o.ts >= sinir).slice(-DEGISIM_OLAY_SINIRI);
+  if (yeni.olaylar.length !== once) degisti = true;
+  return { durum: yeni, degisti };
+}
+
+async function bankaDegisimGuncelle(veri) {
+  let eski = null;
+  try { eski = await redis.get(KV_BANKA_DEGISIM_KEY); } catch (e) { console.error("Banka degisim durumu okunamadi:", e.message); }
+  const { durum, degisti } = bankaDegisimHesapla(eski, veri, Date.now());
+  if (degisti) {
+    try { await redis.set(KV_BANKA_DEGISIM_KEY, durum); } catch (e) { console.error("Banka degisim durumu yazilamadi:", e.message); }
+  }
+  return durum;
+}
+
+// Bir aboneliğin imlecinden yeni olayları tek özet bildirime çevirir. { mesaj, sayi, enYeniTs } | null
+function bankaDegisimOzet(durum, alarm) {
+  const imlec = alarm.sonGorulenTs || alarm.olusturulmaTs || 0;
+  const olaylar = (durum?.olaylar || []).filter((o) => o.kapsam === alarm.kapsam && o.ts > imlec);
+  if (olaylar.length === 0) return null;
+  // Aynı hücre birden çok kez değiştiyse ilk "eski" → son "yeni"; eski==yeni olan (geri dönmüş) çıkarılır
+  const birlesik = new Map();
+  for (const o of olaylar) for (const d of o.degisimler || []) {
+    const a = `${d.banka}|${d.urun}`;
+    const m = birlesik.get(a);
+    birlesik.set(a, m ? { ...m, yeni: d.yeni } : { ...d });
+  }
+  const degisimler = [...birlesik.values()].filter((d) => Math.abs(d.eski - d.yeni) > 0.0001);
+  const enYeniTs = Math.max(...olaylar.map((o) => o.ts));
+  if (degisimler.length === 0) return { mesaj: null, sayi: 0, enYeniTs };
+  const oran = (n) => String(n).replace(".", ",");
+  const satir = (d) => `${d.banka} ${BANKA_URUN_ETIKET[d.urun] || d.urun}: %${oran(d.eski)} → %${oran(d.yeni)}`;
+  const ilk = degisimler.slice(0, 2).map(satir).join(" · ");
+  const fazla = degisimler.length - 2;
+  return { mesaj: fazla > 0 ? `${ilk} · +${fazla} değişiklik daha` : ilk, sayi: degisimler.length, enYeniTs };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // KAP BİLDİRİM ALARMLARI (2026-07-29)
 // ═══════════════════════════════════════════════════════════════════════════
 // Fiyat alarmından YAPISAL OLARAK FARKLI — bu bir ABONELİK:
@@ -1206,6 +1314,8 @@ async function alarmEkle(req, res) {
   // Zekât hatırlatmasında sembol/ad/yon sabit — istemcinin göndermesi gerekmez.
   // Endeks aboneliğinde "yon" anlamsız — istemci göndermese de kabul ediyoruz.
   if (tip === "endeks" && !yon) yon = "degisim";
+  // Banka oranı değişim aboneliğinde de "yon" anlamsız (eşik yok) — istemci göndermese de kabul ediyoruz.
+  if (tip === "banka_degisim" && !yon) yon = "degisim";
   if (tip === "zekat") {
     sembol = ZEKAT_SEMBOL;
     ad = ad || "Zekât Günü";
@@ -1424,6 +1534,82 @@ async function alarmEkle(req, res) {
       });
     } catch (e) {
       res.status(500).json({ hata: "Endeks aboneliği oluşturulamadı", detay: e.message });
+    }
+    return;
+  }
+
+  // ── BANKA ORANI DEĞİŞİM ABONELİĞİ (2026-10-03) — SADECE PRO ─────────────
+  // Eşiksiz: "herhangi bir bankanın herhangi bir oranı değişince haber ver". Kapsam başına TEK abonelik (tekrar kurulursa
+  // mevcut olan döner). Kurulurken o anki oranlar taban çizgisi sayılır → geçmiş değişiklikler yağmaz.
+  if (tip === "banka_degisim") {
+    if (!uid) {
+      res.status(403).json({ hata: "Oran değişim bildirimi için giriş yapmış olman gerekiyor." });
+      return;
+    }
+    const pro = await kullaniciProMu(uid);
+    if (!pro) {
+      res.status(403).json({ hata: "Oran değişim bildirimi Pro üyelere özel. Pro'ya geçerek kullanabilirsin." });
+      return;
+    }
+    const kapsam = req.body?.kapsam;
+    if (!BANKA_DEGISIM_KAPSAMLAR.has(kapsam)) {
+      res.status(400).json({ hata: "Geçerli bir 'kapsam' (finansman | katilma) gerekli" });
+      return;
+    }
+    const karPayiVeri = await karPayiVerisiGetir();
+    if (!karPayiVeri) {
+      res.status(502).json({ hata: "Oran verisi şu an alınamadı, bildirim kurulamadı. Biraz sonra tekrar dene." });
+      return;
+    }
+    const kapsamEtiket = kapsam === "finansman" ? "Finansman oranları" : "Katılma hesabı oranları";
+    try {
+      await bankaDegisimGuncelle(karPayiVeri);   // taban çizgisi yoksa oluşturulur (olay üretmez)
+      const { basarili, sonuc } = await kilitliCalistir(
+        redis, ALARM_KILIT_ANAHTAR, 15,
+        async () => {
+          const alarmlar = await alarmlariOku();
+          const benim = (a) => a.tip === "banka_degisim" && (uid ? (a.uid === uid || a.token === token) : a.token === token);
+          const mevcut = alarmlar.find((a) => benim(a) && a.kapsam === kapsam);
+          if (mevcut) {
+            // Zaten var: pasifse (duraklatılmış / ölü token) yeniden başlat, imleci şimdiye al
+            const guncel = { ...mevcut, token, uid: uid || mevcut.uid || null, aktif: true, kapaliSebep: null, sonGorulenTs: Date.now() };
+            await redis.set(ALARM_KV_ANAHTAR, alarmlar.map((a) => (a.id === mevcut.id ? guncel : a)));
+            return { alarm: guncel, zatenVardi: true };
+          }
+          if (alarmlar.filter((a) => benim(a) && a.aktif).length >= MAKS_BANKA_DEGISIM_ABONELIK_TOKEN_BASINA) {
+            return { hataKodu: 429, hata: "En fazla 2 oran değişim bildirimi kurabilirsiniz." };
+          }
+          if (alarmlar.length >= MAKS_TOPLAM_ALARM) {
+            console.error("KURESEL ALARM TAVANI ASILDI (banka_degisim):", alarmlar.length);
+            return { hataKodu: 503, hata: "Sistem şu anda yeni alarm kabul edemiyor. Lütfen daha sonra tekrar deneyin." };
+          }
+          const yeniAlarm = {
+            id: randomUUID(),
+            token, uid,
+            sembol: `BANKA_DEGISIM:${kapsam}`, ad: ad || `${kapsamEtiket} — değişim bildirimi`,
+            tip: "banka_degisim",
+            yon: "degisim",
+            kapsam,
+            hedefFiyat: null, yuzde: null, baslangicFiyat: null,
+            sonGorulenTs: Date.now(),
+            bildirimSayisi: 0,
+            olusturulmaTs: Date.now(),
+            aktif: true,
+            tetiklenmeTs: null, tetiklenmeFiyat: null,
+          };
+          await redis.set(ALARM_KV_ANAHTAR, [...alarmlar, yeniAlarm]);
+          return { alarm: yeniAlarm, zatenVardi: false };
+        },
+        { denemeSayisi: 10, bekleMs: 300 }
+      );
+      if (!basarili) { res.status(409).json({ hata: "Şu anda başka bir alarm işlemi sürüyor, lütfen tekrar deneyin." }); return; }
+      if (sonuc?.hataKodu) { res.status(sonuc.hataKodu).json({ hata: sonuc.hata }); return; }
+      res.status(200).json({
+        basarili: true, alarm: sonuc.alarm, zatenVardi: sonuc.zatenVardi,
+        not: `${kapsamEtiket} değiştiğinde bildirim alacaksınız. Oranlar elle güncellendiği için bildirim, güncellemeden sonraki ilk kontrol turunda gelir.`,
+      });
+    } catch (e) {
+      res.status(500).json({ hata: "Oran değişim bildirimi oluşturulamadı", detay: e.message });
     }
     return;
   }
@@ -1898,10 +2084,12 @@ async function alarmDurum(req, res) {
         const idx = alarmlar.findIndex((a) => a.id === id && (a.token === token || (uid && a.uid === uid)));
         if (idx < 0) return { hataKodu: 404, hata: "Alarm bulunamadı." };
         const mevcut = alarmlar[idx];
-        if (mevcut.tip !== "kap") {
-          return { hataKodu: 400, hata: "Bu işlem yalnızca KAP bildirim abonelikleri için geçerli." };
+        if (mevcut.tip !== "kap" && mevcut.tip !== "banka_degisim") {
+          return { hataKodu: 400, hata: "Bu işlem yalnızca KAP ve oran değişim abonelikleri için geçerli." };
         }
         const guncel = { ...mevcut, aktif };
+        // Oran değişim aboneliği: duraklatılan süredeki değişiklikler yeniden başlatınca yağmasın → imleç şimdiye
+        if (aktif && mevcut.tip === "banka_degisim") guncel.sonGorulenTs = Date.now();
         if (!aktif) {
           guncel.kapaliSebep = "kullanici";
         } else {
@@ -1952,8 +2140,11 @@ async function alarmKontrol(req, res) {
       async () => {
         const alarmlar = await alarmlariOku();
         const aktifAlarmlar = alarmlar.filter((a) => a.aktif);
+        // Duraklatılmış oran değişim abonelikleri de olay günlüğünün TUTULMASINI gerektirir: günlük durursa duraklatma
+        // sırasındaki değişiklikler "yeni" damgayla sonradan yazılır ve devam edince yağardı.
+        const bankaDegisimVarMi = alarmlar.some((a) => a.tip === "banka_degisim");
 
-        if (aktifAlarmlar.length === 0) {
+        if (aktifAlarmlar.length === 0 && !bankaDegisimVarMi) {
           return { kontrolEdilenAlarm: 0, benzersizSembol: 0, tetiklenen: 0, gonderilenBildirim: 0 };
         }
 
@@ -1963,7 +2154,7 @@ async function alarmKontrol(req, res) {
         // filtresine EKLENMEZSE alarmFiyatTablosu onlar için boşuna fiyat
         // aramaya çalışır ve her turda hata üretir.
         const kapAlarmlar = aktifAlarmlar.filter((a) => a.tip === "kap");
-        const fiyatAlarmlar = aktifAlarmlar.filter((a) => a.tip !== "kap" && a.tip !== "zekat" && a.tip !== "endeks" && a.tip !== "banka_oran");
+        const fiyatAlarmlar = aktifAlarmlar.filter((a) => a.tip !== "kap" && a.tip !== "zekat" && a.tip !== "endeks" && a.tip !== "banka_oran" && a.tip !== "banka_degisim");
 
         // Aynı sembolü birden fazla alarm izliyorsa fiyatı TEK kere çekelim.
         const benzersizSemboller = [...new Set(fiyatAlarmlar.map((a) => a.sembol))];
@@ -1988,10 +2179,13 @@ async function alarmKontrol(req, res) {
 
         // Banka oranı verisi de TEK kere (10 dk'lık bellek-içi önbellekten).
         const bankaOranAlarmlar = aktifAlarmlar.filter((a) => a.tip === "banka_oran");
-        let karPayiVeri = null, bankaOranNot = null;
-        if (bankaOranAlarmlar.length > 0) {
+        const bankaDegisimAlarmlar = aktifAlarmlar.filter((a) => a.tip === "banka_degisim");
+        let karPayiVeri = null, bankaOranNot = null, bankaDegisimDurum = null;
+        if (bankaOranAlarmlar.length > 0 || bankaDegisimVarMi) {
           karPayiVeri = await karPayiVerisiGetir();
           if (!karPayiVeri) bankaOranNot = "kar-payi.json alinamadi — banka orani alarmlari bu turda atlandi";
+          // Olay günlüğü tek karşılaştırmayla tüm aboneler (aktif ya da duraklatılmış) için güncel tutulur
+          else if (bankaDegisimVarMi) bankaDegisimDurum = await bankaDegisimGuncelle(karPayiVeri);
         }
 
         let tetiklenen = 0;
@@ -2000,6 +2194,7 @@ async function alarmKontrol(req, res) {
         let zekatTetiklenen = 0;
         let endeksTetiklenen = 0;
         let bankaOraniTetiklenen = 0;
+        let bankaDegisimTetiklenen = 0;
         let olenAbonelik = 0;   // token gecersiz oldugu icin kapanan abonelik sayisi
         let gecersizKurulumKapatilan = 0;   // kurulusunda kosulu zaten saglanan (eski) hedef alarmlari
         const gonderimHatalari = [];
@@ -2167,6 +2362,32 @@ async function alarmKontrol(req, res) {
             continue;
           }
 
+          // ── BANKA ORANI DEĞİŞİM ABONELİĞİ (2026-10-03) ───────────────────
+          // Tetiklenince KAPANMAZ (abonelik): imleç ilerler, bildirim sayacı artar. Veri alınamadıysa dokunulmaz.
+          if (alarm.tip === "banka_degisim") {
+            if (!bankaDegisimDurum) { guncelListe.push(alarm); continue; }
+            const ozet = bankaDegisimOzet(bankaDegisimDurum, alarm);
+            if (!ozet) { guncelListe.push(alarm); continue; }
+            if (!ozet.mesaj) { guncelListe.push({ ...alarm, sonGorulenTs: ozet.enYeniTs }); continue; }   // değişimler birbirini götürdü
+            bankaDegisimTetiklenen++;
+            const gonderildi = await tekTokeneGonder(alarm.token, "🏦 Oran değişti", ozet.mesaj, {
+              tip: "banka-orani-degisim", kapsam: alarm.kapsam, alarmId: alarm.id,
+            });
+            if (gonderildi === true) gonderilenBildirim++;
+            else if (gonderildi && gonderildi.hata) {
+              gonderimHatalari.push({ alarm: alarm.ad, tokenIlk10: (alarm.token || "").slice(0, 10), hata: gonderildi.hata });
+            }
+            const olduMu = !!(gonderildi && gonderildi.hata &&
+              String(gonderildi.hata).includes("registration-token-not-registered"));
+            if (olduMu) {
+              olenAbonelik++;
+              guncelListe.push({ ...alarm, aktif: false, kapaliSebep: "token-gecersiz", tetiklenmeTs: Date.now() });
+              continue;
+            }
+            guncelListe.push({ ...alarm, sonGorulenTs: ozet.enYeniTs, bildirimSayisi: (alarm.bildirimSayisi || 0) + 1, tetiklenmeTs: Date.now() });
+            continue;
+          }
+
           // ── BANKA ORANI ALARMI ───────────────────────────────────────────
           // Fiyat alarmlarıyla AYNI "geçiş" mantığı (tek seferlik, tetiklenince
           // aktif:false) ama veri kar-payi.json'dan geliyor. Veri o turda hiç
@@ -2287,6 +2508,8 @@ async function alarmKontrol(req, res) {
           endeksTetiklenen,
           bankaOraniAlarmi: bankaOranAlarmlar.length,
           bankaOraniTetiklenen,
+          bankaDegisimAboneligi: bankaDegisimAlarmlar.length,
+          bankaDegisimTetiklenen,
           olenAbonelik,
           gecersizKurulumKapatilan,
           gonderilenBildirim,

@@ -3070,6 +3070,7 @@ function KarPayiOranlari({nav,kimlik}:{nav:any;kimlik:ReturnType<typeof useKpKim
   return(
     <div style={{padding:"0 16px 32px"}}>
       <Seg options={[{v:"finansman",l:CV("Finansman")},{v:"katilma",l:CV("Katılma Hesabı")}]} value={sekme} onChange={setSekme}/>
+      <OranDegisimBildirimi kapsam={sekme} nav={nav} kimlik={kimlik}/>
 
       {sekme==="finansman"&&(<>
       <Card>
@@ -23800,7 +23801,7 @@ let kpGuncelNav: ((sc:string)=>void)|null = null;
 // gösterilir (durum metni, ikon) ve duraklat/devam düğmesi yalnızca bunlarda
 // vardır — tetiklenmiş bir fiyat alarmını yeniden açmak eşik hâlâ sağlandığı
 // için anında tekrar tetiklenmeye yol açardı.
-const ABONELIK_TIPLERI = ["kap","endeks","zekat"];
+const ABONELIK_TIPLERI = ["kap","endeks","zekat","banka_degisim"];
 
 // ─── FİYAT ALARMLARIM EKRANI ─────────────────────────────────────────────────
 function FiyatAlarmlarim(){
@@ -23843,6 +23844,14 @@ function FiyatAlarmlarim(){
     if(a.tip==="kap"){
       return "Yeni KAP bildirimi yayınlandığında";
     }
+    // 2026-10-03: oran değişim aboneliği (eşiksiz) ve banka oranı eşik alarmı — ikisi de aşağıdaki fiyat/yüzde dallarına
+    // düşerse "-%—" gibi anlamsız metin çıkardı.
+    if(a.tip==="banka_degisim"){
+      return a.kapsam==="katilma" ? "Katılma hesabı oranlarından biri değişince" : "Finansman oranlarından biri değişince";
+    }
+    if(a.tip==="banka_oran"){
+      return `${a.yon==="ustunde"?"≥":"≤"} %${a.hedefFiyat!=null?String(a.hedefFiyat).replace(".",","):"—"}`;
+    }
     // 2026-08-06: Yeni abonelik türleri. Bunlar da fiyat alanları boş geldiği
     // için ALTTAKİ yuzde dalına düşmemeli — KAP'ta yaşanan çökme aynısı olurdu.
     if(a.tip==="endeks"){
@@ -23869,7 +23878,7 @@ function FiyatAlarmlarim(){
   // Abonelikler (KAP) tetiklendikten sonra da aktif kalır; bu yüzden
   // "Tetiklendi" yerine kaç bildirim gönderildiğini yazıyoruz.
   const durumMetni=(a:any)=>{
-    if(a.tip==="endeks"||a.tip==="zekat"){
+    if(a.tip==="endeks"||a.tip==="zekat"||a.tip==="banka_degisim"){
       const n=a.bildirimSayisi||0;
       const sayac=n>0?` · ${n} bildirim gönderildi`:"";
       if(!a.aktif){
@@ -23915,7 +23924,7 @@ function FiyatAlarmlarim(){
         </div>
       ):alarmlar.map((a:any)=>(
         <div key={a.id} style={{background:WA(0.04),border:`1px solid ${(ABONELIK_TIPLERI.includes(a.tip)||a.aktif)?WA(0.08):"rgba(74,222,128,0.25)"}`,borderRadius:14,padding:"13px 14px",marginBottom:10,display:"flex",alignItems:"center",gap:10}}>
-          <span style={{fontSize:20,flexShrink:0}}>{a.tip==="kap"?"📄":a.tip==="endeks"?"☪":a.tip==="zekat"?"🌙":(a.aktif?"🔔":"✅")}</span>
+          <span style={{fontSize:20,flexShrink:0}}>{a.tip==="kap"?"📄":a.tip==="endeks"?"☪":a.tip==="zekat"?"🌙":(a.tip==="banka_degisim"||a.tip==="banka_oran")?"🏦":(a.aktif?"🔔":"✅")}</span>
           <div style={{flex:1,minWidth:0}}>
             <p style={{margin:0,fontSize:13.5,fontWeight:700,color:C.soft}}>{a.ad}</p>
             <p style={{margin:"2px 0 0",fontSize:11.5,color:WA(0.55)}}>{kosulMetni(a)}</p>
@@ -25894,6 +25903,82 @@ function HisseAlarmModal({hisse, onClose}:{hisse:{ticker:string, sirket?:string,
 // toplayıp gönderiyor. Açılmadan ÖNCE kpProGerekliMi ile kapı kontrolü
 // yapılıyor (bkz. KarPayiOranlari'ndaki 🔔 butonu) — modal SADECE Pro'ysa
 // hiç açılmıyor.
+// ─── ORAN DEĞİŞİM BİLDİRİMİ (2026-10-03, kullanıcı isteği) ──────────────────────────────────────────────
+// "Banka banka alarmın yanında TEK bir alarm: herhangi bir bankanın herhangi bir oranı değişince bildirim gitsin."
+// Kâr Payı Oran Karşılaştırma ekranında sekmeye göre (Finansman | Katılma Hesabı) tek düğme; SADECE PRO (banka
+// oranı alarmlarıyla aynı kapı). Sunucuda eşiksiz bir ABONELİK ("banka_degisim", kapsam başına bir tane): tetiklenince
+// kapanmaz, her oran değişiminde özet bildirim yollar. Kapatmak = alarm-sil; duraklatma Fiyat Alarmlarım'dan.
+function OranDegisimBildirimi({kapsam, nav, kimlik}:{kapsam:"finansman"|"katilma"; nav:any; kimlik:ReturnType<typeof useKpKimlik>}){
+  const [durum,setDurum]=useState<"yukleniyor"|"kapali"|"acik"|"duraklatildi"|"isliyor">("yukleniyor");
+  const [alarmId,setAlarmId]=useState<string|null>(null);
+  const [hata,setHata]=useState("");
+  const kapsamAd = kapsam==="finansman" ? "Finansman" : "Katılma hesabı";
+
+  useEffect(()=>{
+    let iptal=false;
+    setDurum("yukleniyor"); setHata(""); setAlarmId(null);
+    const token=pushTokenAl();
+    if(!token){ setDurum("kapali"); return; }
+    fetch(`${API_BASE}/api/bildirim?islem=alarm-listele`,{
+      method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token, uid: kpAlarmUid}),
+    }).then(r=>r.ok?r.json():null).then(d=>{
+      if(iptal) return;
+      const a=(d?.alarmlar||[]).find((x:any)=>x.tip==="banka_degisim" && x.kapsam===kapsam);
+      setAlarmId(a?a.id:null);
+      setDurum(!a ? "kapali" : (a.aktif ? "acik" : "duraklatildi"));
+    }).catch(()=>{ if(!iptal) setDurum("kapali"); });
+    return ()=>{ iptal=true; };
+  },[kapsam, kimlik.kullanici?.uid]);
+
+  const ac=()=>{
+    if(!kpProGerekliMi(kimlik.pro, nav)) return;   // Pro değilse ProSatinAl'a yönlendirir
+    const token=pushTokenAl();
+    if(!token){
+      let neden=""; try{ neden=localStorage.getItem("kp_push_hata")||""; }catch{}
+      setHata(bildirimHataMesaji(neden));
+      return;
+    }
+    setDurum("isliyor"); setHata("");
+    fetch(`${API_BASE}/api/bildirim?islem=alarm-ekle`,{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({token, uid: kpAlarmUid, sembol:"x", ad:`${kapsamAd} oranları — değişim bildirimi`, tip:"banka_degisim", kapsam}),
+    }).then(r=>r.json().then(d=>({ok:r.ok,d}))).then(({ok,d})=>{
+      if(ok&&d?.basarili){ setAlarmId(d.alarm?.id||null); setDurum("acik"); olayGonder("alarm_kuruldu",{tip:"banka_degisim",kapsam}); }
+      else { setDurum("kapali"); setHata(d?.hata||"Bildirim açılamadı."); }
+    }).catch(()=>{ setDurum("kapali"); setHata("Bağlantı hatası, tekrar deneyin."); });
+  };
+  const kapat=()=>{
+    const token=pushTokenAl();
+    if(!token||!alarmId) return;
+    setDurum("isliyor"); setHata("");
+    fetch(`${API_BASE}/api/bildirim?islem=alarm-sil`,{
+      method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token, id:alarmId, uid:kpAlarmUid}),
+    }).then(()=>{ setAlarmId(null); setDurum("kapali"); }).catch(()=>{ setDurum("acik"); setHata("Bağlantı hatası, tekrar deneyin."); });
+  };
+
+  const acikMi = durum==="acik";
+  return(
+    <div style={{background:acikMi?"rgba(74,222,128,0.08)":WA(0.04),border:`1px solid ${acikMi?"rgba(74,222,128,0.35)":WA(0.1)}`,borderRadius:14,padding:"11px 13px",marginBottom:14,display:"flex",alignItems:"center",gap:10}}>
+      <span style={{fontSize:20,flexShrink:0}}>{acikMi?"🔔":"🔕"}</span>
+      <div style={{flex:1,minWidth:0}}>
+        <p style={{margin:0,fontSize:13,fontWeight:700,color:C.label}}>{CV("Oran değişince haber ver")}</p>
+        <p style={{margin:"2px 0 0",fontSize:11,color:C.sub,lineHeight:1.45}}>
+          {durum==="duraklatildi" ? CV("Duraklatıldı — Fiyat Alarmlarım'dan devam ettirebilirsin.")
+            : acikMi ? CV(`${kapsamAd} tablosunda herhangi bir bankanın oranı değişirse bildirim gelir.`)
+            : CV(`${kapsamAd} tablosunda herhangi bir bankanın herhangi bir oranı değişirse tek bildirimle haber verilir.`)}
+        </p>
+        {hata&&<p style={{margin:"5px 0 0",fontSize:11,color:C.red}}>{hata}</p>}
+      </div>
+      <button onClick={acikMi||durum==="duraklatildi"?kapat:ac} disabled={durum==="yukleniyor"||durum==="isliyor"} style={{
+        flexShrink:0,padding:"8px 12px",borderRadius:10,fontFamily:"inherit",fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",
+        border:acikMi||durum==="duraklatildi"?`1px solid ${WA(0.16)}`:"none",
+        background:acikMi||durum==="duraklatildi"?"transparent":"#3B82F6",
+        color:acikMi||durum==="duraklatildi"?WA(0.65):"#fff",
+      }}>{durum==="yukleniyor"||durum==="isliyor"?"…":(acikMi||durum==="duraklatildi")?CV("Kapat"):CV("Aç")}</button>
+    </div>
+  );
+}
+
 function BankaOranAlarmModal({banka, urunSecenekleri, varsayilanUrun, onClose}:{
   banka:string;
   urunSecenekleri:{key:string; etiket:string}[];
