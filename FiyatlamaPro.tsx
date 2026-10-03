@@ -16900,31 +16900,85 @@ function zekatTarihYaz(gg: string): string {
 // içinde bir filtre (setPiyasaTabloFiltre + nav("piyasaMenu")). Bu yüzden
 // hedef alanı serbest metin tutuluyor, tıklama işleyicisi switch ile
 // yönlendiriyor (aşağıda anaSayfaHeroGit).
-const ANASAYFA_HERO_SAYFALAR: { renk: string; eyebrow: string; baslik: string; sub: string; cta: string; hedef: string }[] = [
+const ANASAYFA_HERO_SAYFALAR: { renk: string; eyebrow: string; baslik: string; sub: string; cta: string; hedef: string; cizim: string }[] = [
   { renk: "#5B9BD8", eyebrow: "",
     baslik: "Hoş geldin",
     sub: "Bugün ne hesaplamak istersin?",
-    cta: "", hedef: "" },
+    cta: "", hedef: "", cizim: "buyume" },
   { renk: "#D4A03C", eyebrow: "Fiziki Altın",
     baslik: "Kapalı Çarşı fiyatları",
     sub: "Gram, çeyrek, yarım ve tam altında canlı alış-satış",
-    cta: "Fiyatları gör", hedef: "altin" },
+    cta: "Fiyatları gör", hedef: "altin", cizim: "altin" },
   { renk: "#2FA36B", eyebrow: "Zekât Hesaplayıcı",
     baslik: "Nisabın üzerinde misin?",
     sub: "Güncel altın fiyatıyla, Diyanet ölçütünde hesapla",
-    cta: "Hesapla", hedef: "zekat" },
+    cta: "Hesapla", hedef: "zekat", cizim: "zekat" },
   { renk: "#4A8BC7", eyebrow: "Taksit Karşılaştırma",
     baslik: "Hangi banka daha uygun?",
     sub: "7 katılım bankasının taksitini yan yana karşılaştır",
-    cta: "Karşılaştır", hedef: "taksitKarsilastirma" },
+    cta: "Karşılaştır", hedef: "taksitKarsilastirma", cizim: "banka" },
   { renk: "#9B6BC4", eyebrow: "Göstergeler",
     baslik: "Piyasayı yönlendiren veriler",
     sub: "TCMB rezervi, PPK takvimi ve enflasyon tek ekranda",
-    cta: "İncele", hedef: "gostergeler" },
+    cta: "İncele", hedef: "gostergeler", cizim: "gosterge" },
   { renk: "#C97B4A", eyebrow: "Katılım Bankacılığı Sözlüğü",
     baslik: "Murabaha, icâre, sukuk",
     sub: "61 terim, sade Türkçe tanımlarla açıklanmış",
-    cta: "Sözlüğe git", hedef: "sozluk" },
+    cta: "Sözlüğe git", hedef: "sozluk", cizim: "kitap" },
+];
+
+// ── HERO ÇİZİMLERİ VE CANLI ÇİPLER (2026-10-03, kullanıcı isteği: "hoş geldin alanı ve diğer sayfaların boş alanı") ──────────────────
+// Her sayfanın SAĞ ÜSTÜNDE sayfanın kendi renginde, iki tonlu degrade bir çizim (filigran: soldan sağa beliren maskeyle, yazının ARKASINDA).
+// Çizimler sabit SVG metinleridir (veri/ağ yok). Gradient/mask kimlikleri çizimler arasında benzersiz (bkz. test) — tek anda tek çizim
+// görünse de ileride iki kart yan yana gelirse kimlik çakışması gradyanları bozmasın.
+const ANASAYFA_HERO_CIZIMLER: Record<string, string> = {
+  buyume: "<svg viewBox=\"0 0 160 130\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><defs>\n<linearGradient id=\"ba\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#5B9BD8\" stop-opacity=\".5\"/><stop offset=\"1\" stop-color=\"#5B9BD8\" stop-opacity=\"0\"/></linearGradient>\n<linearGradient id=\"bl\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\"><stop offset=\"0\" stop-color=\"#94BEE6\"/><stop offset=\"1\" stop-color=\"#4474A2\"/></linearGradient></defs>\n<line x1=\"6\" y1=\"34\" x2=\"154\" y2=\"34\" stroke=\"#5B9BD8\" stroke-opacity=\".22\" stroke-width=\"1\" stroke-dasharray=\"2 4\"/><line x1=\"6\" y1=\"60\" x2=\"154\" y2=\"60\" stroke=\"#5B9BD8\" stroke-opacity=\".22\" stroke-width=\"1\" stroke-dasharray=\"2 4\"/><line x1=\"6\" y1=\"86\" x2=\"154\" y2=\"86\" stroke=\"#5B9BD8\" stroke-opacity=\".22\" stroke-width=\"1\" stroke-dasharray=\"2 4\"/><rect x=\"12\" y=\"108\" width=\"9\" height=\"14\" rx=\"2.5\" fill=\"#5B9BD8\" opacity=\".22\"/><rect x=\"28.2\" y=\"100\" width=\"9\" height=\"22\" rx=\"2.5\" fill=\"#5B9BD8\" opacity=\".22\"/><rect x=\"44.4\" y=\"105\" width=\"9\" height=\"17\" rx=\"2.5\" fill=\"#5B9BD8\" opacity=\".22\"/><rect x=\"60.6\" y=\"95\" width=\"9\" height=\"27\" rx=\"2.5\" fill=\"#5B9BD8\" opacity=\".22\"/><rect x=\"76.8\" y=\"101\" width=\"9\" height=\"21\" rx=\"2.5\" fill=\"#5B9BD8\" opacity=\".22\"/><rect x=\"93\" y=\"90\" width=\"9\" height=\"32\" rx=\"2.5\" fill=\"#5B9BD8\" opacity=\".22\"/><rect x=\"109.2\" y=\"96\" width=\"9\" height=\"26\" rx=\"2.5\" fill=\"#5B9BD8\" opacity=\".22\"/><rect x=\"125.4\" y=\"86\" width=\"9\" height=\"36\" rx=\"2.5\" fill=\"#5B9BD8\" opacity=\".22\"/><rect x=\"141.6\" y=\"92\" width=\"9\" height=\"30\" rx=\"2.5\" fill=\"#5B9BD8\" opacity=\".22\"/>\n<path d=\"M6 98 C24 97 34 78 54 79 S80 58 98 53 S128 32 146 19 L146 124 L6 124Z\" fill=\"url(#ba)\"/>\n<path d=\"M6 98 C24 97 34 78 54 79 S80 58 98 53 S128 32 146 19\" stroke=\"url(#bl)\" stroke-width=\"3.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>\n<circle cx=\"54\" cy=\"79\" r=\"4\" fill=\"#fff\" stroke=\"#5B9BD8\" stroke-width=\"2.2\"/><circle cx=\"98\" cy=\"53\" r=\"4\" fill=\"#fff\" stroke=\"#5B9BD8\" stroke-width=\"2.2\"/>\n<circle cx=\"146\" cy=\"19\" r=\"12\" fill=\"#5B9BD8\" opacity=\".2\"/><circle cx=\"146\" cy=\"19\" r=\"6\" fill=\"#fff\" stroke=\"#5B9BD8\" stroke-width=\"3\"/></svg>",
+  altin: "<svg viewBox=\"0 0 160 130\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><defs><linearGradient id=\"ag\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#F6D77E\"/><stop offset=\"1\" stop-color=\"#C58F1F\"/></linearGradient></defs><ellipse cx=\"80\" cy=\"119\" rx=\"70\" ry=\"6.5\" fill=\"#D4A03C\" opacity=\".18\"/><polygon points=\"68,114 82,105 75,80 61,89\" fill=\"#9A6A12\"/><polygon points=\"12,114 68,114 61,89 19,89\" fill=\"url(#ag)\"/><polygon points=\"19,89 61,89 75,80 33,80\" fill=\"#FCE9A8\"/><line x1=\"20\" y1=\"89\" x2=\"60\" y2=\"89\" stroke=\"#fff\" stroke-opacity=\".65\" stroke-width=\"1.4\" stroke-linecap=\"round\"/><rect x=\"29\" y=\"97.5\" width=\"22\" height=\"3\" rx=\"1.5\" fill=\"#8A5A0C\" opacity=\".35\"/><rect x=\"33\" y=\"103.5\" width=\"14\" height=\"3\" rx=\"1.5\" fill=\"#8A5A0C\" opacity=\".3\"/><polygon points=\"140,114 154,105 147,80 133,89\" fill=\"#9A6A12\"/><polygon points=\"84,114 140,114 133,89 91,89\" fill=\"url(#ag)\"/><polygon points=\"91,89 133,89 147,80 105,80\" fill=\"#FCE9A8\"/><line x1=\"92\" y1=\"89\" x2=\"132\" y2=\"89\" stroke=\"#fff\" stroke-opacity=\".65\" stroke-width=\"1.4\" stroke-linecap=\"round\"/><rect x=\"101\" y=\"97.5\" width=\"22\" height=\"3\" rx=\"1.5\" fill=\"#8A5A0C\" opacity=\".35\"/><rect x=\"105\" y=\"103.5\" width=\"14\" height=\"3\" rx=\"1.5\" fill=\"#8A5A0C\" opacity=\".3\"/><polygon points=\"106,88 120,79 113,54 99,63\" fill=\"#9A6A12\"/><polygon points=\"46,88 106,88 99,63 53,63\" fill=\"url(#ag)\"/><polygon points=\"53,63 99,63 113,54 67,54\" fill=\"#FCE9A8\"/><line x1=\"54\" y1=\"63\" x2=\"98\" y2=\"63\" stroke=\"#fff\" stroke-opacity=\".65\" stroke-width=\"1.4\" stroke-linecap=\"round\"/><rect x=\"65\" y=\"71.5\" width=\"22\" height=\"3\" rx=\"1.5\" fill=\"#8A5A0C\" opacity=\".35\"/><rect x=\"69\" y=\"77.5\" width=\"14\" height=\"3\" rx=\"1.5\" fill=\"#8A5A0C\" opacity=\".3\"/><circle cx=\"136\" cy=\"30\" r=\"5\" fill=\"#F6D77E\" opacity=\".9\"/><circle cx=\"24\" cy=\"42\" r=\"3\" fill=\"#F6D77E\" opacity=\".7\"/><path d=\"M136 18 v-5 M136 47 v5 M120 30 h-5 M152 30 h5\" stroke=\"#F6D77E\" stroke-width=\"2\" stroke-linecap=\"round\" opacity=\".6\"/></svg>",
+  zekat: "<svg viewBox=\"0 0 160 130\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><defs>\n<linearGradient id=\"zg\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\"><stop offset=\"0\" stop-color=\"#82C8A6\"/><stop offset=\".55\" stop-color=\"#2FA36B\"/><stop offset=\"1\" stop-color=\"#21724B\"/></linearGradient>\n<mask id=\"zm\"><rect width=\"160\" height=\"130\" fill=\"#fff\"/><circle cx=\"96\" cy=\"58\" r=\"29\" fill=\"#000\"/></mask></defs>\n<circle cx=\"86\" cy=\"66\" r=\"56\" stroke=\"#2FA36B\" stroke-opacity=\".25\" stroke-width=\"1.4\"/><circle cx=\"86\" cy=\"66\" r=\"44\" stroke=\"#2FA36B\" stroke-opacity=\".2\" stroke-width=\"1.2\" stroke-dasharray=\"3 5\"/>\n<circle cx=\"80\" cy=\"68\" r=\"35\" fill=\"url(#zg)\" mask=\"url(#zm)\"/>\n<path d=\"M58 44 C50 52 47 62 49 72\" stroke=\"#fff\" stroke-opacity=\".5\" stroke-width=\"2.2\" stroke-linecap=\"round\"/>\n<polygon points=\"112,34 114.5,40.6 121.5,40.9 116,45.3 117.9,52.1 112,48.2 106.1,52.1 108,45.3 102.5,40.9 109.5,40.6\" fill=\"url(#zg)\"/>\n<circle cx=\"132\" cy=\"82\" r=\"2.6\" fill=\"#2FA36B\" opacity=\".7\"/><circle cx=\"36\" cy=\"94\" r=\"2.2\" fill=\"#2FA36B\" opacity=\".6\"/><circle cx=\"126\" cy=\"26\" r=\"1.8\" fill=\"#2FA36B\" opacity=\".6\"/></svg>",
+  banka: "<svg viewBox=\"0 0 160 130\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><defs>\n<linearGradient id=\"bg\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#92B9DD\"/><stop offset=\"1\" stop-color=\"#4A8BC7\"/></linearGradient>\n<linearGradient id=\"bp\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\"><stop offset=\"0\" stop-color=\"#92B9DD\"/><stop offset=\"1\" stop-color=\"#34618B\"/></linearGradient></defs>\n<ellipse cx=\"80\" cy=\"121\" rx=\"70\" ry=\"5.5\" fill=\"#4A8BC7\" opacity=\".16\"/>\n<polygon points=\"20,53 80,20 140,53\" fill=\"url(#bp)\"/><polygon points=\"36,49 80,26 124,49\" fill=\"none\" stroke=\"#fff\" stroke-opacity=\".45\" stroke-width=\"1.6\" stroke-linejoin=\"round\"/>\n<circle cx=\"80\" cy=\"40\" r=\"5.5\" fill=\"#fff\" opacity=\".55\"/>\n<rect x=\"20\" y=\"53\" width=\"120\" height=\"8\" rx=\"2\" fill=\"#34618B\"/><rect x=\"30\" y=\"60\" width=\"12\" height=\"40\" rx=\"3\" fill=\"url(#bg)\"/><rect x=\"32\" y=\"62\" width=\"2.6\" height=\"36\" rx=\"1.3\" fill=\"#fff\" opacity=\".4\"/><rect x=\"51\" y=\"60\" width=\"12\" height=\"40\" rx=\"3\" fill=\"url(#bg)\"/><rect x=\"53\" y=\"62\" width=\"2.6\" height=\"36\" rx=\"1.3\" fill=\"#fff\" opacity=\".4\"/><rect x=\"72\" y=\"60\" width=\"12\" height=\"40\" rx=\"3\" fill=\"url(#bg)\"/><rect x=\"74\" y=\"62\" width=\"2.6\" height=\"36\" rx=\"1.3\" fill=\"#fff\" opacity=\".4\"/><rect x=\"93\" y=\"60\" width=\"12\" height=\"40\" rx=\"3\" fill=\"url(#bg)\"/><rect x=\"95\" y=\"62\" width=\"2.6\" height=\"36\" rx=\"1.3\" fill=\"#fff\" opacity=\".4\"/><rect x=\"114\" y=\"60\" width=\"12\" height=\"40\" rx=\"3\" fill=\"url(#bg)\"/><rect x=\"116\" y=\"62\" width=\"2.6\" height=\"36\" rx=\"1.3\" fill=\"#fff\" opacity=\".4\"/>\n<rect x=\"18\" y=\"100\" width=\"124\" height=\"7\" rx=\"2\" fill=\"#34618B\"/><rect x=\"11\" y=\"107\" width=\"138\" height=\"9\" rx=\"2.5\" fill=\"#4A8BC7\"/>\n<circle cx=\"139\" cy=\"24\" r=\"14\" fill=\"#4A8BC7\"/><circle cx=\"139\" cy=\"24\" r=\"14\" stroke=\"#fff\" stroke-opacity=\".5\" stroke-width=\"2\"/><path d=\"M132.5 24.5 l4.8 4.8 9-10.5\" stroke=\"#fff\" stroke-width=\"3.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>",
+  gosterge: "<svg viewBox=\"0 0 160 130\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><defs>\n<linearGradient id=\"gg\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\"><stop offset=\"0\" stop-color=\"#BE9FD9\"/><stop offset=\"1\" stop-color=\"#6C4B89\"/></linearGradient></defs>\n<rect x=\"12\" y=\"32\" width=\"136\" height=\"88\" rx=\"14\" fill=\"#9B6BC4\" opacity=\".1\"/><rect x=\"12.6\" y=\"32.6\" width=\"134.8\" height=\"86.8\" rx=\"13.4\" stroke=\"#9B6BC4\" stroke-opacity=\".28\" stroke-width=\"1.2\"/>\n<line x1=\"28\" y1=\"102\" x2=\"22\" y2=\"102\" stroke=\"#9B6BC4\" stroke-opacity=\"0.55\" stroke-width=\"2.2\" stroke-linecap=\"round\"/><line x1=\"29.8\" y1=\"88.5\" x2=\"26.9\" y2=\"87.8\" stroke=\"#9B6BC4\" stroke-opacity=\"0.32\" stroke-width=\"1.6\" stroke-linecap=\"round\"/><line x1=\"35\" y1=\"76\" x2=\"32.4\" y2=\"74.5\" stroke=\"#9B6BC4\" stroke-opacity=\"0.32\" stroke-width=\"1.6\" stroke-linecap=\"round\"/><line x1=\"43.2\" y1=\"65.2\" x2=\"39\" y2=\"61\" stroke=\"#9B6BC4\" stroke-opacity=\"0.55\" stroke-width=\"2.2\" stroke-linecap=\"round\"/><line x1=\"54\" y1=\"57\" x2=\"52.5\" y2=\"54.4\" stroke=\"#9B6BC4\" stroke-opacity=\"0.32\" stroke-width=\"1.6\" stroke-linecap=\"round\"/><line x1=\"66.5\" y1=\"51.8\" x2=\"65.8\" y2=\"48.9\" stroke=\"#9B6BC4\" stroke-opacity=\"0.32\" stroke-width=\"1.6\" stroke-linecap=\"round\"/><line x1=\"80\" y1=\"50\" x2=\"80\" y2=\"44\" stroke=\"#9B6BC4\" stroke-opacity=\"0.55\" stroke-width=\"2.2\" stroke-linecap=\"round\"/><line x1=\"93.5\" y1=\"51.8\" x2=\"94.2\" y2=\"48.9\" stroke=\"#9B6BC4\" stroke-opacity=\"0.32\" stroke-width=\"1.6\" stroke-linecap=\"round\"/><line x1=\"106\" y1=\"57\" x2=\"107.5\" y2=\"54.4\" stroke=\"#9B6BC4\" stroke-opacity=\"0.32\" stroke-width=\"1.6\" stroke-linecap=\"round\"/><line x1=\"116.8\" y1=\"65.2\" x2=\"121\" y2=\"61\" stroke=\"#9B6BC4\" stroke-opacity=\"0.55\" stroke-width=\"2.2\" stroke-linecap=\"round\"/><line x1=\"125\" y1=\"76\" x2=\"127.6\" y2=\"74.5\" stroke=\"#9B6BC4\" stroke-opacity=\"0.32\" stroke-width=\"1.6\" stroke-linecap=\"round\"/><line x1=\"130.2\" y1=\"88.5\" x2=\"133.1\" y2=\"87.8\" stroke=\"#9B6BC4\" stroke-opacity=\"0.32\" stroke-width=\"1.6\" stroke-linecap=\"round\"/><line x1=\"132\" y1=\"102\" x2=\"138\" y2=\"102\" stroke=\"#9B6BC4\" stroke-opacity=\"0.55\" stroke-width=\"2.2\" stroke-linecap=\"round\"/>\n<path d=\"M38 102 A42 42 0 0 1 122 102\" stroke=\"#9B6BC4\" stroke-opacity=\".22\" stroke-width=\"10\" stroke-linecap=\"round\"/>\n<path d=\"M38 102 A42 42 0 0 1 104.1 67.6\" stroke=\"url(#gg)\" stroke-width=\"10\" stroke-linecap=\"round\"/>\n<line x1=\"80\" y1=\"102\" x2=\"99.5\" y2=\"74.1\" stroke=\"#6C4B89\" stroke-width=\"3.6\" stroke-linecap=\"round\"/><circle cx=\"80\" cy=\"102\" r=\"7\" fill=\"#fff\" stroke=\"#6C4B89\" stroke-width=\"3.2\"/>\n<rect x=\"30\" y=\"108\" width=\"14\" height=\"4\" rx=\"2\" fill=\"#9B6BC4\" opacity=\".35\"/><rect x=\"116\" y=\"108\" width=\"14\" height=\"4\" rx=\"2\" fill=\"#9B6BC4\" opacity=\".35\"/></svg>",
+  kitap: "<svg viewBox=\"0 0 160 130\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\"><defs>\n<linearGradient id=\"kl\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\"><stop offset=\"0\" stop-color=\"#E7C4AE\"/><stop offset=\"1\" stop-color=\"#fff\" stop-opacity=\".92\"/></linearGradient>\n<linearGradient id=\"kr\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\"><stop offset=\"0\" stop-color=\"#fff\" stop-opacity=\".92\"/><stop offset=\"1\" stop-color=\"#E7C4AE\"/></linearGradient></defs>\n<ellipse cx=\"80\" cy=\"119\" rx=\"68\" ry=\"5.5\" fill=\"#C97B4A\" opacity=\".18\"/>\n<path d=\"M80 40 C64 28 38 26 16 33 L16 107 C38 100 64 102 80 113Z\" fill=\"#C97B4A\" opacity=\".95\"/><path d=\"M80 40 C96 28 122 26 144 33 L144 107 C122 100 96 102 80 113Z\" fill=\"#8D5634\" opacity=\".95\"/>\n<path d=\"M80 36 C65 25 41 23 21 29 L21 101 C41 95 65 97 80 108Z\" fill=\"url(#kl)\"/><path d=\"M80 36 C95 25 119 23 139 29 L139 101 C119 95 95 97 80 108Z\" fill=\"url(#kr)\"/>\n<path d=\"M80 36 V108\" stroke=\"#8D5634\" stroke-opacity=\".45\" stroke-width=\"1.6\"/>\n<g stroke=\"#8D5634\" stroke-opacity=\".38\" stroke-width=\"2.6\" stroke-linecap=\"round\"><path d=\"M31 46 C42 43 56 43 69 47\"/><path d=\"M31 57 C42 54 56 54 69 58\"/><path d=\"M31 68 C42 65 56 65 69 69\"/><path d=\"M31 79 C42 76 52 76 60 78\"/></g>\n<rect x=\"91\" y=\"42\" width=\"38\" height=\"8\" rx=\"3.5\" fill=\"#C97B4A\" opacity=\".85\"/>\n<g stroke=\"#8D5634\" stroke-opacity=\".38\" stroke-width=\"2.6\" stroke-linecap=\"round\"><path d=\"M91 60 C102 57 116 57 129 61\"/><path d=\"M91 71 C102 68 116 68 129 72\"/><path d=\"M91 82 C102 79 112 79 120 81\"/></g>\n<path d=\"M118 21 V47 L124.5 41.5 L131 47 V24Z\" fill=\"#8D5634\"/></svg>",
+};
+
+// CANLI ÇİP: CTA'nın karşısındaki küçük bilgi. Veri yoksa çip HİÇ gösterilmez (boş/yanlış sayı yok). Kaynaklar:
+//  • altın  → /api/gecmis?sembol=GRAM_ALTIN (Piyasa Özeti kartıyla AYNI uç: aynı fiyat, aynı günlük değişim)
+//  • zekât  → aynı yanıtın `alis` alanı × nisap gramı (Zekât Hesaplayıcı da has altın ALIŞ fiyatını kullanır)
+//  • göstergeler → App'in evdsMakro.TUFE_YILLIK değeri (ek istek yok)
+//  • sözlük → SOZLUK_DATA'dan günün terimi (gün numarasına göre; her gün değişir, yeni veri gerekmez)
+type HeroCanli = { etiket: string; deger: string; yuzde?: string; yon?: "y" | "a" };
+type HeroVeri = { gram: { fiyat: number | null; onceki: number | null; alis: number | null } | null; tufeYillik: number | null };
+function heroSayiTR(n: number, d: number): string { return n.toLocaleString("tr-TR", { minimumFractionDigits: d, maximumFractionDigits: d }); }
+function heroGunlukTerim(bugun: Date = new Date()): string {
+  const n = SOZLUK_DATA.length;
+  const gunNo = Math.floor(Date.UTC(bugun.getFullYear(), bugun.getMonth(), bugun.getDate()) / 86400000);
+  return SOZLUK_DATA[((gunNo % n) + n) % n].terim;
+}
+function heroCanliBilgi(hedef: string, v: HeroVeri, bugun: Date = new Date()): HeroCanli | null {
+  if (hedef === "altin") {
+    const g = v.gram;
+    if (!g || !(g.fiyat != null && g.fiyat > 0)) return null;
+    const c: HeroCanli = { etiket: "Gram altın", deger: `${heroSayiTR(g.fiyat, 2)} ₺` };
+    if (g.onceki != null && g.onceki > 0) { const p = ((g.fiyat - g.onceki) / g.onceki) * 100; c.yuzde = `${p >= 0 ? "▲" : "▼"} %${heroSayiTR(Math.abs(p), 2)}`; c.yon = p >= 0 ? "y" : "a"; }
+    return c;
+  }
+  if (hedef === "zekat") {
+    const a = v.gram ? v.gram.alis : null;
+    if (!(a != null && a > 0)) return null;
+    return { etiket: "Nisap bugün", deger: `≈ ${Math.round(ZEKAT_NISAP_GRAM * a).toLocaleString("tr-TR")} ₺` };
+  }
+  if (hedef === "taksitKarsilastirma") return { etiket: "Karşılaştırılan", deger: "7 banka" };
+  if (hedef === "gostergeler") {
+    if (v.tufeYillik == null || !isFinite(v.tufeYillik)) return null;
+    return { etiket: "TÜFE yıllık", deger: `%${heroSayiTR(v.tufeYillik, 2)}` };
+  }
+  if (hedef === "sozluk") return { etiket: "Günün terimi", deger: heroGunlukTerim(bugun) };
+  return null;
+}
+// Karşılama sayfasının kısayolları (CTA yok → alt satır boş kalıyordu). Zekât bilerek YOK (kendi sayfası var).
+const ANASAYFA_HERO_KISAYOLLAR: { hedef: string; ad: string; ikon: string }[] = [
+  { hedef: "hesapla", ad: "Hesapla", ikon: "M4 4h16v16H4z M8 8h8 M8 12h.01 M12 12h.01 M16 12h.01 M8 16h.01 M12 16h.01 M16 16h.01" },
+  { hedef: "portfoyum", ad: "Portföyüm", ikon: "M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0 0 4h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5 M16.5 14h.01" },
+  { hedef: "hisseIzleme", ad: "Hisse İzleme", ikon: "M3 17l6-6 4 4 8-8 M15 7h6v6" },
 ];
 
 // Tek kutu, sabit çerçeve — içindeki sayfa key={idx} ile yeniden monte olup
@@ -16967,8 +17021,25 @@ function heroCtaMetinRengi(hex: string): string {
   return parlaklik > 0.6 ? "#0B1620" : "#FFFFFF";
 }
 
-function AnaSayfaHeroSerit({ git, selamlama, bugunMetni, kullaniciAdi, genisEkran }: { git: (hedef: string) => void; selamlama: string; bugunMetni: string; kullaniciAdi?: string; genisEkran?: boolean }) {
+function AnaSayfaHeroSerit({ git, selamlama, bugunMetni, kullaniciAdi, genisEkran, tufeYillik }: { git: (hedef: string) => void; selamlama: string; bugunMetni: string; kullaniciAdi?: string; genisEkran?: boolean; tufeYillik?: number | null }) {
   const [idx, setIdx] = useState(0);
+  // Canlı çipler için gram altın (altın + zekât sayfaları) — tek istek, Piyasa Özeti ile aynı uç (CDN/Redis önbellekli)
+  const [gram, setGram] = useState<HeroVeri["gram"]>(null);
+  useEffect(() => {
+    let iptal = false;
+    fetch(`${API_BASE}/api/gecmis?sembol=GRAM_ALTIN`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (iptal || !d) return;
+        setGram({
+          fiyat: typeof d.guncelFiyat === "number" ? d.guncelFiyat : null,
+          onceki: typeof d.oncekiKapanis === "number" ? d.oncekiKapanis : null,
+          alis: typeof d.alis === "number" ? d.alis : null,
+        });
+      })
+      .catch(() => {});
+    return () => { iptal = true; };
+  }, []);
   const dokunuldu = useRef<number | null>(null);
   const surukleniyor = useRef(false);
 
@@ -17040,7 +17111,15 @@ function AnaSayfaHeroSerit({ git, selamlama, bugunMetni, kullaniciAdi, genisEkra
         <div key={idx} className="hero-page-anim" style={{
           position: "absolute", inset: 0, padding: genisEkran ? "19px 24px 17px" : "17px 18px 15px",
           display: "flex", flexDirection: "column",
+          isolation: "isolate",   // filigran (zIndex:-1) YAZININ arkasında, kart zemininin ÖNÜNDE kalsın
         }}>
+          {/* FİLİGRAN ÇİZİM: sağ üst, sayfanın renginde; soldan sağa beliren maske → yazıyla çakışsa da okunurluğu bozmaz */}
+          <div aria-hidden="true" style={{
+            position: "absolute", zIndex: -1, pointerEvents: "none",
+            right: genisEkran ? 14 : 8, top: genisEkran ? 12 : 10, width: genisEkran ? 132 : 118, height: genisEkran ? 108 : 97,
+            opacity: acikTema ? 0.9 : 0.95,
+            WebkitMaskImage: "linear-gradient(90deg, transparent 0%, #000 44%)", maskImage: "linear-gradient(90deg, transparent 0%, #000 44%)",
+          } as any} dangerouslySetInnerHTML={{ __html: (ANASAYFA_HERO_CIZIMLER[s.cizim] || "").replace("<svg ", '<svg style="display:block;width:100%;height:100%" ') }} />
           <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 9, flexShrink: 0 }}>
             <span style={{ width: 3, height: 11, borderRadius: 2, background: s.renk, flexShrink: 0 }} />
             <span style={{
@@ -17081,23 +17160,58 @@ function AnaSayfaHeroSerit({ git, selamlama, bugunMetni, kullaniciAdi, genisEkra
               üste binme yapısal olarak imkansız. Zemin sayfanın accent rengi,
               metin ve ok butonun içinde. Metin rengi sabit beyaz değil,
               kontrasta göre seçiliyor (bkz. heroCtaMetinRengi). */}
+          {/* ALT SATIR: karşılamada kısayollar; diğer sayfalarda CTA + (varsa) canlı çip. marginTop:auto → içerik uzunluğu ne olursa olsun üst üste binme yok */}
+          {karsilama && (
+            <div style={{ marginTop: "auto", display: "flex", gap: 7, flexShrink: 0 }}>
+              {ANASAYFA_HERO_KISAYOLLAR.map((k) => (
+                <div key={k.hedef} role="button"
+                  onClick={(e) => { e.stopPropagation(); git(k.hedef); }}
+                  onTouchStart={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()}
+                  style={{
+                    flex: 1, minWidth: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, cursor: "pointer",
+                    background: acikTema ? "rgba(22,34,46,0.06)" : "rgba(255,255,255,0.08)", borderRadius: 12,
+                    padding: genisEkran ? "9px 6px" : "8px 4px", fontSize: genisEkran ? 12.5 : 12, fontWeight: 700, whiteSpace: "nowrap",
+                    color: acikTema ? "#16222E" : "#F2F7FC",
+                  }}>
+                  <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={s.renk} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d={k.ikon} /></svg>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{CV(k.ad)}</span>
+                </div>
+              ))}
+            </div>
+          )}
           {s.cta && (() => {
             const metinRengi = heroCtaMetinRengi(s.renk);
+            const canli = heroCanliBilgi(s.hedef, { gram, tufeYillik: tufeYillik ?? null });
+            const dar = typeof window !== "undefined" && window.innerWidth < 350;
             return (
-              <div style={{
-                marginTop: "auto", display: "inline-flex", alignItems: "center",
-                gap: genisEkran ? 8 : 7, alignSelf: "flex-start", flexShrink: 0,
-                background: s.renk, borderRadius: 8,
-                padding: genisEkran ? "7px 13px" : "6px 11px",
-                fontSize: genisEkran ? 11.5 : 11, fontWeight: 700,
-                color: metinRengi, letterSpacing: "-0.01em", whiteSpace: "nowrap",
-              }}>
-                {CV(s.cta)}
-                <svg width={genisEkran ? 13 : 12} height={genisEkran ? 13 : 12} viewBox="0 0 24 24"
-                  fill="none" stroke={metinRengi} strokeWidth={2.5}
-                  strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                  <path d="M4 12h14M13 6l6 6-6 6" />
-                </svg>
+              <div style={{ marginTop: "auto", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexShrink: 0 }}>
+                <div style={{
+                  display: "inline-flex", alignItems: "center", flexShrink: 0,
+                  gap: genisEkran ? 8 : 7,
+                  background: s.renk, borderRadius: 8,
+                  padding: genisEkran ? "7px 13px" : "6px 11px",
+                  fontSize: genisEkran ? 11.5 : 11, fontWeight: 700,
+                  color: metinRengi, letterSpacing: "-0.01em", whiteSpace: "nowrap",
+                }}>
+                  {CV(s.cta)}
+                  <svg width={genisEkran ? 13 : 12} height={genisEkran ? 13 : 12} viewBox="0 0 24 24"
+                    fill="none" stroke={metinRengi} strokeWidth={2.5}
+                    strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                    <path d="M4 12h14M13 6l6 6-6 6" />
+                  </svg>
+                </div>
+                {canli && (
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: 6, minWidth: 0, overflow: "hidden",
+                    background: acikTema ? "rgba(22,34,46,0.06)" : "rgba(255,255,255,0.08)", borderRadius: 10,
+                    padding: "5px 9px", fontSize: genisEkran ? 12 : 11.5, fontWeight: 700, whiteSpace: "nowrap",
+                    color: acikTema ? "#16222E" : "#F2F7FC",
+                  }}>
+                    {!dar && <span style={{ fontSize: 10, fontWeight: 600, color: acikTema ? "#46617A" : WA(0.62) }}>{CV(canli.etiket)}</span>}
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", maxWidth: 150 }}>{canli.deger}</span>
+                    {canli.yuzde && <span style={{ color: canli.yon === "y" ? C.green : C.red }}>{canli.yuzde}</span>}
+                  </div>
+                )}
               </div>
             );
           })()}
@@ -32280,12 +32394,16 @@ function App(){
                 (iki ayrı dal — biri değişirse diğeri etkilenmesin). */}
             {(()=>{
               const hero = (
-                <AnaSayfaHeroSerit selamlama={TR(selamlama)} bugunMetni={kisaTarihStr} kullaniciAdi={kullaniciAdi} genisEkran={genisEkran} git={(hedef) => {
+                <AnaSayfaHeroSerit selamlama={TR(selamlama)} bugunMetni={kisaTarihStr} kullaniciAdi={kullaniciAdi} genisEkran={genisEkran} tufeYillik={typeof evdsMakro?.TUFE_YILLIK?.deger === "number" ? evdsMakro.TUFE_YILLIK.deger : null} git={(hedef) => {
                   if (hedef === "altin") { setPiyasaTabloFiltre("altin"); nav("piyasaMenu"); }
                   else if (hedef === "gostergeler") { setPiyasaTabloFiltre("gostergeler"); nav("piyasaMenu"); }
                   else if (hedef === "zekat") { nav("zekatHesabi"); }
                   else if (hedef === "taksitKarsilastirma") { nav("taksitKarsilastirma"); }
                   else if (hedef === "sozluk") { nav("sozluk"); }
+                  // Karşılama kısayolları (2026-10-03)
+                  else if (hedef === "hesapla") { nav("hesaplaMenu"); }
+                  else if (hedef === "portfoyum") { nav("portfoyum"); }
+                  else if (hedef === "hisseIzleme") { nav("bistHisseTarayici"); }
                 }} />
               );
               // ⚠️ 2026-09-15 (kullanıcı isteği): BİST 100/30 kartı buradan
