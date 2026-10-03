@@ -17112,7 +17112,7 @@ function ekHesapla(g: any): any {
   // g: {tur:"ticari"|"konut"|"diger", aralik:"a1".."a4", doviz:"TL"|"YP", yapi:"sabit"|"degisken", anapara,
   //     kapama:Date|null, vadeSonu:Date|null, periyot, aovTipi:"tarih"|"manuel", aovManuel, oranTipi, oran, indirim, bsmvOran}
   const P: number = g.anapara;
-  const r: any = { komisyon: 0, oran: 0, bsmv: 0, toplam: 0, adimlar: [] as string[], gecerli: true, eksik: null };
+  const r: any = { komisyon: 0, oran: 0, bsmv: 0, toplam: 0, adimlar: [] as string[], gecerli: true, eksik: null, aov: null, bilesik: null };
   if (!(P > 0)) { r.gecerli = false; r.eksik = "anapara"; return r; }
   if (g.tur === "diger") {
     r.adimlar.push("Tüketici kredilerinde (ihtiyaç, taşıt vb.) kanunda erken ödeme tazminatı öngörülmemiştir; yalnızca faiz/kâr payı indirimi yapılır.");
@@ -17160,6 +17160,7 @@ function ekHesapla(g: any): any {
   } else {
     const k: number = manuelAov ? g.aovManuel : (plan as any).aov;
     if (!(k > 0)) { r.gecerli = false; r.eksik = "aov"; return r; }
+    r.aov = k;   // sonuç ekranında "Ağırlıklı ortalama vade" satırı için
     const ks = ekSayi2(k);
     if (g.doviz === "YP") {
       const taban2 = ar === "a3" ? 2 : 3, kat = ar === "a3" ? 0.15 : 0.10;
@@ -17168,6 +17169,7 @@ function ekHesapla(g: any): any {
     } else {
       if (!(g.oran > 0)) { r.gecerli = false; r.eksik = "oran"; return r; }
       const f = ekBilesikYillik(g.oran, g.oranTipi);
+      r.bilesik = f;
       r.oran = f * 0.05 + k * 0.20;
       r.adimlar.push("Sabit kâr paylı TL: yıllık bileşik oran (%" + ekSayi2(f) + ") × %5 + ağırlıklı ortalama vade (" + ks + " ay) × %0,20 = %" + ekOran4(r.oran));
     }
@@ -17176,6 +17178,80 @@ function ekHesapla(g: any): any {
   r.bsmv = r.komisyon * (g.bsmvOran || 0) / 100;
   r.toplam = r.komisyon + r.bsmv;
   return r;
+}
+
+// ═══ SONUÇ EKRANI + RAPOR (2026-10-03) — satır üreticileri (saf fonksiyonlar) ═══════════
+// Sonuç ekranı ve uygulamadaki ortak "📤 Rapor / Paylaş" penceresi (RaporModal) AYNI satırları kullanır.
+// BSMV YALNIZCA ticaride ve komisyon > 0 iken gösterilir (konut/taşıtta uygulanmaz → etiketlerde de geçmez).
+const EK_TUR: Record<string, string> = { ticari: "Ticari", konut: "Konut (bireysel)", diger: "Taşıt / İhtiyaç" };
+const EK_ARALIK: Record<string, string> = { a4: "06.01.2025 ve sonrası", a3: "01.07.2024 – 05.01.2025", a2: "01.03.2021 – 30.06.2024", a1: "01.03.2021 öncesi" };
+const EK_PERIYOT: Record<string, string> = { "1": "Aylık", "3": "3 aylık", "6": "6 aylık", "12": "Yıllık", "0": "Vade sonunda tek ödeme" };
+const EK_ORANTIP: Record<string, string> = { aylik: "aylık", basit: "yıllık basit", bilesik: "yıllık bileşik" };
+const ekFmt = (v: number, d: number) => v.toLocaleString("tr-TR", { minimumFractionDigits: d, maximumFractionDigits: d });
+function ekTarihTR(d: Date): string {
+  return String(d.getUTCDate()).padStart(2, "0") + "." + String(d.getUTCMonth() + 1).padStart(2, "0") + "." + d.getUTCFullYear();
+}
+function ekBirim(g: any): string { return (g.tur === "ticari" && g.doviz === "YP") ? "döviz" : "₺"; }
+
+function ekKrediBilgileri(g: any, r: any): [string, string][] {
+  const s: [string, string][] = [];
+  const ticari = g.tur === "ticari", eski = ticari && (g.aralik === "a1" || g.aralik === "a2");
+  const sabitT = ticari && !eski && g.yapi === "sabit", birim = ekBirim(g);
+  s.push(["Finansman türü", EK_TUR[g.tur]]);
+  if (ticari) {
+    s.push(["Kullandırım tarihi aralığı", EK_ARALIK[g.aralik]]);
+    s.push(["Para birimi", g.doviz === "YP" ? "Döviz / Dövize endeksli" : "Türk lirası"]);
+  }
+  if (g.tur !== "diger" && !eski) s.push(["Kâr payı yapısı", g.yapi === "sabit" ? "Sabit" : "Değişken"]);
+  s.push(["Erken ödenen anapara", birim + " " + ekFmt(g.anapara, 0)]);   // ANAPARA: ondalıksız
+  if (g.tur !== "diger" && g.kapama) s.push(["Erken kapama tarihi", ekTarihTR(g.kapama)]);
+  if (g.tur !== "diger" && g.vadeSonu) s.push(["Vade sonu tarihi", ekTarihTR(g.vadeSonu)]);
+  if (g.tur !== "diger" && g.kapama && g.vadeSonu && g.vadeSonu.getTime() > g.kapama.getTime()) s.push(["Kalan vade", ekVadeMetni(g.kapama, g.vadeSonu)]);
+  if (sabitT && g.aovTipi === "tarih") {
+    const pl = ekPlanOlustur(g.kapama, g.vadeSonu, g.periyot);
+    s.push(["Taksit periyodu", EK_PERIYOT[String(g.periyot)]]);
+    if (pl) s.push(["Kalan taksit sayısı", String(pl.n)]);
+  }
+  if (sabitT && r.aov != null) s.push(["Ağırlıklı ortalama vade", ekSayi2(r.aov) + " ay" + (g.aovTipi === "manuel" ? " (elle girildi)" : "")]);
+  if (sabitT && g.doviz === "TL" && g.oran > 0) {
+    s.push(["Kâr oranı", "%" + g.oran.toLocaleString("tr-TR", { maximumFractionDigits: 4 }) + " " + EK_ORANTIP[g.oranTipi]]);
+    if (r.bilesik != null && g.oranTipi !== "bilesik") s.push(["Yıllık bileşik oran", "%" + ekSayi2(r.bilesik)]);
+  }
+  if (g.tur === "konut" && g.yapi === "sabit" && g.indirim > 0) s.push(["Toplam indirim tutarı", "₺ " + ekFmt(g.indirim, 2)]);
+  return s;
+}
+
+function ekHesapSatirlari(g: any, r: any): [string, string, boolean?][] {
+  const birim = ekBirim(g), s: [string, string, boolean?][] = [];
+  const bsmvVar = g.tur === "ticari" && r.komisyon > 0;
+  s.push(["Uygulanan azami oran", r.komisyon > 0 ? "%" + ekOran4(r.oran) : "—"]);
+  s.push(["Komisyon", birim + " " + ekFmt(r.komisyon, 2)]);
+  if (bsmvVar) {
+    s.push(["BSMV (%" + g.bsmvOran + ")", birim + " " + ekFmt(r.bsmv, 2)]);
+    s.push(["Komisyon + BSMV", birim + " " + ekFmt(r.toplam, 2)]);
+  }
+  s.push([bsmvVar ? "Anapara + komisyon + BSMV" : "Anapara + komisyon", birim + " " + ekFmt(g.anapara + r.toplam, 2), true]);
+  return s;
+}
+
+// Raporda uzun formül metni satırı bozmasın diye KISA kural adı (uzun açıklama sonuç ekranında)
+function ekKuralKisa(g: any): string {
+  if (g.tur === "diger") return "Erken ödeme tazminatı öngörülmemiş";
+  if (g.tur === "konut") return g.yapi === "degisken" ? "Değişken oran: tazminat alınamaz" : "Kalan vade ≤36 ay %1, >36 ay %2";
+  if (g.aralik === "a1") return "Kalan vade ≤24 ay %1, >24 ay %2 (döviz +1 puan)";
+  if (g.aralik === "a2") return "≤24 ay %2; aşan her yıl için +%1 (döviz taban %3)";
+  if (g.yapi === "degisken") return "Değişken oran: azami %2";
+  if (g.doviz === "YP") return g.aralik === "a3" ? "%2 + vade × %0,15" : "%3 + vade × %0,10";
+  return "Bileşik oran × %5 + vade × %0,20";
+}
+
+// RaporModal'ın beklediği biçim: [{label, value, big?}]
+function ekRaporSatirlari(g: any, r: any): { label: string; value: string; big?: boolean }[] {
+  const s: { label: string; value: string; big?: boolean }[] = [];
+  ekKrediBilgileri(g, r).forEach((x) => s.push({ label: x[0], value: x[1] }));
+  s.push({ label: "Uygulanan kural", value: ekKuralKisa(g) });
+  ekHesapSatirlari(g, r).forEach((x) => s.push({ label: x[0], value: x[1], big: !!x[2] }));
+  return s;
 }
 
 // ── Seçenek listeleri (alana DOKUNUNCA alttan açılan pencerede gösterilir) ──────
@@ -17285,7 +17361,62 @@ function EkOranAlani({ etiket, deger, onDeger, ek, ipucu, placeholder }: { etike
 
 const ekBugunISO = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
 
-function ErkenKapamaKomisyonu({ s }: { s?: any }) {
+function EkBolum({ baslik, satirlar, mono }: { baslik: string; satirlar: [string, string, boolean?][]; mono?: boolean }) {
+  return (
+    <div style={{ background: WA(0.05), border: `1px solid ${C.border}`, borderRadius: 14, padding: "4px 14px", marginBottom: 12 }}>
+      <p style={{ margin: "12px 0 4px", fontSize: 12, fontWeight: 700, color: C.sub, letterSpacing: 0.3 }}>{baslik}</p>
+      {satirlar.map((x, i) => (
+        <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "9px 0", borderTop: i === 0 ? "none" : `1px solid ${C.border}`, fontSize: 13 }}>
+          <span style={{ color: x[2] ? C.label : C.sub, fontWeight: x[2] ? 600 : 400 }}>{x[0]}</span>
+          <span style={{ fontWeight: 600, textAlign: "right", color: x[2] ? C.blue : C.label, fontSize: x[2] ? 15 : 13, fontFamily: mono ? "monospace" : "inherit" }}>{x[1]}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── SONUÇ EKRANI (2026-10-03, kullanıcı isteği): hesaplama bilgilerinin tamamı + Paylaş ──────
+// Alttan açılan sheet; üst kenarı güvenli alanın ALTINDA (Ödeme Planı düzeltmesiyle aynı formül).
+// zIndex 200: RaporModal (300) bunun ÜSTÜNDE açılır. Paylaş: Pro üyede normal; ücretsizde "PRO" rozeti.
+function EkSonucEkrani({ g, r, proDegil, onKapat, onPaylas }: { g: any; r: any; proDegil: boolean; onKapat: () => void; onPaylas: () => void }) {
+  const birim = ekBirim(g);
+  return (
+    <div onClick={onKapat} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", zIndex: 200, display: "flex", alignItems: "flex-end", ...(ekranZoomTersi() !== 1 ? { zoom: ekranZoomTersi() } : {}) }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: C.card, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 680, margin: "0 auto",
+        height: "calc(100dvh - max(4dvh, calc(env(safe-area-inset-top,0px) + 8px)))", display: "flex", flexDirection: "column" }}>
+        <div style={{ padding: "16px 18px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
+          <span style={{ fontSize: 17, fontWeight: 700, color: C.label }}>📄 Erken Kapama Sonucu</span>
+          <button type="button" onClick={onKapat} aria-label="Kapat" style={{ background: WA(0.1), border: "none", width: 36, height: 36, borderRadius: 18, fontSize: 22, cursor: "pointer", color: C.label }}>×</button>
+        </div>
+        <div style={{ flex: 1, overflowY: "auto", padding: "14px 14px 18px" }}>
+          <div style={{ borderRadius: 16, padding: 16, background: "linear-gradient(135deg,#1F4E7A,#2E6DA8)", color: "#fff", marginBottom: 12 }}>
+            <div style={{ fontSize: 12, opacity: 0.85 }}>Azami erken kapama komisyonu</div>
+            <div style={{ fontSize: 28, fontWeight: 700, fontFamily: "monospace", margin: "2px 0" }}>{birim} {ekFmt(r.komisyon, 2)}</div>
+            <div style={{ fontSize: 12.5, opacity: 0.9 }}>{r.komisyon > 0 ? `Uygulanan azami oran: %${ekOran4(r.oran)}` : "Bu durumda komisyon alınmaz"}</div>
+          </div>
+          <EkBolum baslik="KREDİ BİLGİLERİ" satirlar={ekKrediBilgileri(g, r)} />
+          <EkBolum baslik="HESAPLAMA" satirlar={ekHesapSatirlari(g, r)} mono />
+          <div style={{ background: WA(0.05), border: `1px solid ${C.border}`, borderRadius: 14, padding: "4px 14px 12px", marginBottom: 12 }}>
+            <p style={{ margin: "12px 0 6px", fontSize: 12, fontWeight: 700, color: C.sub, letterSpacing: 0.3 }}>NASIL HESAPLANDI</p>
+            <p style={{ margin: 0, fontSize: 12.5, color: C.sub, lineHeight: 1.65 }}>{r.adimlar.join(" ")}</p>
+          </div>
+          <KararNot tur="uyari">
+            {CV("Bu tutar bankanın alabileceği üst sınırdır; banka daha düşük uygulayabilir. Hesap, kredinin tamamının erken kapatılması içindir. Kaynak: TCMB 2020/4 Tebliğ m.11 ve uygulama talimatı; konut için 6502 sayılı Kanun m.37.")}
+          </KararNot>
+        </div>
+        <div style={{ flexShrink: 0, padding: "12px 18px calc(14px + env(safe-area-inset-bottom,0px))", borderTop: `1px solid ${C.border}` }}>
+          <button type="button" onClick={onPaylas} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: 15, borderRadius: 14, border: "none",
+            background: C.blue, color: "#fff", fontFamily: "inherit", fontWeight: 700, fontSize: 16, cursor: "pointer", boxShadow: "0 4px 14px rgba(28,58,94,0.3)" }}>
+            <span>📤 Paylaş</span>
+            {proDegil && <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.4, background: "#D8A94E", color: "#3A2A06", borderRadius: 6, padding: "2px 6px" }}>PRO</span>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ErkenKapamaKomisyonu({ s, kimlik, nav }: { s?: any; kimlik?: any; nav?: (ekran: string) => void }) {
   const [tur, setTur] = useState("ticari");
   const [aralik, setAralik] = useState("a4");
   const [doviz, setDoviz] = useState("TL");
@@ -17300,6 +17431,8 @@ function ErkenKapamaKomisyonu({ s }: { s?: any }) {
   const [oran, setOran] = useState("");
   const [indirim, setIndirim] = useState("");
   const [sheet, setSheet] = useState<string | null>(null);
+  const [sonucAcik, setSonucAcik] = useState(false);
+  const [raporAcik, setRaporAcik] = useState(false);
 
   const ticari = tur === "ticari", konut = tur === "konut", diger = tur === "diger";
   const eski = ticari && (aralik === "a1" || aralik === "a2");
@@ -17321,6 +17454,15 @@ function ErkenKapamaKomisyonu({ s }: { s?: any }) {
     else if (anahtar === "yapi") setYapi(v); else if (anahtar === "periyot") setPeriyot(v); else if (anahtar === "aovTipi") setAovTipi(v);
     else if (anahtar === "oranTipi") setOranTipi(v);
     setSheet(null);
+  };
+
+  // Paylaş: Pro üyede uygulamadaki ortak "Rapor / Paylaş" penceresi (PDF + iOS paylaşım menüsü) açılır;
+  // ücretsiz kullanıcıda düğmede "PRO" rozeti var ve basınca Pro satın alma ekranına gidilir.
+  // Pro durumu henüz yükleniyorsa kapı AÇIK bırakılır (gerçek Pro üyeyi yanlışlıkla Pro ekranına atmamak için).
+  const proDegil = !!kimlik && !!kimlik.pro && !kimlik.pro.aktif && !kimlik.proYukleniyor;
+  const paylasTikla = () => {
+    if (proDegil) { setSonucAcik(false); if (nav) kpProGerekliMi(kimlik.pro, nav); return; }
+    setRaporAcik(true);
   };
 
   const eksikMetin: Record<string, string> = { anapara: "erken ödenecek anaparayı", tarih: "erken kapama ve vade sonu tarihlerini", oran: "kâr oranını", aov: "ağırlıklı ortalama vadeyi" };
@@ -17367,19 +17509,17 @@ function ErkenKapamaKomisyonu({ s }: { s?: any }) {
         <Card>
           <p style={{ margin: 0, fontSize: 12, color: C.sub }}>Azami erken kapama komisyonu</p>
           <p style={{ margin: "2px 0 0", fontSize: 26, fontWeight: 700, fontFamily: "monospace", color: r.komisyon === 0 ? C.green : C.label }}>{birim} {fmtN(r.komisyon, 2)}</p>
-          <p style={{ margin: "2px 0 8px", fontSize: 12, color: C.sub }}>{r.komisyon > 0 ? `Uygulanan azami oran: %${ekOran4(r.oran)}` : "Bu durumda komisyon alınmaz"}</p>
-          <RRow label="Erken ödenen anapara" value={`${birim} ${fmtN(g.anapara, 0)}`} sub />
-          <RRow label="Komisyon" value={`${birim} ${fmtN(r.komisyon, 2)}`} sub />
-          {ticari && r.komisyon > 0 && <RRow label={`BSMV (%${bsmvOran})`} value={`${birim} ${fmtN(r.bsmv, 2)}`} sub />}
-          <RRow label="Komisyon + BSMV" value={`${birim} ${fmtN(r.toplam, 2)}`} />
-          <RRow label="Anapara + komisyon + BSMV" value={`${birim} ${fmtN(g.anapara + r.toplam, 2)}`} accent={C.blue} big />
-          <p style={{ margin: "10px 0 0", fontSize: 12, color: C.sub, lineHeight: 1.6 }}><b style={{ color: C.label }}>Nasıl hesaplandı:</b> {r.adimlar.join(" ")}</p>
+          <p style={{ margin: "2px 0 0", fontSize: 12, color: C.sub }}>{r.komisyon > 0 ? `Uygulanan azami oran: %${ekOran4(r.oran)}` : "Bu durumda komisyon alınmaz"}</p>
+          <button type="button" onClick={() => setSonucAcik(true)} style={{ width: "100%", marginTop: 12, border: "none", background: C.blue, color: "#fff", fontFamily: "inherit", fontWeight: 700, fontSize: 14, borderRadius: 12, padding: 13, cursor: "pointer" }}>📄 Sonuç Ekranı</button>
         </Card>
       )}
 
       <KararNot tur="uyari">
         {CV("Bu tutar bankanın alabileceği üst sınırdır; banka daha düşük uygulayabilir. Hesap, kredinin tamamının erken kapatılması içindir. Kaynak: TCMB 2020/4 sayılı Tebliğ m.11 ve uygulama talimatı; bireysel konut için 6502 sayılı Kanun m.37.")}
       </KararNot>
+
+      {sonucAcik && r.gecerli && <EkSonucEkrani g={g} r={r} proDegil={proDegil} onKapat={() => setSonucAcik(false)} onPaylas={paylasTikla} />}
+      {raporAcik && r.gecerli && <RaporModal baslik="Erken Kapama Komisyonu" satirlar={ekRaporSatirlari(g, r)} plan={null} onClose={() => setRaporAcik(false)} showKdv={false} bsmvOran={0} kkdfOran={0} />}
 
       {sheet && <EkSecimSheet baslik={EK_SECIMLER[sheet].baslik} secenekler={EK_SECIMLER[sheet].secenekler} secili={degerler[sheet]} onSec={(v) => sec(sheet as string, v)} onKapat={() => setSheet(null)} />}
     </div>
@@ -32730,7 +32870,7 @@ function App(){
         {screen==="zekatHesabi"&&<ZekatHesabi/>}
         {screen==="erkenKapamaKarari"&&<ErkenKapamaKarari s={settings}/>}
         {screen==="vadeFarkiKarari"&&<VadeFarkiKarari s={settings}/>}
-        {screen==="erkenKapamaKomisyonu"&&<ErkenKapamaKomisyonu s={settings}/>}
+        {screen==="erkenKapamaKomisyonu"&&<ErkenKapamaKomisyonu s={settings} kimlik={kimlik} nav={nav}/>}
         {screen==="tlYpKarari"&&<TlYpKarari s={settings}/>}
         {screen==="kiraSertifikasi"&&<KiraSertifikasiIhraclari/>}
         {screen==="getiriKarsilastirma"&&<GetiriKarsilastirma/>}
