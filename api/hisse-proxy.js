@@ -365,8 +365,154 @@ function corsAyarla(req, res) {
   res.setHeader("Vary", "Origin");
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// ABD HİSSELERİ (2026-10-03, kullanıcı isteği: "BİST Veri İzleme'ye BİST 100 / S&P 500 / Nasdaq 100 / Dow 30
+// sekmeleri; hangisine basılırsa onun bilgileri gelsin") — ?abd=sp|nq|dj
+// ═══════════════════════════════════════════════════════════════════════════
+// NEDEN BU DOSYADA: yeni bir api/*.js dosyası = yeni Vercel fonksiyonu (plan sınırı riski, bkz. "Vercel Pro kararı");
+// bu uç hisse-proxy'nin yeni bir sorgu dalı olarak eklendi, mevcut BİST dallarına DOKUNULMADI.
+// KAYNAK: TradingView tarayıcısı (BİST için kullandığımız AYNI yöntem), pazar "america". Endeks üyeliği `indexes`
+// sütunundaki proname değerlerinden okunur: SP:SPX (S&P 500), NASDAQ:NDX (Nasdaq 100), DJ:DJI (Dow 30).
+// ⚠️ DOĞRULANMADI: proname değerleri ve america pazarının bu sütunu verdiği bilgi/örnek kullanıma dayanıyor; ilk
+// çalıştırmada ?abd=tani ile (hangi proname'ler kaç hissede geçiyor) doğrulanmalı. Eşleşme bulunamazsa uç
+// success:false + tanı döndürür — ekran boş/yanlış liste göstermez. Resmî/lisanslı bir ABD veri akışı DEĞİL; 15 dk
+// gecikmeli etiketlenir. ⚠️ Ticari kullanım/yeniden dağıtım koşulları kaynağa bağlıdır (bkz. devir belgesi).
+const ABD_ENDEKS_PRONAME = { sp: "SP:SPX", nq: "NASDAQ:NDX", dj: "DJ:DJI" };
+const ABD_ASGARI_ADET = { sp: 400, nq: 80, dj: 25 };   // bunun altı = eşleşme şüpheli (liste yanlış olabilir)
+const KV_ABD_KEY = "abd:hisse:v1";
+const KV_ABD_KILIT = "abd:hisse:kilit";
+const ABD_TAZE_ACIK_MS = 30 * 1000;          // ABD seansı açıkken önbellek tazeliği
+const ABD_TAZE_KAPALI_MS = 15 * 60 * 1000;   // kapalıyken
+
+function abdPiyasaAcikMi() {
+  const ny = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+  const gun = ny.getDay(), dk = ny.getHours() * 60 + ny.getMinutes();
+  return gun >= 1 && gun <= 5 && dk >= 9 * 60 + 30 && dk < 16 * 60;   // resmî tatiller dikkate alınmıyor
+}
+
+async function abdTradingViewCek(sutunlar, aralik) {
+  const govde = {
+    filter: [{ left: "type", operation: "equal", right: "stock" }],
+    options: { lang: "en" },
+    symbols: { query: { types: [] }, tickers: [] },
+    columns: sutunlar,
+    sort: { sortBy: "market_cap_basic", sortOrder: "desc" },
+    range: [0, aralik],
+  };
+  const r = await fetchZamanAsimli(
+    "https://scanner.tradingview.com/america/scan",
+    { method: "POST", headers: { "Content-Type": "application/json", "User-Agent": "Mozilla/5.0" }, body: JSON.stringify(govde) },
+    12000
+  );
+  if (!r.ok) throw new Error(`TV america HTTP ${r.status}`);
+  const j = await r.json();
+  if (!Array.isArray(j?.data) || j.data.length === 0) throw new Error("TV america boş liste");
+  return j;
+}
+
+function abdGrupla(tv) {
+  const sayi = (v) => (typeof v === "number" && isFinite(v) ? v : null);
+  const gruplar = { sp: [], nq: [], dj: [] };
+  const gorulen = { sp: new Set(), nq: new Set(), dj: new Set() };
+  for (const satir of tv.data || []) {
+    const d = satir?.d || [];
+    const kod = String(d[0] || String(satir?.s || "").split(":").pop() || "").trim().toUpperCase();
+    if (!kod) continue;
+    const idx = Array.isArray(d[7]) ? d[7].map((e) => e && e.proname).filter(Boolean) : [];
+    if (idx.length === 0) continue;
+    const kayit = {
+      ticker: kod,
+      yahoo: kod.replace(/\./g, "-"),            // BRK.B → BRK-B (Yahoo grafik ucu için)
+      ad: d[1] ? String(d[1]) : kod,
+      fiyat: sayi(d[2]) ?? 0,
+      degisim1g: sayi(d[3]) == null ? 0 : parseFloat(d[3].toFixed(2)),
+      hacim: sayi(d[4]) ?? 0,
+      piyasaDegeri: sayi(d[5]) ?? 0,
+      sektor: d[6] ? String(d[6]) : "",
+    };
+    for (const [anahtar, pro] of Object.entries(ABD_ENDEKS_PRONAME)) {
+      if (idx.includes(pro) && !gorulen[anahtar].has(kod)) { gorulen[anahtar].add(kod); gruplar[anahtar].push(kayit); }
+    }
+  }
+  return gruplar;
+}
+
+async function abdVeriGetir() {
+  const kayit = await redis.get(KV_ABD_KEY).catch(() => null);
+  const yas = kayit && typeof kayit.ts === "number" ? Date.now() - kayit.ts : Infinity;
+  const tazeMs = abdPiyasaAcikMi() ? ABD_TAZE_ACIK_MS : ABD_TAZE_KAPALI_MS;
+  if (kayit && yas < tazeMs) return { veri: kayit, kaynak: "onbellek" };
+  // Aynı anda gelen çok sayıda istek TradingView'a TEK çağrı yapsın (20 sn set-if-absent kilidi)
+  const kilit = await redis.set(KV_ABD_KILIT, "1", { nx: true, ex: 20 }).catch(() => null);
+  if (!kilit && kayit) return { veri: kayit, kaynak: "onbellek-bayat" };
+  try {
+    const tv = await abdTradingViewCek(["name", "description", "close", "change", "volume", "market_cap_basic", "sector", "indexes"], 1500);
+    const g = abdGrupla(tv);
+    const yeni = { ts: Date.now(), sp: g.sp, nq: g.nq, dj: g.dj };
+    if (g.sp.length + g.nq.length + g.dj.length === 0) {
+      // Hiçbir endeks eşleşmedi (TradingView proname'leri değişmiş olabilir): ESKİ iyi kaydı EZME, varsa onu servis et
+      if (kayit) return { veri: kayit, kaynak: "yedek", hata: "endeks uyeligi eslesmedi (proname degismis olabilir, ?abd=tani)" };
+      return { veri: yeni, kaynak: "canli" };
+    }
+    try { await redis.set(KV_ABD_KEY, yeni, { ex: 3 * 24 * 3600 }); } catch {}
+    return { veri: yeni, kaynak: "canli" };
+  } catch (e) {
+    if (kayit) return { veri: kayit, kaynak: "yedek", hata: String((e && e.message) || e) };
+    throw e;
+  }
+}
+
+async function abdHisseHandler(req, res) {
+  const piyasa = String(req.query.abd);
+  // TANI: hangi endeks proname'leri kaç hissede geçiyor (eşleşme doğrulaması için)
+  if (piyasa === "tani") {
+    try {
+      const tv = await abdTradingViewCek(["name", "indexes"], 1500);
+      const sayac = {};
+      for (const satir of tv.data || []) {
+        const idx = Array.isArray(satir?.d?.[1]) ? satir.d[1] : [];
+        for (const e of idx) { const p = e && e.proname; if (p) sayac[p] = (sayac[p] || 0) + 1; }
+      }
+      const ilk = Object.entries(sayac).sort((a, b) => b[1] - a[1]).slice(0, 40);
+      const g = abdGrupla({ data: (tv.data || []).map((s) => ({ s: s.s, d: [s.d[0], null, null, null, null, null, null, s.d[1]] })) });
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(200).json({
+        success: true, taranan: (tv.data || []).length, eslesen: { sp: g.sp.length, nq: g.nq.length, dj: g.dj.length },
+        beklenen: ABD_ASGARI_ADET, aranan: ABD_ENDEKS_PRONAME, enSikEndeksler: Object.fromEntries(ilk),
+        ornekSatir: (tv.data || [])[0] || null,
+      });
+    } catch (e) {
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(200).json({ success: false, error: String((e && e.message) || e) });
+    }
+  }
+  if (!ABD_ENDEKS_PRONAME[piyasa]) {
+    res.setHeader("Cache-Control", "no-store");
+    return res.status(400).json({ success: false, error: "gecersiz piyasa (sp | nq | dj | tani)" });
+  }
+  try {
+    const { veri, kaynak, hata } = await abdVeriGetir();
+    const liste = Array.isArray(veri[piyasa]) ? veri[piyasa] : [];
+    const acik = abdPiyasaAcikMi();
+    res.setHeader("Cache-Control", acik ? "s-maxage=15, stale-while-revalidate=30" : "s-maxage=300, stale-while-revalidate=600");
+    if (liste.length < ABD_ASGARI_ADET[piyasa]) {
+      // Üyelik eşleşmedi / çok eksik: yanlış ya da boş liste göstermek yerine hata + tanı yolu
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(200).json({ success: false, error: "endeks uyeligi eslesmedi", bulunan: liste.length, beklenen: ABD_ASGARI_ADET[piyasa], ipucu: "?abd=tani" });
+    }
+    return res.status(200).json({
+      success: true, piyasa, count: liste.length, kaynak, ...(hata ? { uyari: hata } : {}),
+      veriZamani: new Date(veri.ts).toISOString(), piyasaAcik: acik, gecikme: "15 dk gecikmeli", data: liste,
+    });
+  } catch (e) {
+    res.setHeader("Cache-Control", "no-store");
+    return res.status(200).json({ success: false, error: String((e && e.message) || e) });
+  }
+}
+
 export default async function handler(req, res) {
   corsAyarla(req, res);
+  if (req.query && req.query.abd) return abdHisseHandler(req, res);
   try {
     const debug = req.query.debug === "1";
 

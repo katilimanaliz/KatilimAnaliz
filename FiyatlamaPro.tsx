@@ -5059,7 +5059,181 @@ function HisseAvatar({ticker, sirket, boyut=42}:{ticker:string, sirket?:string, 
   );
 }
 
-function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri }: { initialTicker?: string | null; onInitialTuketildi?: () => void; onDisaridanGeri?: () => void } = {}) {
+// ═══ ABD HİSSELERİ — saf yardımcılar (2026-10-03) ═══════════════════════════════════════════
+// ABD seansı: Pzt–Cum 09:30–16:00 (New York saati; resmî tatiller dikkate alınmaz). Backend'deki
+// abdPiyasaAcikMi ile AYNI kural — istemci yalnızca "açıkken sık yenile, kapalıyken sakin dur" için kullanır.
+function abdPiyasaAcikMi(simdi: Date = new Date()): boolean {
+  const ny = new Date(simdi.toLocaleString("en-US", { timeZone: "America/New_York" }));
+  const gun = ny.getDay(), dk = ny.getHours() * 60 + ny.getMinutes();
+  return gun >= 1 && gun <= 5 && dk >= 9 * 60 + 30 && dk < 16 * 60;
+}
+// Liste: arama (ticker/şirket adı) + sıralama. "tumu" = backend sırası (piyasa değeri azalan).
+function abdHisseListele(liste: any[], sira: string, arama: string): any[] {
+  const q = (arama || "").trim().toLocaleLowerCase("en-US");
+  let l = (liste || []).filter((h: any) => !q || (String(h.ticker) + " " + String(h.ad)).toLocaleLowerCase("en-US").indexOf(q) >= 0);
+  if (sira === "yukselen") l = l.filter((h: any) => h.degisim1g > 0).sort((a: any, b: any) => b.degisim1g - a.degisim1g);
+  else if (sira === "dusen") l = l.filter((h: any) => h.degisim1g < 0).sort((a: any, b: any) => a.degisim1g - b.degisim1g);
+  else if (sira === "hacim") l = l.slice().sort((a: any, b: any) => (b.hacim || 0) - (a.hacim || 0));
+  return l;
+}
+
+// ═══ ABD HİSSELERİ — "Hisse Veri İzleme" sekmeleri (2026-10-03, kullanıcı isteği) ═══════════════
+// Ekranın en üstüne sekmeler: BİST 100 · S&P 500 · Nasdaq 100 · Dow 30. BİST sekmesi mevcut ekranın AYNISI;
+// ABD sekmeleri /api/hisse-proxy?abd=sp|nq|dj (TradingView america tarayıcısı, 15 dk gecikmeli) verisini gösterir.
+// ⚠️ Katılım Endeksi anahtarı ABD sekmelerinde YOK (bu bilgi güvenilir bir kaynağa bağlanmadan eklenmedi).
+// Hisse satırına dokununca mevcut fiyat grafiği penceresi (KurGrafikModal, Yahoo) açılır; ABD hissesi için
+// Yahoo sembolü backend'den `yahoo` alanıyla gelir (BRK.B → BRK-B).
+const ABD_SEKMELER: [string, string][] = [["bist", "BİST 100"], ["sp", "S&P 500"], ["nq", "Nasdaq 100"], ["dj", "Dow 30"]];
+const ABD_ENDEKS_BILGI: Record<string, { ad: string; sembol: string }> = {
+  sp: { ad: "S&P 500", sembol: "^GSPC" }, nq: { ad: "Nasdaq 100", sembol: "^NDX" }, dj: { ad: "Dow 30", sembol: "^DJI" },
+};
+const abdSekmeDurumu: Record<string, { sira: string; arama: string }> = {};   // oturum boyunca sekme başına arama/sıralama
+
+function AbdPiyasaSekmeleri({ secili, onSec }: { secili: string; onSec: (k: string) => void }) {
+  return (
+    <div className="piyasa-scroll" role="tablist" style={{ display: "flex", gap: 8, overflowX: "auto", padding: "2px 0 10px", marginBottom: 2 }}>
+      {ABD_SEKMELER.map(([k, ad]) => {
+        const a = k === secili;
+        return (
+          <button key={k} type="button" role="tab" aria-selected={a} onClick={() => onSec(k)}
+            style={{ flex: "0 0 auto", border: `1.5px solid ${a ? C.blue : C.border}`, background: a ? C.blue : WA(0.05), color: a ? "#fff" : C.label,
+              fontFamily: "inherit", fontSize: 13.5, fontWeight: 700, borderRadius: 999, padding: "9px 16px", cursor: "pointer" }}>{ad}</button>
+        );
+      })}
+    </div>
+  );
+}
+
+function AbdHisseIzleme({ piyasa, onKurAc }: { piyasa: string; onKurAc?: (k: any) => void }) {
+  const bilgi = ABD_ENDEKS_BILGI[piyasa];
+  const okuCache = (): any[] => { try { const r = sessionStorage.getItem("abd_" + piyasa); if (r) { const j = JSON.parse(r); if (Array.isArray(j && j.data)) return j.data; } } catch (_) {} return []; };
+  const [hisseler, setHisseler] = useState<any[]>(okuCache);
+  const [yukleniyor, setYukleniyor] = useState(true);
+  const [hata, setHata] = useState<string | null>(null);
+  const [endeks, setEndeks] = useState<{ deger: number; degisim: number } | null>(null);
+  const [sira, setSira] = useState<string>((abdSekmeDurumu[piyasa] && abdSekmeDurumu[piyasa].sira) || "tumu");
+  const [arama, setArama] = useState<string>((abdSekmeDurumu[piyasa] && abdSekmeDurumu[piyasa].arama) || "");
+  const [gorunen, setGorunen] = useState(100);
+  const [veriZamani, setVeriZamani] = useState<string | null>(null);
+  const acik = abdPiyasaAcikMi();
+
+  useEffect(() => {
+    let iptal = false;
+    const cek = () => {
+      fetch(`${API_BASE}/api/hisse-proxy?abd=${piyasa}`)
+        .then((r) => r.json())
+        .then((d) => {
+          if (iptal) return;
+          if (d && d.success && Array.isArray(d.data)) {
+            setHisseler(d.data); setHata(null); setVeriZamani(d.veriZamani || null);
+            try { sessionStorage.setItem("abd_" + piyasa, JSON.stringify({ ts: Date.now(), data: d.data })); } catch (_) {}
+          } else setHata((d && d.error) || "Veri alınamadı");
+        })
+        .catch((e) => { if (!iptal) setHata((e && e.message) || "Bağlantı hatası"); })
+        .finally(() => { if (!iptal) setYukleniyor(false); });
+    };
+    // Önbellek 15 dakikadan tazeyse ve ABD seansı kapalıysa YENİ istek atılmaz
+    let taze = false;
+    try { const r = sessionStorage.getItem("abd_" + piyasa); if (r) { const j = JSON.parse(r); taze = Date.now() - j.ts < 15 * 60 * 1000; } } catch (_) {}
+    if (abdPiyasaAcikMi() || !taze) cek(); else setYukleniyor(false);
+    const t = setInterval(() => { if (abdPiyasaAcikMi()) cek(); }, 30000);
+    return () => { iptal = true; clearInterval(t); };
+  }, [piyasa]);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/api/gecmis?sembol=${encodeURIComponent(bilgi.sembol)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const nok = (d && d.noktalar) || [];
+        const f = nok.map((n: any) => n.fiyat).filter((x: any) => typeof x === "number");
+        const guncel = d && d.guncelFiyat != null ? d.guncelFiyat : f[f.length - 1];
+        const onceki = d && d.oncekiKapanis != null ? d.oncekiKapanis : f[f.length - 2];
+        if (guncel != null && onceki) setEndeks({ deger: guncel, degisim: ((guncel - onceki) / onceki) * 100 });
+      })
+      .catch(() => {});
+  }, [piyasa]);
+
+  const liste = abdHisseListele(hisseler, sira, arama);
+  const sec = (s: string) => { setSira(s); setGorunen(100); abdSekmeDurumu[piyasa] = { sira: s, arama }; };
+  const araDegis = (v: string) => { setArama(v); setGorunen(100); abdSekmeDurumu[piyasa] = { sira, arama: v }; };
+  const yon = endeks ? endeks.degisim >= 0 : true;
+
+  return (
+    <div>
+      <div style={{ background: "linear-gradient(160deg, rgba(91,155,216,0.10), rgba(45,212,191,0.04))", border: "1px solid rgba(91,155,216,0.35)", borderRadius: 20, padding: "16px 16px 14px", marginBottom: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 700, color: WA(0.5), textTransform: "uppercase", letterSpacing: 0.6 }}>
+          <span style={{ width: 6, height: 6, borderRadius: 3, background: acik ? C.green : WA(0.35), flexShrink: 0 }} />
+          {bilgi.ad} · GECİKMELİ
+        </div>
+        <div style={{ fontSize: 34, fontWeight: 700, fontFamily: "monospace", letterSpacing: "-0.01em", marginTop: 4, color: TEMA === "acik" ? C.label : "#fff" }}>
+          {endeks ? endeks.deger.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}
+        </div>
+        {endeks && (
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 4, marginTop: 4, fontSize: 13, fontWeight: 700, color: yon ? C.green : C.red }}>
+            {yon ? "▲" : "▼"} %{Math.abs(endeks.degisim).toFixed(2).replace(".", ",")}
+          </div>
+        )}
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 11, color: C.sub, marginTop: 8 }}>
+          <span>{acik ? "ABD seansı açık" : "ABD seansı kapalı"} · 16:30–23:00 (TR)</span>
+          <span>15 dk gecikmeli</span>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", background: WA(0.06), border: `1.5px solid ${C.border}`, borderRadius: 12, padding: "0 12px", marginBottom: 10 }}>
+        <input value={arama} onChange={(e) => araDegis(e.target.value)} placeholder="Ticker veya şirket adı ara…" autoComplete="off" autoCorrect="off"
+          style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", color: C.label, fontFamily: "inherit", fontSize: 14, padding: "11px 0" }} />
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 10 }}>
+        {([["tumu", "Tümü"], ["yukselen", "Yükselenler"], ["dusen", "Düşenler"], ["hacim", "Hacim"]] as const).map(([k, ad]) => {
+          const a = sira === k;
+          return (
+            <button key={k} type="button" aria-pressed={a} onClick={() => sec(k)}
+              style={{ border: `1.5px solid ${a ? C.blue : C.border}`, background: a ? C.blueLight : WA(0.05), color: a ? C.blue : C.label, fontFamily: "inherit", fontSize: 12, fontWeight: 600, borderRadius: 999, padding: "7px 12px", cursor: "pointer" }}>{ad}</button>
+          );
+        })}
+      </div>
+
+      {hata && hisseler.length === 0 && (
+        <KararNot tur="uyari">{`ABD hisse verisi şu an alınamadı (${hata}). Birazdan tekrar dene.`}</KararNot>
+      )}
+      {yukleniyor && hisseler.length === 0 && !hata && <p style={{ textAlign: "center", color: C.sub, fontSize: 13, padding: 20 }}>Yükleniyor…</p>}
+
+      {hisseler.length > 0 && (
+        <div style={{ background: WA(0.04), border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden" }}>
+          {liste.length === 0 && <p style={{ textAlign: "center", color: C.sub, fontSize: 13, padding: 20, margin: 0 }}>Sonuç bulunamadı</p>}
+          {liste.slice(0, gorunen).map((h: any, i: number) => {
+            const up = h.degisim1g >= 0;
+            return (
+              <div key={h.ticker} onClick={() => onKurAc && onKurAc({ kod: h.ticker, ad: h.ad, sembol: h.yahoo || h.ticker, birim: "$" })}
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", borderTop: i === 0 ? "none" : `1px solid ${C.border}`, cursor: "pointer" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: C.label }}>{h.ticker}</div>
+                  <div style={{ fontSize: 11.5, color: C.sub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{h.ad}</div>
+                </div>
+                <div style={{ fontFamily: "monospace", fontSize: 14, fontWeight: 600, color: C.label, textAlign: "right" }}>$ {fmtN(h.fiyat, 2)}</div>
+                <div style={{ minWidth: 74, textAlign: "center", fontSize: 12, fontWeight: 700, borderRadius: 999, padding: "3px 8px", color: up ? C.green : C.red, background: up ? "rgba(27,158,122,0.14)" : "rgba(214,69,69,0.14)" }}>
+                  {up ? "▲" : "▼"} %{Math.abs(h.degisim1g).toFixed(2).replace(".", ",")}
+                </div>
+              </div>
+            );
+          })}
+          {liste.length > gorunen && (
+            <button type="button" onClick={() => setGorunen((g) => g + 100)} style={{ width: "100%", border: "none", borderTop: `1px solid ${C.border}`, background: "transparent", color: C.blue, fontFamily: "inherit", fontWeight: 700, fontSize: 13, padding: 12, cursor: "pointer" }}>
+              Daha fazla göster ({liste.length - gorunen} hisse daha)
+            </button>
+          )}
+        </div>
+      )}
+
+      <KararNot tur="uyari">
+        {CV("Fiyatlar 15 dakika gecikmelidir ve $ cinsindendir. Veri kaynağı (TradingView tarayıcısı) doğruluk garantisi vermez; yatırım tavsiyesi değildir.")}
+      </KararNot>
+      {veriZamani && <p style={{ fontSize: 10.5, color: C.sub, textAlign: "center", margin: "6px 0 0" }}>Son güncelleme: {new Date(veriZamani).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}</p>}
+    </div>
+  );
+}
+
+function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri, onKurAc }: { initialTicker?: string | null; onInitialTuketildi?: () => void; onDisaridanGeri?: () => void; onKurAc?: (k: any) => void } = {}) {
   // ── HİSSE ÖNBELLEĞİ (2026-09-08 eklendi) ────────────────────────────────
   // ÖNCEDEN: bu bileşende okuCache/yazCache HİÇ yoktu, hisseler state'i her
   // zaman BOŞ ([]) başlıyordu — ekran her açıldığında (piyasa kapalı da olsa)
@@ -5134,6 +5308,10 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri 
   }, []);
   const [endeksVeri, setEndeksVeri]     = useState<{[k:string]:{deger:number,degisim:number}}>({});
   const [endeksFiltre, setEndeksFiltre] = useState<"tumu"|"100"|"30"|"50">("tumu");
+  // ── PİYASA SEKMESİ (2026-10-03): bist | sp | nq | dj — son seçim hatırlanır ──────────────────────────
+  const [abdPiyasa, setAbdPiyasaDurum] = useState<string>(() => { try { const k = localStorage.getItem("hv_piyasa"); return k && ABD_SEKMELER.some((x) => x[0] === k) ? k : "bist"; } catch (_) { return "bist"; } });
+  const setAbdPiyasa = (k: string) => { setAbdPiyasaDurum(k); try { localStorage.setItem("hv_piyasa", k); } catch (_) {} };
+  const abdPiyasaRef = useRef(abdPiyasa); abdPiyasaRef.current = abdPiyasa;   // BİST 1 sn'lik yenilemesi ABD sekmesindeyken DURSUN
   // ── BİST 100/50/30 RESMİ(-YE YAKIN) ÜYELİK (2026-09-15) ─────────────────
   // ⚠️ Kullanıcı raporu: "tıklayınca gelen hisseler resmi BİST 100 ile
   // uyuşmuyor" — önceki yöntem (aşağıdaki hisselerPiyasaDegerineGore) SADECE
@@ -5249,7 +5427,7 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri 
     // artırır (Vercel fonksiyon çağrısı + hisse-proxy'nin üstündeki
     // kaynak). piyasaAcikMi() koruması hâlâ geçerli — piyasa kapalıyken
     // hiç sorgu atılmıyor.
-    const interval = setInterval(() => { if (piyasaAcikMi()) fetchHisse(); }, 1 * 1000);
+    const interval = setInterval(() => { if (piyasaAcikMi() && abdPiyasaRef.current === "bist") fetchHisse(); }, 1 * 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -5423,8 +5601,16 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri 
     );
   };
 
+  if (abdPiyasa !== "bist") return (
+    <div style={{background:C.bg, padding:"12px 14px 80px", minHeight:"100%"}}>
+      <AbdPiyasaSekmeleri secili={abdPiyasa} onSec={setAbdPiyasa} />
+      <AbdHisseIzleme key={abdPiyasa} piyasa={abdPiyasa} onKurAc={onKurAc} />
+    </div>
+  );
+
   return (
     <div style={{background:C.bg, padding:"12px 14px 80px", minHeight:"100%"}}>
+      <AbdPiyasaSekmeleri secili={abdPiyasa} onSec={setAbdPiyasa} />
       {/* MASAÜSTÜ: ana kolon + sağ ray (Günün Hareketlileri); mobilde tek kolon */}
       <div style={genisEkran?{display:"grid",gridTemplateColumns:"minmax(0,1fr) 320px",gap:20,alignItems:"start"}:undefined}>
       <div style={{minWidth:0}}>
@@ -17025,10 +17211,16 @@ function KararNot({ tur, children }: { tur: "bilgi" | "uyari"; children: any }) 
 //   (k = kalan ağırlıklı ortalama vade, ay). BSMV: Ayarlar'daki ticari BSMV (varsayılan %5).
 // KONUT: kalan vade ≤36 ay %1, aşarsa %2; kâr payı DEĞİŞKENSE tazminat YOK; tazminat,
 // tüketiciye yapılacak toplam indirimi aşamaz. TAŞIT/İHTİYAÇ: tazminat öngörülmemiştir.
-// ⚠️ DOĞRULANAMAYANLAR: BSMV'nin erken ödeme ücretine %5 uygulanması; ağırlıklı ortalama
-// vadenin TCMB talimatındaki tam tanımı (burada: taksitlerde anapara EŞİT, ay = gün ÷ 30,4375).
+// KALAN AĞIRLIKLI ORTALAMA VADE (k) — TCMB uygulama talimatındaki tanım (2026-10-03, bankaların yayımladığı
+// talimat metni ve TEB'in resmî örnek hesabından; örnek %1,64 sonucuyla BİREBİR doğrulandı): kalan her taksitin
+// vadesi ile KAPAMA TARİHİ arasındaki GÜN farkı, o taksitin TUTARIYLA (anapara payıyla DEĞİL) ağırlıklandırılır;
+// bulunan gün değeri 30'a bölünerek AYA çevrilir. A = [(1 + aylık oran)^12 − 1] × %5 ; B = k × %0,20.
+// Eşit taksitli kredide taksit tutarları eşit → ağırlıklar eşit → k = kalan taksitlerin gün farklarının
+// basit ortalaması ÷ 30. (Önceki sürümlerde ay = gün ÷ 30,4375 alınıyordu; talimat ÷ 30 diyor.)
+// Farklı tutarlı taksit planlarında (balon, ödemesiz dönem) "Elle gir" seçilir.
+// ⚠️ DOĞRULANAMAYAN: BSMV'nin erken ödeme ücretine %5 uygulanması.
 // ═══════════════════════════════════════════════════════════════════════════
-const EK_GUN_AY = 365.25 / 12;
+const EK_GUN_AY = 30;   // TCMB talimatı: gün cinsinden değer 30'a bölünerek aya çevrilir (365,25/12 DEĞİL)
 
 function ekSayiOku(s: any): number {
   if (s == null) return 0;
@@ -17282,7 +17474,7 @@ const EK_SECIMLER: Record<string, { baslik: string; secenekler: [any, string, st
   doviz: { baslik: "Para birimi", secenekler: [["TL", "Türk lirası"], ["YP", "Döviz / Dövize endeksli"]] },
   yapi: { baslik: "Kâr payı yapısı", secenekler: [["sabit", "Sabit"], ["degisken", "Değişken"]] },
   periyot: { baslik: "Taksit periyodu", secenekler: [[1, "Aylık"], [3, "3 aylık"], [6, "6 aylık"], [12, "Yıllık"], [0, "Vade sonunda tek ödeme", "Anapara vade sonunda ödenir"]] },
-  aovTipi: { baslik: "Ağırlıklı ortalama vade", secenekler: [["tarih", "Tarihlerden hesapla", "Taksitlerde anapara eşit varsayılır"], ["manuel", "Elle gir", "Farklı ödeme planı için (balon, ödemesiz dönem vb.)"]] },
+  aovTipi: { baslik: "Ağırlıklı ortalama vade", secenekler: [["tarih", "Tarihlerden hesapla", "Eşit taksitli kredi: taksit tutarları eşit, gün ÷ 30 (TCMB talimatı)"], ["manuel", "Elle gir", "Taksit tutarları eşit değilse (balon, ödemesiz dönem vb.)"]] },
   oranTipi: { baslik: "Kâr oranı türü", secenekler: [["aylik", "Aylık"], ["basit", "Yıllık basit"], ["bilesik", "Yıllık bileşik"]] },
 };
 
@@ -32871,7 +33063,7 @@ function App(){
         {screen==="fonGetiriIzleme"&&<FonGetiriIzleme settings={settings} initialKod={pendingFonSecim} onInitialTuketildi={()=>setPendingFonSecim(null)} genisEkran={genisEkran} onFonGrafikAc={(fon:any)=>{setPendingFonDetay(fon); nav("fonDetay","fonGetiriIzleme");}}/>}
         {screen==="karPayiOranlari"&&<KarPayiOranlari nav={nav} kimlik={kimlik}/>}
         {screen==="fiyatAlarmlarim"&&<FiyatAlarmlarim/>}
-        {screen==="bistHisseTarayici"&&<BistHisseTarayici initialTicker={pendingHisseSecim} onInitialTuketildi={()=>setPendingHisseSecim(null)} onDisaridanGeri={back}/>}
+        {screen==="bistHisseTarayici"&&<BistHisseTarayici initialTicker={pendingHisseSecim} onInitialTuketildi={()=>setPendingHisseSecim(null)} onDisaridanGeri={back} onKurAc={(k:any)=>setSeciliKur(k)}/>}
         {screen==="getiridenAnapara"&&<GetiridenAnapara s={settings}/>}
         {screen==="oranAnalizi"&&<OranAnalizi s={settings}/>}
         {screen==="tahvilBono"&&<TahvilBono s={settings} onGecmis={k=>gecmisKaydet(gecmis,setGecmis,k)}/>}
