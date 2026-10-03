@@ -1362,6 +1362,7 @@ const ICON_MAP: Record<string, any> = {
   zekatHesabi: Gift,             // zekât = vermek; Gift zaten import edilmiş, yeni import riski alınmadı
   erkenKapamaKarari: Zap,        // zaten import; erken kapama modalında da ⚡ kullanılıyor
   vadeFarkiKarari: CalendarClock, // zaten import
+  erkenKapamaKomisyonu: Percent,  // zaten import (yeni import riski yok); bu harita yoksa Araçlar/Hesapla kartı ikonsuz kalır
   tlYpKarari: ArrowLeftRight,     // zaten import
   kiraSertifikasi: FileText,
   taksitKarsilastirma: Scale,
@@ -2067,6 +2068,7 @@ const EKRAN_KATEGORI: Record<string,string> = {
   // Tüzel Finansman
   spotFinansman:"tuzel", taksitliTicari:"tuzel", leasing:"tuzel", cekArkasiFinansman:"tuzel", posHesaplama:"tuzel",
   vadeFarkiKarari:"tuzel",
+  erkenKapamaKomisyonu:"tuzel",
   tlYpKarari:"tuzel",
   tmKomisyon:"tuzel", akreditifKomisyon:"tuzel", soikReeskont:"tuzel",
   // Piyasa & Veriler
@@ -16996,6 +16998,395 @@ function KararNot({ tur, children }: { tur: "bilgi" | "uyari"; children: any }) 
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// ERKEN KAPAMA KOMİSYONU (2026-10-03) — yardımcı (saf) fonksiyonlar
+// Kullanıcı isteği: bağımsız bir modül; kredinin tamamı erken kapatılırken bankanın
+// alabileceği AZAMİ erken ödeme komisyonunu hesaplar. Taksit hesaplayıcılarındaki
+// erken kapama alanlarına (KalanAnaparaModal, SpotErkenKapamaModal) ve "Erken Kapama
+// Kararı" ekranına DOKUNULMADI — bu modül onlardan bağımsız.
+// KURALLAR (TCMB 2020/4 Tebliğ m.11 + Geçici Madde 5 + uygulama talimatı; konut için
+// 6502 sayılı Kanun m.37), TİCARİ için KULLANDIRIM TARİHİ ARALIĞINA göre:
+//   a4  06.01.2025 ve sonrası : sabit TL  yıllık bileşik oran × %5 + k × %0,20
+//                               sabit YP  %3 + k × %0,10 · değişken (TL/YP) %2
+//   a3  01.07.2024–05.01.2025 : sabit TL aynı · sabit YP %2 + k × %0,15 · değişken %2
+//   a2  01.03.2021–30.06.2024 : kalan vade ≤24 ay %2; aşarsa %2 + 24 ayı aşan HER YIL için %1
+//                               (süre yıla tamamlanır); YP taban %3. Sabit/değişken ayrımı YOK.
+//   a1  01.03.2021 öncesi     : kalan vade ≤24 ay %1, aşarsa %2; YP +1 puan. Ayrım YOK.
+//   (k = kalan ağırlıklı ortalama vade, ay). BSMV: Ayarlar'daki ticari BSMV (varsayılan %5).
+// KONUT: kalan vade ≤36 ay %1, aşarsa %2; kâr payı DEĞİŞKENSE tazminat YOK; tazminat,
+// tüketiciye yapılacak toplam indirimi aşamaz. TAŞIT/İHTİYAÇ: tazminat öngörülmemiştir.
+// ⚠️ DOĞRULANAMAYANLAR: BSMV'nin erken ödeme ücretine %5 uygulanması; ağırlıklı ortalama
+// vadenin TCMB talimatındaki tam tanımı (burada: taksitlerde anapara EŞİT, ay = gün ÷ 30,4375).
+// ═══════════════════════════════════════════════════════════════════════════
+const EK_GUN_AY = 365.25 / 12;
+
+function ekSayiOku(s: any): number {
+  if (s == null) return 0;
+  let t = String(s).trim().replace(/\s/g, "");
+  if (t === "") return 0;
+  if (t.indexOf(",") >= 0) t = t.replace(/\./g, "").replace(",", ".");
+  else if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, "");
+  const v = parseFloat(t);
+  return isFinite(v) ? v : 0;
+}
+
+// Tutar alanı biçimi: binlik ayırıcı (.) — ondalık=true ise virgül + en çok 2 hane.
+// ondalık=false (ANAPARA): virgül/ondalık hiç kabul edilmez, yalnızca tam sayı.
+function ekBinAyir(raw: any, ondalik: boolean): string {
+  const t = String(raw == null ? "" : raw).replace(/[^\d,]/g, "");
+  const i = t.indexOf(",");
+  let tam = i < 0 ? t : t.slice(0, i);
+  const kes: string | null = (!ondalik || i < 0) ? null : t.slice(i + 1).replace(/,/g, "").slice(0, 2);
+  tam = tam.replace(/^0+(?=\d)/, "");
+  if (tam === "" && kes !== null) tam = "0";
+  tam = tam.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return kes === null ? tam : tam + "," + kes;
+}
+// Yazım sonrası imleç konumunu korur (imleçten ÖNCEKİ rakam/virgül sayısı aynı kalır).
+// veri: onChange'deki yazılan karakter — "." yazıldıysa (ondalıklı alanda) ondalık virgül sayılır.
+function ekTutarBicimle(onceki: string, konum: number, veri: any, ondalik: boolean): { deger: string; konum: number } {
+  let m = String(onceki);
+  if (ondalik && veri === "." && konum > 0 && m.charAt(konum - 1) === ".") m = m.slice(0, konum - 1) + "," + m.slice(konum);
+  const gecerli = ondalik ? /[\d,]/ : /\d/;
+  const sol = m.slice(0, konum).split("").filter((c) => gecerli.test(c)).length;
+  const yeni = ekBinAyir(m, ondalik);
+  let yp = 0, sayac = 0;
+  if (sol > 0) {
+    yp = yeni.length;
+    for (let i = 0; i < yeni.length; i++) {
+      if (gecerli.test(yeni.charAt(i))) sayac++;
+      if (sayac >= sol) { yp = i + 1; break; }
+    }
+  }
+  return { deger: yeni, konum: yp };
+}
+
+function ekBilesikYillik(oranYuzde: number, tip: string): number {
+  const o = oranYuzde / 100;
+  if (tip === "aylik") return (Math.pow(1 + o, 12) - 1) * 100;
+  if (tip === "basit") return (Math.pow(1 + o / 12, 12) - 1) * 100;
+  return oranYuzde;
+}
+function ekTarihOku(s: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s || "")) return null;
+  const p = s.split("-").map(Number);
+  const d = new Date(Date.UTC(p[0], p[1] - 1, p[2]));
+  return (isNaN(d.getTime()) || d.getUTCMonth() !== p[1] - 1) ? null : d;
+}
+function ekAyEkle(d: Date, n: number): Date {
+  const m = d.getUTCMonth() + n, y = d.getUTCFullYear() + Math.floor(m / 12), a = ((m % 12) + 12) % 12;
+  const sonGun = new Date(Date.UTC(y, a + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(y, a, Math.min(d.getUTCDate(), sonGun)));
+}
+function ekGunFarki(a: Date, b: Date): number { return (b.getTime() - a.getTime()) / 86400000; }
+function ekVadeMetni(kapama: Date, vadeSonu: Date): string {
+  let ay = 0;
+  while (ekAyEkle(kapama, ay + 1).getTime() <= vadeSonu.getTime()) ay++;
+  const gun = Math.round(ekGunFarki(ekAyEkle(kapama, ay), vadeSonu)), y = Math.floor(ay / 12), a = ay % 12;
+  const p: string[] = [];
+  if (y) p.push(y + " yıl");
+  if (a) p.push(a + " ay");
+  if (gun) p.push(gun + " gün");
+  return p.length ? p.join(" ") : "0 gün";
+}
+// Kalan taksitler vade sonundan geriye doğru üretilir. periyotAy: 1,3,6,12 ya da 0 (vade sonunda tek ödeme)
+function ekPlanOlustur(kapama: Date | null, vadeSonu: Date | null, periyotAy: number): { n: number; kalanAy: number; aov: number } | null {
+  if (!kapama || !vadeSonu || !(vadeSonu.getTime() > kapama.getTime())) return null;
+  let t: Date[] = [];
+  if (periyotAy === 0) t = [vadeSonu];
+  else for (let i = 0; i < 1500; i++) { const x = ekAyEkle(vadeSonu, -i * periyotAy); if (!(x.getTime() > kapama.getTime())) break; t.unshift(x); }
+  if (!t.length) return null;
+  let toplam = 0;
+  t.forEach((x) => { toplam += ekGunFarki(kapama, x) / EK_GUN_AY; });
+  return { n: t.length, kalanAy: ekGunFarki(kapama, vadeSonu) / EK_GUN_AY, aov: toplam / t.length };
+}
+// 24 ayı aşan kalan vade YILA TAMAMLANARAK sayılır (Geçici Madde 5/2)
+function ekYilTamamla(kapama: Date, vadeSonu: Date): number {
+  let y = 0;
+  while (vadeSonu.getTime() > ekAyEkle(kapama, 24 + 12 * y).getTime() && y < 200) y++;
+  return y;
+}
+const ekOran4 = (v: number) => v.toFixed(4).replace(".", ",");
+const ekSayi2 = (v: number) => v.toFixed(2).replace(".", ",");
+
+function ekHesapla(g: any): any {
+  // g: {tur:"ticari"|"konut"|"diger", aralik:"a1".."a4", doviz:"TL"|"YP", yapi:"sabit"|"degisken", anapara,
+  //     kapama:Date|null, vadeSonu:Date|null, periyot, aovTipi:"tarih"|"manuel", aovManuel, oranTipi, oran, indirim, bsmvOran}
+  const P: number = g.anapara;
+  const r: any = { komisyon: 0, oran: 0, bsmv: 0, toplam: 0, adimlar: [] as string[], gecerli: true, eksik: null };
+  if (!(P > 0)) { r.gecerli = false; r.eksik = "anapara"; return r; }
+  if (g.tur === "diger") {
+    r.adimlar.push("Tüketici kredilerinde (ihtiyaç, taşıt vb.) kanunda erken ödeme tazminatı öngörülmemiştir; yalnızca faiz/kâr payı indirimi yapılır.");
+    return r;
+  }
+  const ar: string = g.aralik || "a4";
+  const eskiKural = g.tur === "ticari" && (ar === "a1" || ar === "a2");
+  const manuelAov = g.tur === "ticari" && !eskiKural && g.yapi === "sabit" && g.aovTipi === "manuel";
+  const plan = ekPlanOlustur(g.kapama, g.vadeSonu, g.tur === "konut" ? 1 : g.periyot);
+  if (!manuelAov) {
+    if (!g.kapama || !g.vadeSonu) { r.gecerli = false; r.eksik = "tarih"; return r; }
+    if (!plan) { r.gecerli = false; r.eksik = "tarihSirasi"; return r; }
+  }
+  if (g.tur === "konut") {
+    if (g.yapi === "degisken") {
+      r.adimlar.push("Kâr payı oranı değişken olduğu için konut finansmanında erken ödeme tazminatı talep edilemez.");
+      return r;
+    }
+    const kisa = g.vadeSonu.getTime() <= ekAyEkle(g.kapama, 36).getTime();
+    r.oran = kisa ? 1 : 2;
+    r.adimlar.push("Kalan vade " + ekVadeMetni(g.kapama, g.vadeSonu) + " → " + (kisa ? "36 ayı aşmadığı için %1" : "36 ayı aştığı için %2") + ".");
+    r.komisyon = P * r.oran / 100;
+    if (g.indirim > 0 && r.komisyon > g.indirim) {
+      r.adimlar.push("Tazminat, tüketiciye yapılacak toplam indirimi aşamaz → indirim tutarıyla sınırlandı.");
+      r.komisyon = g.indirim; r.oran = r.komisyon / P * 100;
+    }
+    r.toplam = r.komisyon;
+    return r;
+  }
+  // ── Ticari ──
+  if (eskiKural) {
+    const yp = g.doviz === "YP", kv = ekVadeMetni(g.kapama, g.vadeSonu);
+    const uzun = g.vadeSonu.getTime() > ekAyEkle(g.kapama, 24).getTime();
+    if (ar === "a1") {
+      r.oran = (uzun ? 2 : 1) + (yp ? 1 : 0);
+      r.adimlar.push("01.03.2021 öncesi kullandırılan krediler: kalan vade " + kv + " → 24 ayı " + (uzun ? "aştığı için %2" : "aşmadığı için %1") + (yp ? "; döviz cinsi/dövize endeksli kredilerde bir puan artırımlı → %" + r.oran : "") + ".");
+    } else {
+      const yil = uzun ? ekYilTamamla(g.kapama, g.vadeSonu) : 0, taban = yp ? 3 : 2;
+      r.oran = taban + yil;
+      r.adimlar.push("01.03.2021–30.06.2024 arası kullandırılan krediler: kalan vade " + kv + " → " + (uzun ? "24 ayı aşan süre yıla tamamlanır (" + yil + " yıl): %" + taban + " + " + yil + " × %1 = %" + r.oran : "24 ayı aşmadığı için %" + taban) + (yp ? " (döviz cinsi/dövize endeksli: taban %3)" : "") + ".");
+    }
+  } else if (g.yapi === "degisken") {
+    r.oran = 2;
+    r.adimlar.push("Değişken kâr paylı ticari krediler (TL ve YP): erken ödenen tutarın %2'sine kadar.");
+  } else {
+    const k: number = manuelAov ? g.aovManuel : (plan as any).aov;
+    if (!(k > 0)) { r.gecerli = false; r.eksik = "aov"; return r; }
+    const ks = ekSayi2(k);
+    if (g.doviz === "YP") {
+      const taban2 = ar === "a3" ? 2 : 3, kat = ar === "a3" ? 0.15 : 0.10;
+      r.oran = taban2 + k * kat;
+      r.adimlar.push("Sabit kâr paylı döviz cinsi/dövize endeksli (" + (ar === "a3" ? "01.07.2024–05.01.2025" : "06.01.2025 ve sonrası") + "): %" + taban2 + " + ağırlıklı ortalama vade (" + ks + " ay) × %" + String(kat).replace(".", ",") + " = %" + ekOran4(r.oran));
+    } else {
+      if (!(g.oran > 0)) { r.gecerli = false; r.eksik = "oran"; return r; }
+      const f = ekBilesikYillik(g.oran, g.oranTipi);
+      r.oran = f * 0.05 + k * 0.20;
+      r.adimlar.push("Sabit kâr paylı TL: yıllık bileşik oran (%" + ekSayi2(f) + ") × %5 + ağırlıklı ortalama vade (" + ks + " ay) × %0,20 = %" + ekOran4(r.oran));
+    }
+  }
+  r.komisyon = P * r.oran / 100;
+  r.bsmv = r.komisyon * (g.bsmvOran || 0) / 100;
+  r.toplam = r.komisyon + r.bsmv;
+  return r;
+}
+
+// ── Seçenek listeleri (alana DOKUNUNCA alttan açılan pencerede gösterilir) ──────
+const EK_SECIMLER: Record<string, { baslik: string; secenekler: [any, string, string?][] }> = {
+  tur: { baslik: "Finansman türü", secenekler: [["ticari", "Ticari", "TCMB 2020/4 Tebliğ m.11"], ["konut", "Konut (bireysel)", "6502 sayılı Kanun m.37"], ["diger", "Taşıt / İhtiyaç", "Erken ödeme tazminatı yok"]] },
+  aralik: { baslik: "Kredinin kullandırım tarihi aralığı", secenekler: [["a4", "06.01.2025 ve sonrası", "Güncel kurallar"], ["a3", "01.07.2024 – 05.01.2025", "Sabit döviz kredisinde farklı formül"], ["a2", "01.03.2021 – 30.06.2024", "%2 (döviz %3) + 24 ayı aşan her yıl için %1"], ["a1", "01.03.2021 öncesi", "Kalan vade 24 ay altı %1, üstü %2 (döviz +1 puan)"]] },
+  doviz: { baslik: "Para birimi", secenekler: [["TL", "Türk lirası"], ["YP", "Döviz / Dövize endeksli"]] },
+  yapi: { baslik: "Kâr payı yapısı", secenekler: [["sabit", "Sabit"], ["degisken", "Değişken"]] },
+  periyot: { baslik: "Taksit periyodu", secenekler: [[1, "Aylık"], [3, "3 aylık"], [6, "6 aylık"], [12, "Yıllık"], [0, "Vade sonunda tek ödeme", "Anapara vade sonunda ödenir"]] },
+  aovTipi: { baslik: "Ağırlıklı ortalama vade", secenekler: [["tarih", "Tarihlerden hesapla", "Taksitlerde anapara eşit varsayılır"], ["manuel", "Elle gir", "Farklı ödeme planı için (balon, ödemesiz dönem vb.)"]] },
+  oranTipi: { baslik: "Kâr oranı türü", secenekler: [["aylik", "Aylık"], ["basit", "Yıllık basit"], ["bilesik", "Yıllık bileşik"]] },
+};
+
+// ⚠️ Alt bileşenler MODÜL SEVİYESİNDE (ana bileşenin gövdesinde tanımlanırsa her
+// render'da yeniden oluşur ve klavye odağı kaybolur — projenin bilinen tuzağı).
+const ekEtiketStil: any = { display: "block", fontSize: 12, fontWeight: 600, color: C.sub, marginBottom: 4 };
+const ekKutuStil: any = { width: "100%", boxSizing: "border-box", padding: "11px 13px", fontSize: 15, fontWeight: 600, fontFamily: "inherit",
+  fontVariantNumeric: "tabular-nums", background: WA(0.06), border: `1.5px solid ${C.border}`, borderRadius: 10, color: C.label, outline: "none", WebkitAppearance: "none" };
+
+function EkSecimSatiri({ etiket, deger, onAc }: { etiket: string; deger: string; onAc: () => void }) {
+  return (
+    <div style={{ marginBottom: 13 }}>
+      <label style={ekEtiketStil}>{etiket}</label>
+      <button type="button" onClick={onAc} style={{ ...ekKutuStil, display: "flex", alignItems: "center", gap: 8, textAlign: "left", cursor: "pointer" }}>
+        <span style={{ flex: 1, minWidth: 0 }}>{deger}</span>
+        <span style={{ color: C.sub, fontSize: 18, lineHeight: 1 }}>›</span>
+      </button>
+    </div>
+  );
+}
+
+function EkSecimSheet({ baslik, secenekler, secili, onSec, onKapat }: { baslik: string; secenekler: [any, string, string?][]; secili: any; onSec: (v: any) => void; onKapat: () => void }) {
+  return (
+    <div onClick={onKapat} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", zIndex: 500, display: "flex", alignItems: "flex-end", ...(ekranZoomTersi() !== 1 ? { zoom: ekranZoomTersi() } : {}) }}>
+      {/* Sheet'in üst kenarı güvenli alanın ALTINDA kalır (Ödeme Planı düzeltmesiyle aynı formül) */}
+      <div onClick={(e) => e.stopPropagation()} style={{ background: C.card, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 680, margin: "0 auto",
+        maxHeight: "calc(100dvh - max(4dvh, calc(env(safe-area-inset-top,0px) + 8px)))", overflowY: "auto", padding: "8px 16px calc(14px + env(safe-area-inset-bottom,0px))" }}>
+        <div style={{ width: 38, height: 4, borderRadius: 2, background: C.border, margin: "4px auto 10px" }} />
+        <p style={{ margin: "0 0 6px", fontSize: 15, fontWeight: 700, color: C.label }}>{baslik}</p>
+        {secenekler.map((o, i) => {
+          const sec = String(o[0]) === String(secili);
+          return (
+            <button key={String(o[0])} type="button" onClick={() => onSec(o[0])}
+              style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", border: "none", background: "transparent", fontFamily: "inherit",
+                padding: "13px 4px", borderTop: i === 0 ? "none" : `1px solid ${C.border}`, cursor: "pointer", color: C.label }}>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: "block", fontSize: 14.5, fontWeight: 600 }}>{o[1]}</span>
+                {o[2] && <span style={{ display: "block", fontSize: 11.5, color: C.sub, marginTop: 2, lineHeight: 1.4 }}>{o[2]}</span>}
+              </span>
+              <span style={{ width: 22, height: 22, borderRadius: 11, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, color: "#fff",
+                background: sec ? C.blue : "transparent", border: `1.5px solid ${sec ? C.blue : C.border}` }}>{sec ? "✓" : ""}</span>
+            </button>
+          );
+        })}
+        <button type="button" onClick={onKapat} style={{ width: "100%", marginTop: 8, border: "none", background: C.blueLight, color: C.blue, fontFamily: "inherit", fontWeight: 700, fontSize: 14, borderRadius: 12, padding: 12, cursor: "pointer" }}>Kapat</button>
+      </div>
+    </div>
+  );
+}
+
+// ondalik=false → ANAPARA: yalnızca tam sayı, binlik ayırıcılı; virgül/ondalık yazılamaz.
+function EkTutarAlani({ etiket, deger, onDeger, ek, ondalik, ipucu, placeholder }: { etiket: string; deger: string; onDeger: (v: string) => void; ek?: string; ondalik: boolean; ipucu?: string; placeholder?: string }) {
+  const ref = useRef<HTMLInputElement>(null);
+  const onChange = (e: any) => {
+    const el = e.target as HTMLInputElement;
+    const sonuc = ekTutarBicimle(el.value, typeof el.selectionStart === "number" ? el.selectionStart : el.value.length, e.nativeEvent && e.nativeEvent.data, ondalik);
+    onDeger(sonuc.deger);
+    // React değeri yazınca imleç sona kaçar → bir sonraki kareden önce geri alınır
+    requestAnimationFrame(() => { const x = ref.current; if (x && x.setSelectionRange) { try { x.setSelectionRange(sonuc.konum, sonuc.konum); } catch (_) {} } });
+  };
+  return (
+    <div style={{ marginBottom: 13 }}>
+      <label style={ekEtiketStil}>{etiket}</label>
+      <div style={{ position: "relative" }}>
+        <input ref={ref} inputMode={ondalik ? "decimal" : "numeric"} autoComplete="off" autoCorrect="off" value={deger} onChange={onChange} placeholder={placeholder}
+          style={{ ...ekKutuStil, padding: ek ? "11px 44px 11px 13px" : "11px 13px" }} />
+        {ek && <span style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", color: C.blue, fontWeight: 700, fontSize: 13 }}>{ek}</span>}
+      </div>
+      {ipucu && <p style={{ margin: "3px 0 0 2px", fontSize: 11, color: C.sub, lineHeight: 1.45 }}>{ipucu}</p>}
+    </div>
+  );
+}
+
+function EkTarihAlani({ etiket, deger, onDeger, ipucu }: { etiket: string; deger: string; onDeger: (v: string) => void; ipucu?: string }) {
+  return (
+    <div style={{ marginBottom: 13 }}>
+      <label style={ekEtiketStil}>{etiket}</label>
+      <input type="date" className="ek-tarih" value={deger} onChange={(e) => onDeger(e.target.value)} style={{ ...ekKutuStil, minHeight: 46, textAlign: "left" }} />
+      {ipucu && <p style={{ margin: "3px 0 0 2px", fontSize: 11, color: C.sub, lineHeight: 1.45 }}>{ipucu}</p>}
+    </div>
+  );
+}
+
+function EkOranAlani({ etiket, deger, onDeger, ek, ipucu, placeholder }: { etiket: string; deger: string; onDeger: (v: string) => void; ek?: string; ipucu?: string; placeholder?: string }) {
+  return (
+    <div style={{ marginBottom: 13 }}>
+      <label style={ekEtiketStil}>{etiket}</label>
+      <div style={{ position: "relative" }}>
+        <input inputMode="decimal" autoComplete="off" autoCorrect="off" value={deger} placeholder={placeholder} onChange={(e) => onDeger(sadeceRakamVeVirgul(e.target.value))}
+          style={{ ...ekKutuStil, padding: ek ? "11px 44px 11px 13px" : "11px 13px" }} />
+        {ek && <span style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", color: C.blue, fontWeight: 700, fontSize: 13 }}>{ek}</span>}
+      </div>
+      {ipucu && <p style={{ margin: "3px 0 0 2px", fontSize: 11, color: C.sub, lineHeight: 1.45 }}>{ipucu}</p>}
+    </div>
+  );
+}
+
+const ekBugunISO = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+
+function ErkenKapamaKomisyonu({ s }: { s?: any }) {
+  const [tur, setTur] = useState("ticari");
+  const [aralik, setAralik] = useState("a4");
+  const [doviz, setDoviz] = useState("TL");
+  const [yapi, setYapi] = useState("sabit");
+  const [periyot, setPeriyot] = useState<any>(1);
+  const [aovTipi, setAovTipi] = useState("tarih");
+  const [oranTipi, setOranTipi] = useState("aylik");
+  const [anapara, setAnapara] = useState("");
+  const [kapama, setKapama] = useState(ekBugunISO());
+  const [vadeSonu, setVadeSonu] = useState("");
+  const [aovManuel, setAovManuel] = useState("");
+  const [oran, setOran] = useState("");
+  const [indirim, setIndirim] = useState("");
+  const [sheet, setSheet] = useState<string | null>(null);
+
+  const ticari = tur === "ticari", konut = tur === "konut", diger = tur === "diger";
+  const eski = ticari && (aralik === "a1" || aralik === "a2");
+  const sabitTicari = ticari && !eski && yapi === "sabit";
+  const vadeGerek = !(sabitTicari && aovTipi === "manuel");
+  const bsmvOran = Number(s && s.ticariBSMV != null ? s.ticariBSMV : 5);
+
+  const kapamaD = ekTarihOku(kapama), vadeD = ekTarihOku(vadeSonu);
+  const g: any = { tur, aralik, doviz, yapi, anapara: ekSayiOku(anapara), kapama: kapamaD, vadeSonu: vadeD, periyot: Number(periyot), aovTipi,
+    aovManuel: ekSayiOku(aovManuel), oranTipi, oran: ekSayiOku(oran), indirim: ekSayiOku(indirim), bsmvOran };
+  const r = ekHesapla(g);
+  const plan = (!diger && kapamaD && vadeD) ? ekPlanOlustur(kapamaD, vadeD, konut ? 1 : Number(periyot)) : null;
+  const birim = (ticari && doviz === "YP") ? "döviz" : "₺";
+
+  const degerler: Record<string, any> = { tur, aralik, doviz, yapi, periyot, aovTipi, oranTipi };
+  const etiketBul = (anahtar: string) => { const o = EK_SECIMLER[anahtar].secenekler.find((x) => String(x[0]) === String(degerler[anahtar])); return o ? o[1] : ""; };
+  const sec = (anahtar: string, v: any) => {
+    if (anahtar === "tur") setTur(v); else if (anahtar === "aralik") setAralik(v); else if (anahtar === "doviz") setDoviz(v);
+    else if (anahtar === "yapi") setYapi(v); else if (anahtar === "periyot") setPeriyot(v); else if (anahtar === "aovTipi") setAovTipi(v);
+    else if (anahtar === "oranTipi") setOranTipi(v);
+    setSheet(null);
+  };
+
+  const eksikMetin: Record<string, string> = { anapara: "erken ödenecek anaparayı", tarih: "erken kapama ve vade sonu tarihlerini", oran: "kâr oranını", aov: "ağırlıklı ortalama vadeyi" };
+  const bir = (anahtar: string, etiket: string) => <EkSecimSatiri etiket={etiket} deger={etiketBul(anahtar)} onAc={() => setSheet(anahtar)} />;
+
+  return (
+    <div style={{ padding: "14px 14px 90px" }}>
+      <KararNot tur="bilgi">
+        {CV("Kredinin tamamını vadesinden önce kapatırken bankanın alabileceği AZAMİ erken ödeme komisyonunu hesaplar. Güncel kurallara göre hesaplanır.")}
+      </KararNot>
+
+      <Card>
+        <SecTitle>Kredi Bilgileri</SecTitle>
+        {bir("tur", "Finansman türü")}
+        {ticari && bir("aralik", "Kullandırım tarihi aralığı")}
+        {ticari && bir("doviz", "Para birimi")}
+        {!diger && !eski && bir("yapi", "Kâr payı yapısı")}
+        {eski && <p style={{ margin: "-6px 0 12px", fontSize: 11.5, color: C.sub, lineHeight: 1.5 }}>{CV("Bu kullandırım aralığında kâr payı yapısı (sabit/değişken) ve oran hesabı etkilemez; yalnızca kalan vade ve para birimi esas alınır.")}</p>}
+        <EkTutarAlani etiket="Erken ödenecek anapara" deger={anapara} onDeger={setAnapara} ek={birim === "₺" ? "₺" : "döviz"} ondalik={false} placeholder="0" />
+        {!diger && <EkTarihAlani etiket="Erken kapama tarihi" deger={kapama} onDeger={setKapama} ipucu="Varsayılan: bugün" />}
+        {!diger && vadeGerek && <EkTarihAlani etiket="Vade sonu (son taksit) tarihi" deger={vadeSonu} onDeger={setVadeSonu} ipucu="Kredinin son taksit tarihi" />}
+        {sabitTicari && aovTipi === "tarih" && bir("periyot", "Taksit periyodu")}
+        {sabitTicari && bir("aovTipi", "Ağırlıklı ortalama vade")}
+        {sabitTicari && aovTipi === "manuel" && <EkOranAlani etiket="Ağırlıklı ortalama kalan vade" deger={aovManuel} onDeger={setAovManuel} ek="ay" placeholder="örn. 12,5" ipucu="Anapara ödeme planınızdaki ağırlıklı ortalama kalan vade" />}
+        {sabitTicari && doviz === "TL" && bir("oranTipi", "Kâr oranı türü")}
+        {sabitTicari && doviz === "TL" && <EkOranAlani etiket="Kâr oranı" deger={oran} onDeger={setOran} ek="%" placeholder="örn. 3,5" ipucu="Formül yıllık bileşik oranı kullanır; seçtiğin türe göre otomatik dönüştürülür." />}
+        {konut && yapi === "sabit" && <EkTutarAlani etiket="Tüketiciye yapılacak toplam indirim (isteğe bağlı)" deger={indirim} onDeger={setIndirim} ek="₺" ondalik={true} placeholder="0,00" ipucu="Tazminat, bu tutarı aşamaz. Girmezsen sadece oran sınırı uygulanır." />}
+        {plan && vadeGerek && !diger && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 14px", fontSize: 12, color: C.sub, border: `1px dashed ${C.border}`, borderRadius: 10, padding: "10px 12px", marginTop: 4 }}>
+            <span>Kalan vade: <b style={{ color: C.label, fontFamily: "monospace" }}>{ekVadeMetni(kapamaD as Date, vadeD as Date)}</b></span>
+            {sabitTicari && <span>Kalan taksit: <b style={{ color: C.label, fontFamily: "monospace" }}>{plan.n}</b></span>}
+            {sabitTicari && <span>Ağırlıklı ort. vade: <b style={{ color: C.label, fontFamily: "monospace" }}>{ekSayi2(plan.aov)} ay</b></span>}
+          </div>
+        )}
+      </Card>
+
+      {!r.gecerli && (r.eksik === "tarihSirasi" || g.anapara > 0 || vadeSonu !== "" || oran !== "") && (
+        <KararNot tur="uyari">
+          {r.eksik === "tarihSirasi" ? "Vade sonu tarihi, erken kapama tarihinden sonra olmalı." : `Hesaplamak için ${eksikMetin[r.eksik] || "eksik bilgileri"} gir.`}
+        </KararNot>
+      )}
+
+      {r.gecerli && (
+        <Card>
+          <p style={{ margin: 0, fontSize: 12, color: C.sub }}>Azami erken kapama komisyonu</p>
+          <p style={{ margin: "2px 0 0", fontSize: 26, fontWeight: 700, fontFamily: "monospace", color: r.komisyon === 0 ? C.green : C.label }}>{birim} {fmtN(r.komisyon, 2)}</p>
+          <p style={{ margin: "2px 0 8px", fontSize: 12, color: C.sub }}>{r.komisyon > 0 ? `Uygulanan azami oran: %${ekOran4(r.oran)}` : "Bu durumda komisyon alınmaz"}</p>
+          <RRow label="Erken ödenen anapara" value={`${birim} ${fmtN(g.anapara, 0)}`} sub />
+          <RRow label="Komisyon" value={`${birim} ${fmtN(r.komisyon, 2)}`} sub />
+          {ticari && r.komisyon > 0 && <RRow label={`BSMV (%${bsmvOran})`} value={`${birim} ${fmtN(r.bsmv, 2)}`} sub />}
+          <RRow label="Komisyon + BSMV" value={`${birim} ${fmtN(r.toplam, 2)}`} />
+          <RRow label="Anapara + komisyon + BSMV" value={`${birim} ${fmtN(g.anapara + r.toplam, 2)}`} accent={C.blue} big />
+          <p style={{ margin: "10px 0 0", fontSize: 12, color: C.sub, lineHeight: 1.6 }}><b style={{ color: C.label }}>Nasıl hesaplandı:</b> {r.adimlar.join(" ")}</p>
+        </Card>
+      )}
+
+      <KararNot tur="uyari">
+        {CV("Bu tutar bankanın alabileceği üst sınırdır; banka daha düşük uygulayabilir. Hesap, kredinin tamamının erken kapatılması içindir. Kaynak: TCMB 2020/4 sayılı Tebliğ m.11 ve uygulama talimatı; bireysel konut için 6502 sayılı Kanun m.37.")}
+      </KararNot>
+
+      {sheet && <EkSecimSheet baslik={EK_SECIMLER[sheet].baslik} secenekler={EK_SECIMLER[sheet].secenekler} secili={degerler[sheet]} onSec={(v) => sec(sheet as string, v)} onKapat={() => setSheet(null)} />}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // 1) ERKEN KAPAMA KARARI
 // ═══════════════════════════════════════════════════════════════════════════
 //   A) Kapat  : nakit − kapama tutarı, n ay büyür. Taksit yok.
@@ -21084,6 +21475,7 @@ const MENU = {
   zekatHesabi:{title:"Zekât Hesaplayıcı",back:"araclarMenu"},
   erkenKapamaKarari:{title:"Erken Kapama Kararı",back:"hesaplaMenu"},
   vadeFarkiKarari:{title:"Vade Farkı Kararı",back:"hesaplaMenu"},
+  erkenKapamaKomisyonu:{title:"Erken Kapama Komisyonu",back:"hesaplaMenu"},
   tlYpKarari:{title:"TL/YP Borçlanma Kararı",back:"hesaplaMenu"},
   kiraSertifikasi:{title:"Kira Sertifikası İhraçları",back:"araclarMenu"},
   taksitKarsilastirma:{title:"Taksit Karşılaştırma",back:"hesaplaMenu"},
@@ -21116,7 +21508,7 @@ const TAB_OF_SCREEN:any = {
   hazineDoviz:"hesapla", hazineForward:"hesapla", hazineSwap:"hesapla",
   hazineBono:"hesapla", hazineSenaryo:"hesapla",
   piyasaHaberleri:"piyasa", finansalGostergeler:"piyasa",
-  araclarMenu:"araclar", sozluk:"araclar", vadeTakibi:"araclar", katilimBankalari:"araclar", kfkNedir:"araclar", zekatHesabi:"araclar", erkenKapamaKarari:"hesapla", vadeFarkiKarari:"hesapla", tlYpKarari:"hesapla", kiraSertifikasi:"araclar", getiriKarsilastirma:"araclar", haftalikOzet:"araclar", portfoyum:"araclar", fonDetay:"araclar",
+  araclarMenu:"araclar", sozluk:"araclar", vadeTakibi:"araclar", katilimBankalari:"araclar", kfkNedir:"araclar", zekatHesabi:"araclar", erkenKapamaKarari:"hesapla", erkenKapamaKomisyonu:"hesapla", vadeFarkiKarari:"hesapla", tlYpKarari:"hesapla", kiraSertifikasi:"araclar", getiriKarsilastirma:"araclar", haftalikOzet:"araclar", portfoyum:"araclar", fonDetay:"araclar",
   asistan:"yapayzeka",
   profil:"profil",
 };
@@ -21193,6 +21585,7 @@ const SCREEN_TO_PATH: Record<string,string> = {
   zekatHesabi: "/zekat-hesaplayici",
   erkenKapamaKarari: "/erken-kapama-karari",
   vadeFarkiKarari: "/vade-farki-karari",
+  erkenKapamaKomisyonu: "/erken-kapama-komisyonu",
   tlYpKarari: "/tl-yp-karari",
   kiraSertifikasi: "/kira-sertifikasi-ihraclari",
   portfoyum: "/portfoyum",
@@ -21293,6 +21686,7 @@ const MENU_ARAMA_LIST=[
   {key:"toggFinansman",      label:"Togg Finansmanı Hesaplama",            icon:"⚡", grup:"Bireysel Finansman"},
   {key:"esnekOdemePlanlari", label:"Esnek Ödeme Planları Hesaplama",       icon:"📋", grup:"Bireysel Finansman"},
   {key:"spotFinansman",      label:"Spot Finansman Hesaplama",             icon:"⚡", grup:"Tüzel Finansman"},
+  {key:"erkenKapamaKomisyonu", label:"Erken Kapama Komisyonu",              icon:"💸", grup:"Tüzel Finansman", alt:["erken kapama","erken odeme","erken odeme ucreti","komisyon","tazminat","ticari kredi kapama","kapama ucreti","2020/4"]},
   {key:"vadeFarkiKarari",    label:"Vade Farkı Kararı",                    icon:"⏳", grup:"Tüzel Finansman", alt:["vade farki","pesin iskonto","pesin mi vadeli mi","tedarikci","iskonto","pesin odeme","karar"]},
   {key:"tlYpKarari",         label:"TL/YP Borçlanma Kararı",               icon:"💱", grup:"Tüzel Finansman", alt:["tl mi yp mi","doviz kredisi","yp finansman","kur riski","basabas kur","doviz borclanma","karar"]},
   {key:"taksitliTicari",     label:"Taksitli Ticari Finansman Hesaplama",  icon:"🏗️", grup:"Tüzel Finansman"},
@@ -21360,6 +21754,7 @@ const HESAPLA_ARAC_LISTESI = [
   // Tüzel Finansman
   {key:"spotFinansman",      icon:"⚡", label:"Spot Finansman Hesaplama",             kat:"ticari"},
   {key:"vadeFarkiKarari",    icon:"⏳", label:"Vade Farkı Kararı",                    kat:"ticari"},
+  {key:"erkenKapamaKomisyonu", icon:"💸", label:"Erken Kapama Komisyonu",             kat:"ticari"},
   {key:"tlYpKarari",         icon:"💱", label:"TL/YP Borçlanma Kararı",               kat:"ticari"},
   {key:"taksitliTicari",     icon:"🏗️", label:"Taksitli Ticari Finansman Hesaplama",  kat:"ticari"},
   {key:"esnekOdemePlanlari", icon:"📋", label:"Esnek Ödeme Planları Hesaplama",       kat:"ticari"},
@@ -30253,6 +30648,9 @@ function App(){
         }
         .piyasa-scroll::-webkit-scrollbar { display:none; }
         .piyasa-scroll { scrollbar-width: none; -ms-overflow-style: none; }
+        /* Erken Kapama Komisyonu: tarih alanı sola hizalı ve diğer alanlarla aynı yazı tipi */
+        .ek-tarih { -webkit-appearance: none; appearance: none; text-align: left; font-family: inherit; }
+        .ek-tarih::-webkit-date-and-time-value { text-align: left; }
         /* KAYDIRMA ÇUBUĞU HER YERDE GİZLİ (2026-09-15, kullanıcı isteği:
            "tüm menülerdeki kaydırma çubuğu görüntüsünü kaldıralım"). Önceden
            masaüstünde (pointer:fine) ince/koyu bir çubuk BİLEREK GÖSTERİLİYORDU
@@ -32332,6 +32730,7 @@ function App(){
         {screen==="zekatHesabi"&&<ZekatHesabi/>}
         {screen==="erkenKapamaKarari"&&<ErkenKapamaKarari s={settings}/>}
         {screen==="vadeFarkiKarari"&&<VadeFarkiKarari s={settings}/>}
+        {screen==="erkenKapamaKomisyonu"&&<ErkenKapamaKomisyonu s={settings}/>}
         {screen==="tlYpKarari"&&<TlYpKarari s={settings}/>}
         {screen==="kiraSertifikasi"&&<KiraSertifikasiIhraclari/>}
         {screen==="getiriKarsilastirma"&&<GetiriKarsilastirma/>}
