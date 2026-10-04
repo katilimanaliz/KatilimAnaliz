@@ -7,7 +7,7 @@ import {
   ArrowRightLeft, FileSpreadsheet, TrendingUp, TrendingDown, ArrowUp, ArrowDown, Activity, Droplets, ShieldCheck,
   Search, Landmark, Gem, Package, Bell, ClipboardList, FileText, Star,
   Settings, Headphones, BookOpen, Bot, User, Clock, Briefcase,
-  Bitcoin, Banknote, Plus, Eye, EyeOff, Calendar, Tag, Info, Pencil, Trash2, Bookmark, CheckCircle2, ExternalLink, Mail,
+  Bitcoin, Banknote, Plus, Eye, EyeOff, Calendar, Tag, Info, Pencil, Trash2, Bookmark, CheckCircle2, ExternalLink, Mail, GraduationCap,
 } from "lucide-react";
 // NOT: @capacitor-firebase/messaging bilinçli olarak burada static import
 // EDİLMİYOR — modül, aşağıdaki push useEffect'i içinde dinamik import ile
@@ -1149,6 +1149,759 @@ function YasalMetinEkrani({baslik,children}:{baslik:string;children:React.ReactN
 function YmBaslik({children}:{children:React.ReactNode}){return <p style={{margin:"18px 0 6px",fontSize:14,fontWeight:700,color:C.label}}>{children}</p>;}
 function YmP({children}:{children:React.ReactNode}){return <p style={{margin:"0 0 4px",fontSize:13,color:WA(0.7),lineHeight:1.6}}>{children}</p>;}
 
+// ═══════════════════════════════════════════════════════════════════════
+// EĞİTİM BÖLÜMÜ (2026-10-04) — modüller · dersler · modül sınavı (Pro) · puan · liderlik tablosu
+// ═══════════════════════════════════════════════════════════════════════
+// ── EĞİTİM İÇERİĞİ (2026-10-04) ───────────────────────────────────────────
+// 4 modül · 22 ders · 40 soru. Rakam/oran/limit gibi çabuk eskiyen değerler bilerek YAZILMADI
+// (stopaj, TMSF limiti, politika faizi vb. için "güncel mevzuata/duyuruya bak" denir).
+// ⚠️ Yayından önce alan uzmanı (Uğur) gözden geçirmeli — bu bir eğitim içeriğidir.
+type EgitimDers = { id:string; baslik:string; dk:number; govde:string[]; ozet:string[] };
+type EgitimSoru = { s:string; sec:string[]; d:number; ac:string };
+type EgitimModul = { id:string; ad:string; kisa:string; renk:string; ikon:string; aciklama:string; dersler:EgitimDers[]; sorular:EgitimSoru[] };
+
+const EGITIM_MODULLERI: EgitimModul[] = [
+{
+  id:"katilim", ad:"Katılım bankacılığı", kisa:"Katılım", renk:"#2CCB9A", ikon:"🏦",
+  aciklama:"Faizsiz bankacılığın temel ilkeleri, hesap ve finansman ürünleri",
+  dersler:[
+    { id:"k1", baslik:"Katılım bankacılığı nedir?", dk:4,
+      govde:[
+        "Katılım bankacılığı, faiz yerine kâr ve zarara ortaklık, mal ve hizmet alım satımı ile kiralama gibi gerçek ekonomik faaliyetlere dayanan bir bankacılık modelidir.",
+        "Türkiye'de ilk özel finans kurumları 1980'lerin ortasında faaliyete başladı. 2005'te çıkan 5411 sayılı Bankacılık Kanunu ile bu kurumlar \"katılım bankası\" adını aldı ve diğer bankalarla aynı düzenleme ve denetim çerçevesine girdi.",
+        "Katılım bankaları da BDDK'nın düzenleme ve denetimi altındadır. Farkları, ürünlerin faiz içermeyecek şekilde tasarlanması ve bu tasarımın bir danışma kurulunca (komitesince) onaylanmasıdır.",
+      ],
+      ozet:["Faiz yerine ortaklık, alım satım ve kiralama esas alınır","5411 sayılı Kanun'dan beri adı \"katılım bankası\"","BDDK denetimi diğer bankalarla aynıdır","Ürünler danışma kurulunca uygunluk denetiminden geçer"] },
+    { id:"k2", baslik:"Hesap türleri: özel cari ve katılma hesabı", dk:4,
+      govde:[
+        "Özel cari hesap, paranın istenildiği zaman çekilebildiği ve getiri vaat edilmediği hesaptır. Maaş, günlük işlemler ve kısa süreli bekletme için kullanılır.",
+        "Katılma hesabı ise paranın belirli bir vade için bankaya fon olarak katıldığı hesaptır. Banka bu fonu kâr getirecek işlerde kullanır; elde edilen kâr, önceden belirlenen paylaşım oranına göre hesap sahibiyle paylaşılır.",
+        "Bu yüzden katılma hesabında sonuç \"faiz\" değil \"kâr payı\"dır. Kâr payı vade sonunda gerçekleşen sonuca göre belli olur; bankanın kâr paylaşım oranı ise baştan bellidir.",
+        "Bu hesaplar da, diğer bankaların mevduatı gibi Tasarruf Mevduatı Sigorta Fonu (TMSF) güvencesi kapsamındadır. Güvence limiti mevzuata göre güncellendiği için güncel tutara resmî duyurulardan bakmak gerekir.",
+      ],
+      ozet:["Özel cari: getirisiz, istenildiğinde çekilebilir","Katılma hesabı: vadeli, kâr payı alınır","Kâr paylaşım oranı baştan, kâr payı tutarı vade sonunda belli olur","TMSF güvencesi kapsamındadır, limit mevzuata göre değişir"] },
+    { id:"k3", baslik:"Murabaha: maliyet artı kâr satışı", dk:5,
+      govde:[
+        "Murabaha, bankanın müşterinin ihtiyaç duyduğu malı satın alıp, maliyetini ve kâr payını açıkça belirterek müşteriye vadeli satması esasına dayanır.",
+        "Konut, taşıt ve ihtiyaç finansmanı gibi ürünlerin pek çoğu bu yapıyla sunulur. Önemli olan, bankanın malı gerçekten satın alması ve satış anında toplam bedelin (maliyet artı kâr payı) önceden bilinmesidir.",
+        "Kâr payı oranı satış anında sabitlenir ve vade boyunca değişmez. Bu yüzden taksit tutarı da baştan bellidir. Faizsiz bankacılık ilkesine göre gecikme halinde borca ek kâr payı işletilmez; gecikme bedelinin nasıl uygulandığı bankanın icazetli sözleşmesine göre değişir.",
+        "Uygulamadaki Hesapla bölümü, murabaha esaslı finansman ödeme planlarını hesaplamana yardımcı olur.",
+      ],
+      ozet:["Banka malı alır, maliyet + bilinen kâr payıyla vadeli satar","Toplam bedel ve taksitler baştan bellidir","Kâr payı oranı vade boyunca değişmez","Gecikme halinde borca ek kâr payı işletilmez"] },
+    { id:"k4", baslik:"Mudarebe ve müşareke", dk:4,
+      govde:[
+        "Mudarebe, bir tarafın sermaye (rabbülmal), diğer tarafın emek ve uzmanlık (mudarip) koyduğu ortaklıktır. Kâr, sözleşmede belirlenen oranlarda paylaşılır.",
+        "Zarar oluşursa, mudarip kusuru yoksa, parasal zararı sermaye sahibi üstlenir; mudarip ise emeğini kaybeder. Katılma hesaplarının dayanağı mudarebe ilkesidir.",
+        "Müşareke ise tarafların her ikisinin de sermaye koyduğu ortaklıktır. Kâr, önceden anlaşılan oranlarda; zarar ise sermaye payları oranında paylaşılır.",
+        "Bu iki yapının ortak noktası, getirinin gerçek bir ekonomik faaliyetin sonucuna bağlı olması ve garanti edilmemesidir.",
+      ],
+      ozet:["Mudarebe: bir tarafta sermaye, diğer tarafta emek","Mudarebede parasal zararı sermaye sahibi taşır","Müşareke: iki tarafta da sermaye vardır","Zarar sermaye oranında, kâr anlaşılan oranda paylaşılır"] },
+    { id:"k5", baslik:"Kira sertifikası (sukuk) ve icara", dk:4,
+      govde:[
+        "Kira sertifikası (sukuk), gelir getiren bir varlığa veya varlık grubuna dayalı, sahibine o varlıktan elde edilen gelirden pay veren bir menkul kıymettir. Faizli tahvilden farkı, getirinin bir varlığa dayanmasıdır.",
+        "İcara kiralama demektir. Bir varlık kiraya verilir ve kira geliri elde edilir. Kira sertifikalarının önemli bir kısmı bu mantıkla kurgulanır.",
+        "Türkiye'de Hazine ve Maliye Bakanlığı ile çeşitli kurumlar kira sertifikası ihraç eder. Bu ihraçları uygulamadaki Kira Sertifikası İhraçları ekranından izleyebilirsin.",
+      ],
+      ozet:["Sukuk varlığa dayalı bir menkul kıymettir","Getiri, varlığın kira veya kâr gelirinden gelir","İcara: kiralama","Hazine ve özel sektör kira sertifikası ihraç edebilir"] },
+    { id:"k6", baslik:"Danışma kurulu ve icazet belgesi", dk:3,
+      govde:[
+        "Katılım bankalarında ürünlerin faizsiz esaslara uygunluğunu denetleyen bir danışma kurulu (danışma komitesi) bulunur. Kurul, yeni ürünleri ve sözleşmeleri inceler.",
+        "Kurulun ürün için verdiği onay belgesine icazet belgesi denir. Bankalar, ürünlerinin icazet belgelerini kendi internet sitelerinde yayımlar.",
+        "Bir ürünün icazetli olup olmadığını merak ediyorsan, uygulamadaki İcazet Belgeleri ekranından bankayı ve ürünü seçip bankanın yayımladığı belgeye gidebilirsin.",
+      ],
+      ozet:["Danışma kurulu ürün uygunluğunu denetler","Onay belgesine icazet belgesi denir","Bankalar belgeleri kendi sitesinde yayımlar"] },
+  ],
+  sorular:[
+    { s:"Murabaha işleminde banka ne yapar?", sec:["Parayı faizle ödünç verir","Malı satın alıp bilinen kâr payıyla vadeli satar","Müşterinin parasını borsada işletir","Yalnızca garantör olur"], d:1, ac:"Murabahada banka malı satın alır, maliyetini ve kâr payını açıkça belirterek müşteriye vadeli satar." },
+    { s:"Getirisi olmayan ve paranın istenildiğinde çekilebildiği hesap hangisidir?", sec:["Katılma hesabı","Özel cari hesap","Altın katılma hesabı","Kira sertifikası"], d:1, ac:"Özel cari hesapta getiri vaat edilmez; para istenildiği zaman çekilebilir." },
+    { s:"Katılma hesabının dayandığı temel ilke hangisidir?", sec:["Mudarebe","Faiz","Kefalet","Rehin"], d:0, ac:"Katılma hesapları, sermaye ile emeğin ortaklığı olan mudarebe ilkesine dayanır." },
+    { s:"Türkiye'de katılım bankaları hangi kanunla \"katılım bankası\" adını almıştır?", sec:["4054 sayılı Kanun","5411 sayılı Bankacılık Kanunu","6502 sayılı Kanun","5464 sayılı Kanun"], d:1, ac:"2005 tarihli 5411 sayılı Bankacılık Kanunu özel finans kurumlarını katılım bankası olarak düzenlemiştir." },
+    { s:"Murabaha finansmanında kâr payı oranı hakkında hangisi doğrudur?", sec:["Her ay piyasaya göre değişir","Satış anında sabitlenir ve vade boyunca değişmez","Vade sonunda belirlenir","Müşteri tarafından seçilir"], d:1, ac:"Murabahada toplam bedel ve kâr payı satış anında belirlenir; vade boyunca değişmez." },
+    { s:"Müşarekede zarar nasıl paylaşılır?", sec:["Tamamı bankaya aittir","Tamamı müşteriye aittir","Sermaye payları oranında","Eşit paylaşılır"], d:2, ac:"Müşarekede kâr anlaşılan oranlarda, zarar ise sermaye payları oranında paylaşılır." },
+    { s:"Danışma kurulunun ürün için verdiği onay belgesine ne ad verilir?", sec:["Bilanço","İcazet belgesi","Aracı kurum lisansı","Faaliyet izni"], d:1, ac:"Danışma kurulunun ürünlerin faizsiz esaslara uygunluğunu onayladığı belgeye icazet belgesi denir." },
+    { s:"Kira sertifikasının (sukuk) faizli tahvilden temel farkı nedir?", sec:["Daha yüksek getirisidir","Bir varlığa dayanması","Vadesi olmaması","Yalnızca yabancılara satılması"], d:1, ac:"Sukukun getirisi, dayanak varlığın kira veya kâr gelirinden gelir." },
+    { s:"Katılma hesabında vade sonunda hesap sahibine ödenen tutara ne denir?", sec:["Faiz","Kâr payı","Komisyon","Temettü"], d:1, ac:"Katılım bankacılığında getiri faiz değil, kâr payı olarak adlandırılır." },
+    { s:"Mudarebede kusur olmadan parasal zararı kim üstlenir?", sec:["Mudarip","Sermaye sahibi","İkisi eşit","Devlet"], d:1, ac:"Kusur yoksa parasal zararı sermaye sahibi taşır; mudarip emeğini kaybeder." },
+  ],
+},
+{
+  id:"ekonomi", ad:"Genel ekonomi", kisa:"Ekonomi", renk:"#5B9BD8", ikon:"📈",
+  aciklama:"Enflasyon, faiz, kur, büyüme ve kamu finansmanı temelleri",
+  dersler:[
+    { id:"e1", baslik:"Enflasyon ve TÜFE", dk:4,
+      govde:[
+        "Enflasyon, mal ve hizmet fiyatlarının genel düzeyindeki sürekli artıştır. Paranın satın alma gücü azalır.",
+        "Türkiye'de tüketici enflasyonu, Tüketici Fiyat Endeksi (TÜFE) ile ölçülür ve TÜİK her ay yayımlar. Üretici Fiyat Endeksi (ÜFE) ise üreticinin satış fiyatlarındaki değişimi gösterir.",
+        "Nominal getiri ile reel getiri farklıdır. Yaklaşık olarak reel getiri, nominal getiriden enflasyonun düşülmesiyle bulunur. Yıllık %40 kazanıp enflasyon %45 ise, satın alma gücün azalmıştır.",
+      ],
+      ozet:["Enflasyon: genel fiyat düzeyinde sürekli artış","TÜFE'yi TÜİK her ay açıklar","Reel getiri ≈ nominal getiri − enflasyon"] },
+    { id:"e2", baslik:"Faiz ve politika faizi", dk:4,
+      govde:[
+        "Faiz, paranın zaman içindeki fiyatıdır. Merkez Bankası'nın belirlediği politika faizi, ekonomideki diğer faiz ve kâr payı oranlarını yönlendirir.",
+        "Türkiye Cumhuriyet Merkez Bankası (TCMB), Para Politikası Kurulu (PPK) toplantılarında politika faizine karar verir. Politika faizi, bir hafta vadeli repo ihale faizidir.",
+        "Politika faizi artınca kredi ve mevduat getirileri genellikle yükselir, talep yavaşlar ve enflasyon üzerinde baskı azalır. İndirimde ise tersi beklenir. Katılım bankalarında bu etki kâr payı oranlarına yansır.",
+      ],
+      ozet:["Politika faizini TCMB'nin PPK'sı belirler","Bir hafta vadeli repo ihale faizi esas alınır","Politika faizi kâr payı oranlarını da etkiler"] },
+    { id:"e3", baslik:"Döviz kuru", dk:4,
+      govde:[
+        "Döviz kuru, bir para biriminin başka bir para birimi cinsinden fiyatıdır. Dalgalı kur rejiminde kur, esas olarak döviz arz ve talebiyle belirlenir.",
+        "Kuru etkileyen başlıca unsurlar faiz farkları, enflasyon, cari denge, rezervler ve beklentilerdir.",
+        "Kur artışı ithalatı pahalılaştırır. Dövizle borçlanan şirketlerin ve bireylerin yükünü artırır. İhracatçıya ise fiyat avantajı sağlayabilir.",
+      ],
+      ozet:["Kur: bir paranın başka para cinsinden fiyatı","Arz-talep, faiz farkı, enflasyon ve rezervler etkiler","İthalatı pahalılaştırır, ihracatı destekleyebilir"] },
+    { id:"e4", baslik:"GSYH ve ekonomik büyüme", dk:4,
+      govde:[
+        "Gayrisafi Yurt İçi Hasıla (GSYH), bir ülkede belirli bir dönemde üretilen nihai mal ve hizmetlerin toplam değeridir.",
+        "Büyüme oranı, GSYH'nin reel olarak (fiyat etkisinden arındırılmış) değişimini gösterir. TÜİK GSYH'yi üç aylık dönemler halinde açıklar.",
+        "Nominal GSYH enflasyondan etkilenir. Ekonominin gerçek büyümesini görmek için reel büyümeye bakılır.",
+      ],
+      ozet:["GSYH: üretilen nihai mal ve hizmetlerin değeri","Büyüme reel (fiyattan arındırılmış) ölçülür","TÜİK üç aylık açıklar"] },
+    { id:"e5", baslik:"Cari denge ve ödemeler dengesi", dk:4,
+      govde:[
+        "Ödemeler dengesi, bir ülkenin dünyanın geri kalanıyla yaptığı tüm ekonomik işlemleri kaydeder. Cari işlemler hesabı bunun en çok izlenen parçasıdır.",
+        "Cari işlemler hesabı; dış ticaret dengesini, turizm gibi hizmet gelirlerini ve yurt dışına yapılan gelir ödemelerini içerir. Girenden çok çıkan döviz varsa cari açık oluşur.",
+        "Cari açık, dış kaynakla finanse edilmek zorundadır. Bu yüzden döviz kuru ve rezervler üzerinde önemli bir belirleyicidir.",
+      ],
+      ozet:["Cari denge: dış ticaret, hizmetler ve gelir kalemleri","Cari açık dış finansman gerektirir","Kur ve rezervleri etkiler"] },
+    { id:"e6", baslik:"Bütçe ve kamu borçlanması", dk:4,
+      govde:[
+        "Merkezi yönetim bütçesi, devletin gelir ve giderlerini gösterir. Giderler gelirden fazlaysa bütçe açığı oluşur.",
+        "Devlet açığı, Hazine'nin iç ve dış borçlanmasıyla finanse eder. İç borçlanmada devlet iç borçlanma senetleri (DİBS) ihraç edilir: bono (kısa vadeli) ve tahvil (uzun vadeli).",
+        "Hazine, kâr payı ödeyen kira sertifikası da ihraç ederek faizsiz esaslara uygun bir borçlanma yolu sunar.",
+      ],
+      ozet:["Gider > gelir ise bütçe açığı","DİBS: bono (kısa), tahvil (uzun vadeli)","Hazine kira sertifikası da ihraç eder"] },
+  ],
+  sorular:[
+    { s:"Türkiye'de TÜFE'yi hangi kurum açıklar?", sec:["TCMB","TÜİK","BDDK","SPK"], d:1, ac:"Tüketici Fiyat Endeksi'ni her ay TÜİK yayımlar." },
+    { s:"Yıllık %40 nominal getiri sağlayan biri, enflasyon %45 iken ne olur?", sec:["Reel olarak kazanır","Reel olarak kaybeder","Değişmez","Vergi öder"], d:1, ac:"Getiri enflasyondan düşükse satın alma gücü azalır; reel getiri negatiftir." },
+    { s:"Politika faizini kim belirler?", sec:["Hazine","BDDK","TCMB'nin PPK'sı","Borsa İstanbul"], d:2, ac:"Politika faizine TCMB bünyesindeki Para Politikası Kurulu (PPK) karar verir." },
+    { s:"Politika faizi hangi faiz türüdür?", sec:["Bir hafta vadeli repo ihale faizi","Kredi kartı faizi","Gecelik mevduat faizi","Konut kredisi faizi"], d:0, ac:"TCMB'nin politika faizi, bir hafta vadeli repo ihale faizidir." },
+    { s:"Dalgalı kur rejiminde kur esas olarak neyle belirlenir?", sec:["Kanunla","Döviz arz ve talebiyle","Bakanlar kuruluyla","Ağırlıklı ortalamayla"], d:1, ac:"Dalgalı kurda fiyat, piyasadaki döviz arz ve talebiyle oluşur." },
+    { s:"GSYH'nin reel değişimi neyi gösterir?", sec:["Enflasyonu","Fiyat etkisinden arındırılmış büyümeyi","Cari açığı","Bütçe dengesini"], d:1, ac:"Reel büyüme, enflasyon etkisinden arındırılmış üretim artışını gösterir." },
+    { s:"Cari açık ne zaman oluşur?", sec:["Ülkeden çıkan döviz, giren dövizden fazlaysa","Bütçe gelirleri artarsa","Enflasyon düşerse","Rezervler artarsa"], d:0, ac:"Cari işlemlerde ülkeden çıkan döviz, giren dövizden fazlaysa cari açık oluşur." },
+    { s:"Devletin kısa vadeli iç borçlanma senedine ne denir?", sec:["Tahvil","Bono","Hisse","Sukuk"], d:1, ac:"Kısa vadeli devlet borçlanma senetlerine bono, uzun vadeli olanlara tahvil denir." },
+    { s:"Bütçe açığı nedir?", sec:["Gelirlerin giderlerden fazla olması","Giderlerin gelirlerden fazla olması","Kurun yükselmesi","İhracatın artması"], d:1, ac:"Giderler gelirleri aşarsa bütçe açığı oluşur." },
+    { s:"Kur artışı genel olarak neyi pahalılaştırır?", sec:["İhracatı","İthalatı","Turizm gelirini","Bütçe gelirini"], d:1, ac:"Kur yükselince ithal malların TL fiyatı artar." },
+  ],
+},
+{
+  id:"fon", ad:"Fon ve yatırım", kisa:"Fon", renk:"#F59E0B", ikon:"💰",
+  aciklama:"Yatırım fonları, risk-getiri ilişkisi, maliyetler ve hisse senedi temelleri",
+  dersler:[
+    { id:"f1", baslik:"Yatırım fonu nedir?", dk:4,
+      govde:[
+        "Yatırım fonu, birçok yatırımcının parasını bir havuzda toplayıp, uzman bir portföy yönetim şirketinin yönetimiyle çeşitli varlıklara yatıran kolektif bir yapıdır.",
+        "Fona katılan kişi, fon portföyünün küçük bir payına sahip olur. Pay fiyatı, fonun net varlık değerinin pay sayısına bölünmesiyle bulunur ve her iş günü açıklanır.",
+        "Türkiye'de fonların alım satımı büyük ölçüde TEFAS (Türkiye Elektronik Fon Alım Satım Platformu) üzerinden yapılır. Fon getirisi ve riski, fonun içeriğine göre değişir.",
+      ],
+      ozet:["Fon, ortak havuz ve profesyonel yönetimdir","Pay fiyatı = net varlık değeri / pay sayısı","Alım satım TEFAS üzerinden yapılır"] },
+    { id:"f2", baslik:"Fon türleri ve katılım fonları", dk:5,
+      govde:[
+        "Fonlar içerdikleri varlıklara göre ayrışır. Para piyasası fonları kısa vadeli ve düşük riskli araçlara, borçlanma araçları fonları tahvil ve bonoya, hisse senedi fonları ise ağırlıklı olarak hisse senetlerine yatırım yapar.",
+        "Değişken ve karma fonlar, yönetici esnekliğiyle farklı varlıklar arasında dağılım yapabilir. Serbest fonlar ise daha esnek stratejiler izleyebilir ve daha yüksek risk taşıyabilir.",
+        "Katılım fonları, yatırım stratejisi faizsiz esaslara uygun olacak şekilde tasarlanmış, uygunluğu bir kurulca denetlenen fonlardır. Faizli araçlar yerine kira sertifikası, katılma hesabı ve katılım endeksine uygun hisse gibi araçlar tercih edilir.",
+        "Uygulamadaki Fon Getiri İzleme ekranında Katılıma Uygun Fonlar ve Tüm Fonlar görünümlerini karşılaştırabilirsin. Kategori filtresinden para piyasası, hisse gibi gruplara bakabilirsin.",
+      ],
+      ozet:["Para piyasası: kısa vade, düşük risk","Hisse fonu: ağırlıklı hisse, yüksek dalgalanma","Katılım fonu: faizsiz esaslara uygun strateji","Kategori, fonun risk seviyesi hakkında ipucu verir"] },
+    { id:"f3", baslik:"Risk, getiri ve çeşitlendirme", dk:4,
+      govde:[
+        "Genel kural olarak daha yüksek beklenen getiri, daha yüksek risk demektir. Risk, getirinin dalgalanması ve zarar olasılığıdır.",
+        "Çeşitlendirme, tüm parayı tek bir varlığa yatırmak yerine farklı varlıklara dağıtmaktır. Bir varlık düşerken diğeri düşmeyebilir ve toplam dalgalanma azalır.",
+        "Geçmiş getiri gelecek getirinin garantisi değildir. Bir fonu sadece son dönem getirisine bakarak değerlendirmek yanıltıcı olabilir.",
+      ],
+      ozet:["Yüksek getiri beklentisi daha yüksek risk taşır","Çeşitlendirme dalgalanmayı azaltır","Geçmiş getiri garanti değildir"] },
+    { id:"f4", baslik:"Maliyetler ve vergi", dk:3,
+      govde:[
+        "Fonların yönetim ücreti gibi giderleri fon fiyatına yansır. Aynı kategorideki iki fonun getirisini karşılaştırırken ücretlere de bakmak gerekir.",
+        "Fon kazançları vergiye tabidir. Stopaj oranları fon türüne, elde tutma süresine ve kişinin tüzel veya gerçek kişi olmasına göre değişir ve zaman zaman güncellenir.",
+        "Bu nedenle güncel vergi oranı için resmî mevzuata veya aracı kurumun duyurularına bakmak gerekir; bu ders sabit bir oran vermez.",
+      ],
+      ozet:["Yönetim ücreti fon fiyatına yansır","Stopaj fon türü ve süreye göre değişir","Güncel oran için mevzuata bakılmalı"] },
+    { id:"f5", baslik:"Hisse senedi ve Katılım Endeksi", dk:5,
+      govde:[
+        "Hisse senedi, bir şirketin sermayesinde pay sahibi olmaktır. Borsa İstanbul'da işlem gören hisselerin fiyatı arz ve talebe göre değişir.",
+        "Endeksler, bir grup hissenin ortak performansını gösterir. BIST 100 en çok izlenen endekstir.",
+        "Katılım Endeksi, faizsiz finans ilkelerine uygun hisselerden oluşur. Konvansiyonel bankalar ve sigorta şirketleri ile alkol gibi alanlardaki şirketler bu endeksin dışında kalır.",
+        "Hisse alım satımı risklidir. Fiyatlar kısa sürede çok dalgalanabilir. Uygulamadaki BİST Hisse Veri İzleme ekranı sadece bilgi amaçlıdır; yatırım tavsiyesi değildir.",
+      ],
+      ozet:["Hisse: şirketin sermayesinde pay","Endeks: bir grup hissenin ortak performansı","Katılım Endeksi faizsiz ilkelere uygun şirketlerden oluşur"] },
+  ],
+  sorular:[
+    { s:"Fon pay fiyatı nasıl bulunur?", sec:["Net varlık değeri / pay sayısı","Toplam gider / yatırımcı sayısı","Hisse fiyatı × 100","Faiz oranı × vade"], d:0, ac:"Pay fiyatı, fonun net varlık değerinin pay sayısına bölünmesiyle bulunur." },
+    { s:"Fonlar Türkiye'de ağırlıklı olarak hangi platformdan alınıp satılır?", sec:["BIST Pay Piyasası","TEFAS","KAP","EVDS"], d:1, ac:"TEFAS, fonların alım satım platformudur." },
+    { s:"Aşağıdakilerden hangisi genellikle en düşük risklidir?", sec:["Hisse senedi fonu","Para piyasası fonu","Serbest fon","Kaldıraçlı fon"], d:1, ac:"Para piyasası fonları kısa vadeli ve düşük riskli araçlara yatırım yapar." },
+    { s:"Çeşitlendirmenin amacı nedir?", sec:["Getiriyi garanti etmek","Dalgalanmayı azaltmak","Vergiyi sıfırlamak","İşlem ücretini kaldırmak"], d:1, ac:"Farklı varlıklara yatırım yapmak toplam dalgalanmayı azaltmaya yardımcı olur." },
+    { s:"Geçmiş getiri için hangisi doğrudur?", sec:["Gelecek getiriyi garanti eder","Gelecek getiriyi garanti etmez","Her zaman tekrarlanır","Sadece hisselerde geçerlidir"], d:1, ac:"Geçmiş getiri, gelecekteki getirinin garantisi değildir." },
+    { s:"Katılım fonlarının yatırım stratejisi neye uygun olmalıdır?", sec:["Sadece hisseye","Faizsiz esaslara","Sadece dövize","Sadece altına"], d:1, ac:"Katılım fonları faizsiz esaslara uygun stratejiyle yönetilir ve uygunluğu denetlenir." },
+    { s:"Fon stopaj oranları hakkında hangisi doğrudur?", sec:["Hiç değişmez","Fon türü ve süreye göre değişebilir","Tüm fonlarda aynıdır","Fonlar vergiden muaftır"], d:1, ac:"Stopaj oranı fon türüne ve elde tutma süresine göre değişir; zaman zaman güncellenir." },
+    { s:"Katılım Endeksi'nde hangi şirketler yer almaz?", sec:["İmalat şirketleri","Konvansiyonel bankalar","Teknoloji şirketleri","Enerji şirketleri"], d:1, ac:"Faizli bankacılık yapan konvansiyonel bankalar Katılım Endeksi'nin dışında kalır." },
+    { s:"BIST 100 nedir?", sec:["Bir hisse senedi","Bir grup hissenin ortak performansını gösteren endeks","Bir fon","Bir tahvil"], d:1, ac:"BIST 100, Borsa İstanbul'daki büyük hisselerin ortak performansını gösteren endekstir." },
+    { s:"İki fonu karşılaştırırken getiriye ek olarak neye bakılmalıdır?", sec:["Yalnızca fonun adına","Yönetim ücreti ve risk düzeyine","Fon kodunun harf sayısına","Kuruluş yılına"], d:1, ac:"Ücretler fon fiyatına yansır; risk düzeyi de karşılaştırmanın parçasıdır." },
+  ],
+},
+{
+  id:"okuryazar", ad:"Finansal okuryazarlık", kisa:"Okuryazarlık", renk:"#A78BFA", ikon:"👛",
+  aciklama:"Bütçe, birikim, bileşik getiri, borç yönetimi ve dijital güvenlik",
+  dersler:[
+    { id:"o1", baslik:"Bütçe ve tasarruf", dk:4,
+      govde:[
+        "Bütçe, gelir ve giderlerini planlamaktır. Önce giderlerini takip ederek paranın nereye gittiğini görmek gerekir.",
+        "Pratik bir başlangıç, gelirin yaklaşık %50'sini zorunlu giderlere, %30'unu isteklere, %20'sini tasarrufa ayırmaktır. 50/30/20 gibi kurallar sadece başlangıç yöntemidir; kişisel durumlara göre ayarlanır.",
+        "Tasarrufu maaş gününde otomatik ayırmak, \"kalan parayı biriktiririm\" yaklaşımından genellikle daha etkilidir.",
+      ],
+      ozet:["Önce giderleri takip et","50/30/20 gibi kurallar başlangıç içindir","Tasarrufu önce ayırmak daha etkilidir"] },
+    { id:"o2", baslik:"Acil durum fonu", dk:3,
+      govde:[
+        "Acil durum fonu, iş kaybı, sağlık gideri veya beklenmedik harcamalar için ayrılan nakit rezervdir.",
+        "Genellikle aylık zorunlu giderlerinin 3 ila 6 katı önerilir; geliri dalgalı olanlar için daha yüksek bir hedef mantıklı olabilir.",
+        "Bu para, değeri hızla düşebilecek riskli varlıklara yatırılmamalı; ihtiyaç anında hızlı ve kayıpsız çekilebilmelidir. Katılım hesaplarında özel cari hesap veya kısa vadeli ürünler bu amaca uygun olabilir.",
+      ],
+      ozet:["Hedef: 3-6 aylık zorunlu gider","Riskli varlıklara konmamalı","Hızlı ulaşılabilir olmalı"] },
+    { id:"o3", baslik:"Bileşik getiri ve zamanın gücü", dk:4,
+      govde:[
+        "Bileşik getiri, kazancın da kazanç getirmesidir. Her dönemin getirisi anaparaya eklenir ve sonraki dönem bu toplam üzerinden hesaplanır.",
+        "Formül: Gelecek değer = Anapara × (1 + dönemlik oran) ^ dönem sayısı. Süre uzadıkça etki hızla büyür.",
+        "Kabaca hesap için \"72 kuralı\" kullanılır: 72'yi yıllık getiri yüzdesine bölersen paranın kaç yılda ikiye katlanacağını yaklaşık bulursun. Bu kural, sabit getiri varsayar ve yaklaşık bir tahmindir.",
+        "Uygulamadaki Hesapla bölümündeki bileşik ve basit getiri araçlarıyla farkı kendin deneyebilirsin.",
+      ],
+      ozet:["Bileşik getiri: kazancın da kazanç getirmesi","FV = P × (1 + r) ^ n","72 kuralı yaklaşık bir tahmindir"] },
+    { id:"o4", baslik:"Borç yönetimi", dk:4,
+      govde:[
+        "Borçlanmadan önce toplam maliyete bakılmalıdır. Aylık taksit tek başına yeterli bilgi vermez; toplam geri ödeme, vade ve yıllık maliyet oranı önemlidir.",
+        "Aylık borç ödemelerinin gelire oranı yükseldikçe finansal baskı artar. Bu oranı düşük tutmak, beklenmedik durumlara karşı koruma sağlar.",
+        "Kredi kartında yalnızca asgari tutarı ödemek, kalan borca yüksek maliyet işletilmesine neden olur. Mümkünse hesap özeti borcunun tamamı ödenmelidir.",
+        "Katılım finansmanında toplam bedel baştan bellidir. Farklı bankaların tekliflerini Hesapla bölümündeki araçlarla ve Taksit Karşılaştırma ekranıyla karşılaştırabilirsin.",
+      ],
+      ozet:["Taksit yerine toplam maliyete bak","Borç/gelir oranını düşük tut","Kredi kartında tamamını ödemeyi hedefle"] },
+    { id:"o5", baslik:"Dolandırıcılık ve dijital güvenlik", dk:4,
+      govde:[
+        "Banka çalışanı gibi davranan kişiler, SMS veya sahte internet siteleri üzerinden bilgi toplamaya çalışabilir (oltalama). Gerçek bir banka hiçbir zaman telefonla tek kullanımlık şifreni, kart şifreni veya CVV kodunu istemez.",
+        "Şüpheli bir arama veya mesajda bağlantıya tıklama; aramayı kapat ve bankayı kendi uygulamasından ya da resmî numarasından ara.",
+        "Güçlü ve her hesap için ayrı şifre kullan, mümkünse iki adımlı doğrulamayı aç. Uygulamaları sadece resmî mağazalardan indir.",
+        "\"Garantili yüksek getiri\" vaat eden, acele ettiren teklifler dolandırıcılık işaretidir. Yatırım yapmadan önce kurumun lisanslı olup olmadığını SPK ve BDDK'nın resmî sayfalarından kontrol et.",
+      ],
+      ozet:["Bankalar OTP, kart şifresi ve CVV istemez","Şüpheli aramada kapat, resmî kanaldan kendin ara","Garantili yüksek getiri vaadi uyarı işaretidir"] },
+  ],
+  sorular:[
+    { s:"Bir banka çalışanı telefonla sizden tek kullanımlık şifrenizi istiyor. Ne yapmalısınız?", sec:["Şifreyi söylerim","Kapatıp bankayı resmî numarasından ararım","Mesaj atarım","Hesabımı kapatırım"], d:1, ac:"Gerçek bir banka tek kullanımlık şifre istemez. Aramayı kapatıp bankayı resmî kanaldan arayın." },
+    { s:"Acil durum fonu için genel öneri nedir?", sec:["1 haftalık gider","3-6 aylık zorunlu gider","10 yıllık gelir","Sadece altın"], d:1, ac:"Genellikle aylık zorunlu giderlerin 3 ila 6 katı önerilir." },
+    { s:"Bileşik getiri nedir?", sec:["Sadece anaparaya getiri","Getirinin de getiri kazanması","Vergi indirimi","Sabit faiz"], d:1, ac:"Bileşik getiride önceki dönem kazancı anaparaya eklenir ve sonraki dönem bu toplam üzerinden hesaplanır." },
+    { s:"72 kuralı neyi tahmin eder?", sec:["Paranın yaklaşık kaç yılda ikiye katlanacağını","Enflasyonu","Kur artışını","Vergi oranını"], d:0, ac:"72'yi yıllık getiri yüzdesine bölerek paranın yaklaşık ikiye katlanma süresi bulunur." },
+    { s:"50/30/20 gibi bütçe kuralları nasıl değerlendirilmelidir?", sec:["Kesin yasadır","Başlangıç için bir yöntem, kişiye göre ayarlanır","Sadece zenginlere uygundur","Yanlıştır"], d:1, ac:"Bu kurallar başlangıç için pratik yöntemlerdir; gelir ve giderlere göre uyarlanmalıdır." },
+    { s:"Borçlanırken yalnızca aylık taksite bakmak neden yetersizdir?", sec:["Taksit önemsizdir","Toplam geri ödeme ve vadeyi göstermez","Vergi yoktur","Kanun yasaklar"], d:1, ac:"Taksit tek başına yeterli değildir; toplam geri ödeme, vade ve maliyet de görülmelidir." },
+    { s:"Kredi kartında yalnızca asgari tutarı ödemenin sonucu nedir?", sec:["Borç silinir","Kalan borca yüksek maliyet işletilir","Kart kapanır","Puan kazanılır"], d:1, ac:"Asgari ödeme, kalan borca maliyet işletilmesine ve borcun uzamasına neden olur." },
+    { s:"\"Garantili yüksek getiri\" vaadi hakkında en doğru yaklaşım hangisidir?", sec:["Hemen yatırım yapmak","Uyarı işareti olarak görüp kurumu resmî kaynaklardan doğrulamak","Arkadaşlara önermek","Şifreyi paylaşmak"], d:1, ac:"Garanti edilmiş yüksek getiri dolandırıcılık işaretidir; kurumun lisansını SPK/BDDK sayfalarından doğrulayın." },
+    { s:"Tasarrufu artırmanın etkili yollarından biri hangisidir?", sec:["Önce harcayıp kalanı biriktirmek","Maaş gününde otomatik ayırmak","Hiç bütçe yapmamak","Sadece kartla ödemek"], d:1, ac:"Tasarrufu önce ayırmak, kalan parayı biriktirmekten genellikle daha etkilidir." },
+    { s:"Aşağıdakilerden hangisi iyi bir dijital güvenlik alışkanlığıdır?", sec:["Tüm hesaplarda aynı şifre","İki adımlı doğrulamayı açmak","Şifreyi telefona yazıp paylaşmak","Bilinmeyen bağlantılara tıklamak"], d:1, ac:"Güçlü, farklı şifreler ve iki adımlı doğrulama hesap güvenliğini artırır." },
+  ],
+},
+];
+
+const EGITIM_LS_KEY = "kp_egitim_v1";
+const EGITIM_GECME_NOTU = 70;
+const EGITIM_SINAV_SN = 600;
+type EgitimIlerleme = { dersler: Record<string,string[]>; puanlar: Record<string,{puan:number; tarih:string}>; takmaAd: string; listede: boolean };
+const egitimBosIlerleme = (): EgitimIlerleme => ({ dersler:{}, puanlar:{}, takmaAd:"", listede:false });
+
+// Yerel ilerleme: localStorage (misafir de ders ilerlemesini tutar). Girişliyse buluta da yazılır (egitim/{uid}).
+function egitimIlerlemeNormalle(j: any): EgitimIlerleme {
+  const dersler: Record<string,string[]> = {};
+  const puanlar: Record<string,{puan:number; tarih:string}> = {};
+  for (const m of EGITIM_MODULLERI) {
+    const dl = j?.dersler?.[m.id];
+    if (Array.isArray(dl)) dersler[m.id] = dl.filter((x: any) => m.dersler.some(d => d.id === x));
+    const p = j?.puanlar?.[m.id];
+    if (p && typeof p.puan === "number" && isFinite(p.puan)) puanlar[m.id] = { puan: Math.max(0, Math.min(100, Math.round(p.puan))), tarih: String(p.tarih || "") };
+  }
+  return { dersler, puanlar, takmaAd: typeof j?.takmaAd === "string" ? j.takmaAd : "", listede: !!j?.listede };
+}
+function egitimIlerlemeOku(): EgitimIlerleme {
+  try {
+    const raw = localStorage.getItem(EGITIM_LS_KEY);
+    if (!raw) return egitimBosIlerleme();
+    return egitimIlerlemeNormalle(JSON.parse(raw));
+  } catch { return egitimBosIlerleme(); }
+}
+function egitimIlerlemeYaz(v: EgitimIlerleme) { try { localStorage.setItem(EGITIM_LS_KEY, JSON.stringify(v)); } catch {} }
+function egitimToplamPuan(v: EgitimIlerleme): number { return EGITIM_MODULLERI.reduce((t, m) => t + (v.puanlar[m.id]?.puan || 0), 0); }
+// Yerel + bulut: dersler birleşim, puan her modülde EN YÜKSEK; takma ad/liste tercihi yerelde ad varsa yerel kazanır.
+function egitimBirlestir(a: EgitimIlerleme, b: EgitimIlerleme): EgitimIlerleme {
+  const dersler: Record<string,string[]> = {};
+  const puanlar: Record<string,{puan:number; tarih:string}> = {};
+  for (const m of EGITIM_MODULLERI) {
+    const u = Array.from(new Set([...(a.dersler[m.id] || []), ...(b.dersler[m.id] || [])]));
+    if (u.length) dersler[m.id] = u;
+    const pa = a.puanlar[m.id], pb = b.puanlar[m.id];
+    if (pa || pb) puanlar[m.id] = (pa && (!pb || pa.puan >= pb.puan)) ? pa : pb;
+  }
+  return { dersler, puanlar, takmaAd: a.takmaAd || b.takmaAd, listede: a.takmaAd ? a.listede : b.listede };
+}
+async function egitimBulutOku(uid: string): Promise<EgitimIlerleme | null> {
+  try {
+    const app = await kpFirebaseWebApp();
+    const { getFirestore, doc, getDoc } = await import("firebase/firestore");
+    const snap = await getDoc(doc(getFirestore(app), "egitim", uid));
+    if (!snap.exists()) return null;
+    return egitimIlerlemeNormalle(snap.data());
+  } catch (e) { console.error("Eğitim ilerlemesi buluttan okunamadı:", e); return null; }
+}
+function egitimBulutYaz(uid: string, v: EgitimIlerleme) {
+  (async () => {
+    try {
+      const app = await kpFirebaseWebApp();
+      const { getFirestore, doc, setDoc } = await import("firebase/firestore");
+      await setDoc(doc(getFirestore(app), "egitim", uid), { ...v, sonGuncelleme: new Date().toISOString() });
+    } catch (e) { console.error("Eğitim ilerlemesi buluta yazılamadı:", e); }
+  })();
+}
+// Liderlik tablosu: herkese açık özet (liderlik/{uid}) — yalnızca takma ad + toplam puan. Gerçek ad/e-posta ASLA yazılmaz.
+async function egitimLiderlikYaz(uid: string, takmaAd: string, toplam: number): Promise<boolean> {
+  try {
+    const app = await kpFirebaseWebApp();
+    const { getFirestore, doc, setDoc } = await import("firebase/firestore");
+    await setDoc(doc(getFirestore(app), "liderlik", uid), { takmaAd, toplam, guncelleme: new Date().toISOString() });
+    return true;
+  } catch (e) { console.error("Liderlik tablosuna yazılamadı:", e); return false; }
+}
+async function egitimLiderlikSil(uid: string): Promise<boolean> {
+  try {
+    const app = await kpFirebaseWebApp();
+    const { getFirestore, doc, deleteDoc } = await import("firebase/firestore");
+    await deleteDoc(doc(getFirestore(app), "liderlik", uid));
+    return true;
+  } catch (e) { console.error("Liderlik kaydı silinemedi:", e); return false; }
+}
+async function egitimLiderlikGetir(): Promise<{uid:string; takmaAd:string; toplam:number}[] | null> {
+  try {
+    const app = await kpFirebaseWebApp();
+    const { getFirestore, collection, query, orderBy, limit, getDocs } = await import("firebase/firestore");
+    const sn = await getDocs(query(collection(getFirestore(app), "liderlik"), orderBy("toplam", "desc"), limit(25)));
+    return sn.docs.map((d: any) => { const x = d.data() || {}; return { uid: d.id, takmaAd: String(x.takmaAd || "—"), toplam: typeof x.toplam === "number" ? x.toplam : 0 }; });
+  } catch (e) { console.error("Liderlik tablosu okunamadı:", e); return null; }
+}
+function egitimTakmaAdGecerliMi(ad: string): boolean { return /^[A-Za-zÇĞİÖŞÜçğıöşü0-9 ._-]{2,20}$/.test(ad); }
+
+// Seçenek ve soru sırası her sınavda karıştırılır (doğru şık hep aynı yerde olmasın).
+function egitimKaristir<T>(dizi: T[]): T[] {
+  const a = dizi.slice();
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+function egitimSinavHazirla(m: EgitimModul): EgitimSoru[] {
+  return egitimKaristir(m.sorular).map(q => {
+    const sira = egitimKaristir(q.sec.map((_, i) => i));
+    return { s: q.s, sec: sira.map(i => q.sec[i]), d: sira.indexOf(q.d), ac: q.ac };
+  });
+}
+// Pro ekranına gidip dönünce kullanıcı kaldığı modüle dönsün (modül seviyesi tek kullanımlık kayıt; render'da yalnız okunur, mount efektinde silinir).
+let egitimSonGorunum: any = null;
+
+function EgitimGeri({onClick, etiket}:{onClick:()=>void; etiket?:string}){
+  return (
+    <button onClick={onClick} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"6px 12px",borderRadius:16,border:`1px solid ${C.blue}55`,background:C.blueLight,color:C.blue,fontSize:13,fontWeight:700,fontFamily:"inherit",cursor:"pointer",marginBottom:12}}>
+      ‹ {etiket || "Geri"}
+    </button>
+  );
+}
+
+function EgitimSinav({modul, onBitti, onCik}:{modul:EgitimModul; onBitti:(r:{dogru:number;toplam:number;yanlislar:any[]})=>void; onCik:()=>void}){
+  const [sorular] = useState(()=>egitimSinavHazirla(modul));
+  const [idx,setIdx] = useState(0);
+  const [secili,setSecili] = useState<number|null>(null);
+  const [cevaplandi,setCevaplandi] = useState(false);
+  const [hata,setHata] = useState("");
+  const [kalan,setKalan] = useState(EGITIM_SINAV_SN);
+  const [cikisOnay,setCikisOnay] = useState(false);
+  const dogruRef = useRef(0);
+  const yanlisRef = useRef<any[]>([]);
+  const cevapSayisiRef = useRef(0);
+  const bittiRef = useRef(false);
+  const onBittiRef = useRef(onBitti); onBittiRef.current = onBitti;
+
+  const bitir = () => {
+    if (bittiRef.current) return;
+    bittiRef.current = true;
+    // Süre bitince cevaplanmamış sorular yanlış sayılır.
+    for (let i = cevapSayisiRef.current; i < sorular.length; i++) {
+      const q = sorular[i];
+      yanlisRef.current.push({ s:q.s, secilen:null, dogruMetin:q.sec[q.d], ac:q.ac });
+    }
+    onBittiRef.current({ dogru:dogruRef.current, toplam:sorular.length, yanlislar:yanlisRef.current });
+  };
+  useEffect(()=>{ const t = setInterval(()=>setKalan(k=>k-1), 1000); return ()=>clearInterval(t); },[]);
+  useEffect(()=>{ if (kalan <= 0) bitir(); },[kalan]);
+
+  const q = sorular[idx];
+  const cevapla = () => {
+    if (secili == null) { setHata("Önce bir seçenek işaretle"); return; }
+    const dogru = secili === q.d;
+    cevapSayisiRef.current += 1;
+    if (dogru) dogruRef.current += 1;
+    else yanlisRef.current.push({ s:q.s, secilen:q.sec[secili], dogruMetin:q.sec[q.d], ac:q.ac });
+    setCevaplandi(true);
+  };
+  const ileri = () => {
+    if (idx + 1 >= sorular.length) { bitir(); return; }
+    setIdx(idx + 1); setSecili(null); setCevaplandi(false); setHata("");
+  };
+  const mmss = String(Math.floor(Math.max(0,kalan)/60)).padStart(2,"0") + ":" + String(Math.max(0,kalan)%60).padStart(2,"0");
+  const dogruMu = cevaplandi && secili === q.d;
+
+  return (
+    <div style={{padding:"0 14px 26px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",margin:"2px 2px 8px"}}>
+        <span style={{fontSize:12,fontWeight:700,color:C.sub}}>{modul.ad} · Soru {idx+1} / {sorular.length}</span>
+        <span style={{fontSize:13,fontWeight:700,fontFamily:"monospace",color:kalan<=60?C.red:C.label}}>{mmss}</span>
+      </div>
+      <div style={{height:5,background:WA(0.08),borderRadius:3,marginBottom:12}}>
+        <div style={{width:`${(idx/sorular.length)*100}%`,height:5,background:modul.renk,borderRadius:3,transition:"width .2s"}}/>
+      </div>
+      <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px 14px"}}>
+        <p style={{margin:"0 0 12px",fontSize:15,fontWeight:700,lineHeight:1.45,color:C.label}}>{q.s}</p>
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {q.sec.map((metin,i)=>{
+            const sec = secili === i;
+            const dogruSik = cevaplandi && i === q.d;
+            const yanlisSik = cevaplandi && sec && i !== q.d;
+            const kenar = dogruSik ? C.green : yanlisSik ? C.red : sec ? C.blue : C.border;
+            const zemin = dogruSik ? C.greenLight : yanlisSik ? "rgba(248,113,113,0.14)" : sec ? C.blueLight : "transparent";
+            return (
+              <button key={i} disabled={cevaplandi} onClick={()=>{ setSecili(i); setHata(""); }}
+                style={{textAlign:"left",padding:"11px 12px",borderRadius:10,border:`1.5px solid ${kenar}`,background:zemin,color:C.label,fontSize:14,lineHeight:1.4,fontFamily:"inherit",cursor:cevaplandi?"default":"pointer"}}>
+                <span style={{fontWeight:700,marginRight:6,color:C.sub}}>{String.fromCharCode(65+i)})</span>{metin}
+              </button>
+            );
+          })}
+        </div>
+        {hata && <p style={{margin:"10px 2px 0",fontSize:13,color:C.red}}>{hata}</p>}
+        {cevaplandi && (
+          <div style={{marginTop:12,padding:"10px 12px",borderRadius:10,background:dogruMu?C.greenLight:"rgba(248,113,113,0.14)",fontSize:13,lineHeight:1.55,color:C.label}}>
+            <b style={{color:dogruMu?C.green:C.red}}>{dogruMu?"Doğru. ":"Yanlış. "}</b>{q.ac}
+          </div>
+        )}
+        <button onClick={cevaplandi?ileri:cevapla}
+          style={{width:"100%",marginTop:14,padding:"12px 14px",borderRadius:12,border:"none",background:C.blue,color:"#fff",fontSize:14,fontWeight:700,fontFamily:"inherit",cursor:"pointer"}}>
+          {cevaplandi ? (idx+1>=sorular.length ? "Sonucu gör" : "Sonraki soru") : "Cevapla"}
+        </button>
+      </div>
+      <div style={{marginTop:12,textAlign:"center"}}>
+        {!cikisOnay
+          ? <button onClick={()=>setCikisOnay(true)} style={{background:"none",border:"none",color:C.sub,fontSize:12,fontFamily:"inherit",cursor:"pointer",textDecoration:"underline"}}>Sınavdan çık</button>
+          : <div style={{fontSize:12,color:C.sub}}>
+              Çıkarsan bu deneme kaydedilmez.{" "}
+              <button onClick={onCik} style={{background:"none",border:"none",color:C.red,fontSize:12,fontWeight:700,fontFamily:"inherit",cursor:"pointer"}}>Evet, çık</button>{" · "}
+              <button onClick={()=>setCikisOnay(false)} style={{background:"none",border:"none",color:C.blue,fontSize:12,fontWeight:700,fontFamily:"inherit",cursor:"pointer"}}>Devam et</button>
+            </div>}
+      </div>
+    </div>
+  );
+}
+
+function Egitim({kimlik, nav}:{kimlik:any; nav:(e:string)=>void}){
+  const uid: string|null = kimlik?.kullanici?.uid || null;
+  const [ilerleme,setIlerleme] = useState<EgitimIlerleme>(()=>egitimIlerlemeOku());
+  const ilerlemeRef = useRef(ilerleme); ilerlemeRef.current = ilerleme;
+  const [gor,setGor] = useState<any>(()=>egitimSonGorunum || {t:"liste"});
+  const [uyari,setUyari] = useState("");
+  const [takmaAdGiris,setTakmaAdGiris] = useState("");
+  const [liderHata,setLiderHata] = useState("");
+  const [liderlik,setLiderlik] = useState<{uid:string;takmaAd:string;toplam:number}[]|null|undefined>(undefined);
+  const ustRef = useRef<HTMLDivElement>(null);
+
+  useEffect(()=>{ egitimSonGorunum = null; },[]);
+  useEffect(()=>{ try{ ustRef.current?.scrollIntoView({block:"start"}); }catch{} },[gor.t, gor.m, gor.d]);
+
+  // Girişte bir kez: bulutla birleştir (ders birleşimi, puan en yüksek).
+  useEffect(()=>{
+    if(!uid) return;
+    let iptal=false;
+    egitimBulutOku(uid).then(b=>{
+      if(iptal) return;
+      const yerel = egitimIlerlemeOku();
+      const n = b ? egitimBirlestir(yerel,b) : yerel;
+      egitimIlerlemeYaz(n); ilerlemeRef.current = n; setIlerleme(n); egitimBulutYaz(uid,n);
+    });
+    return ()=>{ iptal=true; };
+  },[uid]);
+
+  const kaydet = (n: EgitimIlerleme) => { ilerlemeRef.current = n; setIlerleme(n); egitimIlerlemeYaz(n); if(uid) egitimBulutYaz(uid,n); };
+  const modulBul = (id:string) => EGITIM_MODULLERI.find(m=>m.id===id)!;
+  const toplamPuan = egitimToplamPuan(ilerleme);
+  const toplamDers = EGITIM_MODULLERI.reduce((t,m)=>t+m.dersler.length,0);
+  const biten = EGITIM_MODULLERI.reduce((t,m)=>t+(ilerleme.dersler[m.id]||[]).length,0);
+
+  const kart: any = {background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:"13px 14px",marginBottom:10};
+  const sinavaBasla = (m: EgitimModul) => {
+    if(kimlik?.proYukleniyor){ setUyari("Üyelik durumun kontrol ediliyor. Birkaç saniye sonra tekrar dene."); return; }
+    egitimSonGorunum = {t:"modul", m:m.id};
+    if(!kpProGerekliMi(kimlik.pro, nav)) return;   // Pro değilse ProSatinAl'a yönlendirir
+    egitimSonGorunum = null; setUyari(""); setGor({t:"sinav", m:m.id});
+  };
+
+  const sinavBitti = (m: EgitimModul, r:{dogru:number;toplam:number;yanlislar:any[]}) => {
+    const puan = Math.round((r.dogru / Math.max(1,r.toplam)) * 100);
+    const onceki = ilerlemeRef.current.puanlar[m.id]?.puan || 0;
+    const yeniEnIyi = puan > onceki;
+    const n: EgitimIlerleme = yeniEnIyi
+      ? { ...ilerlemeRef.current, puanlar:{ ...ilerlemeRef.current.puanlar, [m.id]:{ puan, tarih:new Date().toISOString() } } }
+      : ilerlemeRef.current;
+    if(yeniEnIyi){
+      kaydet(n);
+      if(uid && n.listede && n.takmaAd) egitimLiderlikYaz(uid, n.takmaAd, egitimToplamPuan(n));
+    }
+    setGor({t:"sonuc", m:m.id, puan, dogru:r.dogru, toplam:r.toplam, yanlislar:r.yanlislar, yeniEnIyi});
+  };
+
+  const listeyeKatil = async () => {
+    const ad = takmaAdGiris.trim();
+    if(!uid){ setLiderHata("Liderlik tablosuna katılmak için giriş yapmalısın."); return; }
+    if(!egitimTakmaAdGecerliMi(ad)){ setLiderHata("Takma ad 2-20 karakter olmalı; harf, rakam, boşluk, nokta, tire veya alt çizgi kullanabilirsin."); return; }
+    if(toplamPuan<=0){ setLiderHata("Listeye katılmak için önce bir sınav çöz."); return; }
+    setLiderHata("");
+    const ok = await egitimLiderlikYaz(uid, ad, toplamPuan);
+    if(!ok){ setLiderHata("Liderlik tablosuna şu an kaydedilemedi. Biraz sonra tekrar dene."); return; }
+    kaydet({ ...ilerlemeRef.current, takmaAd:ad, listede:true });
+    setLiderlik(undefined);
+  };
+  const listedenCik = async () => {
+    if(!uid) return;
+    const ok = await egitimLiderlikSil(uid);
+    if(!ok){ setLiderHata("Listeden çıkarılamadı. Biraz sonra tekrar dene."); return; }
+    setLiderHata("");
+    kaydet({ ...ilerlemeRef.current, listede:false });
+    setLiderlik(undefined);
+  };
+
+  // Liderlik ekranı açılınca (ve katılım/çıkış sonrası) listeyi çek.
+  useEffect(()=>{
+    if(gor.t!=="liderlik" || !uid || liderlik!==undefined) return;
+    let iptal=false;
+    egitimLiderlikGetir().then(l=>{ if(!iptal) setLiderlik(l); });
+    return ()=>{ iptal=true; };
+  },[gor.t, uid, liderlik]);
+
+  const katilKarti = () => (
+    <div style={kart}>
+      <p style={{margin:"0 0 4px",fontSize:14,fontWeight:700,color:C.label}}>Liderlik tablosuna katıl</p>
+      <p style={{margin:"0 0 10px",fontSize:12,lineHeight:1.5,color:C.sub}}>Sıralamada yalnızca seçtiğin takma ad ve toplam puanın görünür. Gerçek adın ve e-postan paylaşılmaz. İstediğin zaman listeden çıkabilirsin.</p>
+      <input value={takmaAdGiris} onChange={e=>{ setTakmaAdGiris(e.target.value); setLiderHata(""); }} placeholder="Takma ad" maxLength={20}
+        style={{width:"100%",boxSizing:"border-box",padding:"10px 12px",borderRadius:10,border:`1px solid ${C.border}`,background:"transparent",color:C.label,fontSize:14,fontFamily:"inherit",marginBottom:8}}/>
+      {liderHata && <p style={{margin:"0 0 8px",fontSize:12,color:C.red}}>{liderHata}</p>}
+      <button onClick={listeyeKatil} style={{width:"100%",padding:"11px 14px",borderRadius:12,border:"none",background:C.blue,color:"#fff",fontSize:14,fontWeight:700,fontFamily:"inherit",cursor:"pointer"}}>Listeye katıl</button>
+    </div>
+  );
+
+  // ── LİSTE ──
+  let icerik: any = null;
+  if(gor.t==="liste"){
+    icerik = (
+      <div style={{padding:"0 14px 26px"}}>
+        <p style={{margin:"0 2px 12px",fontSize:12,lineHeight:1.55,color:C.sub}}>Katılım bankacılığı, ekonomi ve finans konularında kısa dersler. Dersler ücretsizdir; modül sınavı ve puan Pro üyelere özeldir.</p>
+        <div style={{display:"flex",gap:8,marginBottom:12}}>
+          <div style={{flex:1,...kart,marginBottom:0,textAlign:"center"}}>
+            <div style={{fontSize:20,fontWeight:700,color:C.label}}>{biten}/{toplamDers}</div>
+            <div style={{fontSize:11,color:C.sub}}>Tamamlanan ders</div>
+          </div>
+          <div style={{flex:1,...kart,marginBottom:0,textAlign:"center"}}>
+            <div style={{fontSize:20,fontWeight:700,color:C.label}}>{toplamPuan}<span style={{fontSize:12,color:C.sub}}> / {EGITIM_MODULLERI.length*100}</span></div>
+            <div style={{fontSize:11,color:C.sub}}>Toplam puan</div>
+          </div>
+        </div>
+        {EGITIM_MODULLERI.map(m=>{
+          const b = (ilerleme.dersler[m.id]||[]).length;
+          const p = ilerleme.puanlar[m.id];
+          return (
+            <div key={m.id} className="press-card" onClick={()=>setGor({t:"modul",m:m.id})} style={{...kart,cursor:"pointer"}}>
+              <div style={{display:"flex",alignItems:"center",gap:12}}>
+                <div style={{width:44,height:44,borderRadius:12,background:m.renk+"26",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0}}>{m.ikon}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <p style={{margin:0,fontSize:15,fontWeight:700,color:C.label}}>{m.ad}</p>
+                  <p style={{margin:"2px 0 0",fontSize:12,lineHeight:1.4,color:C.sub}}>{m.aciklama}</p>
+                </div>
+              </div>
+              <div style={{height:5,background:WA(0.08),borderRadius:3,margin:"10px 0 6px"}}>
+                <div style={{width:`${(b/m.dersler.length)*100}%`,height:5,background:m.renk,borderRadius:3}}/>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:C.sub}}>
+                <span>{b} / {m.dersler.length} ders</span>
+                <span>{p ? `Sınav: ${p.puan} puan${p.puan>=EGITIM_GECME_NOTU?" ✓":""}` : "Sınav: Pro"}</span>
+              </div>
+            </div>
+          );
+        })}
+        <div className="press-card" onClick={()=>setGor({t:"liderlik"})} style={{...kart,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <span style={{fontSize:14,fontWeight:700,color:C.label}}>🏆 Liderlik tablosu</span>
+          <span style={{color:C.sub}}>›</span>
+        </div>
+        <p style={{margin:"6px 2px 0",fontSize:11,lineHeight:1.5,color:C.sub2}}>Eğitim içeriği genel bilgi amaçlıdır; yatırım, hukuk veya vergi tavsiyesi değildir.</p>
+      </div>
+    );
+  }
+
+  // ── MODÜL ──
+  if(gor.t==="modul"){
+    const m = modulBul(gor.m);
+    const biti = ilerleme.dersler[m.id]||[];
+    const p = ilerleme.puanlar[m.id];
+    icerik = (
+      <div style={{padding:"0 14px 26px"}}>
+        <EgitimGeri onClick={()=>setGor({t:"liste"})} etiket="Eğitim"/>
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
+          <div style={{width:48,height:48,borderRadius:12,background:m.renk+"26",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24}}>{m.ikon}</div>
+          <div>
+            <p style={{margin:0,fontSize:18,fontWeight:700,color:C.label}}>{m.ad}</p>
+            <p style={{margin:"2px 0 0",fontSize:12,color:C.sub}}>{m.dersler.length} ders · {m.sorular.length} soruluk sınav</p>
+          </div>
+        </div>
+        {m.dersler.map((d,i)=>{
+          const bitti = biti.includes(d.id);
+          return (
+            <div key={d.id} className="press-card" onClick={()=>setGor({t:"ders",m:m.id,d:d.id})} style={{...kart,cursor:"pointer",display:"flex",alignItems:"center",gap:12,padding:"12px 14px"}}>
+              <div style={{width:28,height:28,borderRadius:14,background:bitti?C.green:WA(0.1),color:bitti?"#fff":C.sub,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,flexShrink:0}}>{bitti?"✓":i+1}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <p style={{margin:0,fontSize:14,fontWeight:600,color:C.label}}>{d.baslik}</p>
+                <p style={{margin:"1px 0 0",fontSize:11,color:C.sub}}>{d.dk} dk okuma</p>
+              </div>
+              <span style={{color:C.sub}}>›</span>
+            </div>
+          );
+        })}
+        <div style={{...kart,marginTop:14,borderColor:m.renk+"88"}}>
+          <p style={{margin:"0 0 4px",fontSize:15,fontWeight:700,color:C.label}}>Modül sınavı <span style={{fontSize:11,fontWeight:700,padding:"2px 7px",borderRadius:6,background:"#D8A94E",color:"#3B2A05",marginLeft:4,verticalAlign:"1px"}}>PRO</span></p>
+          <p style={{margin:"0 0 10px",fontSize:12,lineHeight:1.5,color:C.sub}}>
+            {m.sorular.length} soru · {Math.round(EGITIM_SINAV_SN/60)} dakika · geçme notu {EGITIM_GECME_NOTU}.
+            {biti.length<m.dersler.length ? " Önce dersleri tamamlaman önerilir." : ""}
+            {p ? ` En iyi puanın: ${p.puan}.` : ""}
+          </p>
+          {uyari && <p style={{margin:"0 0 8px",fontSize:12,color:C.red}}>{uyari}</p>}
+          <button onClick={()=>sinavaBasla(m)} style={{width:"100%",padding:"12px 14px",borderRadius:12,border:"none",background:C.blue,color:"#fff",fontSize:14,fontWeight:700,fontFamily:"inherit",cursor:"pointer"}}>{p?"Sınavı tekrar çöz":"Sınava başla"}</button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── DERS ──
+  if(gor.t==="ders"){
+    const m = modulBul(gor.m);
+    const i = m.dersler.findIndex(d=>d.id===gor.d);
+    const d = m.dersler[i];
+    const sonraki = m.dersler[i+1];
+    const tamamla = () => {
+      const mevcut = ilerlemeRef.current.dersler[m.id]||[];
+      if(!mevcut.includes(d.id)) kaydet({ ...ilerlemeRef.current, dersler:{ ...ilerlemeRef.current.dersler, [m.id]:[...mevcut,d.id] } });
+      setGor(sonraki ? {t:"ders",m:m.id,d:sonraki.id} : {t:"modul",m:m.id});
+    };
+    icerik = (
+      <div style={{padding:"0 14px 26px"}}>
+        <EgitimGeri onClick={()=>setGor({t:"modul",m:m.id})} etiket={m.ad}/>
+        <p style={{margin:"0 2px 4px",fontSize:12,fontWeight:700,color:m.renk}}>Ders {i+1} / {m.dersler.length} · {d.dk} dk</p>
+        <p style={{margin:"0 2px 12px",fontSize:19,fontWeight:700,lineHeight:1.3,color:C.label}}>{d.baslik}</p>
+        <div style={{...kart,padding:"14px 14px 4px"}}>
+          {d.govde.map((p,k)=><p key={k} style={{margin:"0 0 12px",fontSize:14.5,lineHeight:1.65,color:C.label}}>{p}</p>)}
+        </div>
+        <div style={{...kart,background:m.renk+"1F",borderColor:m.renk+"66"}}>
+          <p style={{margin:"0 0 6px",fontSize:13,fontWeight:700,color:C.label}}>Kısaca</p>
+          {d.ozet.map((o,k)=><p key={k} style={{margin:"0 0 4px",fontSize:13,lineHeight:1.5,color:C.label}}>• {o}</p>)}
+        </div>
+        <button onClick={tamamla} style={{width:"100%",marginTop:4,padding:"12px 14px",borderRadius:12,border:"none",background:C.blue,color:"#fff",fontSize:14,fontWeight:700,fontFamily:"inherit",cursor:"pointer"}}>
+          {sonraki ? "Dersi tamamla ve sonrakine geç" : "Dersi tamamla"}
+        </button>
+        {i>0 && <button onClick={()=>setGor({t:"ders",m:m.id,d:m.dersler[i-1].id})} style={{width:"100%",marginTop:8,padding:"10px 14px",borderRadius:12,border:`1px solid ${C.border}`,background:"transparent",color:C.sub,fontSize:13,fontWeight:600,fontFamily:"inherit",cursor:"pointer"}}>Önceki ders</button>}
+      </div>
+    );
+  }
+
+  // ── SINAV ──
+  if(gor.t==="sinav"){
+    const m = modulBul(gor.m);
+    icerik = <EgitimSinav key={m.id+"-"+(gor.n||0)} modul={m} onBitti={(r)=>sinavBitti(m,r)} onCik={()=>setGor({t:"modul",m:m.id})}/>;
+  }
+
+  // ── SONUÇ ──
+  if(gor.t==="sonuc"){
+    const m = modulBul(gor.m);
+    const gecti = gor.puan>=EGITIM_GECME_NOTU;
+    icerik = (
+      <div style={{padding:"0 14px 26px"}}>
+        <div style={{...kart,textAlign:"center",padding:"18px 14px"}}>
+          <div style={{width:84,height:84,borderRadius:42,margin:"0 auto 10px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:30,fontWeight:700,background:gecti?C.greenLight:"rgba(248,113,113,0.14)",color:gecti?C.green:C.red}}>{gor.puan}</div>
+          <p style={{margin:0,fontSize:17,fontWeight:700,color:C.label}}>{gecti?"Tebrikler, geçtin":"Bu sefer olmadı"}</p>
+          <p style={{margin:"4px 0 0",fontSize:13,color:C.sub}}>{m.ad} · {gor.dogru} / {gor.toplam} doğru</p>
+          {gor.yeniEnIyi && <p style={{margin:"8px 0 0",fontSize:12,fontWeight:700,color:C.green}}>Yeni en iyi puanın</p>}
+          <p style={{margin:"8px 0 0",fontSize:12,color:C.sub}}>Toplam puanın: {toplamPuan} / {EGITIM_MODULLERI.length*100}</p>
+        </div>
+        {uid && !ilerleme.listede && toplamPuan>0 && katilKarti()}
+        {gor.yanlislar.length>0 && (
+          <>
+            <p style={{margin:"14px 2px 8px",fontSize:13,fontWeight:700,color:C.sub}}>Gözden geçir ({gor.yanlislar.length})</p>
+            {gor.yanlislar.map((y:any,k:number)=>(
+              <div key={k} style={kart}>
+                <p style={{margin:"0 0 6px",fontSize:13.5,fontWeight:700,lineHeight:1.45,color:C.label}}>{y.s}</p>
+                <p style={{margin:"0 0 3px",fontSize:12.5,color:C.red}}>Cevabın: {y.secilen==null?"Boş (süre doldu)":y.secilen}</p>
+                <p style={{margin:"0 0 6px",fontSize:12.5,color:C.green}}>Doğru cevap: {y.dogruMetin}</p>
+                <p style={{margin:0,fontSize:12,lineHeight:1.5,color:C.sub}}>{y.ac}</p>
+              </div>
+            ))}
+          </>
+        )}
+        <div style={{display:"flex",gap:8,marginTop:6}}>
+          <button onClick={()=>setGor({t:"sinav",m:m.id,n:(gor.n||0)+1})} style={{flex:1,padding:"11px 12px",borderRadius:12,border:`1px solid ${C.border}`,background:"transparent",color:C.label,fontSize:13,fontWeight:700,fontFamily:"inherit",cursor:"pointer"}}>Tekrar çöz</button>
+          <button onClick={()=>setGor({t:"liderlik"})} style={{flex:1,padding:"11px 12px",borderRadius:12,border:"none",background:C.blue,color:"#fff",fontSize:13,fontWeight:700,fontFamily:"inherit",cursor:"pointer"}}>Liderlik tablosu</button>
+        </div>
+        <button onClick={()=>setGor({t:"modul",m:m.id})} style={{width:"100%",marginTop:8,padding:"10px 12px",borderRadius:12,border:"none",background:"transparent",color:C.sub,fontSize:13,fontFamily:"inherit",cursor:"pointer"}}>Modüle dön</button>
+      </div>
+    );
+  }
+
+  // ── LİDERLİK ──
+  if(gor.t==="liderlik"){
+    const benim = liderlik ? liderlik.findIndex(x=>x.uid===uid) : -1;
+    icerik = (
+      <div style={{padding:"0 14px 26px"}}>
+        <EgitimGeri onClick={()=>setGor({t:"liste"})} etiket="Eğitim"/>
+        <p style={{margin:"0 2px 4px",fontSize:19,fontWeight:700,color:C.label}}>Liderlik tablosu</p>
+        <p style={{margin:"0 2px 12px",fontSize:12,lineHeight:1.5,color:C.sub}}>Sıralama, dört modülün en yüksek sınav puanlarının toplamına göre yapılır (en çok {EGITIM_MODULLERI.length*100}). Yalnızca takma ad ve puan görünür.</p>
+        {!uid ? (
+          <div style={kart}>
+            <p style={{margin:"0 0 10px",fontSize:13,lineHeight:1.5,color:C.label}}>Liderlik tablosunu görmek için giriş yapmalısın.</p>
+            <button onClick={()=>nav("hesapGiris")} style={{width:"100%",padding:"11px 14px",borderRadius:12,border:"none",background:C.blue,color:"#fff",fontSize:14,fontWeight:700,fontFamily:"inherit",cursor:"pointer"}}>Giriş yap</button>
+          </div>
+        ) : liderlik===undefined ? (
+          <p style={{fontSize:13,color:C.sub}}>Yükleniyor…</p>
+        ) : liderlik===null ? (
+          <div style={kart}><p style={{margin:0,fontSize:13,lineHeight:1.5,color:C.label}}>Liderlik tablosu şu an yüklenemedi. Biraz sonra tekrar dene.</p></div>
+        ) : liderlik.length===0 ? (
+          <div style={kart}><p style={{margin:0,fontSize:13,lineHeight:1.5,color:C.label}}>Henüz listede kimse yok. İlk sen ol: bir sınav çöz ve listeye katıl.</p></div>
+        ) : (
+          <div style={{...kart,padding:0,overflow:"hidden"}}>
+            {liderlik.map((x,k)=>{
+              const ben = x.uid===uid;
+              return (
+                <div key={x.uid} style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px",borderBottom:k<liderlik.length-1?`1px solid ${C.border}`:"none",background:ben?C.blueLight:"transparent"}}>
+                  <span style={{width:26,fontSize:13,fontWeight:700,color:k<3?"#D8A94E":C.sub}}>{k+1}</span>
+                  <span style={{flex:1,minWidth:0,fontSize:14,fontWeight:ben?700:500,color:C.label,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.takmaAd}{ben?" (sen)":""}</span>
+                  <span style={{fontSize:14,fontWeight:700,fontFamily:"monospace",color:C.label}}>{x.toplam}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {uid && liderlik && benim<0 && ilerleme.listede && <p style={{margin:"0 2px 10px",fontSize:12,color:C.sub}}>İlk 25 dışındasın. Toplam puanın: {toplamPuan}.</p>}
+        {uid && !ilerleme.listede && katilKarti()}
+        {uid && ilerleme.listede && (
+          <div style={{textAlign:"center",marginTop:6}}>
+            <p style={{margin:"0 0 6px",fontSize:12,color:C.sub}}>Takma adın: {ilerleme.takmaAd}</p>
+            {liderHata && <p style={{margin:"0 0 6px",fontSize:12,color:C.red}}>{liderHata}</p>}
+            <button onClick={listedenCik} style={{background:"none",border:"none",color:C.red,fontSize:13,fontWeight:700,fontFamily:"inherit",cursor:"pointer",textDecoration:"underline"}}>Listeden çık</button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return <div ref={ustRef}>{icerik}</div>;
+}
+
 function KvkkAydinlatma(){
   return(
     <YasalMetinEkrani baslik="KVKK Aydınlatma Metni">
@@ -1364,6 +2117,7 @@ const ICON_MAP: Record<string, any> = {
   haftalikOzet: Newspaper,
   katilimBankalari: Landmark,
   icazetBelgeleri: FileBadge,   // 2026-10-03: belge/sertifika ikonu; FileBadge zaten import edilmiş (yeni import riski yok). Bu harita yoksa Araçlar kartı ve sol menü İKONSUZ görünür.
+  egitim: GraduationCap,   // 2026-10-04: Eğitim bölümü (Araçlar kartı + sol menü ikonu)
   // 2026-08-01: Yeni ekranlar bu haritaya eklenmemişti; Araçlar menüsündeki
   // kartlar ikonsuz görünüyordu. Zaten import edilmiş ikonlar kullanıldı,
   // yeni import riski alınmadı.
@@ -2087,7 +2841,7 @@ const EKRAN_KATEGORI: Record<string,string> = {
   // Araçlar / Hesaplama Araçları
   finansalTakvim:"arac", vadeTakibi:"arac", katilimBankalari:"arac",
   hazineDoviz:"arac", hazineForward:"arac", hazineSwap:"arac", hazineBono:"arac", hazineSenaryo:"arac",
-  asistan:"arac", sozluk:"arac",
+  asistan:"arac", sozluk:"arac", egitim:"arac",
 };
 const KategoriRenkContext = createContext<string|null>(null);
 
@@ -22032,6 +22786,7 @@ const MENU = {
   haftalikOzet:{title:"Haftalık Piyasa Özeti",back:"home"},
   katilimBankalari:{title:"Katılım Bankaları",back:"araclarMenu"},
   icazetBelgeleri:{title:"İcazet Belgeleri",back:"araclarMenu"},
+  egitim:{title:"Eğitim",back:"araclarMenu"},
   kfkNedir:{title:"Katılım Finans Kefalet (KFK) Nedir?",back:"araclarMenu"},
   katilimSektoru:{title:"Katılım Bankacılığı Sektörü",back:"araclarMenu"},
   ekonomiSozluk:{title:"Ekonomi Sözlüğü",back:"araclarMenu"},
@@ -22071,7 +22826,7 @@ const TAB_OF_SCREEN:any = {
   hazineDoviz:"hesapla", hazineForward:"hesapla", hazineSwap:"hesapla",
   hazineBono:"hesapla", hazineSenaryo:"hesapla",
   piyasaHaberleri:"piyasa", finansalGostergeler:"piyasa",
-  araclarMenu:"araclar", sozluk:"araclar", vadeTakibi:"araclar", katilimBankalari:"araclar", kfkNedir:"araclar", zekatHesabi:"araclar", erkenKapamaKarari:"hesapla", erkenKapamaKomisyonu:"hesapla", vadeFarkiKarari:"hesapla", tlYpKarari:"hesapla", kiraSertifikasi:"araclar", getiriKarsilastirma:"araclar", haftalikOzet:"araclar", portfoyum:"araclar", fonDetay:"araclar",
+  araclarMenu:"araclar", sozluk:"araclar", egitim:"araclar", vadeTakibi:"araclar", katilimBankalari:"araclar", kfkNedir:"araclar", zekatHesabi:"araclar", erkenKapamaKarari:"hesapla", erkenKapamaKomisyonu:"hesapla", vadeFarkiKarari:"hesapla", tlYpKarari:"hesapla", kiraSertifikasi:"araclar", getiriKarsilastirma:"araclar", haftalikOzet:"araclar", portfoyum:"araclar", fonDetay:"araclar",
   asistan:"yapayzeka",
   profil:"profil",
 };
@@ -22109,6 +22864,7 @@ const SCREEN_TO_PATH: Record<string,string> = {
   finansalTakvim: "/finansal-takvim",
   fiyatAlarmlarim: "/fiyat-alarmlarim",
   sozluk: "/finans-sozlugu",
+  egitim: "/egitim",
   ayarlar: "/ayarlar",
   toggFinansman: "/togg-finansmani",
   arsaIsyeri: "/arsa-isyeri-finansmani",
@@ -22271,6 +23027,7 @@ const MENU_ARAMA_LIST=[
   {key:"kfkNedir",           label:"Katılım Finans Kefalet (KFK) Nedir?",         icon:"🤝", grup:"Araçlar", alt:["kfk","kefalet","katılım finans kefalet","kgf","teminat","kobi"]},
   {key:"katilimSektoru",     label:"Katılım Bankacılığı Sektörü",               icon:"🏦", grup:"Araçlar", alt:["sektör","bddk","pay","aktif","toplanan fon","kullandırılan fon","katılma hesabı","özel cari","roe","kârlılık"]},
   {key:"icazetBelgeleri",    label:"İcazet Belgeleri",                          icon:"📑", grup:"Araçlar", alt:["icazet","icazet belgesi","danışma komitesi","faizsiz","uygunluk","fetva","murabaha","katılma hesabı","belge"]},
+  {key:"egitim",               label:"Eğitim",                                    icon:"🎓", grup:"Araçlar", alt:["eğitim","ders","sınav","quiz","puan","liderlik","öğren","katılım bankacılığı","ekonomi","finansal okuryazarlık","fon","yatırım"]},
   {key:"ekonomiSozluk",      label:"Ekonomi Sözlüğü",                           icon:"📚", grup:"Araçlar", alt:["ekonomi","terim","sözlük","enflasyon","gsyh","faiz","tanım","kavram","makro"]},
   {key:"zekatHesabi",        label:"Zekât Hesaplayıcı",                               icon:"🌙", grup:"Araçlar", alt:["zekat","zekât","nisap","nisab","kırkta bir","sadaka","altın nisabı","dini","ibadet","hesapla"]},
   {key:"kiraSertifikasi",    label:"Kira Sertifikası İhraçları",                 icon:"📜", grup:"Araçlar", alt:["kira sertifikası","sukuk","ihraç","vekâlet","murabaha","icare","varlık kiralama","spk"]},
@@ -32036,6 +32793,7 @@ function App(){
                 {key:"portfoyum",label:"Portföyüm"},
               ]},
               {baslik:"BİLGİ", ogeler:[
+                {key:"egitim",label:"Eğitim"},
                 {key:"kiraSertifikasi",label:"Kira Sertifikası İhraçları"},
                 {key:"katilimBankalari",label:"Katılım Bankaları"},
                 {key:"icazetBelgeleri",label:"İcazet Belgeleri"},
@@ -33546,6 +34304,7 @@ function App(){
               {key:"getiriKarsilastirma", icon:"📊", label:"Getiri Karşılaştırma", desc:"Döviz, altın, gümüş, endeks getirilerini dönemsel karşılaştır", renk:"#F59E0B", bg:"rgba(245,158,11,0.15)"},
               {key:"vadeTakibi", icon:"⏰", label:"Vade Takip & Hatırlatma Ajandam", desc:"Finansman ve ödeme vadelerini takip et, hatırlatma al", renk:C.green, bg:"rgba(74,222,128,0.15)"},
               {key:"katilimBankalari", icon:"🏛️", label:"Katılım Bankaları", desc:"Türkiye'deki katılım bankaları, kuruluş tarihleri ve bilgileri", renk:C.blue, bg:"rgba(91,155,216,0.15)"},
+              {key:"egitim", icon:"🎓", label:"Eğitim", desc:"Katılım bankacılığı, ekonomi ve finans dersleri; modül sınavı ve liderlik tablosu", renk:"#2CCB9A", bg:"rgba(44,203,154,0.15)"},
               {key:"icazetBelgeleri", icon:"📑", label:"İcazet Belgeleri", desc:"Banka ve ürün seç, bankanın kendi yayımladığı icazet belgesine git", renk:"#2CCB9A", bg:"rgba(44,203,154,0.15)"},
               {key:"katilimSektoru", icon:"🏦", label:"Katılım Bankacılığı Sektörü", desc:"Sektör payı, fon büyüklükleri ve kârlılık — BDDK resmî verisiyle", renk:"#5B9BD8", bg:"rgba(91,155,216,0.15)"},
               {key:"ekonomiSozluk", icon:"📚", label:"Ekonomi Sözlüğü", desc:"196 ekonomi ve finans terimi — enflasyondan rezervlere, sade tanımlarla", renk:"#A78BFA", bg:"rgba(167,139,250,0.15)"},
@@ -33891,6 +34650,7 @@ function App(){
         {screen==="vadeTakibi"&&<VadeTakibi/>}
         {screen==="katilimBankalari"&&<KatilimBankalari/>}
         {screen==="icazetBelgeleri"&&<IcazetBelgeleri/>}
+        {screen==="egitim"&&<Egitim kimlik={kimlik} nav={nav}/>}
         {screen==="kfkNedir"&&<KfkNedir/>}
         {screen==="katilimSektoru"&&<KatilimSektoru/>}
         {screen==="ekonomiSozluk"&&<EkonomiSozluk/>}
