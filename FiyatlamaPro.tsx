@@ -255,6 +255,24 @@ async function kpFirebaseWebApp(){
   return getApps().length ? getApps()[0] : initializeApp(FIREBASE_WEB_CONFIG);
 }
 
+// ── HESAP SİLİNİRKEN KULLANICI VERİSİ (2026-10-04) ─────────────────────────
+// Firestore, Authentication kullanıcısı silinince ona bağlı dokümanları KENDİLİĞİNDEN silmez; üstelik kullanıcı silindikten sonra
+// erişim kuralı (request.auth) artık geçmez. Bu yüzden veriler deleteUser'dan ÖNCE silinir (en iyi çaba: bir koleksiyon hata verirse diğerleri yine denenir).
+async function kpKullaniciVerisiniSil(uid: string) {
+  try {
+    const app = await kpFirebaseWebApp();
+    const { getFirestore, collection, getDocs, deleteDoc, doc } = await import("firebase/firestore");
+    const db = getFirestore(app);
+    try {
+      const sn = await getDocs(collection(db, "musteriPortfoyu", uid, "kayitlar"));
+      for (const d of sn.docs) await deleteDoc(d.ref);
+    } catch (e) { console.error("Müşteri Portföyüm kayıtları silinemedi:", e); }
+    for (const koleksiyon of ["musteriPortfoyu", "egitim", "liderlik", "portfoy"]) {
+      try { await deleteDoc(doc(db, koleksiyon, uid)); } catch (e) { console.error(koleksiyon + " dokümanı silinemedi:", e); }
+    }
+  } catch (e) { console.error("Kullanıcı verisi silinemedi:", e); }
+}
+
 function kpKimlikHataMetni(kod:string|undefined,baglam:"eposta"|"diger"="eposta"):string{
   const k=String(kod||"");
   if(k.includes("email-already-in-use")) return "Bu e-posta zaten kayıtlı. Giriş yapmayı dene.";
@@ -563,6 +581,7 @@ function useKpKimlik(){
   // bir mesajla bildiriyoruz (tekrar giriş yapmasını istiyoruz), teknik
   // hata kodunu değil.
   const hesabimiSil=()=>_islemSarmala(async()=>{
+    if(kullanici?.uid) await kpKullaniciVerisiniSil(kullanici.uid);
     const gercekIsNative=(window as any).Capacitor?.isNativePlatform?.() ?? false;
     if(gercekIsNative){
       const mod=await import("@capacitor-firebase/authentication");
@@ -2600,6 +2619,1753 @@ function Egitim({kimlik, nav}:{kimlik:any; nav:(e:string)=>void}){
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// MÜŞTERİ PORTFÖYÜM (2026-10-04) — bankacılar için müşteri / görüşme / takip defteri
+// • Banka entegrasyonu YOK: bakiye, kredi, hesap veya işlem verisi çekilmez; tüm kayıtlar kullanıcının elle girdiği notlardır.
+// • ÜYELİĞE BAĞLI: giriş yapmayan kullanıcı kullanamaz (misafire "Üye ol"). Veriler Firestore musteriPortfoyu/{uid}/kayitlar/{id} altında; yalnızca hesap sahibi okuyup yazar.
+// • Hesap silinirken bu veriler de silinir (kpKullaniciVerisiniSil). Yerel depoda kalıcı kopya tutulmaz (yalnızca v229 cihaz kayıtlarının tek seferlik aktarımı okunur).
+// • Ücretsiz: 5 müşteri · müşteri başına 5 hafıza maddesi · son 5 görüşme; sesli not, notlarda arama ve yedek Pro (kimlik.pro).
+// • Tam ekran katman (zIndex 250); tüm tanımlar tek bir kapsülde (IIFE), CSS .bmx altında kapsüllü — uygulamanın geri kalanıyla çakışmaz.
+// ═══════════════════════════════════════════════════════════════════════
+const BM_CSS = `
+.bmx{
+  --bg:#F2F5F8;--card:#FFFFFF;--card2:#F6F8FA;--text:#16222E;--sub:#3F5062;--mute:#5F6F7F;
+  --line:rgba(22,34,46,.10);--line-strong:rgba(22,34,46,.28);
+  --blue:#2E6DA8;--blue-t:#245A8F;--blue-soft:rgba(46,109,168,.10);--blue-line:rgba(46,109,168,.28);
+  --green:#189656;--green-t:#12753F;--green-soft:rgba(24,150,86,.11);
+  --amber:#B07C1E;--amber-t:#80560A;--amber-soft:rgba(176,124,30,.14);
+  --red:#D64545;--red-t:#B02E2E;--red-soft:rgba(214,69,69,.10);
+  --sh:0 1px 2px rgba(16,24,40,.05),0 6px 18px rgba(16,24,40,.05);
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+;position:fixed;overflow:hidden;box-sizing:border-box;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;font-size:15px;line-height:1.4;-webkit-font-smoothing:antialiased;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.bmx[data-tema="koyu"]{
+  --bg:#0F1923;--card:#16222E;--card2:#1B2A38;--text:#F1F5F9;--sub:#C2CEDA;--mute:#9AA9B8;
+  --line:rgba(255,255,255,.12);--line-strong:rgba(255,255,255,.34);
+  --blue:#5B9BD8;--blue-t:#8DBCEB;--blue-soft:rgba(91,155,216,.16);--blue-line:rgba(91,155,216,.38);
+  --green:#4ADE80;--green-t:#6FE59B;--green-soft:rgba(74,222,128,.15);
+  --amber:#E0A53D;--amber-t:#EDBD68;--amber-soft:rgba(224,165,61,.17);
+  --red:#F87171;--red-t:#FA9A9A;--red-soft:rgba(248,113,113,.15);
+  --sh:0 1px 2px rgba(0,0,0,.35),0 6px 18px rgba(0,0,0,.25);
+}
+.bmx .ustbar{display:flex;align-items:center;height:46px;padding:0 6px;flex-shrink:0;border-bottom:1px solid var(--line);background:var(--bg)}
+.bmx *,.bmx *::before,.bmx *::after{box-sizing:border-box}
+.bmx button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;padding:0}
+.bmx input,.bmx textarea{font:inherit;color:inherit}
+.bmx h1,.bmx h2,.bmx h3,.bmx p{margin:0}
+.bmx a{color:inherit;text-decoration:none}
+.bmx ul{margin:0;padding:0;list-style:none}
+.bmx :focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.bmx .app{height:100%;max-width:480px;margin:0 auto;display:flex;flex-direction:column;position:relative;background:var(--bg);overflow:hidden}
+@media (min-width:520px){.bmx .app{border-left:1px solid var(--line);border-right:1px solid var(--line)}
+}
+.bmx .main{flex:1;min-height:0;position:relative;display:flex;flex-direction:column}
+.bmx .scroll{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.bmx .ekran{padding:6px 16px 8px}
+.bmx .tab-gecis{animation:bm_gec .24s ease both}
+.bmx .alt-bosluk{height:20px}
+.bmx .tabbar{display:flex;background:var(--card);border-top:1px solid var(--line);padding:4px 2px 4px}
+.bmx .tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;min-height:54px;justify-content:center;font-size:11px;font-weight:600;color:var(--mute);letter-spacing:.1px}
+.bmx .tab.on{color:var(--blue-t)}
+.bmx .tab-ik{position:relative;display:flex}
+.bmx .rozet{position:absolute;top:-5px;right:-8px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:var(--red);color:#fff;font-size:10.5px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid var(--card)}
+.bmx .rozet.kucuk{top:-6px;right:-10px}
+.bmx .ust{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:10px 0 12px}
+.bmx .ust h1{font-size:26px;font-weight:700;letter-spacing:-.4px;line-height:1.15}
+.bmx .ust p{margin-top:3px;font-size:14.5px;color:var(--sub)}
+.bmx .ust-sag{display:flex;gap:8px;align-items:center}
+.bmx .ibtn{width:44px;height:44px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:var(--text);position:relative;flex-shrink:0;transition:transform .12s,background .2s}
+.bmx .ibtn:active{transform:scale(.94)}
+.bmx .ibtn.halka{background:var(--card);border:1px solid var(--line);box-shadow:var(--sh)}
+.bmx .ibtn.dolu{background:var(--blue);color:#fff;box-shadow:0 4px 12px rgba(46,109,168,.28)}
+.bmx .ibtn.kucuk{width:32px;height:32px;color:var(--mute)}
+.bmx .ibtn.kucuk2{width:42px;height:42px}
+.bmx .sec-h{display:flex;align-items:center;justify-content:space-between;margin:20px 0 6px}
+.bmx .sec-h h2{font-size:17px;font-weight:700;letter-spacing:-.15px}
+.bmx .alt-b{font-size:13.5px;color:var(--sub);margin:-2px 0 10px}
+.bmx .link{color:var(--blue-t);font-weight:600;font-size:14px;display:inline-flex;align-items:center;gap:5px;min-height:36px}
+.bmx .adet{font-size:12.5px;font-weight:700;background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:1px 8px;color:var(--sub)}
+.bmx .stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.bmx .stat{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 14px;text-align:left;box-shadow:var(--sh);display:flex;flex-direction:column;gap:2px;transition:transform .12s}
+.bmx .stat:active{transform:scale(.98)}
+.bmx .stat-n{font-size:26px;font-weight:700;letter-spacing:-.5px;line-height:1.1}
+.bmx .stat-l{font-size:13px;color:var(--sub);display:flex;align-items:center;gap:6px;font-weight:500}
+.bmx .nk{width:9px;height:9px;border-radius:50%;display:inline-block}
+.bmx .nk.r{background:var(--red)}
+.bmx .nk.o{background:var(--amber)}
+.bmx .nk.g{background:var(--green)}
+.bmx .stat-s{height:68px;border-radius:16px}
+.bmx .swipe{position:relative;margin-bottom:10px;border-radius:16px}
+.bmx .sw-bg{position:absolute;inset:0;border-radius:16px;display:flex;align-items:center;font-weight:700;font-size:14px;padding:0 20px;gap:8px;transition:opacity .12s}
+.bmx .sw-sag{background:var(--green-soft);color:var(--green-t);justify-content:flex-start}
+.bmx .sw-sol{background:var(--amber-soft);color:var(--amber-t);justify-content:flex-end}
+.bmx .sw-ic{position:relative;touch-action:pan-y;will-change:transform}
+.bmx .akart{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--sh);position:relative;overflow:hidden}
+.bmx .akart::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--green)}
+.bmx .akart.onc-yuksek::before{background:var(--red)}
+.bmx .akart.onc-orta::before{background:var(--amber)}
+.bmx .akart-ust{display:flex;gap:11px;padding:14px 14px 10px 16px;text-align:left;width:100%;align-items:flex-start}
+.bmx .onc-nokta{width:10px;height:10px;border-radius:50%;background:var(--green);margin-top:5px;flex-shrink:0}
+.bmx .onc-yuksek .onc-nokta{background:var(--red)}
+.bmx .onc-orta .onc-nokta{background:var(--amber)}
+.bmx .akart-orta{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.bmx .akart-orta strong{font-size:15.5px;font-weight:700;letter-spacing:-.15px}
+.bmx .akart-orta small{font-size:12.5px;color:var(--sub)}
+.bmx .akart-aks{margin-top:5px;font-size:14px;font-weight:500}
+.bmx .akart-sag{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0}
+.bmx .onc-et{font-size:11px;color:var(--sub);font-weight:600}
+.bmx .tarih-chip{font-size:12px;font-weight:700;padding:3px 9px;border-radius:9px;background:var(--card2);border:1px solid var(--line);color:var(--sub);white-space:nowrap}
+.bmx .tarih-chip.bugun{background:var(--blue-soft);border-color:var(--blue-line);color:var(--blue-t)}
+.bmx .tarih-chip.gec{background:var(--red-soft);border-color:transparent;color:var(--red-t)}
+.bmx .akart-alt{display:flex;gap:8px;padding:0 12px 12px 16px}
+.bmx .abtn{min-height:44px;flex:1;border:1px solid var(--line);border-radius:12px;background:var(--card2);font-size:13.5px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:0 8px;white-space:nowrap;transition:transform .12s}
+.bmx .abtn:active{transform:scale(.97)}
+.bmx .abtn.pri{background:var(--blue);border-color:var(--blue);color:#fff}
+.bmx .abtn.ok{background:var(--green-soft);border-color:transparent;color:var(--green-t)}
+.bmx .abtn.sil{color:var(--red-t)}
+.bmx .ipucu{font-size:12.5px;color:var(--sub);display:flex;gap:6px;align-items:flex-start;margin-top:8px;line-height:1.4}
+.bmx .ipucu.orta{justify-content:center;align-items:center;margin:2px 0 6px;color:var(--mute)}
+.bmx .bos-mini{display:flex;gap:12px;align-items:flex-start;background:var(--card);border:1px dashed var(--line-strong);border-radius:16px;padding:14px;color:var(--sub)}
+.bmx .bos-mini strong{display:block;color:var(--text);font-size:14.5px;margin-bottom:2px}
+.bmx .bos-mini p{font-size:13px}
+.bmx .mkart{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--sh);padding:14px;margin-bottom:10px;cursor:pointer;transition:transform .12s}
+.bmx .mkart:active{transform:scale(.99)}
+.bmx .mkart-ust{display:flex;gap:12px;align-items:center}
+.bmx .avatar{width:42px;height:42px;border-radius:50%;background:var(--blue-soft);color:var(--blue-t);font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;letter-spacing:.3px}
+.bmx .avatar.sm{width:34px;height:34px;font-size:13px}
+.bmx .avatar.buyuk{width:68px;height:68px;font-size:22px}
+.bmx .mkart-ad{flex:1;min-width:0;display:flex;flex-direction:column}
+.bmx .mkart-ad strong{font-size:15.5px;font-weight:700;letter-spacing:-.15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bmx .mkart-ad small{font-size:12.5px;color:var(--sub)}
+.bmx .dchip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;padding:4px 10px;border-radius:12px;white-space:nowrap}
+.bmx .dchip i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.bmx .d-sicak.dchip{background:var(--green-soft);color:var(--green-t)}
+.bmx .d-sicak i{background:var(--green)}
+.bmx .d-ilik.dchip{background:var(--amber-soft);color:var(--amber-t)}
+.bmx .d-ilik i{background:var(--amber)}
+.bmx .d-soguk.dchip{background:var(--red-soft);color:var(--red-t)}
+.bmx .d-soguk i{background:var(--red)}
+.bmx .mkart-yildiz{display:flex;align-items:center;gap:8px;margin:10px 0 10px 54px;font-size:12px;color:var(--sub)}
+.bmx .stars{display:inline-flex;gap:1px}
+.bmx .mkart-alt{display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end;border-top:1px solid var(--line);padding-top:10px}
+.bmx .mkart-alt small{display:block;font-size:11.5px;color:var(--sub);font-weight:500}
+.bmx .mkart-alt b{font-size:13.5px;font-weight:700}
+.bmx .kirmizi{color:var(--red-t)}
+.bmx .detay-btn{display:inline-flex;align-items:center;gap:2px;font-size:13px;font-weight:700;color:var(--blue-t);padding:6px 4px 6px 10px;background:var(--blue-soft);border-radius:10px}
+.bmx .snip{font-size:12.5px;color:var(--sub);margin:-4px 4px 12px;font-style:italic}
+.bmx .yapisik{position:sticky;top:0;z-index:6;background:var(--bg);padding:2px 0 8px;margin:0 -16px 6px;padding-left:16px;padding-right:16px}
+.bmx .arama{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:14px;height:46px;padding:0 6px 0 13px;color:var(--mute)}
+.bmx .arama input{flex:1;min-width:0;border:0;background:none;outline:none;height:100%;color:var(--text);font-size:15px}
+.bmx .arama:focus-within{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-soft)}
+.bmx .chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.bmx .chips.kay{flex-wrap:nowrap;overflow-x:auto;padding:10px 16px 2px;margin:0 -16px;scrollbar-width:none}
+.bmx .chips.kay::-webkit-scrollbar{display:none}
+.bmx .chip{min-height:38px;padding:0 14px;border-radius:19px;background:var(--card);border:1px solid var(--line);font-size:13.5px;font-weight:600;color:var(--sub);display:inline-flex;align-items:center;gap:6px;white-space:nowrap;flex-shrink:0;transition:background .15s,color .15s}
+.bmx .chip.on{background:var(--blue);border-color:var(--blue);color:#fff}
+.bmx .chip .cn{font-size:11.5px;background:rgba(127,127,127,.18);border-radius:9px;padding:0 6px;font-weight:700}
+.bmx .chip.on .cn{background:rgba(255,255,255,.25)}
+.bmx .chip.etiket{background:var(--blue-soft);border-color:transparent;color:var(--blue-t);padding-right:6px}
+.bmx .chip.etiket button{width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:var(--blue-t)}
+.bmx .chip.ekle{border-style:dashed;color:var(--sub);background:transparent}
+.bmx .konu-form input{height:38px;border:1px solid var(--blue);border-radius:19px;padding:0 14px;background:var(--card);width:130px;outline:none}
+.bmx .sira-satir{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--mute);min-height:28px;margin-top:4px}
+.bmx .yatay{display:flex;gap:10px;overflow-x:auto;margin:0 -16px;padding:2px 16px 8px;scrollbar-width:none}
+.bmx .yatay::-webkit-scrollbar{display:none}
+.bmx .unut{flex:0 0 78%;max-width:260px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:13px 14px;text-align:left;display:flex;flex-direction:column;gap:2px;box-shadow:var(--sh)}
+.bmx .unut strong{font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bmx .unut small{font-size:12.5px;color:var(--sub)}
+.bmx .unut-gun{margin-top:8px;font-size:12.5px;font-weight:700;color:var(--amber-t);display:flex;align-items:center;gap:5px}
+.bmx .kart-b{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--sh);padding:14px;margin-bottom:10px}
+.bmx .liste-grup{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:var(--sh)}
+.bmx .liste-satir{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;text-align:left;padding:14px;min-height:56px;border-bottom:1px solid var(--line)}
+.bmx .liste-satir:last-child{border-bottom:0}
+.bmx .liste-satir strong{display:block;font-size:15px}
+.bmx .liste-satir small{font-size:12.5px;color:var(--sub)}
+.bmx .gizlilik{display:flex;gap:12px;align-items:flex-start}
+.bmx .gizlilik p{font-size:13.5px;color:var(--sub);margin-top:3px}
+.bmx .gz-ik{width:40px;height:40px;border-radius:12px;background:var(--green-soft);color:var(--green-t);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.bmx .gz-ik.uyari{background:var(--amber-soft);color:var(--amber-t)}
+.bmx .ipuclari p{font-size:13.5px;color:var(--sub);padding:5px 0}
+.bmx .ipuclari b{color:var(--text)}
+.bmx .surum{text-align:center;font-size:12px;color:var(--mute);margin-top:16px}
+.bmx .ay-bas{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.bmx .ay-bas strong{font-size:16px}
+.bmx .grid-ay{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.bmx .gh{font-size:11.5px;font-weight:700;color:var(--mute);text-align:center;padding:4px 0}
+.bmx .gd{aspect-ratio:1/1;max-height:50px;border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:14.5px;font-weight:600;position:relative}
+.bmx .grid-ay.k .gd{aspect-ratio:auto;height:40px;font-size:14px}
+.bmx .gd.gec{color:var(--mute)}
+.bmx .gd.bu{box-shadow:inset 0 0 0 1.5px var(--blue)}
+.bmx .gd.sec{background:var(--blue);color:#fff}
+.bmx .dots{display:flex;gap:3px;height:5px}
+.bmx .dots i,.bmx .lejant i{width:5px;height:5px;border-radius:50%;display:inline-block}
+.bmx .dots i.pl,.bmx .lejant i.pl{background:var(--green)}
+.bmx .dots i.tk,.bmx .lejant i.tk{background:var(--amber)}
+.bmx .dots i.ge,.bmx .lejant i.ge{background:var(--red)}
+.bmx .dots i.gr,.bmx .lejant i.gr{background:var(--mute)}
+.bmx .gd.sec .dots i{background:#fff!important;opacity:.9}
+.bmx .lejant{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:10px;font-size:12px;color:var(--sub)}
+.bmx .lejant span{display:inline-flex;align-items:center;gap:5px}
+.bmx .lejant i{width:8px;height:8px}
+.bmx .gec-satir{display:flex;gap:12px;width:100%;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:8px}
+.bmx .gec-nokta{width:8px;height:8px;border-radius:50%;background:var(--mute);margin-top:6px;flex-shrink:0}
+.bmx .gec-satir strong{display:block;font-size:14.5px}
+.bmx .gec-satir small{display:block;font-size:12px;color:var(--sub);font-weight:600}
+.bmx .gec-satir em{display:block;font-style:normal;font-size:13px;color:var(--sub);margin-top:2px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.bmx .mini-cal{margin-top:10px;background:var(--card2);border:1px solid var(--line);border-radius:14px;padding:8px}
+.bmx .secili-tarih{display:flex;align-items:center;gap:6px;margin-top:10px;font-size:13px;font-weight:600;color:var(--blue-t)}
+.bmx .overlay-detay{position:absolute;inset:0;background:var(--bg);overflow-y:auto;overflow-x:hidden;z-index:20;animation:bm_detayGiris .28s cubic-bezier(.2,.8,.2,1) both;-webkit-overflow-scrolling:touch}
+.bmx .detay{padding:0 16px 10px}
+.bmx .d-bar{position:sticky;top:0;z-index:3;background:var(--bg);margin:0 -16px;padding:6px 10px}
+.bmx .geri{display:inline-flex;align-items:center;gap:2px;min-height:44px;color:var(--blue-t);font-weight:600;font-size:15px;padding-right:12px}
+.bmx .d-ust{text-align:center;display:flex;flex-direction:column;align-items:center;gap:6px;padding:4px 0 14px}
+.bmx .d-ust h1{font-size:23px;font-weight:700;letter-spacing:-.3px;line-height:1.2}
+.bmx .d-ust p{font-size:14px;color:var(--sub)}
+.bmx .d-etiket{display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:center;margin-top:2px}
+.bmx .pot{display:inline-flex;gap:7px;align-items:center;font-size:12.5px;color:var(--sub)}
+.bmx .pot b{font-weight:700;color:var(--text)}
+.bmx .hizli{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:2px 0 16px}
+.bmx .hizli button,.bmx .hizli a{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--sub);padding:4px 0;min-height:44px}
+.bmx .hi{width:52px;height:52px;border-radius:18px;background:var(--card);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--blue-t);box-shadow:var(--sh);transition:transform .12s}
+.bmx .hizli button:active .hi,.bmx .hizli a:active .hi{transform:scale(.94)}
+.bmx .hi.pri{background:var(--blue);border-color:var(--blue);color:#fff}
+.bmx .hafiza{background:var(--blue-soft);border:1px solid var(--blue-line);border-radius:18px;padding:14px;margin-bottom:6px}
+.bmx .haf-bas{display:flex;gap:11px;align-items:center;margin-bottom:10px}
+.bmx .haf-bas h2{font-size:17px;font-weight:700}
+.bmx .haf-bas p{font-size:12.5px;color:var(--sub)}
+.bmx .haf-ik{width:38px;height:38px;border-radius:12px;background:var(--card);color:var(--blue-t);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.bmx .hafiza ul{display:flex;flex-direction:column;gap:6px}
+.bmx .hafiza li{display:flex;gap:10px;align-items:center;background:var(--card);border-radius:12px;padding:10px 6px 10px 12px;font-size:14.5px;line-height:1.4}
+.bmx .hafiza li>span:nth-child(2){flex:1}
+.bmx .haf-nokta{width:7px;height:7px;border-radius:50%;background:var(--blue);flex-shrink:0}
+.bmx .haf-bos{font-size:13.5px;color:var(--sub);padding:2px 0 6px}
+.bmx .haf-ekle{display:flex;gap:8px;margin-top:10px}
+.bmx .haf-ekle input{flex:1;min-width:0;height:42px;border:1px solid var(--line);background:var(--card);border-radius:12px;padding:0 12px;outline:none}
+.bmx .haf-ekle input:focus{border-color:var(--blue)}
+.bmx .aks.gec{border-color:rgba(214,69,69,.35)}
+.bmx .aks-ust{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.bmx .aks-tur{font-size:12px;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:.4px}
+.bmx .aks-m{display:block;font-size:16.5px;margin-bottom:4px}
+.bmx .aks small{display:flex;align-items:center;gap:6px;color:var(--sub);font-size:13px}
+.bmx .aks-btn{display:flex;gap:8px;margin-top:12px}
+.bmx .bosaks{display:flex;flex-direction:column;gap:10px;align-items:flex-start;color:var(--sub)}
+.bmx .konu-chip{font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:9px;background:var(--card2);border:1px solid var(--line);color:var(--sub);white-space:nowrap}
+.bmx .sg-ust{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.bmx .sg-not{font-size:14.5px;line-height:1.5}
+.bmx .zaman{position:relative;margin-left:5px}
+.bmx .zaman::before{content:"";position:absolute;left:5px;top:14px;bottom:14px;width:2px;background:var(--line)}
+.bmx .zg{position:relative;margin-bottom:8px}
+.bmx .zg-bas{display:flex;gap:12px;width:100%;text-align:left;align-items:flex-start;padding:10px 8px 10px 0;min-height:48px}
+.bmx .z-nokta{width:12px;height:12px;border-radius:50%;background:var(--card);border:3px solid var(--blue);margin-top:4px;flex-shrink:0;position:relative;z-index:1}
+.bmx .zg-orta{flex:1;min-width:0;display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
+.bmx .zg-orta b{font-size:14.5px}
+.bmx .zg-orta em{flex-basis:100%;font-style:normal;font-size:13px;color:var(--sub);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bmx .zg-ic{margin:0 0 4px 24px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px}
+.bmx .zg-ic p{font-size:14.5px;line-height:1.5}
+.bmx .zg-aks{margin-top:8px;font-size:13.5px;color:var(--sub)}
+.bmx .zg-btn{display:flex;gap:8px;margin-top:10px}
+.bmx .sil-musteri{display:block;margin:22px auto 0;color:var(--red-t);font-weight:600;font-size:14px;min-height:44px;padding:0 16px}
+.bmx .sheet-wrap{position:absolute;inset:0;z-index:60;pointer-events:none}
+.bmx .sheet-wrap.on{pointer-events:auto}
+.bmx .sheet-bd{position:absolute;inset:0;background:rgba(10,20,30,.45);opacity:0;transition:opacity .25s}
+.bmx .sheet-wrap.on .sheet-bd{opacity:1}
+.bmx .sheet{position:absolute;left:0;right:0;bottom:0;max-height:86%;background:var(--card);border-radius:22px 22px 0 0;transform:translateY(102%);transition:transform .28s cubic-bezier(.2,.8,.2,1);display:flex;flex-direction:column;box-shadow:0 -10px 40px rgba(0,0,0,.18)}
+.bmx .sheet.tall{max-height:94%}
+.bmx .sheet-wrap.on .sheet{transform:none}
+.bmx .sheet-grip{width:38px;height:4px;border-radius:2px;background:var(--line-strong);margin:8px auto 0;opacity:.5}
+.bmx .sheet-top{display:flex;justify-content:space-between;align-items:center;padding:4px 8px 4px 20px}
+.bmx .sheet-top h3{font-size:18px;font-weight:700}
+.bmx .sheet-body{overflow-y:auto;padding:4px 20px 0;flex:1;min-height:0;-webkit-overflow-scrolling:touch}
+.bmx .sheet-foot-in{position:sticky;bottom:0;background:var(--card);padding:12px 0 calc(14px);border-top:1px solid var(--line);margin-top:16px}
+.bmx .form{display:flex;flex-direction:column;gap:16px;padding-bottom:6px}
+.bmx .alan label,.bmx .alan>label{display:block;font-size:13px;font-weight:700;color:var(--sub);margin-bottom:7px}
+.bmx .alan input,.bmx .alan textarea,.bmx .mt8{font-size:15.5px}
+.bmx .alan input,.bmx .alan textarea,.bmx .notkutu textarea{width:100%;border:1px solid var(--line);background:var(--card2);border-radius:13px;padding:0 13px;height:48px;outline:none;color:var(--text)}
+.bmx .alan textarea{height:auto;padding:12px 48px 12px 13px;resize:none;line-height:1.45}
+.bmx .alan input:focus,.bmx .alan textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-soft);background:var(--card)}
+.bmx .alan input[aria-invalid="true"],.bmx .alan textarea[aria-invalid="true"]{border-color:var(--red)}
+.bmx .mt8{margin-top:8px}
+.bmx .mt12{margin-top:12px}
+.bmx input.mt8{width:100%;border:1px solid var(--line);background:var(--card2);border-radius:13px;padding:0 13px;height:46px;outline:none}
+.bmx .iki{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.bmx .hata{color:var(--red-t);font-size:13px;font-weight:600;margin-top:6px}
+.bmx .seg{display:flex;background:var(--card2);border:1px solid var(--line);border-radius:13px;padding:3px;gap:2px}
+.bmx .seg button{flex:1;min-height:42px;border-radius:10px;font-size:13.5px;font-weight:600;color:var(--sub);display:inline-flex;align-items:center;justify-content:center;gap:6px;transition:background .15s}
+.bmx .seg button.on{background:var(--card);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.14)}
+.bmx .dseg i{width:8px;height:8px;border-radius:50%}
+.bmx .dseg.d-sicak i{background:var(--green)}
+.bmx .dseg.d-ilik i{background:var(--amber)}
+.bmx .dseg.d-soguk i{background:var(--red)}
+.bmx .stars-input{display:flex;gap:2px}
+.bmx .star-btn{width:44px;height:44px;display:flex;align-items:center;justify-content:center}
+.bmx .notkutu{position:relative}
+.bmx .mic{position:absolute;right:8px;bottom:8px;width:38px;height:38px;border-radius:50%;background:var(--card);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--blue-t)}
+.bmx .mic.on{background:var(--red);border-color:var(--red);color:#fff;animation:bm_nabiz 1.1s ease-in-out infinite}
+.bmx .musteri-sat{display:flex;gap:11px;align-items:center;background:var(--card2);border:1px solid var(--line);border-radius:14px;padding:10px 12px}
+.bmx .musteri-sat small{display:block;font-size:11.5px;color:var(--sub);font-weight:600}
+.bmx .tarih-satir{display:flex;justify-content:space-between;align-items:center;width:100%;text-align:left;background:var(--card2);border:1px solid var(--line);border-radius:13px;padding:8px 14px;min-height:52px}
+.bmx .tarih-satir small{display:block;font-size:11.5px;color:var(--sub);font-weight:600}
+.bmx .anahtar{display:flex;gap:12px;align-items:center;cursor:pointer;min-height:48px}
+.bmx .anahtar input{position:absolute;opacity:0;width:0;height:0}
+.bmx .anahtar .sw{width:46px;height:28px;border-radius:14px;background:var(--line-strong);position:relative;flex-shrink:0;transition:background .2s;opacity:.55}
+.bmx .anahtar .sw::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .2s}
+.bmx .anahtar input:checked+.sw{background:var(--blue);opacity:1}
+.bmx .anahtar input:checked+.sw::after{transform:translateX(18px)}
+.bmx .anahtar input:focus-visible+.sw{outline:2px solid var(--blue);outline-offset:2px}
+.bmx .anahtar strong{display:block;font-size:14.5px}
+.bmx .anahtar small{display:block;font-size:12.5px;color:var(--sub)}
+.bmx .btn{min-height:50px;border-radius:14px;padding:0 20px;font-weight:700;font-size:15.5px;display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:transform .12s,opacity .15s}
+.bmx .btn:active{transform:scale(.98)}
+.bmx .btn.pri{background:var(--blue);color:#fff;box-shadow:0 4px 12px rgba(46,109,168,.25)}
+.bmx .btn.ikincil{background:var(--card2);border:1px solid var(--line);color:var(--text)}
+.bmx .btn.tehlike{background:var(--red);color:#fff}
+.bmx .btn.kucuk{min-height:40px;font-size:14px;padding:0 14px;border-radius:12px}
+.bmx .btn.blok{width:100%}
+.bmx .btn:disabled{opacity:.45}
+.bmx .onay-metin{font-size:15px;color:var(--sub);line-height:1.5}
+.bmx .sec-liste{display:flex;flex-direction:column;margin-top:10px;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.bmx .sec-satir{display:flex;align-items:center;justify-content:space-between;gap:10px;text-align:left;padding:12px 14px;min-height:56px;border-bottom:1px solid var(--line);background:var(--card);width:100%}
+.bmx .sec-satir:last-child{border-bottom:0}
+.bmx .sec-satir strong{display:block;font-size:15px}
+.bmx .sec-satir small{font-size:12.5px;color:var(--sub)}
+.bmx .sheet-body>div>.arama{margin-top:6px}
+.bmx .bos{text-align:center;padding:40px 24px;display:flex;flex-direction:column;align-items:center;gap:10px}
+.bmx .bos-ikon{width:76px;height:76px;border-radius:26px;background:var(--blue-soft);color:var(--blue-t);display:flex;align-items:center;justify-content:center;margin-bottom:6px}
+.bmx .bos h3{font-size:19px;font-weight:700}
+.bmx .bos p{font-size:14.5px;color:var(--sub);max-width:290px;margin-bottom:8px}
+.bmx .skel{border-radius:10px;background:linear-gradient(90deg,var(--card2) 25%,var(--line) 50%,var(--card2) 75%);background-size:200% 100%;animation:bm_parilti 1.3s linear infinite}
+.bmx .skel-kart{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:10px;display:flex;flex-direction:column;gap:9px}
+.bmx .skel.s1{height:16px;width:58%}
+.bmx .skel.s2{height:12px;width:36%}
+.bmx .skel.s3{height:34px;width:100%}
+.bmx .toast-yer{position:absolute;left:12px;right:12px;bottom:12px;z-index:40;pointer-events:none;display:flex;justify-content:center}
+.bmx .toast{pointer-events:auto;background:#16222E;color:#fff;border-radius:14px;padding:6px 8px 6px 16px;display:flex;align-items:center;gap:6px;font-size:14px;font-weight:500;box-shadow:0 8px 24px rgba(0,0,0,.28);max-width:100%;min-height:48px}
+.bmx[data-tema="koyu"] .toast{border:1px solid var(--line)}
+.bmx .toast span{flex:1;padding:6px 6px 6px 0;line-height:1.3}
+.bmx .toast button{color:#8DBCEB;font-weight:700;font-size:14px;min-height:40px;padding:0 10px;white-space:nowrap}
+.bmx .basari{position:absolute;inset:0;z-index:80;background:rgba(10,20,30,.4);display:flex;align-items:center;justify-content:center;animation:bm_gec .2s ease both}
+.bmx .basari-ic{background:var(--card);border-radius:24px;padding:26px 36px;display:flex;flex-direction:column;align-items:center;gap:6px;box-shadow:0 20px 50px rgba(0,0,0,.3);animation:bm_acil .35s cubic-bezier(.2,.9,.3,1.3) both;text-align:center}
+.bmx .basari-ic strong{font-size:18px;margin-top:6px}
+.bmx .basari-ic span{font-size:14px;color:var(--sub)}
+.bmx .bc{stroke-dasharray:210;stroke-dashoffset:210;animation:bm_ciz .5s .05s ease forwards}
+.bmx .bp{stroke-dasharray:60;stroke-dashoffset:60;animation:bm_ciz .35s .4s ease forwards}
+@keyframes bm_gec{from{opacity:0;transform:translateY(6px)}
+to{opacity:1;transform:none}
+}
+@keyframes bm_detayGiris{from{transform:translateX(34px);opacity:0}
+to{transform:none;opacity:1}
+}
+@keyframes bm_acil{from{opacity:0;transform:scale(.9)}
+to{opacity:1;transform:none}
+}
+@keyframes bm_ciz{to{stroke-dashoffset:0}
+}
+@keyframes bm_nabiz{0%,100%{box-shadow:0 0 0 0 rgba(214,69,69,.5)}
+50%{box-shadow:0 0 0 9px rgba(214,69,69,0)}
+}
+@keyframes bm_parilti{to{background-position:-200% 0}
+}
+@keyframes bm_toastGir{from{opacity:0;transform:translateY(14px)}
+to{opacity:1;transform:none}
+}
+.bmx .eg-acil{animation:bm_gec .22s ease both}
+.bmx .eg-pop{animation:bm_toastGir .28s cubic-bezier(.2,.8,.2,1) both}
+@media (prefers-reduced-motion: reduce){.bmx *,.bmx *::before,.bmx *::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
+.bmx .mini-et{font-size:12.5px;font-weight:700;color:var(--sub);margin:12px 0 8px}
+.bmx .tel-link{color:var(--blue-t);font-weight:600;text-decoration:underline;text-underline-offset:3px}
+.bmx .abtn{text-decoration:none}
+.bmx .seg.tip button{font-size:12px;padding:0;min-width:0;letter-spacing:-.1px}
+.bmx .pro-rozet{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.6px;padding:2px 6px;border-radius:6px;background:#D8A94E;color:#3B2A05;vertical-align:1px;margin-left:4px}
+.bmx .ucretsiz-et{font-size:12px;font-weight:700;padding:3px 10px;border-radius:10px;background:var(--card2);border:1px solid var(--line);color:var(--sub)}
+.bmx .metre{height:7px;border-radius:4px;background:var(--line);overflow:hidden}
+.bmx .metre i{display:block;height:100%;background:var(--blue);border-radius:4px;transition:width .5s ease}
+.bmx .kota{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--sh);padding:12px 14px;margin-bottom:10px;display:flex;flex-direction:column;gap:8px}
+.bmx .kota.dolu{border-color:rgba(176,124,30,.5)}
+.bmx .kota.dolu .metre i{background:var(--amber)}
+.bmx .kota-ust{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13.5px}
+.bmx .kota small{font-size:12.5px;color:var(--sub)}
+.bmx .surum-kart{display:flex;flex-direction:column;gap:12px}
+.bmx .surum-bas{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.bmx .surum-bas strong{display:block;font-size:16px}
+.bmx .surum-bas small{display:block;font-size:12.5px;color:var(--sub);margin-top:2px}
+.bmx .limit-liste{display:flex;flex-direction:column}
+.bmx .limit-liste li{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px;color:var(--sub)}
+.bmx .limit-liste li:last-child{border-bottom:0}
+.bmx .limit-liste b{color:var(--text)}
+.bmx .anahtar.kilitli{width:100%;text-align:left;background:var(--card2);border:1px dashed var(--line-strong);border-radius:13px;padding:8px 12px}
+.bmx .kilit-ik{width:34px;height:34px;border-radius:10px;background:var(--amber-soft);color:var(--amber-t);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.bmx .kilit-satir{display:flex;gap:12px;align-items:center;width:100%;text-align:left;background:var(--card);border:1px dashed var(--line-strong);border-radius:14px;padding:11px 14px;min-height:56px;margin:2px 0 0 24px;width:calc(100% - 24px);color:var(--sub)}
+.bmx .kilit-satir span{flex:1}
+.bmx .kilit-satir b{display:block;color:var(--text);font-size:14px}
+.bmx .kilit-satir small{font-size:12.5px}
+.bmx .kilit-link{display:inline-flex;align-items:center;gap:5px;color:var(--amber-t);font-weight:700;font-size:12px;min-height:28px}
+.bmx .pw{display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;padding-bottom:6px}
+.bmx .pw-ik{width:64px;height:64px;border-radius:22px;background:var(--amber-soft);color:var(--amber-t);display:flex;align-items:center;justify-content:center;margin-top:4px}
+.bmx .pw h3{font-size:21px;font-weight:700;letter-spacing:-.2px}
+.bmx .pw-m{font-size:14.5px;color:var(--sub);max-width:310px;line-height:1.45}
+.bmx .pw-kota{width:100%;display:flex;flex-direction:column;gap:6px;margin:4px 0;text-align:left}
+.bmx .pw-kota small{font-size:12.5px;color:var(--sub);font-weight:600}
+.bmx .pw-tablo{width:100%;border-collapse:collapse;margin:8px 0 2px;font-size:13.5px;text-align:left}
+.bmx .pw-tablo th,.bmx .pw-tablo td{padding:9px 6px;border-bottom:1px solid var(--line)}
+.bmx .pw-tablo thead th{font-size:12px;color:var(--sub);font-weight:700;text-align:center}
+.bmx .pw-tablo tbody th{font-weight:600;color:var(--text)}
+.bmx .pw-tablo td{text-align:center;color:var(--sub)}
+.bmx .pw-tablo .pro-s{background:var(--blue-soft);color:var(--blue-t);font-weight:700;text-align:center}
+.bmx .pw-fiyat{font-size:12.5px;color:var(--sub);margin:6px 0 4px}
+.bmx .pw .btn{width:100%}
+.bmx .pw-not{font-size:12px;color:var(--mute);max-width:290px}
+.bmx .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.bmx .ustbar{justify-content:space-between}
+.bmx .senk-chip{font-size:12px;font-weight:700;padding:4px 10px;border-radius:10px;background:var(--blue-soft);color:var(--blue-t);margin-right:6px}
+.bmx .senk-chip.hata{background:var(--red-soft);color:var(--red-t)}
+.bmx .senk-nokta{width:10px;height:10px;border-radius:50%;background:var(--green);flex-shrink:0}
+.bmx .senk-nokta.bekliyor{background:var(--amber)}
+.bmx .senk-nokta.hata{background:var(--red)}
+.bmx .senk-satir{cursor:default}
+.bmx .misafir{display:flex;flex-direction:column;align-items:center;text-align:center;gap:12px;padding:34px 20px 20px}
+.bmx .misafir h1{font-size:25px;font-weight:700;letter-spacing:-.3px}
+.bmx .misafir-m{font-size:15px;color:var(--sub);max-width:320px;line-height:1.5}
+.bmx .misafir-liste{display:flex;flex-direction:column;gap:10px;text-align:left;margin:6px 0 10px;font-size:14.5px}
+.bmx .misafir-liste li{display:flex;gap:10px;align-items:flex-start}
+.bmx .misafir-liste svg{color:var(--green-t);flex-shrink:0;margin-top:1px}
+.bmx .misafir .btn{width:100%}
+.bmx .misafir-not{font-size:12.5px;color:var(--mute)}
+.bmx .teknik{font-size:12px;color:var(--mute);text-align:center;margin-top:12px}
+.bmx .eski-kart{display:flex;flex-direction:column;gap:8px;border-color:var(--blue-line);background:var(--blue-soft)}
+.bmx .eski-kart p{font-size:13.5px;color:var(--sub)}
+.bmx .eski-kart .iki{margin-top:4px}
+.bmx .onay-bas{font-size:23px;font-weight:700;text-align:center;margin-bottom:12px}
+.bmx .onay-kart p{font-size:14px;color:var(--sub);line-height:1.5;padding:6px 0}
+.bmx .onay-kart b{color:var(--text)}
+.bmx .ekran .btn.blok{margin-top:10px}
+`;
+const MusteriPortfoyumEkrani = (() => {
+/* ───────── Tarih yardımcıları (yerel tarih, "YYYY-MM-DD") ───────── */
+const pad = (n: any) => String(n).padStart(2, "0");
+const iso = (d: any) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const parse = (s: any): any => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+const addDays = (s: any, n: any) => { const d = parse(s); d.setDate(d.getDate() + n); return iso(d); };
+const diffDays = (a: any, b: any): number => Math.round((parse(a) - parse(b)) / 86400000);
+const AYLAR = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
+const GUNLER = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
+const bugunISO = () => iso(new Date());
+const fmtKisa = (s: any) => { const d = parse(s); return `${d.getDate()} ${AYLAR[d.getMonth()]}`; };
+const fmtUzun = (s: any) => `${fmtKisa(s)} ${parse(s).getFullYear()}`;
+function goreli(s: any, bugun: any) {
+  const n = diffDays(s, bugun);
+  if (n === 0) return "Bugün";
+  if (n === 1) return "Yarın";
+  if (n === -1) return "Dün";
+  if (n < 0) return `${-n} gün gecikti`;
+  if (n < 7) return GUNLER[parse(s).getDay()];
+  return fmtKisa(s);
+}
+const uid_ = () => Math.random().toString(36).slice(2, 9);
+
+/* ───────── Sabitler ───────── */
+const TIPLER = ["Bireysel", "İşletme", "KOBİ", "Ticari", "Kurumsal"];
+/* Ücretsiz sürüm sınırları (tek yerden değiştirilir). Pro: hepsi sınırsız / açık. */
+const UCRETSIZ = { musteri: 5, hafiza: 5, gecmis: 5 };
+const PRO_ICERIK = {
+  musteri: ["Müşteri sınırına ulaştın", `Ücretsiz sürümde ${UCRETSIZ.musteri} müşteriye kadar ekleyebilirsin. Daha fazla müşteri için Pro'ya geç.`],
+  hafiza: ["Müşteri hafızası dolu", `Ücretsiz sürümde her müşteri için ${UCRETSIZ.hafiza} hafıza maddesi tutabilirsin.`],
+  gecmis: ["Tüm görüşme geçmişi", `Ücretsiz sürümde son ${UCRETSIZ.gecmis} görüşme görünür. Eski görüşmeler silinmez; Pro ile tekrar açılır.`],
+  ses: ["Sesli not", "Konuşarak not almak Pro'ya özel."],
+  notara: ["Notlarda arama", "Ücretsiz sürümde yalnızca isim, sektör ve etiketlerde arama yapılır."],
+  yedek: ["Veri yedeği", "Verilerini dışa aktarmak Pro'ya özel."],
+  genel: ["Katılım Plus Pro", "Sınırsız müşteri, tam geçmiş ve daha fazlası."],
+};
+const KARSILASTIRMA = [["Müşteri", `${UCRETSIZ.musteri} müşteri`, "Sınırsız"], ["Hafıza maddesi", `${UCRETSIZ.hafiza} / müşteri`, "Sınırsız"], ["Görüşme geçmişi", `Son ${UCRETSIZ.gecmis}`, "Tümü"], ["Sesli not", "Yok", "Var"], ["Notlarda arama", "Yok", "Var"], ["Veri yedeği", "Yok", "Var"]];
+const DURUMLAR = { sicak: "Yüksek", ilik: "Orta", soguk: "Düşük" }; // ilgi düzeyi (iç anahtarlar eski kayıtlarla uyumlu kalsın diye aynı)
+// Telefonun kendi arama uygulaması (cep hattı) için tel: bağlantısı. Numara yoksa/geçersizse null.
+function telHref(tel: any) {
+  if (!tel) return null;
+  let d = String(tel).replace(/[^\d+]/g, "");
+  if (d.startsWith("00")) d = "+" + d.slice(2);
+  else if (d.startsWith("0") && d.length === 11) d = "+90" + d.slice(1);
+  else if (/^5\d{9}$/.test(d)) d = "+90" + d;
+  return d.replace(/\D/g, "").length >= 7 ? "tel:" + d : null;
+}
+const KONU_ONERI = ["Finansman", "Fon", "Dış ticaret", "POS", "Sigorta", "Diğer"];
+const GORUSME_KONULARI = ["Finansman", "Fon", "Dış ticaret", "POS", "Sigorta", "İlk görüşme", "Diğer"];
+const TUR = { arama: "Arama", gorusme: "Görüşme", teklif: "Teklif", takip: "Takip" };
+
+/* ───────── Depo (reducer + localStorage) ───────── */
+/* ───────── Bulut katmanı: veriler ÜYELİĞE bağlı (Firestore: musteriPortfoyu/{uid}/kayitlar/{id}) ─────────
+   Erişim kuralı yalnızca hesap sahibine izin verir. Yerel depoda KALICI kopya tutulmaz (yalnızca eski sürümden aktarım okunur). */
+const BM_KOK = "musteriPortfoyu";
+const BM_ESKI_LS = "kp_musteri_portfoyum_v1"; // v229 (yalnızca cihaz) sürümünden kalan kayıtlar için, tek seferlik aktarım
+const BM_ONAY_SURUM = 1;
+async function bmFs(): Promise<any> {
+  const app = await kpFirebaseWebApp();
+  const m: any = await import("firebase/firestore");
+  return { db: m.getFirestore(app), m };
+}
+function bmNormalle(d: any): any {
+  const dizi = (x: any) => (Array.isArray(x) ? x : []);
+  const metin = (x: any, k = 400) => (typeof x === "string" ? x.slice(0, k) : "");
+  const next = d && d.next && typeof d.next.tarih === "string" ? { tarih: d.next.tarih, metin: metin(d.next.metin, 300), tur: TUR[d.next.tur] ? d.next.tur : "takip", planli: !!d.next.planli } : null;
+  return {
+    id: String(d.id), ad: metin(d.ad, 120) || "—", tip: TIPLER.includes(d.tip) ? d.tip : "KOBİ", sektor: metin(d.sektor, 80) || "—", tel: metin(d.tel, 30),
+    durum: DURUMLAR[d.durum] ? d.durum : "ilik", pot: Math.max(0, Math.min(5, Math.round(Number(d.pot) || 0))),
+    konular: dizi(d.konular).filter((x: any) => typeof x === "string").slice(0, 20),
+    hafiza: dizi(d.hafiza).filter((h: any) => h && typeof h.metin === "string").map((h: any) => ({ id: String(h.id || uid_()), metin: metin(h.metin, 600), tarih: metin(h.tarih, 10) })),
+    gorusmeler: sirala(dizi(d.gorusmeler).filter((g: any) => g && typeof g.tarih === "string").map((g: any) => ({ id: String(g.id || uid_()), tarih: g.tarih, konu: metin(g.konu, 60), not: metin(g.not, 4000), aksiyon: metin(g.aksiyon, 300) }))),
+    olusturma: metin(d.olusturma, 10), next,
+  };
+}
+async function bmYukle(uidKullanici: string): Promise<any> {
+  const { db, m } = await bmFs();
+  const [ust, sn] = await Promise.all([m.getDoc(m.doc(db, BM_KOK, uidKullanici)), m.getDocs(m.collection(db, BM_KOK, uidKullanici, "kayitlar"))]);
+  const musteriler = sn.docs.map((d: any) => bmNormalle({ ...d.data(), id: d.id }));
+  const veri = ust.exists() ? ust.data() : null;
+  return { musteriler, onay: veri && veri.onay ? veri.onay : null };
+}
+async function bmYaz(uidKullanici: string, mus: any): Promise<void> {
+  const { db, m } = await bmFs();
+  const { id, ...icerik } = JSON.parse(JSON.stringify(mus));
+  await m.setDoc(m.doc(db, BM_KOK, uidKullanici, "kayitlar", mus.id), { ...icerik, guncelleme: new Date().toISOString() });
+}
+async function bmSilKayit(uidKullanici: string, id: string): Promise<void> {
+  const { db, m } = await bmFs();
+  await m.deleteDoc(m.doc(db, BM_KOK, uidKullanici, "kayitlar", id));
+}
+async function bmOnayYaz(uidKullanici: string): Promise<void> {
+  const { db, m } = await bmFs();
+  await m.setDoc(m.doc(db, BM_KOK, uidKullanici), { onay: { tarih: new Date().toISOString(), surum: BM_ONAY_SURUM } }, { merge: true });
+}
+// v229'dan kalan (yalnızca cihazdaki) kayıtlar: varsa sayısını döndürür
+function bmEskiKayitlar(): any[] {
+  try {
+    const raw = localStorage.getItem(BM_ESKI_LS);
+    if (!raw) return [];
+    const j = JSON.parse(raw);
+    if (!j || !Array.isArray(j.musteriler) || j.demo) return [];
+    return j.musteriler.filter((x: any) => x && x.id && typeof x.ad === "string").map((x: any) => bmNormalle(x));
+  } catch (e) { return []; }
+}
+const bmEskiSil = () => { try { localStorage.removeItem(BM_ESKI_LS); } catch (e) {} };
+
+function sirala(g: any) { return g.slice().sort((a, b) => (a.tarih < b.tarih ? 1 : a.tarih > b.tarih ? -1 : 0)); }
+function reducer(s: any, a: any): any {
+  const guncelle = (id: any, fn: any) => ({ ...s, musteriler: s.musteriler.map((m) => (m.id === id ? fn(m) : m)) });
+  switch (a.type) {
+    case "EKLE": return { ...s, musteriler: [a.m, ...s.musteriler] };
+    case "TOPLU": return { ...s, musteriler: [...a.liste, ...s.musteriler] };
+    case "GUNCELLE": return guncelle(a.id, (m) => ({ ...m, ...a.patch }));
+    case "GERI": return { ...s, musteriler: s.musteriler.some((m) => m.id === a.m.id) ? s.musteriler.map((m) => (m.id === a.m.id ? a.m : m)) : [a.m, ...s.musteriler] };
+    case "SIL": return { ...s, musteriler: s.musteriler.filter((m) => m.id !== a.id) };
+    case "GORUSME": return guncelle(a.id, (m) => {
+      const n = { ...m, gorusmeler: sirala([a.g, ...m.gorusmeler]) };
+      if (a.hafiza) n.hafiza = [{ id: uid_(), metin: a.hafiza, tarih: a.g.tarih }, ...m.hafiza];
+      if (a.next !== undefined) n.next = a.next;
+      return n;
+    });
+    case "GORUSME_SIL": return guncelle(a.id, (m) => ({ ...m, gorusmeler: m.gorusmeler.filter((g) => g.id !== a.gid) }));
+    case "HAFIZA_EKLE": return guncelle(a.id, (m) => ({ ...m, hafiza: [{ id: uid_(), metin: a.metin, tarih: a.tarih }, ...m.hafiza] }));
+    case "HAFIZA_SIL": return guncelle(a.id, (m) => ({ ...m, hafiza: m.hafiza.filter((h) => h.id !== a.hid) }));
+    case "KONU_EKLE": return guncelle(a.id, (m) => (m.konular.includes(a.konu) ? m : { ...m, konular: [...m.konular, a.konu] }));
+    case "KONU_SIL": return guncelle(a.id, (m) => ({ ...m, konular: m.konular.filter((k) => k !== a.konu) }));
+    case "TAKIP": return guncelle(a.id, (m) => ({ ...m, next: a.next }));
+    case "TAMAM": return guncelle(a.id, (m) => {
+      const g = { id: uid_(), tarih: a.bugun, konu: "Takip tamamlandı", not: m.next ? m.next.metin : "Takip tamamlandı.", aksiyon: "" };
+      return { ...m, next: null, gorusmeler: sirala([g, ...m.gorusmeler]) };
+    });
+    case "ERTELE": return guncelle(a.id, (m) => (m.next ? { ...m, next: { ...m.next, tarih: a.tarih } } : m));
+    case "TEMIZLE": return { musteriler: [] };
+    default: return s;
+  }
+}
+
+/* ───────── Türetilmiş değerler ───────── */
+const sonGorusme = (m: any) => (m.gorusmeler.length ? m.gorusmeler[0].tarih : null);
+function oncelik(m: any, bugun: any) {
+  if (!m.next) return { puan: 0, seviye: "normal" };
+  const n = diffDays(m.next.tarih, bugun);
+  let p = n < 0 ? 3 : n === 0 ? 2 : n === 1 ? 1 : 0;
+  if (m.durum === "sicak") p += 1;
+  if (m.pot >= 4) p += 1;
+  return { puan: p, seviye: p >= 4 ? "yuksek" : p === 3 ? "orta" : "normal" };
+}
+const ONC_ETIKET = { yuksek: "Yüksek öncelik", orta: "Orta öncelik", normal: "Normal" };
+function istatistik(ms: any, bugun: any) {
+  let bugunN = 0, gecikmis = 0, planli = 0;
+  for (const m of ms) {
+    if (!m.next) continue;
+    const n = diffDays(m.next.tarih, bugun);
+    if (n === 0) bugunN++;
+    else if (n < 0) gecikmis++;
+    else if (m.next.planli && n <= 14) planli++;
+  }
+  return { toplam: ms.length, bugun: bugunN, gecikmis, planli };
+}
+
+/* ───────── İkonlar ───────── */
+const YOL = {
+  home: "M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z",
+  users: ["M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6", "M16.5 14.2c3 .2 5 2.1 5 5.3", { c: [9, 8, 3.5] }, { c: [17.5, 9, 2.5] }],
+  phone: "M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z",
+  note: ["M5 4h14a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9l-4 4V5a1 1 0 0 1 1-1z", "M8 8.5h8M8 12h5"],
+  cal: [{ r: [3, 5, 18, 16, 2.5] }, "M3 10h18M8 3v4M16 3v4"],
+  bell: ["M6 9a6 6 0 0 1 12 0c0 5 2 6.5 2 6.5H4S6 14 6 9z", "M10 19a2 2 0 0 0 4 0"],
+  more: [{ c: [5, 12, 1.4] }, { c: [12, 12, 1.4] }, { c: [19, 12, 1.4] }],
+  plus: "M12 5v14M5 12h14",
+  search: [{ c: [11, 11, 6.5] }, "M20 20l-4-4"],
+  right: "M9 6l6 6-6 6", left: "M15 6l-6 6 6 6", down: "M6 9l6 6 6-6",
+  check: "M5 12.5l4.5 4.5L19 7.5",
+  clock: [{ c: [12, 12, 9] }, "M12 7v5l3 2"],
+  mic: [{ r: [9, 3, 6, 11, 3] }, "M5 11a7 7 0 0 0 14 0M12 18v3"],
+  x: "M6 6l12 12M18 6L6 18",
+  edit: ["M4 20h4L19 9l-4-4L4 16z"],
+  mem: ["M7 3h10a1 1 0 0 1 1 1v17l-6-4-6 4V4a1 1 0 0 1 1-1z", "M10 8h4M10 11h3"],
+  alert: ["M12 3l10 18H2z", "M12 10v5M12 18v.4"],
+  trash: "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13",
+  shield: ["M12 3l8 3v6c0 4.5-3.2 7.8-8 9-4.8-1.2-8-4.5-8-9V6z", "M9 12l2.2 2.2L15.5 10"],
+  tag: ["M3 12V4h8l10 10-8 8z", { c: [7.5, 8.5, 1.2] }],
+  sort: "M7 4v16M4 17l3 3 3-3M17 20V4M14 7l3-3 3 3",
+  lock: [{ r: [5, 11, 14, 9, 2.5] }, "M8 11V8a4 4 0 0 1 8 0v3"],
+  gem: ["M12 3.5l8.5 6.8L12 20.5 3.5 10.3z", "M3.5 10.3h17M9 10.3l3-6.8 3 6.8M9 10.3l3 10.2 3-10.2"],
+};
+function Ik({ n, s = 20, w = 1.8, className, style }: any) {
+  const d = YOL[n];
+  const parts = Array.isArray(d) ? d : [d];
+  return (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={w} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={className} style={style}>
+      {parts.map((p, i) => typeof p === "string" ? <path key={i} d={p} /> : p.c ? <circle key={i} cx={p.c[0]} cy={p.c[1]} r={p.c[2]} /> : <rect key={i} x={p.r[0]} y={p.r[1]} width={p.r[2]} height={p.r[3]} rx={p.r[4]} />)}
+    </svg>
+  );
+}
+function Yildiz({ n, size = 14, onChange }: any) {
+  const yildizlar = [1, 2, 3, 4, 5].map((i) => (
+    <svg key={i} width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" onClick={onChange ? () => onChange(i === n ? 0 : i) : undefined} style={{ cursor: onChange ? "pointer" : "default", flexShrink: 0 }}>
+      <polygon points="12,3.5 14.6,9 20.5,9.7 16.1,13.8 17.3,19.7 12,16.8 6.7,19.7 7.9,13.8 3.5,9.7 9.4,9" fill={i <= n ? "var(--amber)" : "none"} stroke={i <= n ? "var(--amber)" : "var(--line-strong)"} strokeWidth="1.5" strokeLinejoin="round" />
+    </svg>
+  ));
+  return <span className="stars" role="img" aria-label={`${n} / 5 potansiyel`}>{yildizlar}</span>;
+}
+function Ayarla({ n, onChange }: any) {
+  return (
+    <div className="stars-input" role="radiogroup" aria-label="Potansiyel">
+      {[1, 2, 3, 4, 5].map((i) => (
+        <button key={i} type="button" className="star-btn" aria-label={`${i} yıldız`} aria-pressed={i <= n} onClick={() => onChange(i === n ? 0 : i)}>
+          <svg width="28" height="28" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12,3.5 14.6,9 20.5,9.7 16.1,13.8 17.3,19.7 12,16.8 6.7,19.7 7.9,13.8 3.5,9.7 9.4,9" fill={i <= n ? "var(--amber)" : "none"} stroke={i <= n ? "var(--amber)" : "var(--line-strong)"} strokeWidth="1.5" strokeLinejoin="round" /></svg>
+        </button>
+      ))}
+    </div>
+  );
+}
+const DurumChip = ({ d }: any) => <span className={`dchip d-${d}`}><i />{DURUMLAR[d]} ilgi</span>;
+// "Ara": numara varsa telefonun kendi arama uygulamasını (cep hattı) açar; yoksa numara eklemeye yönlendirir.
+function AraBtn({ m, ui, className, children }: any) {
+  const href = telHref(m.tel);
+  if (href) return <a className={className} href={href} onClick={() => ui.aramaBasladi(m)}>{children}</a>;
+  return <button type="button" className={className} onClick={() => ui.numaraYok(m)}>{children}</button>;
+}
+const ProRozet = () => <span className="pro-rozet">PRO</span>;
+const Baslik = ({ children, sag }: any) => <div className="sec-h"><h2>{children}</h2>{sag}</div>;
+
+function Sheet({ open, onClose, title, children, tall, footer }: any) {
+  const [mount, setMount] = useState(open);
+  const [gor, setGor] = useState(false);
+  useEffect(() => {
+    if (open) { setMount(true); const t = requestAnimationFrame(() => requestAnimationFrame(() => setGor(true))); return () => cancelAnimationFrame(t); }
+    setGor(false); const t = setTimeout(() => setMount(false), 260); return () => clearTimeout(t);
+  }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    const k = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k);
+  }, [open, onClose]);
+  if (!mount) return null;
+  return (
+    <div className={`sheet-wrap ${gor ? "on" : ""}`}>
+      <div className="sheet-bd" onClick={onClose} />
+      <div className={`sheet ${tall ? "tall" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
+        <div className="sheet-grip" />
+        <div className="sheet-top"><h3>{title}</h3><button className="ibtn" aria-label="Kapat" onClick={onClose}><Ik n="x" s={20} /></button></div>
+        <div className="sheet-body">{children}</div>
+        {footer ? <div className="sheet-foot">{footer}</div> : null}
+      </div>
+    </div>
+  );
+}
+
+/* ───────── Mini takvim (tarih seçici + takvim sekmesi) ───────── */
+function AyIzgara({ ay, secili, bugun, onSec, noktalar, kucuk }: any) {
+  const [yil, m] = ay;
+  const ilk = new Date(yil, m, 1);
+  const bosluk = (ilk.getDay() + 6) % 7; // pazartesi başlangıç
+  const gunSayisi = new Date(yil, m + 1, 0).getDate();
+  const hucre = [];
+  for (let i = 0; i < bosluk; i++) hucre.push(null);
+  for (let d = 1; d <= gunSayisi; d++) hucre.push(`${yil}-${pad(m + 1)}-${pad(d)}`);
+  return (
+    <div className={`grid-ay ${kucuk ? "k" : ""}`}>
+      {["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"].map((g) => <span key={g} className="gh">{g}</span>)}
+      {hucre.map((s, i) => s ? (
+        <button key={s} type="button" className={`gd ${s === secili ? "sec" : ""} ${s === bugun ? "bu" : ""} ${s < bugun ? "gec" : ""}`} onClick={() => onSec(s)} aria-label={fmtUzun(s)} aria-pressed={s === secili}>
+          <span>{parse(s).getDate()}</span>
+          {noktalar && noktalar[s] ? <span className="dots">{noktalar[s].slice(0, 3).map((t, k) => <i key={k} className={t} />)}</span> : null}
+        </button>
+      ) : <span key={"b" + i} />)}
+    </div>
+  );
+}
+function AyBasligi({ ay, setAy }: any) {
+  const [y, m] = ay;
+  const git = (d) => { const t = new Date(y, m + d, 1); setAy([t.getFullYear(), t.getMonth()]); };
+  return (
+    <div className="ay-bas">
+      <button className="ibtn" aria-label="Önceki ay" onClick={() => git(-1)}><Ik n="left" /></button>
+      <strong>{AYLAR[m]} {y}</strong>
+      <button className="ibtn" aria-label="Sonraki ay" onClick={() => git(1)}><Ik n="right" /></button>
+    </div>
+  );
+}
+function TarihSecici({ deger, onSec, bugun, hizli = true }: any) {
+  const bas = deger ? parse(deger) : parse(bugun);
+  const [ay, setAy] = useState([bas.getFullYear(), bas.getMonth()]);
+  const [takvimAcik, setTakvimAcik] = useState(false);
+  const secenek = [["Bugün", 0], ["Yarın", 1], ["3 gün", 3], ["1 hafta", 7], ["2 hafta", 14], ["1 ay", 30]];
+  return (
+    <div>
+      {hizli ? (
+        <div className="chips">
+          {secenek.map(([e, n]) => { const t = addDays(bugun, n); return <button key={e} type="button" className={`chip ${deger === t ? "on" : ""}`} onClick={() => onSec(t)}>{e}</button>; })}
+          <button type="button" className={`chip ${takvimAcik ? "on" : ""}`} onClick={() => setTakvimAcik((x) => !x)}><Ik n="cal" s={15} /> Tarih seç</button>
+        </div>
+      ) : null}
+      {(takvimAcik || !hizli) ? (
+        <div className="mini-cal eg-acil">
+          <AyBasligi ay={ay} setAy={setAy} />
+          <AyIzgara ay={ay} secili={deger} bugun={bugun} onSec={onSec} kucuk />
+        </div>
+      ) : null}
+      {deger ? <p className="secili-tarih"><Ik n="cal" s={15} /> {fmtUzun(deger)} · {goreli(deger, bugun)}</p> : null}
+    </div>
+  );
+}
+
+/* ───────── Kaydırmalı satır (swipe) ───────── */
+function SwipeRow({ onSag, onSol, children, etiketSag = "Tamamlandı", etiketSol = "Ertele" }: any) {
+  const [dx, setDx] = useState(0);
+  const [surukle, setSurukle] = useState(false);
+  const [cikis, setCikis] = useState(null); // {h}
+  const ref = useRef(null);
+  const st = useRef({ x: 0, y: 0, kilit: null, id: null });
+  const bas = (e) => { if (e.pointerType === "mouse" && e.button !== 0) return; st.current = { x: e.clientX, y: e.clientY, kilit: null, id: e.pointerId }; };
+  const hareket = (e) => {
+    const s = st.current; if (s.id !== e.pointerId) return;
+    const ddx = e.clientX - s.x, ddy = e.clientY - s.y;
+    if (!s.kilit) {
+      if (Math.abs(ddx) > 9 && Math.abs(ddx) > Math.abs(ddy) * 1.2) { s.kilit = "x"; setSurukle(true); try { ref.current.setPointerCapture(e.pointerId); } catch (_) {} }
+      else if (Math.abs(ddy) > 9) { s.kilit = "y"; }
+    }
+    if (s.kilit === "x") setDx(Math.max(-150, Math.min(150, ddx)));
+  };
+  const bit = (e) => {
+    const s = st.current; if (s.id !== e.pointerId) return;
+    const kil = s.kilit; s.id = null;
+    if (kil === "x") {
+      setSurukle(false);
+      if (dx > 90) { kapat(onSag); return; }
+      if (dx < -90) { setDx(0); onSol && onSol(); return; }
+    }
+    setDx(0); setSurukle(false);
+  };
+  const kapat = (fn) => {
+    const h = ref.current ? ref.current.offsetHeight : 0;
+    setCikis({ h }); requestAnimationFrame(() => requestAnimationFrame(() => setCikis({ h: 0 })));
+    setTimeout(() => fn && fn(), 260);
+  };
+  return (
+    <div className="swipe" style={cikis ? { height: cikis.h, opacity: cikis.h === 0 ? 0 : 1, transition: "height .26s ease, opacity .22s ease, margin .26s ease", margin: cikis.h === 0 ? 0 : undefined, overflow: "hidden" } : undefined}>
+      <div className="sw-bg sw-sag" style={{ opacity: dx > 8 ? 1 : 0 }}><Ik n="check" s={20} /> {etiketSag}</div>
+      <div className="sw-bg sw-sol" style={{ opacity: dx < -8 ? 1 : 0 }}>{etiketSol} <Ik n="clock" s={20} /></div>
+      <div ref={ref} className="sw-ic" style={{ transform: `translateX(${dx}px)`, transition: surukle ? "none" : "transform .22s cubic-bezier(.2,.8,.2,1)" }} onPointerDown={bas} onPointerMove={hareket} onPointerUp={bit} onPointerCancel={bit}>
+        {typeof children === "function" ? children({ kapatTamam: () => kapat(onSag) }) : children}
+      </div>
+    </div>
+  );
+}
+
+/* ───────── Kartlar ───────── */
+function AksiyonKarti({ m, bugun, ui, kompakt }: any) {
+  const o = oncelik(m, bugun);
+  const n = diffDays(m.next.tarih, bugun);
+  return (
+    <SwipeRow onSag={() => ui.tamamla(m.id)} onSol={() => ui.ertele(m.id)}>
+      {({ kapatTamam }) => (
+        <article className={`akart onc-${o.seviye}`}>
+          <button className="akart-ust" onClick={() => ui.detay(m.id)} aria-label={`${m.ad} detayını aç`}>
+            <span className="onc-nokta" aria-hidden="true" />
+            <span className="akart-orta">
+              <strong>{m.ad}</strong>
+              <small>{m.tip} · {m.sektor}</small>
+              <span className="akart-aks">{m.next.metin}</span>
+            </span>
+            <span className="akart-sag">
+              <span className={`tarih-chip ${n < 0 ? "gec" : n === 0 ? "bugun" : ""}`}>{goreli(m.next.tarih, bugun)}</span>
+              <small className="onc-et">{ONC_ETIKET[o.seviye]}</small>
+            </span>
+          </button>
+          <div className="akart-alt">
+            <AraBtn m={m} ui={ui} className="abtn pri"><Ik n="phone" s={17} /> Ara</AraBtn>
+            <button className="abtn" onClick={() => ui.not(m.id)}><Ik n="note" s={17} /> Not ekle</button>
+            <button className="abtn ok" onClick={kapatTamam}><Ik n="check" s={17} /> Tamamlandı</button>
+          </div>
+        </article>
+      )}
+    </SwipeRow>
+  );
+}
+
+function MusteriKarti({ m, bugun, ui }: any) {
+  const sg = sonGorusme(m);
+  const n = m.next ? diffDays(m.next.tarih, bugun) : null;
+  return (
+    <article className="mkart" onClick={() => ui.detay(m.id)}>
+      <div className="mkart-ust">
+        <div className="avatar" aria-hidden="true">{m.ad.split(" ").filter((x) => /^[A-ZÇĞİÖŞÜ]/.test(x)).slice(0, 2).map((x) => x[0]).join("") || m.ad[0]}</div>
+        <div className="mkart-ad"><strong>{m.ad}</strong><small>{m.tip} · {m.sektor}</small></div>
+        <DurumChip d={m.durum} />
+      </div>
+      <div className="mkart-yildiz"><Yildiz n={m.pot} /><span>Potansiyel</span></div>
+      <div className="mkart-alt">
+        <div><small>Son görüşme</small><b>{sg ? fmtKisa(sg) : "Henüz yok"}</b></div>
+        <div><small>Sonraki takip</small><b className={n !== null && n < 0 ? "kirmizi" : ""}>{m.next ? `${fmtKisa(m.next.tarih)}${n < 0 ? " · gecikti" : n === 0 ? " · bugün" : ""}` : "Planlanmadı"}</b></div>
+        <button className="detay-btn" tabIndex={-1} aria-hidden="true">Detay <Ik n="right" s={15} /></button>
+      </div>
+    </article>
+  );
+}
+
+function Iskelet({ n = 3 }: any) {
+  return <div>{Array.from({ length: n }).map((_, i) => <div key={i} className="skel-kart"><div className="skel s1" /><div className="skel s2" /><div className="skel s3" /></div>)}</div>;
+}
+function Bos({ baslik, metin, eylem, onEylem, ikon = "users" }: any) {
+  return (
+    <div className="bos">
+      <div className="bos-ikon"><Ik n={ikon} s={30} w={1.5} /></div>
+      <h3>{baslik}</h3><p>{metin}</p>
+      {eylem ? <button className="btn pri" onClick={onEylem}><Ik n="plus" s={18} /> {eylem}</button> : null}
+    </div>
+  );
+}
+
+/* ───────── Pro ekranı (paywall) ───────── */
+function ProKarti({ ozellik, sayi, pro, onGec, onKapat }: any) {
+  const [baslik, metin] = PRO_ICERIK[ozellik] || PRO_ICERIK.genel;
+  const oran = Math.min(100, (sayi / UCRETSIZ.musteri) * 100);
+  return (
+    <div className="pw">
+      <div className="pw-ik"><Ik n="gem" s={28} w={1.6} /></div>
+      <h3>{baslik}</h3>
+      <p className="pw-m">{metin}</p>
+      {ozellik === "musteri" ? (
+        <div className="pw-kota"><div className="metre" role="progressbar" aria-valuemin={0} aria-valuemax={UCRETSIZ.musteri} aria-valuenow={Math.min(sayi, UCRETSIZ.musteri)} aria-label="Müşteri kotası"><i style={{ width: oran + "%" }} /></div><small>{sayi} / {UCRETSIZ.musteri} müşteri kullanıldı</small></div>
+      ) : null}
+      <table className="pw-tablo">
+        <thead><tr><th scope="col"><span className="sr">Özellik</span></th><th scope="col">Ücretsiz</th><th scope="col" className="pro-s">Pro</th></tr></thead>
+        <tbody>{KARSILASTIRMA.map(([a, u, p]) => <tr key={a}><th scope="row">{a}</th><td>{u}</td><td className="pro-s">{p}</td></tr>)}</tbody>
+      </table>
+      <p className="pw-fiyat">Fiyat ve ücretsiz deneme bilgisi bir sonraki ekranda.</p>
+      <button className="btn pri blok" onClick={onGec}>Pro'ya geç</button>
+      <button className="btn ikincil blok" onClick={onKapat}>Şimdilik değil</button>
+      <p className="pw-not">Verilerin silinmez: ücretsiz sürümde mevcut kayıtlarını görmeye devam edersin.</p>
+    </div>
+  );
+}
+
+/* ───────── Sesli not ───────── */
+function useSes(onMetin, ui) {
+  const toast = ui.toast;
+  const [dinle, setDinle] = useState(false);
+  const rec = useRef(null);
+  const baslat = () => {
+    if (!ui.proGerek("ses")) return;
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) { toast("Bu tarayıcı sesli notu desteklemiyor. Klavyedeki mikrofon simgesini kullanabilirsin."); return; }
+    try {
+      const r = new SR(); r.lang = "tr-TR"; r.interimResults = false; r.continuous = false;
+      r.onresult = (e) => { let t = ""; for (let i = e.resultIndex; i < e.results.length; i++) t += e.results[i][0].transcript; if (t.trim()) onMetin(t.trim()); };
+      r.onerror = () => { setDinle(false); toast("Mikrofona erişilemedi. Tarayıcı iznini kontrol et."); };
+      r.onend = () => setDinle(false);
+      r.start(); rec.current = r; setDinle(true);
+    } catch (_) { setDinle(false); toast("Sesli not başlatılamadı."); }
+  };
+  const durdur = () => { try { rec.current && rec.current.stop(); } catch (_) {} setDinle(false); };
+  return { dinle, baslat, durdur };
+}
+
+/* ───────── Müşteri seçici ───────── */
+function MusteriSecici({ musteriler, onSec }: any) {
+  const [q, setQ] = useState("");
+  const liste = useMemo(() => { const t = q.trim().toLocaleLowerCase("tr-TR"); return musteriler.filter((m) => !t || m.ad.toLocaleLowerCase("tr-TR").includes(t)).slice(0, 40); }, [q, musteriler]);
+  return (
+    <div>
+      <label className="arama"><Ik n="search" s={18} /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="İsim veya firma ara…" aria-label="Müşteri ara" /></label>
+      <div className="sec-liste">
+        {liste.map((m) => <button key={m.id} className="sec-satir" onClick={() => onSec(m.id)}><span><strong>{m.ad}</strong><small>{m.tip} · {m.sektor}</small></span><Ik n="right" s={16} /></button>)}
+        {liste.length === 0 ? <p className="ipucu">Eşleşen müşteri yok.</p> : null}
+      </div>
+    </div>
+  );
+}
+
+/* ───────── Müşteri ekle / düzenle ───────── */
+function MusteriFormu({ m, ui, bugun, onBitti }: any) {
+  const yeni = !m;
+  const [ad, setAd] = useState(m ? m.ad : "");
+  const [tip, setTip] = useState(m ? m.tip : "");
+  const [sektor, setSektor] = useState(m ? m.sektor : "");
+  const [tel, setTel] = useState(m ? m.tel : "");
+  const [durum, setDurum] = useState(m ? m.durum : "ilik");
+  const [pot, setPot] = useState(m ? m.pot : 3);
+  const [konular, setKonular] = useState(m ? m.konular.filter((k) => KONU_ONERI.includes(k)) : []);
+  const [not, setNot] = useState("");
+  const [takip, setTakip] = useState(null);
+  const [takipMetin, setTakipMetin] = useState("");
+  const [hata, setHata] = useState({});
+  const [sesDolu, setSesDolu] = useState(false);
+  const ses = useSes((t) => setNot((x) => (x ? x + " " : "") + t), ui);
+  const kaydet = () => {
+    const h: any = {};
+    if (!ad.trim()) h.ad = "Müşteri adı gerekli";
+    if (!tip) h.tip = "Müşteri tipini seç";
+    setHata(h); if (Object.keys(h).length) return;
+    const ekKonular = m ? m.konular.filter((k) => !KONU_ONERI.includes(k)) : [];
+    const ortak = { ad: ad.trim(), tip, sektor: sektor.trim() || "—", tel: tel.trim(), durum, pot, konular: [...konular, ...ekKonular] };
+    if (yeni) {
+      const mus = { id: uid_(), ...ortak, hafiza: [], gorusmeler: [], olusturma: bugun, next: takip ? { tarih: takip, metin: takipMetin.trim() || "İlk takip", tur: "takip", planli: false } : null };
+      if (not.trim()) mus.gorusmeler = [{ id: uid_(), tarih: bugun, konu: "İlk görüşme", not: not.trim(), aksiyon: "" }];
+      ui.dispatch({ type: "EKLE", m: mus });
+      onBitti(mus);
+    } else {
+      ui.dispatch({ type: "GUNCELLE", id: m.id, patch: ortak });
+      ui.toast("Müşteri bilgileri güncellendi"); onBitti(null);
+    }
+  };
+  const toggleKonu = (k) => setKonular((x) => (x.includes(k) ? x.filter((y) => y !== k) : [...x, k]));
+  return (
+    <>
+      <div className="form">
+        <div className="alan">
+          <label htmlFor="f-ad">Müşteri adı *</label>
+          <input id="f-ad" value={ad} onChange={(e) => { setAd(e.target.value); setHata((h) => ({ ...h, ad: null })); }} placeholder="Örn. Örnek Makine Ltd. Şti." autoComplete="off" aria-invalid={!!hata.ad} />
+          {hata.ad ? <p className="hata" role="alert">{hata.ad}</p> : null}
+        </div>
+        <div className="alan">
+          <label id="l-tip">Müşteri tipi *</label>
+          <div className="seg tip" role="radiogroup" aria-labelledby="l-tip">
+            {TIPLER.map((t) => <button key={t} type="button" role="radio" aria-checked={tip === t} className={tip === t ? "on" : ""} onClick={() => { setTip(t); setHata((h) => ({ ...h, tip: null })); }}>{t}</button>)}
+          </div>
+          {hata.tip ? <p className="hata" role="alert">{hata.tip}</p> : null}
+        </div>
+        <div className="iki">
+          <div className="alan"><label htmlFor="f-sek">Sektör</label><input id="f-sek" value={sektor === "—" ? "" : sektor} onChange={(e) => setSektor(e.target.value)} placeholder="Örn. İmalat" /></div>
+          <div className="alan"><label htmlFor="f-tel">Telefon</label><input id="f-tel" type="tel" inputMode="tel" value={tel} onChange={(e) => setTel(e.target.value)} placeholder="05xx xxx xx xx" /></div>
+        </div>
+        <div className="alan">
+          <label id="l-dur">İlgi düzeyi</label>
+          <div className="seg" role="radiogroup" aria-labelledby="l-dur">
+            {Object.entries(DURUMLAR).map(([k, v]) => <button key={k} type="button" role="radio" aria-checked={durum === k} className={`dseg d-${k} ${durum === k ? "on" : ""}`} onClick={() => setDurum(k)}><i />{v}</button>)}
+          </div>
+        </div>
+        <div className="alan"><label>Potansiyel</label><Ayarla n={pot} onChange={setPot} /></div>
+        <div className="alan">
+          <label>İlgilendiği konular</label>
+          <div className="chips">{KONU_ONERI.map((k) => <button key={k} type="button" className={`chip ${konular.includes(k) ? "on" : ""}`} aria-pressed={konular.includes(k)} onClick={() => toggleKonu(k)}>{konular.includes(k) ? <Ik n="check" s={14} /> : null}{k}</button>)}</div>
+        </div>
+        {yeni ? (
+          <div className="alan">
+            <label htmlFor="f-not">İlk not</label>
+            <div className="notkutu">
+              <textarea id="f-not" rows={3} value={not} onChange={(e) => setNot(e.target.value)} placeholder="Bu müşteriyle ilgili önemli bilgileri buraya yazın." />
+              <button type="button" className={`mic ${ses.dinle ? "on" : ""}`} aria-label={ses.dinle ? "Dinlemeyi durdur" : "Sesli not"} onClick={ses.dinle ? ses.durdur : ses.baslat}><Ik n="mic" s={19} /></button>
+            </div>
+            <p className="ipucu"><Ik n="shield" s={14} /> Kimlik no, hesap no, IBAN veya bakiye gibi bilgileri yazma.</p>
+          </div>
+        ) : null}
+        {yeni ? (
+          <div className="alan">
+            <label>Sonraki takip tarihi</label>
+            <TarihSecici deger={takip} onSec={setTakip} bugun={bugun} />
+            {takip ? <input className="mt8" value={takipMetin} onChange={(e) => setTakipMetin(e.target.value)} placeholder="Takip notu (isteğe bağlı)" aria-label="Takip notu" /> : null}
+          </div>
+        ) : null}
+      </div>
+      <div className="sheet-foot-in"><button className="btn pri blok" onClick={kaydet}>{yeni ? "Kaydet" : "Değişiklikleri kaydet"}</button></div>
+    </>
+  );
+}
+
+/* ───────── Görüşme notu ───────── */
+function NotFormu({ m, ui, bugun, onBitti }: any) {
+  const [konu, setKonu] = useState(m.konular.find((k) => GORUSME_KONULARI.includes(k)) || "Diğer");
+  const [tarih, setTarih] = useState(bugun);
+  const [tarihAc, setTarihAc] = useState(false);
+  const [not, setNot] = useState("");
+  const [aksiyon, setAksiyon] = useState("");
+  const [takip, setTakip] = useState(null);
+  const [hafiza, setHafiza] = useState(false);
+  const vadesi = m.next && diffDays(m.next.tarih, bugun) <= 0;
+  const hafizaDolu = !ui.pro && m.hafiza.length >= UCRETSIZ.hafiza;
+  const [tamamla, setTamamla] = useState(!!vadesi);
+  const [hata, setHata] = useState("");
+  const ses = useSes((t) => { setNot((x) => (x ? x + " " : "") + t); setHata(""); }, ui);
+  const kaydet = () => {
+    if (!not.trim()) { setHata("Kısa bir not yaz"); return; }
+    const onceki = m;
+    const g = { id: uid_(), tarih, konu, not: not.trim(), aksiyon: aksiyon.trim() };
+    let next;
+    if (takip) next = { tarih: takip, metin: aksiyon.trim() || "Takip", tur: "takip", planli: false };
+    else if (tamamla && vadesi) next = null;
+    ui.dispatch({ type: "GORUSME", id: m.id, g, hafiza: hafiza ? not.trim() : undefined, next });
+    ui.toast("Görüşme notu kaydedildi", [{ label: "Geri al", fn: () => ui.dispatch({ type: "GERI", m: onceki }) }]);
+    onBitti();
+  };
+  return (
+    <>
+      <div className="form">
+        <div className="musteri-sat"><span className="avatar sm" aria-hidden="true">{m.ad[0]}</span><span><small>Müşteri</small><strong>{m.ad}</strong></span></div>
+        <div className="alan">
+          <label>Görüşme konusu</label>
+          <div className="chips">{GORUSME_KONULARI.map((k) => <button key={k} type="button" className={`chip ${konu === k ? "on" : ""}`} aria-pressed={konu === k} onClick={() => setKonu(k)}>{k}</button>)}</div>
+        </div>
+        <div className="alan">
+          <label htmlFor="n-not">Not</label>
+          <div className="notkutu">
+            <textarea id="n-not" autoFocus rows={4} value={not} onChange={(e) => { setNot(e.target.value); setHata(""); }} placeholder="Ne konuşuldu? Müşterinin söylediği önemli şeyler…" aria-invalid={!!hata} />
+            <button type="button" className={`mic ${ses.dinle ? "on" : ""}`} aria-label={ses.dinle ? "Dinlemeyi durdur" : "Sesli not"} onClick={ses.dinle ? ses.durdur : ses.baslat}><Ik n="mic" s={19} /></button>
+          </div>
+          {ses.dinle ? <p className="ipucu eg-acil">Dinleniyor… konuşabilirsin.</p> : null}
+          {hata ? <p className="hata" role="alert">{hata}</p> : null}
+        </div>
+        <div className="alan">
+          <label htmlFor="n-aks">Sonraki aksiyon</label>
+          <input id="n-aks" value={aksiyon} onChange={(e) => setAksiyon(e.target.value)} placeholder="Örn. Finansman teklifi hazırlanacak" />
+          <p className="mini-et">Takip tarihi</p>
+          <TarihSecici deger={takip} onSec={setTakip} bugun={bugun} />
+        </div>
+        <div className="alan">
+          <button type="button" className="tarih-satir" onClick={() => setTarihAc((x) => !x)}><span><small>Görüşme tarihi</small><strong>{tarih === bugun ? "Bugün" : fmtUzun(tarih)}</strong></span><Ik n="cal" s={18} /></button>
+          {tarihAc ? <div className="mt8 eg-acil"><TarihSecici deger={tarih} onSec={(t) => { setTarih(t); setTarihAc(false); }} bugun={bugun} hizli={false} /></div> : null}
+        </div>
+        {hafizaDolu ? (
+          <button type="button" className="anahtar kilitli" onClick={() => ui.proAc("hafiza")}><span className="kilit-ik"><Ik n="lock" s={18} /></span><span><strong>Müşteri hafızasına ekle <ProRozet /></strong><small>Hafıza dolu ({UCRETSIZ.hafiza}/{UCRETSIZ.hafiza}). Pro ile sınırsız.</small></span></button>
+        ) : (
+          <label className="anahtar"><input type="checkbox" checked={hafiza} onChange={(e) => setHafiza(e.target.checked)} /><span className="sw" /><span><strong>Müşteri hafızasına ekle</strong><small>Bu notu aramadan önce hatırlamak için sabitle</small></span></label>
+        )}
+        {vadesi && !takip ? <label className="anahtar"><input type="checkbox" checked={tamamla} onChange={(e) => setTamamla(e.target.checked)} /><span className="sw" /><span><strong>Bekleyen takibi tamamla</strong><small>“{m.next.metin}”</small></span></label> : null}
+      </div>
+      <div className="sheet-foot-in"><button className="btn pri blok" onClick={kaydet}>Kaydet</button></div>
+    </>
+  );
+}
+
+/* ───────── Takip planla ───────── */
+function TakipFormu({ m, ui, bugun, onBitti, tarihOn }: any) {
+  const [metin, setMetin] = useState(m.next ? m.next.metin : "");
+  const [tur, setTur] = useState(m.next ? m.next.tur : "arama");
+  const [tarih, setTarih] = useState(tarihOn || (m.next ? m.next.tarih : addDays(bugun, 1)));
+  const [planli, setPlanli] = useState(m.next ? m.next.planli : false);
+  const [hata, setHata] = useState("");
+  const kaydet = () => {
+    if (!metin.trim()) { setHata("Takip için kısa bir açıklama yaz"); return; }
+    const onceki = m;
+    ui.dispatch({ type: "TAKIP", id: m.id, next: { tarih, metin: metin.trim(), tur, planli } });
+    ui.toast(`Takip planlandı · ${fmtKisa(tarih)}`, [{ label: "Geri al", fn: () => ui.dispatch({ type: "GERI", m: onceki }) }]);
+    onBitti();
+  };
+  return (
+    <>
+      <div className="form">
+        <div className="musteri-sat"><span className="avatar sm" aria-hidden="true">{m.ad[0]}</span><span><small>Müşteri</small><strong>{m.ad}</strong></span></div>
+        {m.next ? <p className="ipucu">Mevcut takibin yerine geçer: “{m.next.metin}” · {fmtKisa(m.next.tarih)}</p> : null}
+        <div className="alan">
+          <label htmlFor="t-m">Ne yapılacak?</label>
+          <input id="t-m" autoFocus value={metin} onChange={(e) => { setMetin(e.target.value); setHata(""); }} placeholder="Örn. Finansman teklifini ilet" aria-invalid={!!hata} />
+          {hata ? <p className="hata" role="alert">{hata}</p> : null}
+        </div>
+        <div className="alan"><label>Tür</label><div className="chips">{Object.entries(TUR).map(([k, v]) => <button key={k} type="button" className={`chip ${tur === k ? "on" : ""}`} aria-pressed={tur === k} onClick={() => setTur(k)}>{v}</button>)}</div></div>
+        <div className="alan"><label>Tarih</label><TarihSecici deger={tarih} onSec={setTarih} bugun={bugun} /></div>
+        <label className="anahtar"><input type="checkbox" checked={planli} onChange={(e) => setPlanli(e.target.checked)} /><span className="sw" /><span><strong>Planlı görüşme</strong><small>Randevulu veya yüz yüze toplantı</small></span></label>
+      </div>
+      <div className="sheet-foot-in"><button className="btn pri blok" onClick={kaydet}>Takibi kaydet</button></div>
+    </>
+  );
+}
+
+/* ───────── Ertele ───────── */
+function ErtelFormu({ m, ui, bugun, onBitti }: any) {
+  const [takvim, setTakvim] = useState(false);
+  const [sec, setSec] = useState(null);
+  const uygula = (t) => {
+    const onceki = m;
+    ui.dispatch({ type: "ERTELE", id: m.id, tarih: t });
+    ui.toast(`Ertelendi · ${fmtKisa(t)}`, [{ label: "Geri al", fn: () => ui.dispatch({ type: "GERI", m: onceki }) }]);
+    onBitti();
+  };
+  const ops = [["Yarın", 1], ["3 gün sonra", 3], ["1 hafta sonra", 7], ["2 hafta sonra", 14]];
+  const taban = m.next && m.next.tarih > bugun ? m.next.tarih : bugun;
+  return (
+    <div className="form">
+      <p className="ipucu">“{m.next.metin}” · {m.ad}</p>
+      <div className="sec-liste">
+        {ops.map(([e, n]) => { const t = addDays(taban, n); return <button key={e} className="sec-satir" onClick={() => uygula(t)}><span><strong>{e}</strong><small>{GUNLER[parse(t).getDay()]}, {fmtKisa(t)}</small></span><Ik n="right" s={16} /></button>; })}
+        <button className="sec-satir" onClick={() => setTakvim((x) => !x)}><span><strong>Tarih seç…</strong><small>Takvimden belirle</small></span><Ik n="cal" s={18} /></button>
+      </div>
+      {takvim ? (
+        <div className="eg-acil">
+          <TarihSecici deger={sec} onSec={setSec} bugun={bugun} hizli={false} />
+          <button className="btn pri blok mt12" disabled={!sec} onClick={() => sec && uygula(sec)}>{sec ? `${fmtKisa(sec)} tarihine ertele` : "Bir tarih seç"}</button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/* ───────── Filtre / sıralama ───────── */
+const FILTRELER = [["tumu", "Tümü"], ["bugun", "Bugün"], ["bekleyen", "Takip Bekleyen"], ["sicak", "Yüksek İlgi"], ["yuksek", "Yüksek Potansiyel"], ["Finansman", "Finansman"], ["Fon", "Fon"], ["Dış ticaret", "Dış Ticaret"]];
+const SIRALAR = [["takip", "Takip tarihi"], ["son", "Son görüşme"], ["ad", "İsim (A–Z)"]];
+const norm = (s) => (s || "").toLocaleLowerCase("tr-TR");
+function filtrele(ms, f, q, bugun, sira, notAra) {
+  const t = norm(q.trim());
+  const ipucu = {};
+  let r = ms.filter((m) => {
+    if (f === "bugun" && !(m.next && m.next.tarih === bugun)) return false;
+    if (f === "bekleyen" && !(m.next && m.next.tarih < bugun)) return false;
+    if (f === "sicak" && m.durum !== "sicak") return false;
+    if (f === "yuksek" && m.pot < 4) return false;
+    if (["Finansman", "Fon", "Dış ticaret"].includes(f) && !m.konular.includes(f)) return false;
+    if (!t) return true;
+    if (norm(m.ad).includes(t) || norm(m.sektor).includes(t) || m.konular.some((k) => norm(k).includes(t))) return true;
+    if (!notAra) return false;
+    const h = m.hafiza.find((x) => norm(x.metin).includes(t));
+    if (h) { ipucu[m.id] = h.metin; return true; }
+    const g = m.gorusmeler.find((x) => norm(x.not).includes(t));
+    if (g) { ipucu[m.id] = g.not; return true; }
+    return false;
+  });
+  const nx = (m) => (m.next ? m.next.tarih : "9999-12-31");
+  if (sira === "takip") r = r.slice().sort((a, b) => (nx(a) < nx(b) ? -1 : nx(a) > nx(b) ? 1 : 0));
+  else if (sira === "son") r = r.slice().sort((a, b) => (sonGorusme(b) || "").localeCompare(sonGorusme(a) || ""));
+  else r = r.slice().sort((a, b) => a.ad.localeCompare(b.ad, "tr"));
+  return { r, ipucu };
+}
+
+/* ───────── Ana sayfa (Müşteri Portföyüm) ───────── */
+function AnaSayfa({ state, bugun, ui, yuk }: any) {
+  const ms = state.musteriler;
+  const st = istatistik(ms, bugun);
+  const n = st.bugun + st.gecikmis;
+  const yapilacak = useMemo(() => ms.filter((m) => m.next && diffDays(m.next.tarih, bugun) <= 1)
+    .sort((a, b) => oncelik(b, bugun).puan - oncelik(a, bugun).puan || (a.next.tarih < b.next.tarih ? -1 : 1)), [ms, bugun]);
+  const unutulan = useMemo(() => ms.filter((m) => { const s = sonGorusme(m); return (s === null || diffDays(bugun, s) >= 30) && !(m.next && diffDays(m.next.tarih, bugun) <= 1); })
+    .sort((a, b) => (sonGorusme(a) || "0000").localeCompare(sonGorusme(b) || "0000")).slice(0, 8), [ms, bugun]);
+  const son = useMemo(() => ms.filter((m) => sonGorusme(m)).sort((a, b) => sonGorusme(b).localeCompare(sonGorusme(a))).slice(0, 3), [ms]);
+  const ust = (
+    <header className="ust">
+      <div><h1>Müşteri Portföyüm</h1><p>{ms.length === 0 ? "Henüz müşterin yok" : n > 0 ? `Bugün ${n} aksiyonun var` : "Bugün için bekleyen aksiyon yok"}</p></div>
+      <div className="ust-sag">
+        <button className="ibtn halka" aria-label={`Bildirimler${n ? `, ${n} bekleyen aksiyon` : ""}`} onClick={() => ui.git("takipler", "tumu")}><Ik n="bell" s={22} />{n > 0 ? <b className="rozet">{n}</b> : null}</button>
+        <button className="ibtn dolu" aria-label="Müşteri ekle" onClick={ui.yeni}><Ik n="plus" s={22} w={2.2} /></button>
+      </div>
+    </header>
+  );
+  if (yuk) return <div className="ekran">{ust}<div className="stats">{[0, 1, 2, 3].map((i) => <div key={i} className="skel stat-s" />)}</div><Iskelet n={3} /></div>;
+  if (ms.length === 0) return <div className="ekran">{ust}{ui.eski.length > 0 ? <div className="kart-b eski-kart"><strong>Bu cihazda {ui.eski.length} müşteri kaydı bulundu</strong><p>Eski sürümden kalan kayıtları hesabına aktarabilir veya cihazdan silebilirsin.</p><div className="iki"><button className="btn ikincil" onClick={ui.eskiSil}>Cihazdan sil</button><button className="btn pri" onClick={ui.eskiAktar}>Hesabıma aktar</button></div></div> : null}<Bos baslik="Portföyünü oluşturmaya başla" metin="İlk müşterini ekle ve görüşmelerini, takiplerini ve önemli notlarını tek yerden yönet." eylem="İlk müşteriyi ekle" onEylem={ui.yeni} /></div>;
+  return (
+    <div className="ekran">
+      {ust}
+      {!ui.pro ? <KotaKarti sayi={ms.length} ui={ui} /> : null}
+      <div className="stats">
+        <button className="stat" onClick={() => ui.git("musteriler", "tumu")}><span className="stat-n">{st.toplam}</span><span className="stat-l"><Ik n="users" s={15} /> Müşteri</span></button>
+        <button className="stat" onClick={() => ui.git("takipler", "bugun")}><span className="stat-n">{st.bugun}</span><span className="stat-l"><i className="nk r" /> Bugün takip</span></button>
+        <button className="stat" onClick={() => ui.git("takipler", "gecikmis")}><span className="stat-n">{st.gecikmis}</span><span className="stat-l"><i className="nk o" /> Takip bekliyor</span></button>
+        <button className="stat" onClick={() => ui.git("takipler", "planli")}><span className="stat-n">{st.planli}</span><span className="stat-l"><i className="nk g" /> Planlı görüşme</span></button>
+      </div>
+      <Baslik sag={yapilacak.length > 6 ? <button className="link" onClick={() => ui.git("takipler", "tumu")}>Tümü ({yapilacak.length})</button> : null}>Bugün Ne Yapmalıyım?</Baslik>
+      <p className="alt-b">Öncelikli müşteri aksiyonların</p>
+      {yapilacak.length === 0 ? (
+        <div className="bos-mini"><Ik n="check" s={22} /><div><strong>Her şey yolunda</strong><p>Bugün ve yarın için bekleyen aksiyon yok. Planlanmamış müşterilerine göz atabilirsin.</p></div></div>
+      ) : yapilacak.slice(0, 6).map((m) => <AksiyonKarti key={m.id} m={m} bugun={bugun} ui={ui} />)}
+      {yapilacak.length > 0 ? <p className="ipucu orta"><Ik n="right" s={13} /> Kartı sağa kaydır: tamamla · sola kaydır: ertele</p> : null}
+      {unutulan.length > 0 ? (
+        <>
+          <Baslik>Unutulmasın</Baslik>
+          <p className="alt-b">Bir süredir görüşülmeyen müşteriler</p>
+          <div className="yatay">
+            {unutulan.map((m) => { const s = sonGorusme(m); const g = s ? diffDays(bugun, s) : null; return (
+              <button key={m.id} className="unut" onClick={() => ui.detay(m.id)}>
+                <strong>{m.ad}</strong><small>{m.tip} · {m.sektor}</small>
+                <span className="unut-gun"><Ik n="clock" s={14} /> {g === null ? "Hiç görüşülmedi" : `${g} gündür görüşülmedi`}</span>
+              </button>); })}
+          </div>
+        </>
+      ) : null}
+      <Baslik sag={<button className="link" onClick={() => ui.git("musteriler", "tumu")}>Portföyü Gör</button>}>Son Müşteriler</Baslik>
+      {son.map((m) => <MusteriKarti key={m.id} m={m} bugun={bugun} ui={ui} />)}
+      <div className="alt-bosluk" />
+    </div>
+  );
+}
+
+/* ───────── Müşteriler ───────── */
+function Musteriler({ state, bugun, ui, filtre, setFiltre, yuk }: any) {
+  const [q, setQ] = useState("");
+  const [sira, setSira] = useState("takip");
+  const [limit, setLimit] = useState(20);
+  useEffect(() => setLimit(20), [filtre, q, sira]);
+  useEffect(() => { ui.siraRef.current = { sira, setSira }; });
+  const { r, ipucu } = useMemo(() => filtrele(state.musteriler, filtre, q, bugun, sira, ui.pro), [state.musteriler, filtre, q, bugun, sira, ui.pro]);
+  return (
+    <div className="ekran">
+      <header className="ust"><div><h1>Müşteriler</h1><p>{state.musteriler.length} müşteri{r.length !== state.musteriler.length ? ` · ${r.length} sonuç` : ""}</p></div>
+        <div className="ust-sag"><button className="ibtn dolu" aria-label="Müşteri ekle" onClick={ui.yeni}><Ik n="plus" s={22} w={2.2} /></button></div></header>
+      <div className="yapisik">
+        <label className="arama"><Ik n="search" s={18} /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="İsim veya firma ara…" aria-label="Müşteri ara" />{q ? <button type="button" className="ibtn kucuk" aria-label="Aramayı temizle" onClick={() => setQ("")}><Ik n="x" s={16} /></button> : null}</label>
+        <div className="chips kay" role="tablist" aria-label="Filtreler">{FILTRELER.map(([k, e]) => <button key={k} role="tab" aria-selected={filtre === k} className={`chip ${filtre === k ? "on" : ""}`} onClick={() => setFiltre(k)}>{e}</button>)}</div>
+        <div className="sira-satir">{q ? (ui.pro ? <span>Notlarda ve etiketlerde de arar</span> : <button className="kilit-link" onClick={() => ui.proAc("notara")}><Ik n="lock" s={13} /> Notlarda arama <ProRozet /></button>) : <span>{!ui.pro ? `${state.musteriler.length} / ${UCRETSIZ.musteri} müşteri` : ""}</span>}<button className="link" onClick={() => ui.sirala(sira, setSira)}><Ik n="sort" s={15} /> {SIRALAR.find((x) => x[0] === sira)[1]}</button></div>
+      </div>
+      {yuk ? <Iskelet n={4} /> : state.musteriler.length === 0 ? (
+        <Bos baslik="Portföyünü oluşturmaya başla" metin="İlk müşterini ekle ve görüşmelerini, takiplerini ve önemli notlarını tek yerden yönet." eylem="İlk müşteriyi ekle" onEylem={ui.yeni} />
+      ) : r.length === 0 ? (
+        <Bos ikon="search" baslik="Sonuç bulunamadı" metin="Farklı bir arama dene veya filtreyi değiştir." eylem="Filtreyi temizle" onEylem={() => { setQ(""); setFiltre("tumu"); }} />
+      ) : (
+        <>
+          {r.slice(0, limit).map((m) => <div key={m.id}><MusteriKarti m={m} bugun={bugun} ui={ui} />{ipucu[m.id] ? <p className="snip">Notlarda: “{ipucu[m.id].length > 90 ? ipucu[m.id].slice(0, 90) + "…" : ipucu[m.id]}”</p> : null}</div>)}
+          {r.length > limit ? <button className="btn ikincil blok" onClick={() => setLimit((l) => l + 20)}>Daha fazla göster ({r.length - limit})</button> : null}
+        </>
+      )}
+      <div className="alt-bosluk" />
+    </div>
+  );
+}
+
+/* ───────── Takipler ───────── */
+const TAKIP_FILTRE = [["tumu", "Tümü"], ["gecikmis", "Gecikmiş"], ["bugun", "Bugün"], ["planli", "Planlı"], ["sonra", "Daha sonra"]];
+function Takipler({ state, bugun, ui, filtre, setFiltre }: any) {
+  const acts = useMemo(() => state.musteriler.filter((m) => m.next).map((m) => ({ m, n: diffDays(m.next.tarih, bugun) })).sort((a, b) => a.n - b.n), [state.musteriler, bugun]);
+  const sayi = { gecikmis: acts.filter((a) => a.n < 0).length, bugun: acts.filter((a) => a.n === 0).length, planli: acts.filter((a) => a.m.next.planli && a.n >= 0).length, sonra: acts.filter((a) => a.n > 7).length };
+  const GRUP = [["gecikmis", "Gecikmiş", (a) => a.n < 0], ["bugun", "Bugün", (a) => a.n === 0], ["hafta", "Bu hafta", (a) => a.n >= 1 && a.n <= 7], ["sonra", "Daha sonra", (a) => a.n > 7]];
+  let secili = acts;
+  if (filtre === "gecikmis") secili = acts.filter((a) => a.n < 0);
+  else if (filtre === "bugun") secili = acts.filter((a) => a.n === 0);
+  else if (filtre === "planli") secili = acts.filter((a) => a.m.next.planli && a.n >= 0);
+  else if (filtre === "sonra") secili = acts.filter((a) => a.n > 7);
+  return (
+    <div className="ekran">
+      <header className="ust"><div><h1>Takipler</h1><p>{acts.length} planlı takip</p></div></header>
+      <div className="yapisik">
+        <div className="chips kay" role="tablist" aria-label="Takip filtreleri">{TAKIP_FILTRE.map(([k, e]) => <button key={k} role="tab" aria-selected={filtre === k} className={`chip ${filtre === k ? "on" : ""}`} onClick={() => setFiltre(k)}>{e}{sayi[k] ? <b className="cn">{sayi[k]}</b> : null}</button>)}</div>
+      </div>
+      {secili.length === 0 ? <Bos ikon="bell" baslik="Bu filtrede takip yok" metin={filtre === "gecikmis" ? "Geciken takibin yok. Harika." : "Müşterilerine takip tarihi ekleyerek hiçbir görüşmeyi kaçırma."} /> : (
+        GRUP.map(([k, ad, fn]) => { const l = secili.filter(fn); if (!l.length) return null; return (
+          <section key={k}><Baslik sag={<span className="adet">{l.length}</span>}>{ad}</Baslik>{l.map((a) => <AksiyonKarti key={a.m.id} m={a.m} bugun={bugun} ui={ui} />)}</section>); })
+      )}
+      {secili.length > 0 ? <p className="ipucu orta"><Ik n="right" s={13} /> Sağa kaydır: tamamla · sola kaydır: ertele</p> : null}
+      <div className="alt-bosluk" />
+    </div>
+  );
+}
+
+/* ───────── Takvim ───────── */
+function Takvim({ state, bugun, ui }: any) {
+  const b = parse(bugun);
+  const [ay, setAy] = useState([b.getFullYear(), b.getMonth()]);
+  const [sec, setSec] = useState(bugun);
+  const noktalar = useMemo(() => {
+    const o = {};
+    const ekle = (d, t) => { (o[d] = o[d] || []).includes(t) || (o[d] = [...(o[d] || []), t]); };
+    for (const m of state.musteriler) {
+      if (m.next) ekle(m.next.tarih, m.next.tarih < bugun ? "ge" : m.next.planli ? "pl" : "tk");
+      for (const g of m.gorusmeler) ekle(g.tarih, "gr");
+    }
+    return o;
+  }, [state.musteriler, bugun]);
+  const aks = state.musteriler.filter((m) => m.next && m.next.tarih === sec);
+  const gec = [];
+  for (const m of state.musteriler) for (const g of m.gorusmeler) if (g.tarih === sec) gec.push({ m, g });
+  const gunAd = `${GUNLER[parse(sec).getDay()]}, ${fmtKisa(sec)}`;
+  return (
+    <div className="ekran">
+      <header className="ust"><div><h1>Takvim</h1><p>Takip ve görüşmelerin</p></div><div className="ust-sag"><button className="btn ikincil kucuk" onClick={() => { setSec(bugun); setAy([b.getFullYear(), b.getMonth()]); }}>Bugün</button></div></header>
+      <div className="kart-b">
+        <AyBasligi ay={ay} setAy={setAy} />
+        <AyIzgara ay={ay} secili={sec} bugun={bugun} onSec={setSec} noktalar={noktalar} />
+        <div className="lejant"><span><i className="pl" /> Planlı görüşme</span><span><i className="tk" /> Takip</span><span><i className="ge" /> Geciken</span><span><i className="gr" /> Geçmiş görüşme</span></div>
+      </div>
+      <Baslik sag={sec >= bugun ? <button className="link" onClick={() => ui.takipEkleGun(sec)}><Ik n="plus" s={15} /> Takip ekle</button> : null}>{sec === bugun ? "Bugün" : gunAd}</Baslik>
+      {aks.length === 0 && gec.length === 0 ? <div className="bos-mini"><Ik n="cal" s={22} /><div><strong>Bu gün için kayıt yok</strong><p>{sec >= bugun ? "“Takip ekle” ile bu tarihe bir takip planlayabilirsin." : "Bu tarihte kayıtlı görüşme yok."}</p></div></div> : null}
+      {aks.map((m) => <AksiyonKarti key={m.id} m={m} bugun={bugun} ui={ui} />)}
+      {gec.map(({ m, g }) => (
+        <button key={g.id} className="gec-satir" onClick={() => ui.detay(m.id)}>
+          <span className="gec-nokta" /><span><strong>{m.ad}</strong><small>{g.konu}</small><em>{g.not}</em></span>
+        </button>
+      ))}
+      <div className="alt-bosluk" />
+    </div>
+  );
+}
+
+/* ───────── Daha fazla ───────── */
+function DahaFazla({ state, ui }: any) {
+  return (
+    <div className="ekran">
+      <header className="ust"><div><h1>Daha Fazla</h1><p>Ayarlar ve bilgi</p></div></header>
+      <div className="kart-b surum-kart">
+        <div className="surum-bas"><div><strong>Sürümün</strong><small>{ui.pro ? "Katılım Plus Pro: tüm özellikler açık" : "Ücretsiz sürüm: temel özellikler"}</small></div>{ui.pro ? <ProRozet /> : <span className="ucretsiz-et">Ücretsiz</span>}</div>
+        <ul className="limit-liste">{KARSILASTIRMA.map(([a, u, p]) => <li key={a}><span>{a}</span><b>{ui.pro ? p : u}</b></li>)}</ul>
+        {!ui.pro ? <button className="btn pri blok mt12" onClick={() => ui.proAc("genel")}><Ik n="gem" s={18} /> Pro'ya geç</button> : null}
+      </div>
+      <div className="kart-b gizlilik">
+        <div className="gz-ik"><Ik n="shield" s={22} /></div>
+        <div><strong>Hesabına bağlı saklanır</strong>
+          <p>Bu modül bankanın hiçbir sistemine bağlanmaz. Bakiye, kredi, hesap veya işlem bilgisi çekilmez. Kayıtlar senin elle girdiğin notlardır; hesabına bağlı olarak Katılım Plus'ın bulut altyapısında (Firebase) saklanır ve yalnızca senin hesabın okuyup yazabilir. Hesabını silersen bu kayıtlar da silinir.</p></div>
+      </div>
+      <div className="kart-b gizlilik">
+        <div className="gz-ik uyari"><Ik n="alert" s={22} /></div>
+        <div><strong>Girmemen gerekenler</strong>
+          <p>TC kimlik no, hesap no, IBAN, kart bilgisi ve bakiye gibi bilgileri yazma. Müşterilerine ait kişisel veriyi girerken bankanın kendi politikasına ve ilgili mevzuata uymak senin sorumluluğundadır.</p></div>
+      </div>
+      <Baslik>Veri</Baslik>
+      <div className="liste-grup">
+        <div className="liste-satir senk-satir"><span><strong>Kayıt durumu</strong><small>{ui.senk === "hata" ? "Buluta kaydedilemedi, otomatik tekrar denenecek" : ui.senk === "bekliyor" ? "Kaydediliyor…" : "Tüm değişiklikler hesabına kaydedildi"}</small></span><span className={`senk-nokta ${ui.senk}`} aria-hidden="true" /></div>
+        <button className="liste-satir" onClick={ui.yenile}><span><strong>Hesaptan yenile</strong><small>Başka bir cihazda yaptığın değişiklikleri getir</small></span><Ik n="right" s={16} /></button>
+        {ui.eski.length > 0 ? <button className="liste-satir" onClick={ui.eskiAktar}><span><strong>Bu cihazdaki {ui.eski.length} kaydı hesabıma aktar</strong><small>Eski sürümden kalan kayıtlar bulundu</small></span><Ik n="right" s={16} /></button> : null}
+        <button className="liste-satir" onClick={ui.temizle}><span><strong>Tüm verileri sil</strong><small>Hesabındaki tüm müşteri ve görüşme kayıtlarını siler</small></span><Ik n="right" s={16} /></button>
+        <button className="liste-satir" onClick={ui.kopyala}><span><strong>Verileri kopyala (JSON) <ProRozet /></strong><small>Yedek almak için panoya kopyalar</small></span><Ik n="right" s={16} /></button>
+      </div>
+      <Baslik>Kısayollar</Baslik>
+      <div className="kart-b ipuclari">
+        <p><b>Sağa kaydır</b> bir takip kartını tamamlar.</p>
+        <p><b>Sola kaydır</b> ertelemek için seçenekleri açar.</p>
+        <p><b>Ara → Not ekle:</b> arama sonrası çıkan bildirimden tek dokunuşla görüşme notu yaz.</p>
+        <p><b>Mikrofon</b> ile notu sesli söyleyebilirsin.</p>
+      </div>
+      <p className="surum">Katılım Plus · Müşteri Portföyüm</p>
+      <div className="alt-bosluk" />
+    </div>
+  );
+}
+
+/* ───────── Müşteri detay (Customer 360) ───────── */
+function Detay({ m, bugun, ui, geri }: any) {
+  const [acik, setAcik] = useState({});
+  const [yeniH, setYeniH] = useState("");
+  const [konuAc, setKonuAc] = useState(false);
+  const [yeniK, setYeniK] = useState("");
+  const sg = m.gorusmeler[0];
+  const n = m.next ? diffDays(m.next.tarih, bugun) : null;
+  const potEt = m.pot >= 4 ? "Yüksek potansiyel" : m.pot === 3 ? "Orta potansiyel" : "Düşük potansiyel";
+  const hafizaEkle = () => { if (!yeniH.trim()) return; if (!ui.hafizaIzin(m)) return; ui.dispatch({ type: "HAFIZA_EKLE", id: m.id, metin: yeniH.trim(), tarih: bugun }); setYeniH(""); };
+  const konuEkle = () => { const k = yeniK.trim(); if (k) ui.dispatch({ type: "KONU_EKLE", id: m.id, konu: k }); setYeniK(""); setKonuAc(false); };
+  return (
+    <div className="detay">
+      <div className="d-bar"><button className="geri" onClick={geri}><Ik n="left" s={20} /> Müşteriler</button></div>
+      <div className="d-ust">
+        <div className="avatar buyuk" aria-hidden="true">{m.ad.split(" ").filter((x) => /^[A-ZÇĞİÖŞÜ]/.test(x)).slice(0, 2).map((x) => x[0]).join("") || m.ad[0]}</div>
+        <h1>{m.ad}</h1>
+        <p>{m.tip} · {m.sektor}{m.tel ? <> · {telHref(m.tel) ? <a className="tel-link" href={telHref(m.tel)} onClick={() => ui.aramaBasladi(m)}>{m.tel}</a> : m.tel}</> : null}</p>
+        <div className="d-etiket"><DurumChip d={m.durum} /><span className="pot"><Yildiz n={m.pot} size={15} /><b>{potEt}</b></span></div>
+      </div>
+      <div className="hizli">
+        <AraBtn m={m} ui={ui}><span className="hi pri"><Ik n="phone" s={21} /></span>Ara</AraBtn>
+        <button onClick={() => ui.not(m.id)}><span className="hi"><Ik n="note" s={21} /></span>Not</button>
+        <button onClick={() => ui.takip(m.id)}><span className="hi"><Ik n="cal" s={21} /></span>Takip</button>
+        <button onClick={() => ui.duzenle(m.id)}><span className="hi"><Ik n="edit" s={21} /></span>Düzenle</button>
+      </div>
+
+      <section className="hafiza">
+        <div className="haf-bas"><span className="haf-ik"><Ik n="mem" s={20} /></span><div><h2>Müşteri Hafızası</h2><p>Bu müşteriyle daha önce konuşulan önemli konular</p></div></div>
+        {m.hafiza.length === 0 ? <p className="haf-bos">Henüz önemli bir bilgi yok. Aşağıdan ekle veya bir görüşme notunu hafızaya sabitle.</p> : (
+          <ul>{m.hafiza.map((h) => <li key={h.id}><span className="haf-nokta" /><span>{h.metin}</span><button className="ibtn kucuk" aria-label="Sil" onClick={() => ui.dispatch({ type: "HAFIZA_SIL", id: m.id, hid: h.id })}><Ik n="x" s={15} /></button></li>)}</ul>
+        )}
+        <form className="haf-ekle" onSubmit={(e) => { e.preventDefault(); hafizaEkle(); }}>
+          <input value={yeniH} onChange={(e) => setYeniH(e.target.value)} placeholder="Önemli bir bilgi ekle…" aria-label="Hafızaya bilgi ekle" />
+          <button type="submit" className="ibtn dolu kucuk2" aria-label="Ekle"><Ik n="plus" s={18} w={2.2} /></button>
+        </form>
+      </section>
+
+      <Baslik>Sonraki Aksiyon</Baslik>
+      {m.next ? (
+        <div className={`kart-b aks ${n < 0 ? "gec" : ""}`}>
+          <div className="aks-ust"><span className="aks-tur">{TUR[m.next.tur]}{m.next.planli ? " · Planlı görüşme" : ""}</span><span className={`tarih-chip ${n < 0 ? "gec" : n === 0 ? "bugun" : ""}`}>{goreli(m.next.tarih, bugun)}</span></div>
+          <strong className="aks-m">{m.next.metin}</strong>
+          <small><Ik n="cal" s={14} /> {fmtUzun(m.next.tarih)}</small>
+          <div className="aks-btn">
+            <button className="abtn ok" onClick={() => ui.tamamla(m.id)}><Ik n="check" s={17} /> Tamamlandı</button>
+            <button className="abtn" onClick={() => ui.ertele(m.id)}><Ik n="clock" s={17} /> Ertele</button>
+            <button className="abtn" onClick={() => ui.takip(m.id)}><Ik n="edit" s={17} /> Değiştir</button>
+          </div>
+        </div>
+      ) : (
+        <div className="kart-b aks bosaks"><p>Bu müşteri için takip planlanmadı.</p><button className="btn pri" onClick={() => ui.takip(m.id)}><Ik n="plus" s={18} /> Takip planla</button></div>
+      )}
+
+      <Baslik>Aktif Konular</Baslik>
+      <div className="chips">
+        {m.konular.map((k) => <span key={k} className="chip etiket">{k}<button aria-label={`${k} etiketini kaldır`} onClick={() => ui.dispatch({ type: "KONU_SIL", id: m.id, konu: k })}><Ik n="x" s={13} /></button></span>)}
+        {konuAc ? (
+          <form className="konu-form" onSubmit={(e) => { e.preventDefault(); konuEkle(); }}><input autoFocus value={yeniK} onChange={(e) => setYeniK(e.target.value)} placeholder="Konu" aria-label="Yeni konu" onBlur={konuEkle} /></form>
+        ) : <button className="chip ekle" onClick={() => setKonuAc(true)}><Ik n="plus" s={14} /> Konu ekle</button>}
+      </div>
+
+      {sg ? (<><Baslik>Son Görüşme</Baslik>
+        <div className="kart-b"><div className="sg-ust"><strong>{fmtUzun(sg.tarih)}</strong><span className="konu-chip">{sg.konu}</span></div><p className="sg-not">{sg.not}</p></div></>) : null}
+
+      <Baslik sag={<span className="adet">{m.gorusmeler.length}</span>}>Görüşme Geçmişi</Baslik>
+      {m.gorusmeler.length === 0 ? <div className="bos-mini"><Ik n="note" s={22} /><div><strong>Henüz görüşme yok</strong><p>İlk görüşme notunu ekleyerek geçmişi başlat.</p></div></div> : (
+        <div className="zaman">
+          {(ui.pro ? m.gorusmeler : m.gorusmeler.slice(0, UCRETSIZ.gecmis)).map((g) => { const a = !!acik[g.id]; return (
+            <div key={g.id} className={`zg ${a ? "acik" : ""}`}>
+              <button className="zg-bas" aria-expanded={a} onClick={() => setAcik((x) => ({ ...x, [g.id]: !x[g.id] }))}>
+                <span className="z-nokta" />
+                <span className="zg-orta"><b>{fmtKisa(g.tarih)}</b><span className="konu-chip">{g.konu}</span>{!a ? <em>{g.not}</em> : null}</span>
+                <Ik n="down" s={17} style={{ transform: a ? "rotate(180deg)" : "none", transition: "transform .2s" }} />
+              </button>
+              {a ? (
+                <div className="zg-ic eg-acil">
+                  <p>{g.not}</p>
+                  {g.aksiyon ? <p className="zg-aks"><b>Sonraki aksiyon:</b> {g.aksiyon}</p> : null}
+                  <div className="zg-btn">
+                    <button className="abtn" onClick={() => { if (!ui.hafizaIzin(m)) return; if (!m.hafiza.some((h) => h.metin === g.not)) { ui.dispatch({ type: "HAFIZA_EKLE", id: m.id, metin: g.not, tarih: g.tarih }); ui.toast("Hafızaya eklendi"); } else ui.toast("Bu not zaten hafızada"); }}><Ik n="mem" s={16} /> Hafızaya ekle</button>
+                    <button className="abtn sil" onClick={() => { const onceki = m; ui.dispatch({ type: "GORUSME_SIL", id: m.id, gid: g.id }); ui.toast("Görüşme silindi", [{ label: "Geri al", fn: () => ui.dispatch({ type: "GERI", m: onceki }) }]); }}><Ik n="trash" s={16} /> Sil</button>
+                  </div>
+                </div>
+              ) : null}
+            </div>); })}
+          {!ui.pro && m.gorusmeler.length > UCRETSIZ.gecmis ? <button className="kilit-satir" onClick={() => ui.proAc("gecmis")}><Ik n="lock" s={17} /><span><b>{m.gorusmeler.length - UCRETSIZ.gecmis} eski görüşme</b><small>Pro ile tüm geçmişi gör</small></span><ProRozet /></button> : null}
+        </div>
+      )}
+      <button className="sil-musteri" onClick={() => ui.sil(m)}>Müşteriyi sil</button>
+      <div className="alt-bosluk" />
+    </div>
+  );
+}
+
+/* ───────── Ücretsiz kota kartı (ana sayfa) ───────── */
+function KotaKarti({ sayi, ui }: any) {
+  const dolu = sayi >= UCRETSIZ.musteri;
+  const asildi = sayi > UCRETSIZ.musteri;
+  return (
+    <div className={`kota ${dolu ? "dolu" : ""}`}>
+      <div className="kota-ust"><span><b>Ücretsiz sürüm</b> · {sayi} / {UCRETSIZ.musteri} müşteri</span><button className="link" onClick={() => ui.proAc(dolu ? "musteri" : "genel")}>Pro'ya geç</button></div>
+      <div className="metre" role="progressbar" aria-valuemin={0} aria-valuemax={UCRETSIZ.musteri} aria-valuenow={Math.min(sayi, UCRETSIZ.musteri)} aria-label="Müşteri kotası"><i style={{ width: Math.min(100, (sayi / UCRETSIZ.musteri) * 100) + "%" }} /></div>
+      {asildi ? <small>Kayıtların görünür kalır; yeni müşteri eklemek için Pro gerekir.</small> : dolu ? <small>Sınıra ulaştın. Yeni müşteri eklemek için Pro'ya geç.</small> : null}
+    </div>
+  );
+}
+
+/* ───────── Misafir (giriş yapmamış) ekranı ───────── */
+function BmMisafir({ girisAc }: any) {
+  return (
+    <div className="main"><div className="scroll"><div className="ekran misafir">
+      <div className="bos-ikon"><Ik n="lock" s={32} w={1.5} /></div>
+      <h1>Müşteri Portföyüm</h1>
+      <p className="misafir-m">Müşterilerini, görüşme notlarını ve takiplerini tek yerden yönet. Kayıtların hesabına bağlı saklanır; kullanmak için üye olman gerekir.</p>
+      <ul className="misafir-liste">
+        <li><Ik n="check" s={18} w={2.2} /> Bugün kimi arayacağını tek bakışta gör</li>
+        <li><Ik n="check" s={18} w={2.2} /> Görüşme notların ve müşteri hafızan hesabında kalsın</li>
+        <li><Ik n="check" s={18} w={2.2} /> Telefonundan tek dokunuşla ara, notunu hemen ekle</li>
+      </ul>
+      <button className="btn pri blok" onClick={() => girisAc("kayit")}>Üye ol</button>
+      <button className="btn ikincil blok" onClick={() => girisAc("giris")}>Zaten üyeyim, giriş yap</button>
+      <p className="misafir-not">Üyelik ücretsiz. Pro olmadan {UCRETSIZ.musteri} müşteriye kadar kullanabilirsin.</p>
+    </div></div></div>
+  );
+}
+function BmYukleniyor() {
+  return <div className="main"><div className="scroll"><div className="ekran"><header className="ust"><div><h1>Müşteri Portföyüm</h1><p>Kayıtların yükleniyor…</p></div></header><Iskelet n={3} /></div></div></div>;
+}
+function BmHata({ kod, tekrar, geri }: any) {
+  return (
+    <div className="main"><div className="scroll"><div className="ekran">
+      <Bos ikon="alert" baslik="Kayıtların yüklenemedi" metin="Bağlantını kontrol edip tekrar dene. Kayıtların silinmedi." eylem="Tekrar dene" onEylem={tekrar} />
+      <button className="btn ikincil blok" onClick={geri}>Geri dön</button>
+      {kod ? <p className="teknik">Teknik ayrıntı: {kod}</p> : null}
+    </div></div></div>
+  );
+}
+function BmOnay({ onKabul, geri }: any) {
+  return (
+    <div className="main"><div className="scroll"><div className="ekran">
+      <div className="bos-ikon" style={{ margin: "18px auto 6px" }}><Ik n="shield" s={32} w={1.5} /></div>
+      <h1 className="onay-bas">Başlamadan önce</h1>
+      <div className="kart-b onay-kart">
+        <p><b>Ne saklanır?</b> Müşteri adı, telefonu, sektörü ve senin yazdığın görüşme/takip notları.</p>
+        <p><b>Nerede?</b> Hesabına bağlı olarak Katılım Plus'ın bulut altyapısında (Firebase). Yalnızca senin hesabın okuyup yazabilir.</p>
+        <p><b>Ne saklanmaz?</b> Banka sistemlerinden veri çekilmez. TC kimlik no, hesap no, IBAN, kart ve bakiye bilgisi girme.</p>
+        <p><b>Sorumluluk:</b> Müşterilerine ait kişisel veriyi girerken bankanın politikasına ve ilgili mevzuata (KVKK, bankacılık sırrı) uymak senin sorumluluğundadır.</p>
+        <p><b>Silme:</b> Kayıtlarını istediğin zaman silebilirsin; hesabını silersen hepsi silinir.</p>
+      </div>
+      <button className="btn pri blok" onClick={onKabul}>Anladım, devam et</button>
+      <button className="btn ikincil blok" onClick={geri}>Vazgeç</button>
+    </div></div></div>
+  );
+}
+
+/* ───────── Uygulama kabuğu ───────── */
+function useBugun() {
+  const [b, setB] = useState(bugunISO());
+  useEffect(() => {
+    const f = () => setB(bugunISO());
+    const t = setInterval(f, 60000); document.addEventListener("visibilitychange", f);
+    return () => { clearInterval(t); document.removeEventListener("visibilitychange", f); };
+  }, []);
+  return b;
+}
+const SEKMELER = [["ana", "Ana Sayfa", "home"], ["musteriler", "Müşteriler", "users"], ["takvim", "Takvim", "cal"], ["takipler", "Takipler", "bell"], ["daha", "Daha Fazla", "more"]];
+
+// Tam ekran katman: üstte "‹ Araçlar" çubuğu, içerik çocuklarda. Giriş yapmamış / yüklenen / hesaplı tüm durumlar bunu kullanır.
+function BmKabuk({ cik, sag, children }: any) {
+  const zoom = typeof ekranZoomTersi === "function" ? ekranZoomTersi() : 1;
+  return (
+    <div className="bmx" data-tema={TEMA} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 250, ...(zoom !== 1 ? { zoom } : {}) }}>
+      <style>{BM_CSS}</style>
+      <div className="app">
+        <div className="ustbar"><button className="geri" onClick={cik}><Ik n="left" s={20} /> Geri</button>{sag}</div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// Giriş kapısı: üyelik şart. Misafire "Üye ol" gösterilir; kayıtlar yalnızca giriş yapmış hesabın uid'sine bağlı okunur/yazılır.
+// geri: uygulamanın kendi geri fonksiyonu (ana sayfa kısayolundan açıldıysa ana sayfaya, Araçlar'dan açıldıysa Araçlar'a döner).
+function BmApp({ kimlik, nav, girisAc, geri }: any) {
+  const k = kimlik && kimlik.kullanici;
+  const cik = geri || (() => nav("araclarMenu"));
+  if (!k) return <BmKabuk cik={cik}>{kimlik && kimlik.kimlikYukleniyor ? <BmYukleniyor /> : <BmMisafir girisAc={girisAc} />}</BmKabuk>;
+  return <BmHesapli key={k.uid} kimlik={kimlik} nav={nav} cik={cik} uid={k.uid} />;
+}
+
+function BmHesapli({ kimlik, nav, cik, uid }: any) {
+  const [state, setState] = useState<any>({ musteriler: [] });
+  const dispatch = useCallback((a: any) => setState((s: any) => reducer(s, a)), []);
+  const [faz, setFaz] = useState("yukleniyor"); // yukleniyor | hata | onay | hazir
+  const [hataKod, setHataKod] = useState("");
+  const [yenileSay, setYenileSay] = useState(0);
+  const [senk, setSenk] = useState("kayitli"); // kayitli | bekliyor | hata
+  const [eski, setEski] = useState<any[]>(() => bmEskiKayitlar());
+  const bugun = useBugun();
+  const [tab, setTab] = useState("ana");
+  const [detayId, setDetayId] = useState<any>(null);
+  const [sheet, setSheet] = useState<any>(null);
+  const sonSheet = useRef<any>(null); if (sheet) sonSheet.current = sheet;
+  const [toast, setToast] = useState<any>(null); const toastT = useRef<any>(null);
+  const [mFiltre, setMFiltre] = useState("tumu");
+  const [tFiltre, setTFiltre] = useState("tumu");
+  const [basari, setBasari] = useState<any>(null);
+  const siraRef = useRef<any>(null);
+  const scrollRef = useRef<any>(null);
+  const stateRef = useRef<any>(state); stateRef.current = state;
+  const sonPro = useRef<any>(null);
+  const sonArama = useRef<any>(null);
+  const [proSheet, setProSheet] = useState<any>(null);
+  const canli = useRef(true);
+  const calisiyor = useRef(false);
+  const tekrarIste = useRef(false);
+  const sonYazilan = useRef<any>({});
+  const zamanlayici = useRef<any>(null);
+  const flushRef = useRef<any>(null);
+  const ilkYuklendi = useRef(false);
+  // Pro: gerçek üyelik durumu (kimlik.pro). Durum yüklenirken yanlış paywall göstermemek için Pro sayılır.
+  const pro = !!(kimlik && kimlik.pro && kimlik.pro.aktif) || !!(kimlik && kimlik.proYukleniyor);
+  if (proSheet) sonPro.current = proSheet;
+
+  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = 0; }, [tab]);
+  const showToast = useCallback((msg: string, actions: any[] = []) => {
+    clearTimeout(toastT.current);
+    const id = uid_(); setToast({ id, msg, actions });
+    toastT.current = setTimeout(() => setToast((t: any) => (t && t.id === id ? null : t)), actions.length ? 6500 : 3200);
+  }, []);
+
+  // ── Buluttan yükleme (ilk açılış + "Hesaptan yenile") ──
+  useEffect(() => {
+    let iptal = false;
+    bmYukle(uid).then((r: any) => {
+      if (iptal) return;
+      sonYazilan.current = {}; r.musteriler.forEach((m: any) => { sonYazilan.current[m.id] = JSON.stringify(m); });
+      setState({ musteriler: r.musteriler });
+      if (!ilkYuklendi.current) { ilkYuklendi.current = true; setFaz(r.onay ? "hazir" : "onay"); }
+      else showToast("Hesabından yenilendi");
+    }).catch((e: any) => {
+      console.error("Müşteri Portföyüm yüklenemedi:", e);
+      if (iptal) return;
+      if (!ilkYuklendi.current) { setHataKod(String((e && (e.code || e.message)) || "bilinmiyor")); setFaz("hata"); }
+      else showToast("Yenilenemedi. Bağlantını kontrol et.");
+    });
+    return () => { iptal = true; };
+  }, [uid, yenileSay]);
+
+  // ── Buluta yazma: yalnızca değişen müşteri dokümanları (700 ms birleştirme), hata olursa 15 sn sonra otomatik tekrar ──
+  const flush = useCallback(async () => {
+    if (calisiyor.current) { tekrarIste.current = true; return; }
+    calisiyor.current = true;
+    try {
+      do {
+        tekrarIste.current = false;
+        const cur = stateRef.current.musteriler;
+        const ids = new Set(cur.map((m: any) => m.id));
+        const yaz = cur.filter((m: any) => sonYazilan.current[m.id] !== JSON.stringify(m));
+        const sil = Object.keys(sonYazilan.current).filter((id) => !ids.has(id));
+        if (!yaz.length && !sil.length) { if (canli.current) setSenk("kayitli"); continue; }
+        let hata = false;
+        for (const m of yaz) { try { await bmYaz(uid, m); sonYazilan.current[m.id] = JSON.stringify(m); } catch (e) { hata = true; console.error("Müşteri buluta yazılamadı:", e); } }
+        for (const id of sil) { try { await bmSilKayit(uid, id); delete sonYazilan.current[id]; } catch (e) { hata = true; console.error("Müşteri buluttan silinemedi:", e); } }
+        if (canli.current) setSenk(hata ? "hata" : "kayitli");
+        if (hata) { clearTimeout(zamanlayici.current); zamanlayici.current = setTimeout(() => { if (flushRef.current) flushRef.current(); }, 15000); }
+      } while (tekrarIste.current);
+    } finally { calisiyor.current = false; }
+  }, [uid]);
+  flushRef.current = flush;
+  useEffect(() => {
+    if (faz !== "hazir") return;
+    const cur = state.musteriler;
+    const degisti = cur.some((m: any) => sonYazilan.current[m.id] !== JSON.stringify(m)) || Object.keys(sonYazilan.current).some((id) => !cur.some((m: any) => m.id === id));
+    if (!degisti) return;
+    setSenk("bekliyor");
+    clearTimeout(zamanlayici.current);
+    zamanlayici.current = setTimeout(() => { if (flushRef.current) flushRef.current(); }, 700);
+  }, [state.musteriler, faz]);
+  // Ekrandan çıkarken bekleyen değişiklikler hemen gönderilir (React'ten bağımsız, arka planda tamamlanır)
+  useEffect(() => { canli.current = true; return () => { canli.current = false; clearTimeout(zamanlayici.current); if (flushRef.current) flushRef.current(); }; }, []);
+
+  // Aramadan dönünce (uygulama yeniden görünür olunca) görüşme notu için tek dokunuşluk hatırlatma.
+  useEffect(() => {
+    const f = () => {
+      const a = sonArama.current;
+      if (document.visibilityState !== "visible" || !a) return;
+      const gecen = Date.now() - a.ts;
+      if (gecen < 4000) return;
+      sonArama.current = null;
+      if (gecen > 30 * 60000) return;
+      const m = stateRef.current.musteriler.find((x: any) => x.id === a.id);
+      if (m) showToast(`${m.ad} görüşmesi için not ekle?`, [{ label: "Not ekle", fn: () => setSheet({ t: "not", id: m.id }) }]);
+    };
+    document.addEventListener("visibilitychange", f);
+    return () => document.removeEventListener("visibilitychange", f);
+  }, [showToast]);
+  const musteri = (id: string) => state.musteriler.find((m: any) => m.id === id);
+
+  const ui: any = {
+    dispatch, toast: showToast, bugun, siraRef, pro, senk, eski,
+    // Pro kapısı: izin varsa true; yoksa Pro ekranını açar ve false döner.
+    proAc: (ozellik: string, devam?: any) => setProSheet({ ozellik, devam }),
+    proGerek: (ozellik: string, devam?: any) => { if (pro) return true; setProSheet({ ozellik, devam }); return false; },
+    hafizaIzin: (m: any) => { if (pro || m.hafiza.length < UCRETSIZ.hafiza) return true; setProSheet({ ozellik: "hafiza" }); return false; },
+    detay: (id: string) => setDetayId(id),
+    git: (t: string, f?: string) => { setDetayId(null); if (t === "takipler" && f) setTFiltre(f); if (t === "musteriler" && f) setMFiltre(f); setTab(t); },
+    yeni: () => { if (!pro && stateRef.current.musteriler.length >= UCRETSIZ.musteri) { setProSheet({ ozellik: "musteri" }); return; } setSheet({ t: "yeni" }); },
+    duzenle: (id: string) => setSheet({ t: "duzenle", id }),
+    not: (id: string) => setSheet({ t: "not", id }),
+    takip: (id: string, tarihOn?: string) => setSheet({ t: "takip", id, tarihOn }),
+    takipEkleGun: (tarih: string) => setSheet({ t: "secici", sonra: "takip", tarihOn: tarih }),
+    ertele: (id: string) => setSheet({ t: "ertele", id }),
+    // Telefonun kendi arama uygulaması açılır (tel: bağlantısı, cep hattı); görüşme kaydı ve not ayrı tutulur.
+    aramaBasladi: (m: any) => { sonArama.current = { id: m.id, ts: Date.now() }; showToast(`${m.ad} aranıyor · ${m.tel}`, [{ label: "Not ekle", fn: () => setSheet({ t: "not", id: m.id }) }]); },
+    numaraYok: (m: any) => showToast("Bu müşteri için telefon numarası kayıtlı değil", [{ label: "Numara ekle", fn: () => setSheet({ t: "duzenle", id: m.id }) }]),
+    tamamla: (id: string) => {
+      const m = musteri(id); if (!m || !m.next) return;
+      dispatch({ type: "TAMAM", id, bugun });
+      showToast("Takip tamamlandı", [{ label: "Geri al", fn: () => dispatch({ type: "GERI", m }) }, { label: "Yeni takip", fn: () => setSheet({ t: "takip", id }) }]);
+    },
+    sirala: (sira: string, setSira: any) => setSheet({ t: "sirala", sira, setSira }),
+    sil: (m: any) => setSheet({ t: "onay", baslik: "Müşteri silinsin mi?", metin: `${m.ad} ve tüm görüşme geçmişi hesabından silinecek.`, etiket: "Sil", fn: () => { dispatch({ type: "SIL", id: m.id }); setDetayId(null); showToast("Müşteri silindi", [{ label: "Geri al", fn: () => dispatch({ type: "GERI", m }) }]); } }),
+    temizle: () => setSheet({ t: "onay", baslik: "Tüm veriler silinsin mi?", metin: "Hesabındaki bütün müşteri ve görüşme kayıtları silinir. Bu işlem geri alınamaz.", etiket: "Hepsini sil", fn: () => { dispatch({ type: "TEMIZLE" }); setDetayId(null); setTab("ana"); showToast("Tüm veriler silindi"); } }),
+    yenile: () => { if (senk !== "kayitli") { showToast("Değişikliklerin henüz kaydedilmedi. Birazdan tekrar dene."); return; } setYenileSay((n) => n + 1); },
+    eskiAktar: () => {
+      const mevcut = new Set(stateRef.current.musteriler.map((m: any) => m.id));
+      const liste = eski.filter((x: any) => !mevcut.has(x.id));
+      dispatch({ type: "TOPLU", liste }); bmEskiSil(); setEski([]);
+      showToast(`${liste.length} kayıt hesabına aktarıldı`);
+    },
+    eskiSil: () => { bmEskiSil(); setEski([]); showToast("Cihazdaki eski kayıtlar silindi"); },
+    kopyala: () => {
+      if (!pro) { setProSheet({ ozellik: "yedek" }); return; }
+      const j = JSON.stringify(state.musteriler, null, 2);
+      try { navigator.clipboard.writeText(j).then(() => showToast("Veriler panoya kopyalandı"), () => showToast("Panoya kopyalanamadı")); } catch (e) { showToast("Panoya kopyalanamadı"); }
+    },
+  };
+
+  const bekleyen = useMemo(() => state.musteriler.filter((m: any) => m.next && diffDays(m.next.tarih, bugun) <= 0).length, [state.musteriler, bugun]);
+  const kapat = () => setSheet(null);
+
+  if (faz === "yukleniyor") return <BmKabuk cik={cik}><BmYukleniyor /></BmKabuk>;
+  if (faz === "hata") return <BmKabuk cik={cik}><BmHata kod={hataKod} geri={cik} tekrar={() => { setFaz("yukleniyor"); setYenileSay((n) => n + 1); }} /></BmKabuk>;
+  if (faz === "onay") return <BmKabuk cik={cik}><BmOnay geri={cik} onKabul={() => { bmOnayYaz(uid).then(() => setFaz("hazir")).catch((e: any) => { console.error("Onay kaydedilemedi:", e); setHataKod(String((e && (e.code || e.message)) || "bilinmiyor")); setFaz("hata"); }); }} /></BmKabuk>;
+
+  const s = sheet || sonSheet.current;
+  let sBaslik = "", sGovde: any = null, sUzun = false;
+  if (s) {
+    const m = s.id ? musteri(s.id) : null;
+    if (s.t === "yeni") {
+      sBaslik = "Yeni müşteri"; sUzun = true;
+      sGovde = <MusteriFormu key="yeni" ui={ui} bugun={bugun} onBitti={(mus: any) => { kapat(); if (mus) { setBasari(mus); setTimeout(() => { setBasari(null); setDetayId(mus.id); }, 1250); } }} />;
+    } else if (s.t === "duzenle" && m) {
+      sBaslik = "Müşteriyi düzenle"; sUzun = true;
+      sGovde = <MusteriFormu key={"d" + m.id} m={m} ui={ui} bugun={bugun} onBitti={kapat} />;
+    } else if (s.t === "not" && m) {
+      sBaslik = "Görüşme notu"; sUzun = true;
+      sGovde = <NotFormu key={"n" + m.id} m={m} ui={ui} bugun={bugun} onBitti={kapat} />;
+    } else if (s.t === "takip" && m) {
+      sBaslik = "Takip planla"; sUzun = true;
+      sGovde = <TakipFormu key={"t" + m.id} m={m} ui={ui} bugun={bugun} tarihOn={s.tarihOn} onBitti={kapat} />;
+    } else if (s.t === "ertele" && m && m.next) {
+      sBaslik = "Ertele";
+      sGovde = <ErtelFormu key={"e" + m.id} m={m} ui={ui} bugun={bugun} onBitti={kapat} />;
+    } else if (s.t === "secici") {
+      sBaslik = "Müşteri seç"; sUzun = true;
+      sGovde = <MusteriSecici musteriler={state.musteriler} onSec={(id: string) => setSheet(s.sonra === "not" ? { t: "not", id } : { t: "takip", id, tarihOn: s.tarihOn })} />;
+    } else if (s.t === "sirala") {
+      sBaslik = "Sırala";
+      sGovde = <div className="form"><div className="sec-liste">{SIRALAR.map(([k, e]) => <button key={k} className="sec-satir" onClick={() => { s.setSira(k); kapat(); }}><span><strong>{e}</strong></span>{s.sira === k ? <Ik n="check" s={18} /> : null}</button>)}</div></div>;
+    } else if (s.t === "onay") {
+      sBaslik = s.baslik;
+      sGovde = <div className="form"><p className="onay-metin">{s.metin}</p><div className="iki"><button className="btn ikincil blok" onClick={kapat}>Vazgeç</button><button className="btn tehlike blok" onClick={() => { kapat(); s.fn(); }}>{s.etiket}</button></div></div>;
+    }
+  }
+  const senkChip = senk === "kayitli" ? null : <span className={`senk-chip ${senk}`} role="status">{senk === "hata" ? "Kaydedilemedi · tekrar denenecek" : "Kaydediliyor…"}</span>;
+
+  return (
+    <BmKabuk cik={cik} sag={senkChip}>
+      <div className="main">
+        <div className="scroll" ref={scrollRef} aria-hidden={detayId ? "true" : undefined}>
+          <div key={tab} className="tab-gecis">
+            {tab === "ana" && <AnaSayfa state={state} bugun={bugun} ui={ui} yuk={false} />}
+            {tab === "musteriler" && <Musteriler state={state} bugun={bugun} ui={ui} filtre={mFiltre} setFiltre={setMFiltre} yuk={false} />}
+            {tab === "takvim" && <Takvim state={state} bugun={bugun} ui={ui} />}
+            {tab === "takipler" && <Takipler state={state} bugun={bugun} ui={ui} filtre={tFiltre} setFiltre={setTFiltre} />}
+            {tab === "daha" && <DahaFazla state={state} ui={ui} />}
+          </div>
+        </div>
+        {detayId && musteri(detayId) ? <div className="overlay-detay"><Detay key={detayId} m={musteri(detayId)} bugun={bugun} ui={ui} geri={() => setDetayId(null)} /></div> : null}
+        <div className="toast-yer" aria-live="polite">
+          {toast ? <div key={toast.id} className="toast eg-pop"><span>{toast.msg}</span>{toast.actions.map((a: any) => <button key={a.label} onClick={() => { a.fn(); setToast(null); }}>{a.label}</button>)}</div> : null}
+        </div>
+      </div>
+      <nav className="tabbar" aria-label="Ana gezinme">
+        {SEKMELER.map(([k, e, ik]) => (
+          <button key={k} className={`tab ${tab === k ? "on" : ""}`} aria-current={tab === k ? "page" : undefined} onClick={() => { setDetayId(null); setTab(k); }}>
+            <span className="tab-ik"><Ik n={ik} s={23} w={tab === k ? 2.1 : 1.7} />{k === "takipler" && bekleyen > 0 ? <b className="rozet kucuk">{bekleyen}</b> : null}</span>{e}
+          </button>
+        ))}
+      </nav>
+      <Sheet open={!!sheet} onClose={proSheet ? () => {} : kapat} title={sBaslik} tall={sUzun}>{sGovde}</Sheet>
+      <Sheet open={!!proSheet} onClose={() => setProSheet(null)} title="Katılım Plus Pro" tall>
+        {(proSheet || sonPro.current) ? <ProKarti ozellik={(proSheet || sonPro.current).ozellik} sayi={state.musteriler.length} pro={pro} onKapat={() => setProSheet(null)} onGec={() => { setProSheet(null); nav("proSatinAl"); }} /> : null}
+      </Sheet>
+      {basari ? <div className="basari" role="status"><div className="basari-ic"><svg width="72" height="72" viewBox="0 0 72 72"><circle cx="36" cy="36" r="32" fill="none" stroke="var(--green)" strokeWidth="4" className="bc" /><path d="M22 37l9 9 19-20" fill="none" stroke="var(--green)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" className="bp" /></svg><strong>Müşteri eklendi</strong><span>{basari.ad}</span></div></div> : null}
+    </BmKabuk>
+  );
+}
+
+return BmApp;
+})();
+
 function KvkkAydinlatma(){
   return(
     <YasalMetinEkrani baslik="KVKK Aydınlatma Metni">
@@ -2641,6 +4407,7 @@ function GizlilikPolitikasi(){
       <YmP>• Hesap bilgileri: ad soyad, e-posta, şifre (Firebase Authentication ile şifrelenmiş) — hesap oluşturmanız hâlinde.</YmP>
       <YmP>• Cihaz bilgileri: push bildirim jetonu, platform (iOS/Android/web).</YmP>
       <YmP>• Kullanım verileri: favori hesaplamalarınız, hesaplama geçmişiniz, fiyat alarmlarınız — hesabınız yoksa sadece cihazınızda (localStorage), hesabınız varsa hesabınıza bağlı olarak saklanır.</YmP>
+      <YmP>• Müşteri Portföyüm (üye girişi gerektirir): kullanıcının elle girdiği müşteri adı, telefon, sektör ve görüşme/takip notları hesabınıza bağlı olarak bulut altyapımızda (Google Firebase) saklanır ve yalnızca hesabınız tarafından okunup yazılabilir. Banka sistemlerinden hiçbir veri alınmaz. Müşterilerinize ait kişisel verileri girerken bağlı olduğunuz kurumun politikalarına ve ilgili mevzuata uymak kullanıcının sorumluluğundadır; hesabınızı sildiğinizde bu kayıtlar da silinir.</YmP>
       <YmP>• Uygulama, kredi kartı veya banka hesap bilgisi TOPLAMAZ — hiçbir finansal işlem/ödeme özelliği bulunmamaktadır.</YmP>
 
       <YmBaslik>2. Verileri Nasıl Kullanıyoruz</YmBaslik>
@@ -2816,6 +4583,7 @@ const ICON_MAP: Record<string, any> = {
   katilimBankalari: Landmark,
   icazetBelgeleri: FileBadge,   // 2026-10-03: belge/sertifika ikonu; FileBadge zaten import edilmiş (yeni import riski yok). Bu harita yoksa Araçlar kartı ve sol menü İKONSUZ görünür.
   egitim: GraduationCap,   // 2026-10-04: Eğitim bölümü (Araçlar kartı + sol menü ikonu)
+  musteriPortfoyum: Briefcase,   // 2026-10-04: Müşteri Portföyüm (Araçlar kartı + sol menü ikonu); Briefcase zaten import edilmiş
   // 2026-08-01: Yeni ekranlar bu haritaya eklenmemişti; Araçlar menüsündeki
   // kartlar ikonsuz görünüyordu. Zaten import edilmiş ikonlar kullanıldı,
   // yeni import riski alınmadı.
@@ -3539,7 +5307,7 @@ const EKRAN_KATEGORI: Record<string,string> = {
   // Araçlar / Hesaplama Araçları
   finansalTakvim:"arac", vadeTakibi:"arac", katilimBankalari:"arac",
   hazineDoviz:"arac", hazineForward:"arac", hazineSwap:"arac", hazineBono:"arac", hazineSenaryo:"arac",
-  asistan:"arac", sozluk:"arac", egitim:"arac",
+  asistan:"arac", sozluk:"arac", egitim:"arac", musteriPortfoyum:"arac",
 };
 const KategoriRenkContext = createContext<string|null>(null);
 
@@ -23485,6 +25253,7 @@ const MENU = {
   katilimBankalari:{title:"Katılım Bankaları",back:"araclarMenu"},
   icazetBelgeleri:{title:"İcazet Belgeleri",back:"araclarMenu"},
   egitim:{title:"Eğitim",back:"araclarMenu"},
+  musteriPortfoyum:{title:"Müşteri Portföyüm",back:"araclarMenu"},
   kfkNedir:{title:"Katılım Finans Kefalet (KFK) Nedir?",back:"araclarMenu"},
   katilimSektoru:{title:"Katılım Bankacılığı Sektörü",back:"araclarMenu"},
   ekonomiSozluk:{title:"Ekonomi Sözlüğü",back:"araclarMenu"},
@@ -23524,7 +25293,7 @@ const TAB_OF_SCREEN:any = {
   hazineDoviz:"hesapla", hazineForward:"hesapla", hazineSwap:"hesapla",
   hazineBono:"hesapla", hazineSenaryo:"hesapla",
   piyasaHaberleri:"piyasa", finansalGostergeler:"piyasa",
-  araclarMenu:"araclar", sozluk:"araclar", egitim:"araclar", vadeTakibi:"araclar", katilimBankalari:"araclar", kfkNedir:"araclar", zekatHesabi:"araclar", erkenKapamaKarari:"hesapla", erkenKapamaKomisyonu:"hesapla", vadeFarkiKarari:"hesapla", tlYpKarari:"hesapla", kiraSertifikasi:"araclar", getiriKarsilastirma:"araclar", haftalikOzet:"araclar", portfoyum:"araclar", fonDetay:"araclar",
+  araclarMenu:"araclar", sozluk:"araclar", egitim:"araclar", musteriPortfoyum:"araclar", vadeTakibi:"araclar", katilimBankalari:"araclar", kfkNedir:"araclar", zekatHesabi:"araclar", erkenKapamaKarari:"hesapla", erkenKapamaKomisyonu:"hesapla", vadeFarkiKarari:"hesapla", tlYpKarari:"hesapla", kiraSertifikasi:"araclar", getiriKarsilastirma:"araclar", haftalikOzet:"araclar", portfoyum:"araclar", fonDetay:"araclar",
   asistan:"yapayzeka",
   profil:"profil",
 };
@@ -23563,6 +25332,7 @@ const SCREEN_TO_PATH: Record<string,string> = {
   fiyatAlarmlarim: "/fiyat-alarmlarim",
   sozluk: "/finans-sozlugu",
   egitim: "/egitim",
+  musteriPortfoyum: "/musteri-portfoyum",
   ayarlar: "/ayarlar",
   toggFinansman: "/togg-finansmani",
   arsaIsyeri: "/arsa-isyeri-finansmani",
@@ -23726,6 +25496,7 @@ const MENU_ARAMA_LIST=[
   {key:"katilimSektoru",     label:"Katılım Bankacılığı Sektörü",               icon:"🏦", grup:"Araçlar", alt:["sektör","bddk","pay","aktif","toplanan fon","kullandırılan fon","katılma hesabı","özel cari","roe","kârlılık"]},
   {key:"icazetBelgeleri",    label:"İcazet Belgeleri",                          icon:"📑", grup:"Araçlar", alt:["icazet","icazet belgesi","danışma komitesi","faizsiz","uygunluk","fetva","murabaha","katılma hesabı","belge"]},
   {key:"egitim",               label:"Eğitim",                                    icon:"🎓", grup:"Araçlar", alt:["eğitim","ders","sınav","quiz","puan","liderlik","öğren","katılım bankacılığı","ekonomi","finansal okuryazarlık","fon","yatırım"]},
+  {key:"musteriPortfoyum",      label:"Müşteri Portföyüm",                         icon:"🗂️", grup:"Araçlar", alt:["müşteri","portföy","bankacı","görüşme","takip","hatırlatma","not","crm","aksiyon","telefon","arama"]},
   {key:"ekonomiSozluk",      label:"Ekonomi Sözlüğü",                           icon:"📚", grup:"Araçlar", alt:["ekonomi","terim","sözlük","enflasyon","gsyh","faiz","tanım","kavram","makro"]},
   {key:"zekatHesabi",        label:"Zekât Hesaplayıcı",                               icon:"🌙", grup:"Araçlar", alt:["zekat","zekât","nisap","nisab","kırkta bir","sadaka","altın nisabı","dini","ibadet","hesapla"]},
   {key:"kiraSertifikasi",    label:"Kira Sertifikası İhraçları",                 icon:"📜", grup:"Araçlar", alt:["kira sertifikası","sukuk","ihraç","vekâlet","murabaha","icare","varlık kiralama","spk"]},
@@ -33186,6 +34957,13 @@ function App(){
   };
   useEffect(()=>{ navRef.current=nav; }); // deps YOK — her render sonrasi calisip navRef'i taze tutar
   const girisTamamlandi=()=>{ const h=girisSonrasiHedef.current; girisSonrasiHedef.current=null; nav(h||"profil"); };
+  // Müşteri Portföyüm üyelik ister: misafir "Üye ol / Giriş yap"a basınca hesap ekranına gider, işlem bitince bu ekrana döner.
+  const musteriPortfoyuIcinHesapAc=(mod:"giris"|"kayit")=>{
+    setGirisBaslangicModu(mod);
+    girisSonrasiHedef.current="musteriPortfoyum";
+    girisHedefIsteniyor.current=true;
+    nav("hesapGiris");
+  };
   const proIcinHesapAc=(mod:"giris"|"kayit")=>{
     setGirisBaslangicModu(mod);
     girisSonrasiHedef.current="proSatinAl";
@@ -33489,6 +35267,7 @@ function App(){
               ]},
               {baslik:"PORTFÖY", ogeler:[
                 {key:"portfoyum",label:"Portföyüm"},
+                {key:"musteriPortfoyum",label:"Müşteri Portföyüm"},
               ]},
               {baslik:"BİLGİ", ogeler:[
                 {key:"egitim",label:"Eğitim"},
@@ -35002,6 +36781,7 @@ function App(){
               {key:"getiriKarsilastirma", icon:"📊", label:"Getiri Karşılaştırma", desc:"Döviz, altın, gümüş, endeks getirilerini dönemsel karşılaştır", renk:"#F59E0B", bg:"rgba(245,158,11,0.15)"},
               {key:"vadeTakibi", icon:"⏰", label:"Vade Takip & Hatırlatma Ajandam", desc:"Finansman ve ödeme vadelerini takip et, hatırlatma al", renk:C.green, bg:"rgba(74,222,128,0.15)"},
               {key:"katilimBankalari", icon:"🏛️", label:"Katılım Bankaları", desc:"Türkiye'deki katılım bankaları, kuruluş tarihleri ve bilgileri", renk:C.blue, bg:"rgba(91,155,216,0.15)"},
+              {key:"musteriPortfoyum", icon:"🗂️", label:"Müşteri Portföyüm", desc:"Bankacılar için müşteri, görüşme ve takip defteri. Bugün kimi arayacağını gör; üyelik gerekir, kayıtlar hesabına bağlı saklanır", renk:"#5B9BD8", bg:"rgba(91,155,216,0.15)"},
               {key:"egitim", icon:"🎓", label:"Eğitim", desc:"4 modül, 100 ders; örnek senaryolar, modül sınavı, puan ve liderlik tablosu", renk:"#2CCB9A", bg:"rgba(44,203,154,0.15)"},
               {key:"icazetBelgeleri", icon:"📑", label:"İcazet Belgeleri", desc:"Banka ve ürün seç, bankanın kendi yayımladığı icazet belgesine git", renk:"#2CCB9A", bg:"rgba(44,203,154,0.15)"},
               {key:"katilimSektoru", icon:"🏦", label:"Katılım Bankacılığı Sektörü", desc:"Sektör payı, fon büyüklükleri ve kârlılık — BDDK resmî verisiyle", renk:"#5B9BD8", bg:"rgba(91,155,216,0.15)"},
@@ -35349,6 +37129,7 @@ function App(){
         {screen==="katilimBankalari"&&<KatilimBankalari/>}
         {screen==="icazetBelgeleri"&&<IcazetBelgeleri/>}
         {screen==="egitim"&&<Egitim kimlik={kimlik} nav={nav}/>}
+        {screen==="musteriPortfoyum"&&<MusteriPortfoyumEkrani kimlik={kimlik} nav={nav} girisAc={musteriPortfoyuIcinHesapAc} geri={back}/>}
         {screen==="kfkNedir"&&<KfkNedir/>}
         {screen==="katilimSektoru"&&<KatilimSektoru/>}
         {screen==="ekonomiSozluk"&&<EkonomiSozluk/>}
@@ -35460,7 +37241,7 @@ function App(){
             <div style={genisEkran?{display:"flex",flexDirection:"row-reverse",alignItems:"center",gap:12,marginBottom:10}:{}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:genisEkran?"flex-end":"space-between",gap:10,marginBottom:genisEkran?0:20,flexShrink:0}}>
               {!genisEkran && (
-              <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
                 {/* ⚠️ 2026-09-21 (kullanıcı isteği: "Koyu modda k harfi
                     koyu olmayacak, yine aynı beyaz zemin aynı olacak öyle
                     mi yaptın"): koyu modda logonun KENDİSİ yeniden
@@ -35476,7 +37257,7 @@ function App(){
                       12px/400 — TP token sistemine göre, önce görsel demo
                       ile onaylandı. */}
                   <span style={{fontSize:17,fontWeight:700,letterSpacing:"-0.01em",color:(TEMA==="acik"?"#16222E":"#EAF1FA")}}>Katılım <span style={{background:"linear-gradient(90deg,#1B9E7A,#2CCB9A)",WebkitBackgroundClip:"text",backgroundClip:"text",color:"transparent"}}>Plus</span></span>
-                  <span style={{fontSize:12,fontWeight:400,color:(TEMA==="acik"?"#2E4256":"rgba(255,255,255,0.68)"),letterSpacing:"0.01em",marginTop:2,lineHeight:"17px"}}>{CV("Katılım Finansının Akıllı Asistanı")}</span>
+                  <span style={{fontSize:11.5,fontWeight:400,color:(TEMA==="acik"?"#2E4256":"rgba(255,255,255,0.68)"),letterSpacing:"0.01em",marginTop:2,lineHeight:"17px",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{CV("Katılım Finansının Akıllı Asistanı")}</span>
                 </div>
               </div>
               )}
@@ -35510,6 +37291,14 @@ function App(){
                   değişirse diğeri YANLIŞLIKLA etkilenmesin. */}
               {genisEkran ? (
                 <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+                  <button onClick={()=>nav("musteriPortfoyum","home")} aria-label="Müşteri Portföyüm" title="Müşteri Portföyüm" style={{
+                    position:"relative",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
+                    width:40,height:40,borderRadius:20,border:"none",cursor:"pointer",
+                    background:"linear-gradient(135deg,#2E6DA8,#5B9BD8)",
+                    boxShadow:"0 2px 8px rgba(46,109,168,0.35)",
+                  }}>
+                    <Briefcase size={18} color="#FFFFFF" strokeWidth={2} absoluteStrokeWidth/>
+                  </button>
                   <button onClick={()=>{setPortfoyBaslangicSekme("portfoy"); nav("portfoyum","home");}} style={{
                     position:"relative",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
                     width:40,height:40,borderRadius:20,border:"none",cursor:"pointer",
@@ -35531,7 +37320,15 @@ function App(){
                   </button>
                 </div>
               ) : (
-                <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                <div style={{display:"flex",alignItems:"center",gap:5,flexShrink:0}}>
+                  <button onClick={()=>nav("musteriPortfoyum","home")} aria-label="Müşteri Portföyüm" title="Müşteri Portföyüm" style={{
+                    position:"relative",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
+                    width:40,height:40,borderRadius:20,border:"none",cursor:"pointer",
+                    background:"linear-gradient(135deg,#2E6DA8,#5B9BD8)",
+                    boxShadow:"0 2px 8px rgba(46,109,168,0.35)",
+                  }}>
+                    <Briefcase size={18} color="#FFFFFF" strokeWidth={2} absoluteStrokeWidth/>
+                  </button>
                   <button onClick={()=>{setPortfoyBaslangicSekme("portfoy"); nav("portfoyum","home");}} style={{
                     position:"relative",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
                     width:40,height:40,borderRadius:20,border:"none",cursor:"pointer",
