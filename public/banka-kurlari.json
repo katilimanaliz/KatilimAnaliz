@@ -1,0 +1,197 @@
+{
+  "guncelleme": null,
+  "olcumSaati": null,
+  "kaynakNotu": "Bankaların herkese açık internet sitelerinde ilan ettiği gösterge kurlar.",
+  "bankalar": [
+    {
+      "ad": "Adil Katılım",
+      "USD": {
+        "alis": null,
+        "satis": null
+      },
+      "EUR": {
+        "alis": null,
+        "satis": null
+      },
+      "XAU": {
+        "alis": null,
+        "satis": null
+      },
+      "XAG": {
+        "alis": null,
+        "satis": null
+      }
+    },
+    {
+      "ad": "Albaraka Türk",
+      "USD": {
+        "alis": null,
+        "satis": null
+      },
+      "EUR": {
+        "alis": null,
+        "satis": null
+      },
+      "XAU": {
+        "alis": null,
+        "satis": null
+      },
+      "XAG": {
+        "alis": null,
+        "satis": null
+      }
+    },
+    {
+      "ad": "Dünya Katılım",
+      "USD": {
+        "alis": null,
+        "satis": null
+      },
+      "EUR": {
+        "alis": null,
+        "satis": null
+      },
+      "XAU": {
+        "alis": null,
+        "satis": null
+      },
+      "XAG": {
+        "alis": null,
+        "satis": null
+      }
+    },
+    {
+      "ad": "Emlak Katılım",
+      "USD": {
+        "alis": null,
+        "satis": null
+      },
+      "EUR": {
+        "alis": null,
+        "satis": null
+      },
+      "XAU": {
+        "alis": null,
+        "satis": null
+      },
+      "XAG": {
+        "alis": null,
+        "satis": null
+      }
+    },
+    {
+      "ad": "Hayat Finans",
+      "USD": {
+        "alis": null,
+        "satis": null
+      },
+      "EUR": {
+        "alis": null,
+        "satis": null
+      },
+      "XAU": {
+        "alis": null,
+        "satis": null
+      },
+      "XAG": {
+        "alis": null,
+        "satis": null
+      }
+    },
+    {
+      "ad": "Kuveyt Türk",
+      "USD": {
+        "alis": null,
+        "satis": null
+      },
+      "EUR": {
+        "alis": null,
+        "satis": null
+      },
+      "XAU": {
+        "alis": null,
+        "satis": null
+      },
+      "XAG": {
+        "alis": null,
+        "satis": null
+      }
+    },
+    {
+      "ad": "T.O.M. Katılım",
+      "USD": {
+        "alis": null,
+        "satis": null
+      },
+      "EUR": {
+        "alis": null,
+        "satis": null
+      },
+      "XAU": {
+        "alis": null,
+        "satis": null
+      },
+      "XAG": {
+        "alis": null,
+        "satis": null
+      }
+    },
+    {
+      "ad": "Türkiye Finans",
+      "USD": {
+        "alis": null,
+        "satis": null
+      },
+      "EUR": {
+        "alis": null,
+        "satis": null
+      },
+      "XAU": {
+        "alis": null,
+        "satis": null
+      },
+      "XAG": {
+        "alis": null,
+        "satis": null
+      }
+    },
+    {
+      "ad": "Vakıf Katılım",
+      "USD": {
+        "alis": null,
+        "satis": null
+      },
+      "EUR": {
+        "alis": null,
+        "satis": null
+      },
+      "XAU": {
+        "alis": null,
+        "satis": null
+      },
+      "XAG": {
+        "alis": null,
+        "satis": null
+      }
+    },
+    {
+      "ad": "Ziraat Katılım",
+      "USD": {
+        "alis": null,
+        "satis": null
+      },
+      "EUR": {
+        "alis": null,
+        "satis": null
+      },
+      "XAU": {
+        "alis": null,
+        "satis": null
+      },
+      "XAG": {
+        "alis": null,
+        "satis": null
+      }
+    }
+  ]
+}
