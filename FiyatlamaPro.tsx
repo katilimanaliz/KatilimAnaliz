@@ -1150,15 +1150,15 @@ function YmBaslik({children}:{children:React.ReactNode}){return <p style={{margi
 function YmP({children}:{children:React.ReactNode}){return <p style={{margin:"0 0 4px",fontSize:13,color:WA(0.7),lineHeight:1.6}}>{children}</p>;}
 
 // ═══════════════════════════════════════════════════════════════════════
-// EĞİTİM BÖLÜMÜ (2026-10-04, 2. sürüm) — 4 modül · 20 ünite · 100 ders · örnek senaryolar · Pro sınav (20 soruluk bankadan 10) · puan · seri · liderlik
+// EĞİTİM BÖLÜMÜ (2026-10-04, 3. sürüm) — 4 modül · 20 ünite · 100 ders · öğretici örnek senaryolar (durum/çözüm/çıkarım) · Pro sınav · puan · seri · liderlik
 // ═══════════════════════════════════════════════════════════════════════
-// ── EĞİTİM İÇERİĞİ (2026-10-04) — 4 modül · 20 ünite · 100 ders · 80 soru. Çabuk eskiyen rakamlar bilerek yazılmadı.
+// ── EĞİTİM İÇERİĞİ (2026-10-04) — 4 modül · 20 ünite · 100 ders · 80 soru · her derste öğretici örnek senaryo (durum / çözüm / çıkarım). Çabuk eskiyen rakamlar bilerek yazılmadı.
 // ⚠️ Yayından önce alan uzmanınca gözden geçirilmeli.
-type EgitimDers = { id:string; baslik:string; dk:number; govde:string[]; ozet:string[]; sen:[string,string] };
+type EgitimDers = { id:string; baslik:string; dk:number; govde:string[]; ozet:string[]; sen:[string,string,string,string] };
 type EgitimUnite = { ad:string; ozet:string; dersler:EgitimDers[] };
 type EgitimSoru = { s:string; sec:string[]; d:number; ac:string };
 type EgitimModul = { id:string; ad:string; kisa:string; renk:string; ikon:string; seviye:string; aciklama:string; uniteler:EgitimUnite[]; dersler:EgitimDers[]; sorular:EgitimSoru[] };
-const EGD = (id:string, baslik:string, dk:number, govde:string[], ozet:string[], sen:[string,string]): EgitimDers => ({ id, baslik, dk, govde, ozet, sen });
+const EGD = (id:string, baslik:string, dk:number, govde:string[], ozet:string[], sen:[string,string,string,string]): EgitimDers => ({ id, baslik, dk, govde, ozet, sen });
 const EGQ = (s:string, sec:string[], d:number, ac:string): EgitimSoru => ({ s, sec, d, ac });
 
 const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
@@ -1172,31 +1172,31 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Bankalar para toplar ve kullandırır; katılım bankalarında bu iki işlem de faizsiz yöntemlerle yapılır. Toplanan fon, ticaret ve üretim gibi gerçek faaliyetlerin finansmanında kullanılır.",
       "Katılım bankaları da BDDK'nın düzenleme ve denetimi altındadır. Farkları, ürünlerin faizsiz esaslara uygun tasarlanması ve bu uygunluğun bağımsız bir kurulca onaylanmasıdır."],
       ["Faiz yerine ortaklık, alım satım ve kiralama esas alınır","Fonlar gerçek ekonomik faaliyetlerde kullanılır","Denetim BDDK'dadır, uygunluk danışma kurulundadır"],
-      ["Ayşe Hanım’ın sorusu","Ayşe Hanım yakın arkadaşından “katılım bankası faizsiz ama yine de banka” cümlesini duydu. Kendi maaşını yatıracağı bankayı seçerken önce bu bankanın BDDK lisanslı olduğunu ve ürünlerinin icazet belgesi bulunduğunu kontrol etmeye karar verdi."]),
+      ["Hangi bankayı seçmeli?","Ayşe Hanım maaşını yatıracağı bir katılım bankası arıyor. Bir tanıdığı “faizsiz olduğu için güvenli” demiş.","Üç ayrı kontrol yapar: (1) bankanın BDDK lisanslı olduğunu resmî banka listesinden doğrular, (2) kullanacağı ürünlerin icazet belgesini bankanın internet sitesinde arar, (3) hesabın mevduat sigortası (TMSF) kapsamında olduğunu teyit eder.","“Faizsiz” etiketi yeterli değildir: lisans, icazet ve güvence üç ayrı kontrol noktasıdır."]),
     EGD("k02","Faizsiz yaklaşımın mantığı",5,[
       "Faizli sistemde para, kendisi bir ürün gibi kiralanır: borç verilir ve vade boyunca önceden belirlenen bir fazlalık alınır. Faizsiz yaklaşımda ise para tek başına getiri üretmez; getiri, para ile bir mal, hizmet veya girişimin birleşmesinden doğar.",
       "Bu yüzden katılım bankacılığında üç temel fikir öne çıkar: risk paylaşımı, gerçek varlık bağı ve belirsizliğin (gharar) azaltılması. Taraflar işlemin toplam bedelini ve koşullarını baştan bilir.",
       "Bu fikir, ürünlerin isimlerine de yansır: faiz yerine kâr payı, borç yerine finansman, mevduat yerine katılma hesabı gibi kavramlar kullanılır."],
       ["Para tek başına getiri üretmez, bir faaliyetle birleşmelidir","Risk paylaşımı ve gerçek varlık bağı esastır","Koşullar ve toplam bedel baştan bellidir"],
-      ["Aynı ihtiyaç, iki yol","Bir esnaf dükkânına makine almak istiyor. Faizli bankada nakit kredi çekip makineyi kendisi alır. Katılım bankasında ise banka makineyi satın alır ve esnafa vadeli satar; para değil, makine el değiştirir."]),
+      ["Nakit kredi mi, mal satışı mı?","Bir esnafın 400.000 TL’lik bir makineye ihtiyacı var. Faizli bankada 400.000 TL nakit kredi çekip makineyi kendisi alabilir. Katılım bankasında ise banka makineyi satın alıp esnafa vadeli satar.","Banka makineyi satıcıdan 400.000 TL’ye alır, kâr payını ekler (varsayımsal olarak toplam 460.000 TL) ve esnafa taksitle satar. Ödeme satıcıya yapılır; esnafın eline nakit geçmez. Toplam bedel olan 460.000 TL daha satış anında bellidir.","Faizsiz modelde para değil mal el değiştirir. Bu yüzden toplam bedel baştan bellidir ve kaynak amacı dışında kullanılamaz."]),
     EGD("k03","Türkiye’de katılım bankacılığının gelişimi",4,[
       "Türkiye’de faizsiz finans kurumları 1980’lerin ortasında “özel finans kurumları” adıyla faaliyete başladı. O dönemde bu kurumlar bankacılık kanununun dışında, ayrı bir kararnameyle düzenleniyordu.",
       "2005 yılında çıkan 5411 sayılı Bankacılık Kanunu ile özel finans kurumları “katılım bankası” adını aldı ve diğer bankalarla aynı düzenleme ve denetim çerçevesine girdi.",
       "Sonraki yıllarda kamu sermayeli katılım bankalarının da kurulmasıyla sektör genişledi. Katılım bankaları bugün Türkiye Katılım Bankaları Birliği çatısında bir araya gelir."],
       ["1980’lerin ortasında özel finans kurumları","2005’te 5411 sayılı Kanun’la katılım bankası oldu","Diğer bankalarla aynı denetim çerçevesindedir"],
-      ["Kuruluş tarihleri","Bir öğrenci ödev için sektörü araştırıyor. Uygulamadaki Katılım Bankaları ekranında bankaların kuruluş tarihlerine bakıp en eski ve en yeni bankayı karşılaştırarak sektörün zaman içinde nasıl büyüdüğünü bir tablo halinde yazıyor."]),
+      ["İki isim, aynı kurum mu?","Bir öğrenci ödevinde “özel finans kurumu” ile “katılım bankası” kavramlarını farklı kurumlar sanıyor ve ikisini ayrı başlıklarda anlatıyor.","Zaman çizelgesi kurar: 1980’lerin ortası, özel finans kurumları ayrı bir kararnameyle faaliyete başlar. 2005, 5411 sayılı Bankacılık Kanunu bu kurumları “katılım bankası” olarak diğer bankalarla aynı düzenleme ve denetim çatısına alır. Sonraki yıllarda kamu sermayeli bankalar da sektöre girer.","İkisi aynı kurum türünün önceki ve sonraki hukuki adıdır. Dönüm noktası 2005 ve 5411 sayılı Kanun’dur."]),
     EGD("k04","Katılım bankası ile konvansiyonel banka",4,[
       "İki bankada da hesap açılır, kart kullanılır, havale yapılır ve finansman alınır. Müşteri açısından birçok işlem benzer görünür; fark ürünün arkasındaki hukuki yapıdadır.",
       "Konvansiyonel bankada kredi, para borç verilmesi ve faiz alınması demektir. Katılım bankasında ise finansman; mal satışı (murabaha), kiralama (icara) veya ortaklık (müşareke) gibi yöntemlerle verilir.",
       "Katılım bankalarında ayrıca ürünlerin uygunluğunu denetleyen bir danışma kurulu bulunur ve fonların kullanım alanı belirli ilkelerle sınırlıdır."],
       ["Müşteri işlemleri benzerdir, hukuki yapı farklıdır","Konvansiyonel kredi borçtur, katılım finansmanı bir alım satım veya ortaklıktır","Danışma kurulu uygunluğu denetler"],
-      ["İki teklifi karşılaştırmak","Mehmet aynı taşıt için iki farklı bankadan teklif aldı. Birinde “faiz oranı”, diğerinde “kâr payı” yazıyor. Doğru karşılaştırma için her iki tekliften de toplam geri ödeme tutarını ve vade sonundaki toplam maliyeti yan yana yazdı."]),
+      ["İki teklif nasıl kıyaslanır?","Mehmet aynı araç için iki teklif aldı. Faizli bankada aylık taksit 21.000 TL, katılım bankasında 20.500 TL. Vade ikisinde de 36 ay. Terimler farklı: biri “faiz”, diğeri “kâr payı” diyor.","Terimleri değil toplam geri ödemeyi karşılaştırır: 21.000 × 36 = 756.000 TL ve 20.500 × 36 = 738.000 TL. Sonra dosya masrafı, sigorta gibi ek giderleri iki tarafa da ekleyip yeniden toplar. Fark 18.000 TL’dir ve ek giderlerle değişebilir.","Hukuki yapı farklı olsa da kıyas ölçütü aynıdır: masraflar dahil toplam geri ödeme. Karar etikete değil rakama göre verilir."]),
     EGD("k05","Uygun olmayan faaliyetler ve belirsizlik",4,[
       "Katılım bankaları, faizli işlemlere, kumar ve şansa dayalı oyunlara, alkol ve domuz ürünleri gibi uygun görülmeyen alanlara finansman sağlamaz ve bu alanlarda yatırım yapmaz.",
       "Faizsiz finansta belirsizlik de sakıncalı sayılır. Satışta malın, fiyatın ve vadenin açık olması gerekir. Sonucu tamamen şansa bağlı, bir tarafın mutlaka kaybettiği işlemler uygun değildir.",
       "Bu ilkeler, katılım endeksindeki hisselerin seçiminde ve yatırım fonlarının stratejisinde de belirleyicidir."],
       ["Faiz, kumar ve uygun olmayan sektörler dışarıda kalır","Satışta mal, fiyat ve vade belirli olmalıdır","İlkeler endeks ve fon seçiminde de geçerlidir"],
-      ["Fon kararından önce","Zeynep bir yatırım fonu seçerken “katılım” etiketine güvenmek yerine, fonun izahnamesinde yatırım stratejisinin faizsiz esaslara uygun olduğunu ve uygunluğu denetleyen bir kurulun bulunduğunu kontrol etti."]),
+      ["“Katılım fonu” yazması yeterli mi?","Zeynep bir yatırım fonu seçerken fonun adında “katılım” geçtiğini gördü ve bunu yeterli saymak istiyor.","Fon izahnamesinde üç soruya bakar: (1) yatırım stratejisi faizsiz esaslara uygun mu, (2) uygunluğu denetleyen kurul adı ve görevi yazılı mı, (3) portföyde faizli araç veya uygun olmayan sektör hissesi yok mu? Üçünün cevabı olumluysa fonu listesine alır.","Etiket değil, izahname ve denetim kurulu bilgisi kanıttır. Bu üç soru her “katılım” fonu için tekrarlanır."]),
   ]},
   { ad:"Hesaplar", ozet:"Özel cari, katılma hesabı, kâr payı ve güvence", dersler:[
     EGD("k06","Özel cari hesap",3,[
@@ -1204,37 +1204,37 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Banka bu hesaptaki tutarı istenildiğinde geri ödemekle yükümlüdür; getiri vaat edilmediği için hesap sahibine kâr payı da ödenmez.",
       "Hesap istenildiğinde bozulmadan çalıştığı için vade veya ceza gibi bir kavram yoktur."],
       ["Vadesizdir, getiri vaat edilmez","Para istenildiğinde çekilebilir","Günlük işlemler için uygundur"],
-      ["Maaş hesabı","Can’ın maaşı ayın 1’inde yatıyor ve kira ayın 5’inde çıkıyor. İlk 4 gün için ayrı bir vadeli hesap açmak yerine maaşı özel cari hesapta tutuyor; kira ödemesini karşıladıktan sonra kalan tutarı katılma hesabına aktarıyor."]),
+      ["Maaş günü ile kira günü arası","Can’ın maaşı ayın 1’inde yatıyor, 5.000 TL’lik kirası 5’inde çıkıyor. Maaşın bir kısmını bu 4 gün için vadeli hesaba koymayı düşünüyor.","Dört günlük vade için kâr payı ihmal edilebilecek kadar küçüktür; üstelik vade bozulursa hesap yeniden hesaplanır. Bu yüzden maaşı özel cari hesapta tutar, kirayı öder, kalan tutarı ihtiyaç duymayacağı süre için katılma hesabına aktarır.","Kısa süre içinde çekilecek para özel cari hesapta, bekleyecek para katılma hesabında durur."]),
     EGD("k07","Katılma hesabı",5,[
       "Katılma hesabı, paranın belirli bir vade için bankaya fon olarak katıldığı hesaptır. Banka bu fonu kâr getirecek işlerde kullanır, elde edilen kârı önceden belirlenen paylaşım oranına göre hesap sahibiyle paylaşır.",
       "Bu hesapta getiri “faiz” değil “kâr payı”dır. Sonuç, bankanın havuzundaki gerçekleşen kâra bağlıdır; bu yüzden vade sonunda ödenecek tutar önceden kesin olarak garanti edilemez.",
       "Vadeler genellikle bir aydan bir yıla kadar farklı seçeneklerle sunulur. Vade dolmadan hesap bozulursa kâr payı hesabı sözleşmeye göre yeniden yapılır."],
       ["Vadeli hesaptır; banka fonu kâr getiren işlerde kullanır","Getiri kâr payıdır, gerçekleşen sonuca bağlıdır","Vade bozulursa kâr payı yeniden hesaplanır"],
-      ["32 günlük hesap","Elif 200.000 TL’yi 32 gün için katılma hesabına yatırmaya karar verdi. Bankanın uygulamasında gösterilen tahmini kâr payı oranına bakıp vade sonunda gerçekleşenin bundan farklı olabileceğini not aldı."]),
+      ["32 günlük hesapta ne beklemeli?","Elif 200.000 TL’yi 32 gün için katılma hesabına yatırmak istiyor. Banka ekranında tahmini yıllık kâr payı oranı %42 görünüyor.","Brüt tahmini kâr payı = 200.000 × 0,42 × 32 ÷ 365 ≈ 7.364,38 TL. Bu tutar tahmindir: vade sonunda gerçekleşen kâr payı bankanın havuz sonucuna göre farklı çıkabilir ve stopaj gibi vergi kesintileri bu tutardan düşülür.","Katılma hesabında rakam bir tahmindir. Planını tek bir tutara değil, makul bir aralığa göre yap."]),
     EGD("k08","Kâr payı nasıl hesaplanır?",5,[
       "Basit hesap formülü: Kâr payı = Anapara × Yıllık kâr payı oranı × Gün sayısı ÷ 365. Banka ekranlarında gösterilen oran genellikle yıllık ve tahminidir.",
       "Örneğin 100.000 TL, yıllık %40 varsayımsal oranla 32 gün için yatırılırsa brüt kâr payı yaklaşık 100.000 × 0,40 × 32 ÷ 365 = 3.506,85 TL olur. Stopaj gibi vergi kesintileri bu tutardan düşülür.",
       "Gerçekleşen kâr payı, bankanın o vadedeki gerçek sonucuna göre belli olur; tahmin ile gerçekleşen arasında fark çıkabilir."],
       ["Kâr payı = Anapara × Oran × Gün ÷ 365","Gösterilen oran tahminidir, brüt tutardır","Vergi kesintileri brüt tutardan düşülür"],
-      ["Rakamla deneme","Deniz, 50.000 TL için yıllık %38 varsayımıyla 90 günlük brüt kâr payını hesapladı: 50.000 × 0,38 × 90 ÷ 365 ≈ 4.684,93 TL. Sonra uygulamadaki Hesapla bölümünde aynı hesabı yapıp sonucun yakın çıktığını gördü."]),
+      ["90 günlük kâr payını hesaplamak","Deniz 50.000 TL’yi 90 gün vadeli hesaba koymayı düşünüyor. Banka yıllık %38 tahmini oran gösteriyor (varsayımsal).","Önce yıllık brüt tutar: 50.000 × 0,38 = 19.000 TL. Sonra gün oranı: 19.000 × 90 ÷ 365 ≈ 4.684,93 TL. Aynı hesabı 180 gün için yaparsa 9.369,86 TL çıkar; gün sayısı iki katına çıkınca brüt kâr payı da iki katına çıkar.","Basit formül: Anapara × Yıllık oran × Gün ÷ 365. Sonuç vergi öncesi (brüt) tutardır."]),
     EGD("k09","Kâr paylaşım oranı",4,[
       "Kâr paylaşım oranı, havuzda elde edilen kârın ne kadarının hesap sahibine, ne kadarının bankaya ait olacağını belirten orandır. Örneğin 80/20 olması, kârın %80’inin hesap sahibine, %20’sinin bankaya gitmesi demektir.",
       "Bu oran vade başında bellidir ve vade boyunca değişmez. Değişen, havuzdaki gerçekleşen kâr düzeyidir: kâr artarsa hesap sahibinin payı artar, azalırsa azalır.",
       "Bu yüzden “kâr payı oranı” ile “kâr paylaşım oranı” birbirinden farklı kavramlardır: ilki sonucu (yıllık getiri), ikincisi paylaşım kuralını gösterir."],
       ["Paylaşım oranı vade başında sabittir","Gerçekleşen kâra göre getiri değişir","Kâr payı oranı sonuç, paylaşım oranı kuraldır"],
-      ["80/20’yi okumak","Burak’ın hesabında paylaşım oranı 80/20. Banka vade sonunda havuzdan 1.000 TL’lik pay çıkarsa Burak’a 800 TL, bankaya 200 TL gider. Bunu, “bana garantili 800 TL” diye anlamak yerine “kârın %80’i” diye not aldı."]),
+      ["80/20 ne demek?","Burak’ın hesabında kâr paylaşım oranı 80/20 yazıyor. Bunu “bana %80 getiri garantisi” diye anlıyor.","Oran kuralı gösterir, tutarı değil. Havuzdan hesabına düşen brüt kâr 1.000 TL ise Burak’a 800 TL, bankaya 200 TL gider. Dönem kötü geçip kâr 500 TL olursa Burak’a 400 TL gider. Oran aynı kalır, tutar değişir.","Paylaşım oranı bir paylaşım kuralıdır, getiri sözü değildir. Getiriyi havuzdaki gerçekleşen kâr belirler."]),
     EGD("k10","Altın ve döviz katılma hesapları",4,[
       "Katılma hesapları Türk lirasının yanında döviz ve altın cinsinden de açılabilir. Hesap hangi cinsten açılırsa kâr payı ve anapara o cins üzerinden izlenir.",
       "Döviz ve altın hesaplarında kur ve altın fiyatındaki değişim, TL karşılığındaki değeri etkiler. Hesabın kendi cinsindeki kâr payı olsa bile TL’ye çevirdiğinde zarar görebilirsin.",
       "Bu yüzden amaç, kısa vadeli kazanç değil, belirli bir ihtiyacı (ör. döviz borcu, altın birikimi) korumak olmalıdır."],
       ["Hesap cinsi kâr payı ve anaparayı belirler","Kur ve altın fiyatı TL değerini etkiler","Amaç net değilse kur riskine dikkat"],
-      ["Döviz birikimi","Ahmet bir yıl sonra yurt dışı eğitim ücreti ödeyecek. Ücret euro olduğu için birikimini euro cinsi katılma hesabında tutmaya karar verdi; böylece TL’deki kur dalgalanması bu ihtiyacı doğrudan etkilemiyor."]),
+      ["Euro hesabı mı, TL hesabı mı?","Ahmet bir yıl sonra 10.000 euro eğitim ücreti ödeyecek. Birikimini TL hesapta tutsa da yüksek görünen TL kâr payından yararlanabilir. Varsayımsal kur bugün 40 TL.","Bugün ihtiyaç 10.000 × 40 = 400.000 TL. Kur 46’ya çıkarsa ihtiyaç 460.000 TL olur: 60.000 TL’lik ek yük. Birikimi euro cinsi hesapta tutarsa ihtiyaç euro olarak karşılanır ve kur riski ortadan kalkar. Bedeli ise genellikle TL’ye kıyasla daha düşük kâr payıdır.","Gider hangi para birimindeyse birikimi o cinste tutmak kur riskini azaltır. Bu, getiri maksimizasyonu değil risk yönetimidir."]),
     EGD("k11","Güvence ve hesap seçimi",4,[
       "Katılım bankalarındaki özel cari ve katılma hesapları, mevduat sigortası sistemi (TMSF) kapsamındadır. Sigorta limiti mevzuata göre belirlenir ve zaman zaman güncellenir; güncel tutar için resmî duyurulara bakılmalıdır.",
       "Hesap seçerken vade, para cinsi, beklenen getiri, erken bozma koşulları ve paranın ne zaman gerekeceği birlikte düşünülmelidir.",
       "Birden fazla bankada hesap açmak, limit aşılan tutarlar için güvenceyi artırabilir; ancak her hesabın şartı ve maliyeti ayrıca incelenmelidir."],
       ["Hesaplar mevduat sigortası kapsamındadır","Limit mevzuata göre değişir","Vade, para cinsi ve erken bozma koşulları birlikte değerlendirilir"],
-      ["Limit kontrolü","Selin büyük bir tutarı tek bankada tutuyordu. Resmî sitedeki güncel güvence limitini kontrol edip tutarın limitin üzerinde olduğunu gördü ve bir kısmını ikinci bir katılım bankasındaki hesaba aktarmayı planladı."]),
+      ["Güvence limitini aşıyor muyum?","Selin tek bir katılım bankasında büyük bir tutar tutuyor. Güvencenin “tamamen” kapsadığını düşünüyor.","Güvence her mevduat sahibi için her banka başına ayrı bir limitle sınırlıdır. Güncel limiti resmî duyurudan öğrenir. Limit varsayımsal olarak 1.000.000 TL ve hesabı 1.500.000 TL ise aşan 500.000 TL güvence dışında kalır. Çözüm olarak aşan kısmı başka bir bankaya aktarır.","Güvence banka ve kişi başınadır. Limit aşılıyorsa tutarı bankalara yaymak riski azaltır. Güncel tutar için her zaman resmî duyuruya bak."]),
   ]},
   { ad:"Finansman yöntemleri", ozet:"Murabaha, mudarebe, müşareke ve icara", dersler:[
     EGD("k12","Murabaha: maliyet artı kâr satışı",5,[
@@ -1242,31 +1242,31 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Önemli olan, bankanın malı gerçekten satın alması ve satış anında toplam bedelin (maliyet artı kâr payı) önceden bilinmesidir. Böylece taksit tutarı ve vade baştan nettir.",
       "Kâr payı oranı satış anında sabitlenir ve vade boyunca değişmez. Faizsiz bankacılık ilkesine göre gecikme halinde borca ek kâr payı işletilmez."],
       ["Banka malı alır, maliyet + bilinen kâr payıyla vadeli satar","Toplam bedel ve taksitler baştan bellidir","Kâr payı oranı vade boyunca değişmez"],
-      ["Toplam bedeli görmek","Hakan, 500.000 TL’lik bir mal için 36 ay vadeli teklif aldı. Teklifte maliyet 500.000 TL, kâr payı tutarı ve toplam satış bedeli ayrı ayrı yazıyordu. Aylık taksiti toplam bedeli 36’ya bölerek kontrol etti."]),
+      ["Aylık taksit doğru mu?","Hakan, 500.000 TL maliyetli bir mal için 36 ay vadeli murabaha teklifi aldı. Teklifte toplam satış bedeli 680.000 TL yazıyor.","Kâr payı tutarı = 680.000 − 500.000 = 180.000 TL. Aylık eşit taksit = 680.000 ÷ 36 ≈ 18.888,89 TL. Murabahada bu tutar vade boyunca değişmez, çünkü toplam bedel satış anında sabitlenmiştir.","Murabahada üç rakam baştan sabittir: maliyet, kâr payı ve toplam bedel. Taksiti kendin doğrulayabilirsin."]),
     EGD("k13","Murabahada işlem adımları",5,[
       "Tipik bir murabaha işleminde müşteri önce finansman talebinde bulunur. Banka, malı satıcıdan satın alır; bunu çoğu zaman müşteriyi vekil tayin ederek yaptırır, ödemeyi ise doğrudan satıcıya yapar.",
       "Mal bankanın mülkiyetine geçtikten sonra banka malı müşteriye maliyet artı kâr payıyla satar. Vekâletle yapılan alımda bile alım bankanın hesabına yapılır; mal bankanın mülkiyetine geçmeden müşteriye satış yapılamaz.",
       "Fatura ve sözleşmeler işlemin gerçekten yapıldığını gösterir. Para müşterinin eline nakit olarak geçmez; ödeme satıcıya yapılır."],
       ["Talep, satın alma, satış ve teslim adımları vardır","Ödeme çoğunlukla doğrudan satıcıya yapılır","Fatura ve sözleşme işlemi belgeler"],
-      ["Belgeleri toplamak","Nilay konut finansmanı için başvurdu. İşlem sonunda satış sözleşmesi, ödeme dekontu ve faturayı bir klasörde topladı; bunların işlemin gerçekten alım satım olarak yapıldığını gösteren belgeler olduğunu öğrendi."]),
+      ["İşlem sırası doğru mu?","Nilay konut finansmanı sözleşmelerini inceliyor. Satış sözleşmesindeki tarih, bankanın konutu satıcıdan aldığı tarihten önce görünüyor.","Doğru sıra şudur: (1) finansman talebi, (2) bankanın malı satıcıdan satın alması ve ödemeyi satıcıya yapması, (3) bankanın malı müşteriye kâr payıyla satması, (4) devir ve teslim. Satış tarihi, satın alma tarihinden önceyse banka sahip olmadığı malı satmış olur; bu bir uygunluk sorunudur.","Önce banka satın alır, sonra müşteriye satar. Belgelerin tarih sırası, işlemin gerçekten alım satım olduğunu gösterir."]),
     EGD("k14","Mudarebe",4,[
       "Mudarebe, bir tarafın sermaye (rabbülmal), diğer tarafın emek ve uzmanlık (mudarip) koyduğu ortaklıktır. Kâr, sözleşmede belirlenen oranlarda paylaşılır.",
       "Zarar oluşursa ve mudarip kusurlu değilse, parasal zararı sermaye sahibi üstlenir; mudarip emeğini kaybeder. Katılma hesaplarının dayanağı mudarebe ilkesidir.",
       "Mudarebede sermaye sahibi, işin yönetimine karışmaz; mudarip ise sermayeyi sözleşmeye uygun şekilde kullanmakla yükümlüdür."],
       ["Bir tarafta sermaye, diğer tarafta emek vardır","Kusur yoksa parasal zararı sermaye sahibi taşır","Katılma hesaplarının dayanağıdır"],
-      ["Sermaye ve emek","Kemal’in birikimi var ama ticaret bilgisi yok; Seda’nın ticaret bilgisi var ama sermayesi yok. Kârı yarı yarıya paylaşma şartıyla mudarebe yapıyorlar. İş zararla kapanırsa Kemal parasını, Seda emeğini kaybediyor."]),
+      ["Zarar olursa kim ne kaybeder?","Kemal 100.000 TL sermaye koydu, Seda emek veriyor. Kâr paylaşımı Kemal %60, Seda %40 olarak yazıldı.","Kâr 50.000 TL ise Kemal 30.000 TL, Seda 20.000 TL alır. İş 20.000 TL zararla kapanırsa ve Seda kusurlu değilse, parasal zararı Kemal üstlenir (sermayesi 80.000 TL’ye düşer); Seda emeğini kaybeder ama cebinden ödeme yapmaz. Seda ihmal veya kusur yapmışsa zarardan sorumlu olur.","Mudarebede kâr oranla bölüşülür; kusur yoksa zarar sermaye sahibine aittir. Katılma hesabında getirinin garanti edilememesinin sebebi budur."]),
     EGD("k15","Müşareke ve azalan müşareke",5,[
       "Müşareke, tarafların her ikisinin de sermaye koyduğu ortaklıktır. Kâr, önceden anlaşılan oranlarda; zarar ise sermaye payları oranında paylaşılır.",
       "Azalan müşareke, banka ile müşterinin bir malı (ör. konut) ortak alması ve bankanın payını zamanla müşteriye devretmesi yöntemidir. Müşteri bir yandan ortaklık payı için kira öder, bir yandan da bankanın payını kademeli satın alır.",
       "Zaman geçtikçe müşterinin payı artar, bankanın payı azalır; sonunda mülkiyet tamamen müşteriye geçer."],
       ["Müşarekede iki taraf da sermaye koyar","Zarar sermaye oranında paylaşılır","Azalan müşarekede banka payını zamanla devreder"],
-      ["Konutta ortaklık","Ece ve banka bir evi %20’ye %80 oranında satın alıyor. Ece her ay bankanın payı için kira ve bir miktar pay bedeli ödüyor. Pay oranı değiştikçe kira da azalıyor; sonunda ev tamamen Ece’ye geçiyor."]),
+      ["Azalan müşarekede kira nasıl azalır?","Ece ve banka 1.000.000 TL’lik bir evi ortak alıyor: Ece %20 (200.000 TL), banka %80 (800.000 TL). Ece her yıl bankanın 100.000 TL’lik payını satın alacak. Bankanın payı üzerinden yıllık kira oranı varsayımsal %10.","Yıl 1: banka payı 800.000 TL, kira = %10 × 800.000 = 80.000 TL. Yıl sonunda Ece 100.000 TL’lik pay alır; Ece %30, banka %70 olur. Yıl 2: kira = %10 × 700.000 = 70.000 TL. Her yıl kira 10.000 TL azalır; payların tamamı Ece’ye geçtiğinde mülkiyet tamamen onun olur.","Müşterinin payı arttıkça bankanın payı ve ödenen kira azalır. Azalan müşareke, kira ile pay devrini birleştirir."]),
     EGD("k16","İcara ve kiralama",4,[
       "İcara kiralama demektir. Bir varlık kiraya verilir ve karşılığında kira bedeli alınır. Mülkiyet kiraya verende kalır, kullanım hakkı kiracıya geçer.",
       "Finansal kiralama (leasing) ve bazı kira sertifikası yapıları bu mantığa dayanır. Kira dönemi sonunda varlığın kiracıya satılması veya devredilmesi de mümkündür.",
       "Kiralamada varlığın bakım ve sigorta gibi yükümlülüklerinin kime ait olduğu sözleşmede açıkça belirlenmelidir."],
       ["Mülkiyet kiraya verende, kullanım kiracıdadır","Leasing ve sukuk yapılarında kullanılır","Bakım ve sigorta sorumluluğu sözleşmeyle belirlenir"],
-      ["Makine kiralama","Bir üretici yeni bir makineyi satın almak yerine banka üzerinden kiralıyor. Kira süresi sonunda makineyi önceden belirlenen bedelle satın alma hakkı da sözleşmede yer alıyor."]),
+      ["Makineyi kiralamak mı, almak mı?","Bir üretici 600.000 TL’lik makineyi 24 ay kiralamayı düşünüyor. Aylık kira 30.000 TL, dönem sonunda satın alma bedeli 60.000 TL.","Toplam maliyet = 30.000 × 24 + 60.000 = 780.000 TL. Peşin alsaydı 600.000 TL öderdi; 180.000 TL’lik fark, ödemeleri 24 aya yaymanın finansman bedelidir. Üretici ayrıca bakım ve sigorta yükümlülüğünün kimde olduğunu sözleşmeden kontrol eder.","Kiralamada toplam maliyeti (kira + dönem sonu bedel) peşin fiyatla kıyasla. Bakım ve sigorta yükümlülüğü sözleşmede açıkça yazmalıdır."]),
   ]},
   { ad:"Ürünler", ozet:"Konut, taşıt, ihtiyaç ve ticari finansman", dersler:[
     EGD("k17","Konut finansmanı",5,[
@@ -1274,25 +1274,25 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Satış sırasında kâr payı oranı, vade ve taksit tutarı sabitlenir. Konutun tapusu müşteri adına devredilir ve bankanın alacağı için çoğu zaman ipotek konulur.",
       "Başvuruda gelir belgeleri, ekspertiz raporu ve konutun değeri değerlendirilir. Finansman tutarı ve vadesi, mevzuattaki üst sınırlar ve bankanın değerlendirmesine göre belirlenir."],
       ["Genellikle murabaha ile verilir","Kâr payı oranı ve taksitler sabittir","Tapu müşteriye geçer, ipotek teminat olabilir"],
-      ["Ödeme planını okumak","Murat, konut finansmanı teklifinde taksit tablosunu açtı. Her taksitte anapara payı ve kâr payı ayrı görünüyordu. Toplam kâr payını ve toplam geri ödemeyi uygulamadaki hesaplayıcıyla doğruladı."]),
+      ["Konut ödeme planının asıl rakamları","Murat 2.000.000 TL’lik konut için 500.000 TL peşinat verecek. Finanse edilecek tutar 1.500.000 TL, vade 120 ay ve bankanın toplam satış bedeli 2.700.000 TL (varsayımsal).","Toplam kâr payı = 2.700.000 − 1.500.000 = 1.200.000 TL (finanse tutarın %80’i). Aylık taksit = 2.700.000 ÷ 120 = 22.500 TL. Murat bu rakamları uygulamadaki Hesapla ekranında da doğrulayabilir.","Taksit tek başına yanıltabilir. Kararın asıl rakamları toplam kâr payı ve toplam geri ödemedir."]),
     EGD("k18","Taşıt ve ihtiyaç finansmanı",4,[
       "Taşıt finansmanında banka aracı satıcıdan alır ve müşteriye vadeli satar. Araç genellikle bankaya rehinli olarak tescil edilir ve taksitler bittiğinde rehin kalkar.",
       "İhtiyaç finansmanı da bir alım satıma dayanır: banka bir malı alır ve müşteriye vadeli satar. İşlem adımları bankanın icazetli ürün yapısına göre değişebilir.",
       "Her iki üründe de vade, peşinat, toplam bedel ve sigorta gibi giderler başvurudan önce karşılaştırılmalıdır."],
       ["Taşıtta araç tescilinde rehin olabilir","İhtiyaç finansmanı da mal alım satımına dayanır","Vade, peşinat ve ek giderler karşılaştırılmalı"],
-      ["Peşinat kararı","Gül, 600.000 TL’lik araç için %20 peşinat verirse finanse edeceği tutarın ve toplam kâr payının nasıl değiştiğini iki ayrı senaryoda hesapladı; peşinat arttıkça toplam geri ödemenin düştüğünü gördü."]),
+      ["Peşinat arttırınca ne olur?","Gül 600.000 TL’lik araç alacak. Seçenek A: %20 peşinat, B: %40 peşinat. Vade 36 ay; toplam kâr payı finanse edilen tutarın %45’i (varsayımsal).","A: peşinat 120.000, finanse 480.000; toplam borç 480.000 × 1,45 = 696.000, taksit 19.333,33; toplam çıkış 816.000 TL. B: peşinat 240.000, finanse 360.000; toplam borç 522.000, taksit 14.500; toplam çıkış 762.000 TL. Fark 54.000 TL.","Peşinat arttıkça finanse tutar ve toplam kâr payı düşer. Ama peşinat için ayırdığın nakit acil durum fonundan gelmemelidir."]),
     EGD("k19","Ticari finansman",5,[
       "Ticari finansman, işletmelerin mal alımı, ekipman, işletme sermayesi ve dış ticaret ihtiyaçları için sunulan finansman çeşitlerini kapsar. Spot finansman, taksitli ticari finansman, çek arkası finansman ve leasing bunlardan bazılarıdır.",
       "Bu ürünler de gerçek bir alım satım veya kiralamaya dayanır. İşletmenin ihtiyacı olan mal banka tarafından alınır ve vadeli satılır ya da kiralanır.",
       "İşletmeler için erken kapama, vade farkı, kur riski ve TL/YP seçimi gibi konular maliyeti belirler; bu yüzden teklifler toplam maliyete göre karşılaştırılmalıdır."],
       ["İşletme ihtiyaçları için murabaha ve kiralama kullanılır","Spot, taksitli, çek arkası ve leasing yaygın ürünlerdir","Toplam maliyet, kur ve vade birlikte değerlendirilir"],
-      ["İki teklif","Bir toptancı hammadde için hem TL hem döviz cinsi finansman teklifi aldı. Dövizli teklifin kâr payı düşük görünüyordu, ama gelirleri TL olduğu için kur artışı riskini de maliyete ekleyerek karşılaştırdı."]),
+      ["TL mi, döviz mi?","Bir toptancı 1.000.000 TL’lik hammadde için 12 ay vadeli iki teklif aldı. TL teklifi toplam 1.250.000 TL. Dövizli teklif 25.000 USD finansman için toplam 27.500 USD (kur varsayımsal 40). Gelirleri TL.","Bugünkü kurla dövizli teklif 27.500 × 40 = 1.100.000 TL, yani daha ucuz görünür. Ama kur 48’e çıkarsa 27.500 × 48 = 1.320.000 TL olur ve TL teklifinden 70.000 TL pahalıya gelir. Başabaş kur = 1.250.000 ÷ 27.500 ≈ 45,45’tir.","Gelirin TL ise dövizli teklif bir kur bahsidir. Başabaş kuru hesaplayıp o kura ne kadar yakın olduğunu değerlendirerek karar ver."]),
     EGD("k20","Toplam maliyet ve erken kapama",5,[
       "Bir finansmanın gerçek maliyeti yalnızca kâr payı oranı değildir. Dosya masrafı, sigorta, ekspertiz ve diğer giderler de toplam maliyete eklenir. Taksit yerine toplam geri ödemeye bakmak daha doğru bir kıyas sağlar.",
       "Erken kapamada, kalan borç peşin ödenir. Erken kapama koşulları sözleşmede ve mevzuatta düzenlenir; bankanın alabileceği ücret mevzuatla sınırlandırılmıştır ve kalan borç tutarı yeniden hesaplanır.",
       "Erken kapama kararında kalan vade, kalan taksitler, olası komisyon ve paranın alternatif kullanımı birlikte düşünülmelidir."],
       ["Toplam maliyet; kâr payı ve tüm giderleri içerir","Erken kapama koşulları sözleşme ve mevzuata bağlıdır","Karar, komisyon ve alternatif kullanım birlikte değerlendirilir"],
-      ["Erken kapamak mantıklı mı?","Cem borcunun bir kısmını bir ikramiyeyle kapatabilecek durumda. Kalan vade kısa olduğu için ödeyeceği erken kapama komisyonu ve alacağı indirimi uygulamadaki Erken Kapama ekranında hesaplayıp karar vermeyi planlıyor."]),
+      ["Erken kapamak mantıklı mı?","Cem’in 6 taksit borcu kaldı (taksit 52.000 TL, toplam 312.000 TL). Elinde 300.000 TL’lik ikramiye var. Banka kalan vadeye ait kâr payını indirerek kapama tutarını 300.000 TL, erken kapama ücretini 3.000 TL olarak hesapladı (varsayımsal).","Devam ederse ödeyeceği toplam 6 × 52.000 = 312.000 TL. Kapatırsa 300.000 + 3.000 = 303.000 TL öder. Fark 9.000 TL tasarruftur. Cem bu 9.000 TL’yi, aynı 300.000 TL’yi 6 ay başka bir yerde değerlendirmenin getirisiyle ve acil durum fonuna etkisiyle kıyaslar.","Erken kapama kazancı = kalan taksitlerin toplamı − (kapama tutarı + ücret). Bu fark, nakdin alternatif kullanımıyla karşılaştırılarak karar verilir."]),
   ]},
   { ad:"Piyasa ve uygunluk", ozet:"Sukuk, icazet, katılım endeksi, zekât ve sektör", dersler:[
     EGD("k21","Kira sertifikası (sukuk)",5,[
@@ -1300,31 +1300,31 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Türkiye’de Hazine ve Maliye Bakanlığı ile çeşitli kurumlar kira sertifikası ihraç eder. İhraç edilen sertifikaların vadesi, getirisi ve türü ihraççıya göre değişir.",
       "Bu ihraçları uygulamadaki Kira Sertifikası İhraçları ekranından izleyebilirsin."],
       ["Sukuk, varlığa dayalı bir menkul kıymettir","Getiri, dayanak varlığın kira veya kâr gelirinden gelir","Hazine ve özel sektör ihraç edebilir"],
-      ["Sukuk mu tahvil mi?","Burcu bir ihraç duyurusunda “kira sertifikası” ifadesini görünce önce hangi varlığa dayandığını, ihraççının kim olduğunu ve vadesini kontrol etti; getirinin kira gelirinden geldiğini doğrulayıp yatırım kararını ondan sonra verdi."]),
+      ["İhraç duyurusunu okumak","Burcu, 100.000 TL nominal 2 yıl vadeli bir kira sertifikası duyurusu görüyor: 6 ayda bir sabit kira ödemesi, yıllık %36 getiri.","Dönemlik kira = 100.000 × 0,36 ÷ 2 = 18.000 TL. 2 yılda 4 ödeme = 72.000 TL. Vade sonunda anapara 100.000 TL de ödenir; toplam 172.000 TL. Burcu ayrıca dayanak varlığın ne olduğunu, ihraççıyı ve getirinin sabit mi değişken mi olduğunu kontrol eder.","Sukukta ödemeler dayanak varlığın kira gelirine bağlıdır. Dayanak varlık, ihraççı, vade ve getiri tipi sorgulanmadan karar verilmez."]),
     EGD("k22","Danışma kurulu ve icazet belgesi",4,[
       "Katılım bankalarında ürünlerin faizsiz esaslara uygunluğunu denetleyen bir danışma kurulu (danışma komitesi) bulunur. Kurul yeni ürünleri ve sözleşmeleri inceler.",
       "Kurulun ürün için verdiği onay belgesine icazet belgesi denir. Bankalar ürünlerinin icazet belgelerini kendi internet sitelerinde yayımlar.",
       "Bir ürünün icazetli olup olmadığını merak ediyorsan, uygulamadaki İcazet Belgeleri ekranından bankayı ve ürünü seçip bankanın yayımladığı belgeye gidebilirsin."],
       ["Danışma kurulu ürün uygunluğunu denetler","Onay belgesine icazet belgesi denir","Bankalar belgeleri kendi sitesinde yayımlar"],
-      ["Belgeyi bulmak","Ali, kullanacağı finansman ürününün icazet belgesini görmek istiyor. Katılım Plus’taki İcazet Belgeleri ekranından bankasını ve ürünü seçip bankanın kendi sayfasındaki belgeye ulaşıyor."]),
+      ["İcazet belgesi nasıl okunur?","Ali, kullanmayı düşündüğü finansman ürününün icazet belgesini bankanın internet sitesinde buldu. Belgede ne arayacağını bilmiyor.","Dört kontrol yapar: (1) belgedeki ürün adı kendi ürününle birebir aynı mı, (2) belge tarihi güncel mi, (3) danışma kurulu üyelerinin adları ve kararı yazılı mı, (4) belge bankanın resmî sitesinden mi alındı? Uygulamadaki İcazet Belgeleri ekranı doğrudan bankanın sayfasına yönlendirir.","Belge ürünle eşleşmeli ve bankanın resmî sitesinden alınmalıdır. Katılım Plus belgeleri üretmez, yalnızca bankanın sayfasına yönlendirir."]),
     EGD("k23","Katılım endeksi ve hisse seçimi",5,[
       "Katılım endeksleri, faizsiz finans ilkelerine uygun şirketlerin hisselerinden oluşur. Borsa İstanbul’da bu amaçla hesaplanan endeksler vardır ve uygunluk, şirketin faaliyet alanı ile bazı finansal oranlarına göre belirlenir.",
       "Konvansiyonel bankalar, sigorta şirketleri ile alkol ve kumar gibi alanlarda çalışan şirketler bu endekslerin dışında kalır. Şirketlerin borçlanma ve faiz geliri oranları da değerlendirilir.",
       "Endeks bileşimi dönemsel olarak güncellenir, bu yüzden bir hissenin uygunluğu zaman içinde değişebilir."],
       ["Faaliyet alanı ve finansal oranlar belirleyicidir","Bankalar ve sigorta şirketleri dışarıda kalır","Bileşim dönemsel olarak güncellenir"],
-      ["Güncel listeyi izlemek","Berk portföyündeki bir hissenin katılım endeksinde olup olmadığını merak etti. Uygulamadaki Katılım Endeksi göstergesine bakıp hissenin güncel durumunu kontrol etti ve listenin dönemsel değiştiğini not aldı."]),
+      ["Portföydeki hisse uygun mu?","Berk’in portföyünde 5 hisse var. Hangilerinin katılım endeksinde olduğunu bilmiyor.","Güncel endeks bileşenlerini kontrol eder: 4 hisse listede, 1’i yok. Listede olmayan hissenin neden dışarıda olduğunu araştırır: faaliyet alanı uygun mu, borç ve faiz geliri oranları eşikleri aşıyor mu? Endeks dönemsel güncellendiği için bir önceki dönemde uygun olan hisse bu dönem çıkmış olabilir.","Uygunluk sabit değildir. Endeks güncellemelerinden sonra portföydeki hisseleri yeniden kontrol et."]),
     EGD("k24","Zekât ve katılım finans",4,[
       "Zekât, belirli bir varlığa (nisap) ulaşan ve üzerinden bir yıl geçen mal sahiplerinin, malın belirli bir kısmını (kırkta bir, yani %2,5) ihtiyaç sahiplerine vermesidir. Nisap miktarı genellikle yaklaşık 80 gram altın değeriyle ifade edilir.",
       "Zekâta tabi varlıklar arasında nakit, altın, döviz, katılma hesabındaki birikimler ve ticaret malları sayılır. Hesaplama yapılırken borçlar da dikkate alınır.",
       "Uygulamadaki Zekât Hesaplayıcı, nisabı güncel altın fiyatıyla gösterir. Dinî hükümlerle ilgili kesin bilgi için yetkili kaynaklara danışılmalıdır."],
       ["Nisap yaklaşık 80 gram altın değeridir","Oran kırkta bir, yani %2,5’tir","Dinî hükümler için yetkili kaynağa danışılmalıdır"],
-      ["Nisap kontrolü","Sevgi, bir yıldır tuttuğu birikimin nisabı aşıp aşmadığını merak ediyor. Zekât Hesaplayıcı’da güncel altın fiyatıyla nisap tutarını gördü ve borçlarını düşerek hesaplamasını yaptı."]),
+      ["Nisabı aşıyor muyum?","Sevgi bir yıldır 450.000 TL nakit, 20 gram altın ve 30.000 TL borçla yaşıyor. Gram altın varsayımsal 5.000 TL, nisap 80,18 gram altın.","Nisap = 80,18 × 5.000 ≈ 400.900 TL. Varlıklar: 450.000 + 20 × 5.000 = 550.000 TL. Borç düşülür: 550.000 − 30.000 = 520.000 TL. 520.000 nisabı aşar. Zekât = 520.000 × %2,5 = 13.000 TL. Güncel altın fiyatını Zekât Hesaplayıcı’da görebilir; dinî hükümler için yetkili kaynağa danışır.","Hesap sırası: varlıkların toplamı − borçlar → nisapla karşılaştır → aşıyorsa %2,5."]),
     EGD("k25","Sektör verileri ve BDDK",4,[
       "BDDK, bankacılık sektörünün düzenleyici ve denetleyici kurumudur. Katılım bankalarının aktif büyüklüğü, toplanan ve kullandırılan fonlar, kârlılık ve sektör payı gibi veriler BDDK ve Türkiye Katılım Bankaları Birliği tarafından düzenli olarak yayımlanır.",
       "Bu veriler sektörün büyüklüğünü, bankalar arası karşılaştırmayı ve zaman içindeki gelişimi anlamak için kullanılır.",
       "Uygulamadaki Katılım Bankacılığı Sektörü ekranı bu verileri BDDK resmî verisine dayanarak gösterir."],
       ["BDDK sektörün düzenleyicisi ve denetleyicisidir","Veriler aktif, fon ve kârlılık gibi başlıkları içerir","Sektör payı zaman içinde izlenir"],
-      ["Sektör payı","Özge, katılım bankalarının sektör payının yıllar içinde nasıl değiştiğini görmek için Sektör Verileri ekranındaki grafiği inceledi ve payın hangi yıllarda hızlandığını not alarak rapora ekledi."]),
+      ["Sektör payı nasıl yorumlanır?","Özge bir raporda katılım bankalarının sektör payının arttığını okuyor. Varsayımsal rakamlar: geçen yıl katılım aktifleri 6, sektör 60 trilyon TL; bu yıl 8,4 ve 70 trilyon TL.","Geçen yıl pay = 6 ÷ 60 = %10. Bu yıl pay = 8,4 ÷ 70 = %12. Katılım aktifleri %40 büyüdü (6 → 8,4), sektör %16,7 (60 → 70); katılım sektörden daha hızlı büyüdüğü için payı arttı. Gerçek veriler Katılım Bankacılığı Sektörü ekranında görülür.","Pay = katılım aktifleri ÷ sektör aktifleri. Payın artması için katılım bankalarının sektörden daha hızlı büyümesi gerekir."]),
   ]},
   ],
   sorular:[
@@ -1360,31 +1360,31 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Vazgeçilen en iyi alternatifin değerine fırsat maliyeti denir. Örneğin bir akşamı çalışarak geçirmek, o akşam dinlenmekten veya ders çalışmaktan vazgeçmek demektir.",
       "Bireyler, şirketler ve devletler bu tercihleri sürekli yapar. Ekonomiyi anlamak, bu tercihlerin nasıl yapıldığını ve sonuçlarını görebilmektir."],
       ["Kaynaklar sınırlı, ihtiyaçlar sınırsızdır","Her seçimin bir fırsat maliyeti vardır","Ekonomi, tercihlerin ve sonuçlarının incelenmesidir"],
-      ["Bir seçim, iki maliyet","Ece 10.000 TL’lik birikimini ya bir tatile ya da acil durum fonuna ayırabilir. Tatili seçerse fonun getirisinden ve güvencesinden vazgeçmiş olur; bu vazgeçtiği değer tatilin fırsat maliyetidir."]),
+      ["Tatilin gerçek bedeli","Ece’nin 10.000 TL’lik birikimi var. Ya tatile gidecek ya da yıllık %40 getirili bir hesaba koyacak.","Tatil seçilirse görünen bedel 10.000 TL’dir. Hesabı seçseydi 12 ay sonra yaklaşık 10.000 × 0,40 = 4.000 TL brüt getiri elde ederdi. Tatilin gerçek bedeli, harcanan para ve vazgeçilen getirinin toplamıdır: 10.000 + 4.000 = 14.000 TL.","Fırsat maliyeti, vazgeçilen en iyi alternatifin değeridir. Her harcamanın görünen ve görünmeyen bir bedeli vardır."]),
     EGD("e02","Arz ve talep",4,[
       "Talep, tüketicilerin belirli bir fiyattan satın almak istediği miktardır. Arz ise üreticilerin belirli bir fiyattan satmaya razı olduğu miktar. Fiyat yükseldikçe talep genellikle düşer, arz ise artar.",
       "Arz ve talebin kesiştiği noktada denge fiyatı oluşur. Talep artarsa fiyat yükselir; arz artarsa fiyat düşer. Mevsim, gelir, moda ve beklentiler bu eğrileri kaydırır.",
       "Bu temel mantık; kur, hisse, altın ve konut fiyatları gibi pek çok piyasada geçerlidir."],
       ["Fiyat arttıkça talep düşer, arz artar","Denge fiyatı arz ve talebin kesiştiği noktadadır","Gelir ve beklentiler eğrileri kaydırır"],
-      ["Sebze fiyatı","Yağış az olunca domates rekoltesi düştü, yani arz azaldı. Talep aynı kaldığı için fiyat yükseldi. Cem bu durumda geçici fiyat artışı ile kalıcı bir artışı ayırmak için ertesi aydaki fiyata da bakmaya karar verdi."]),
+      ["Domates fiyatı neden arttı?","Don nedeniyle domates rekoltesi düştü. Kilosu 20 TL’den 28 TL’ye çıktı.","Adımlar: (1) arz azaldı, arz eğrisi sola kaydı, (2) talep aynı kaldı, (3) eski fiyatta talep arzdan fazla oldu, (4) fiyat yükselince bazı tüketiciler vazgeçti ve denge yeni fiyatta kuruldu. Yeni rekolte geldiğinde arz normale döner ve fiyat geriler; bu yüzden etki geçicidir.","Fiyat artışında önce arz mı talep mi değişti diye sor. Geçici bir arz şoku fiyatı geçici olarak yükseltir."]),
     EGD("e03","Piyasa türleri ve fiyat oluşumu",4,[
       "Tam rekabet piyasasında çok sayıda alıcı ve satıcı vardır; hiçbiri tek başına fiyatı belirleyemez. Tekelde tek bir satıcı, oligopolde ise birkaç büyük satıcı fiyat üzerinde etkilidir.",
       "Rekabetin azaldığı piyasalarda fiyatlar yükselebilir ve kalite düşebilir. Bu yüzden rekabet kurumları bu piyasaları denetler.",
       "Finansal piyasalarda ise fiyat, çok sayıda alıcı ve satıcının emirleriyle sürekli oluşur; likidite ve bilgi akışı fiyatın niteliğini belirler."],
       ["Rekabet fiyat üzerinde baskı kurar","Tekel ve oligopolde fiyat gücü yüksektir","Finansal piyasada fiyat sürekli emirlerle oluşur"],
-      ["Tek satıcı","Bir ilçede tek bir market varsa fiyatları kendisi belirler. Yeni bir market açılınca rekabet artar ve fiyatlar düşer. Selin bu farkı gözlemleyip iki marketin fiyatlarını yan yana yazdı."]),
+      ["Tek market, iki market","Bir ilçede tek market var; ürün maliyeti 70 TL, satış fiyatı 100 TL. Sonra ikinci bir market açılıyor ve satış fiyatı 85 TL’ye iniyor.","Birinci durumda kâr marjı 100 − 70 = 30 TL. Rekabet gelince fiyat 85 TL olur, marj 15 TL’ye düşer. Tüketici her üründe 15 TL (%15) tasarruf eder. Rekabet olmasaydı satıcı fiyatı düşürmek zorunda kalmazdı.","Satıcı sayısı arttıkça fiyat maliyete yaklaşır. Rekabet kurumları bu yüzden tekelleşmeyi ve karteli denetler."]),
     EGD("e04","Mikro ve makro ekonomi",3,[
       "Mikroekonomi, tek tek hanehalkı, şirket ve piyasaların davranışlarını inceler: bir ürünün fiyatı, bir şirketin üretim kararı gibi.",
       "Makroekonomi ise ekonominin bütününü inceler: büyüme, enflasyon, işsizlik, faiz ve kur gibi göstergeler bu alanın konusudur.",
       "İkisi birbirini etkiler: milyonlarca küçük karar makro göstergeleri oluşturur, makro koşullar da bireylerin kararlarını değiştirir."],
       ["Mikro: birey ve şirket kararları","Makro: büyüme, enflasyon, işsizlik, faiz, kur","İkisi birbirini etkiler"],
-      ["Aynı olay, iki bakış","Kira artışı bir ailenin bütçesi için mikro bir sorundur; ülke genelinde kira artışlarının enflasyona katkısı ise makro bir konudur. Ayşe iki bakışı ayrı ayrı yazarak olayı daha iyi kavradı."]),
+      ["Kira artışı iki gözle","Ayşe’nin kirası 20.000 TL’den 28.000 TL’ye çıktı (%40 artış). Aynı yıl ülkedeki kiralar da ortalama %40 arttı. Varsayımsal olarak TÜFE sepetinde kiranın ağırlığı %7.","Mikro bakış: Ayşe’nin aylık yükü 8.000 TL, yıllık 96.000 TL arttı; bütçesini yeniden düzenlemesi gerekir. Makro bakış: kiranın TÜFE’ye katkısı yaklaşık ağırlık × artış = 0,07 × 40 = 2,8 puandır.","Aynı olay mikroda bir bütçe sorunu, makroda enflasyona katkıdır. Katkı ≈ sepet ağırlığı × fiyat artışı."]),
     EGD("e05","Para ve işlevleri",4,[
       "Para üç temel işlev görür: değişim aracıdır, değer ölçüsüdür ve değer saklama aracıdır. Para sayesinde takas yerine alışveriş kolaylaşır.",
       "Enflasyon yüksekse paranın değer saklama işlevi zayıflar; çünkü aynı tutarla zamanla daha az mal alınır.",
       "Para arzını, merkez bankası ve bankacılık sistemi birlikte belirler. Dijital ödemeler yaygınlaştıkça parayı elde bulundurma ihtiyacı azalır ama işlevleri değişmez."],
       ["Değişim aracı, değer ölçüsü, değer saklama aracı","Yüksek enflasyonda değer saklama zayıflar","Para arzı merkez bankası ve bankalarca belirlenir"],
-      ["Değer saklamak","Hasan iki yıl önce 10.000 TL’yi yastık altında sakladı. Bugün aynı tutarla aldığı mal miktarı azaldı; böylece paranın değer saklama işlevinin enflasyonla nasıl zayıfladığını kendi örneğinde gördü."]),
+      ["Yastık altındaki 10.000 TL","Hasan 10.000 TL’yi bir yıl yastık altında sakladı. Yıllık enflasyon %50 oldu.","Başlangıçta 10.000 TL ile alınan sepet bir yıl sonra 15.000 TL’ye çıktı. Hasan’ın nakdi hâlâ 10.000 TL. Satın alma gücü 10.000 ÷ 1,5 ≈ 6.667 TL’ye düştü; yani yaklaşık 3.333 TL (%33) değer kaybetti.","Enflasyon %50 iken nakdin satın alma gücü yılda yaklaşık üçte bir erir. Değer saklama işlevi enflasyonla zayıflar."]),
   ]},
   { ad:"Makro göstergeler", ozet:"GSYH, enflasyon, işsizlik, cari denge ve bütçe", dersler:[
     EGD("e06","GSYH ve büyüme",5,[
@@ -1392,31 +1392,31 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Nominal GSYH enflasyondan etkilenir. Gerçek büyümeyi görmek için fiyat etkisinden arındırılmış reel büyümeye bakılır.",
       "Kişi başına GSYH, toplam üretimin nüfusa bölünmesiyle bulunur ve ortalama refah düzeyi hakkında fikir verir; ancak gelir dağılımını göstermez."],
       ["GSYH: üretilen nihai mal ve hizmetlerin değeri","Büyüme reel (fiyattan arındırılmış) ölçülür","Kişi başına GSYH gelir dağılımını göstermez"],
-      ["Nominal mi reel mi?","Bir haberde “ekonomi nominal olarak %60 büyüdü” yazıyordu. Kaan enflasyonun da yüksek olduğunu bildiği için reel büyümeyi aradı ve gerçek büyümenin çok daha düşük olduğunu gördü."]),
+      ["Nominal büyüme mi, reel büyüme mi?","Bir haber “ekonomi %60 büyüdü” diyor. Aynı dönemde fiyat artışı (GSYH deflatörü) %50.","Reel büyüme = (1 + nominal) ÷ (1 + enflasyon) − 1 = 1,60 ÷ 1,50 − 1 ≈ %6,7. Üretimin gerçek miktarı yalnızca %6,7 artmıştır; geri kalanı fiyat artışıdır.","Başlıktaki nominal büyüme çoğu zaman yanıltır. Gerçek büyüme için fiyat etkisinden arındırılmış (reel) rakama bak."]),
     EGD("e07","Enflasyon ve TÜFE",5,[
       "Enflasyon, mal ve hizmet fiyatlarının genel düzeyindeki sürekli artıştır. Paranın satın alma gücü azalır.",
       "Tüketici enflasyonu, Tüketici Fiyat Endeksi (TÜFE) ile ölçülür ve TÜİK her ay yayımlar. ÜFE ise üreticinin satış fiyatlarındaki değişimi gösterir ve çoğunlukla tüketici fiyatlarının öncü göstergesi sayılır.",
       "Enflasyon sepetinin bileşimi herkes için aynı değildir. Gıda, barınma ve ulaşım gibi harcama gruplarının ağırlığı kişiden kişiye değişir; bu yüzden kişisel enflasyon resmi oranından farklı olabilir."],
       ["TÜFE tüketici fiyatlarını ölçer","ÜFE üretici fiyatlarını ölçer","Kişisel enflasyon resmî orandan farklı olabilir"],
-      ["Sepet farkı","Deniz’in harcamalarının büyük kısmı kira. Kiralar resmî enflasyondan hızlı arttığı için Deniz’in kişisel enflasyonu resmî orandan yüksek çıktı. Bu yüzden bütçesini resmî oran yerine kendi sepetine göre güncelledi."]),
+      ["Kişisel enflasyon","Deniz’in harcamaları: kira %50, gıda %30, diğer %20. Bir yıllık fiyat artışları: kira %60, gıda %45, diğer %30. Resmî yıllık enflasyon %45.","Kişisel enflasyon = 0,50 × 60 + 0,30 × 45 + 0,20 × 30 = 30 + 13,5 + 6 = %49,5. Deniz’in yaşadığı enflasyon, resmî orandan 4,5 puan yüksek çıktı; çünkü harcamasının yarısı hızlı artan kira kalemindeydi.","Kişisel enflasyon, harcama ağırlığı ile kalem artışlarının çarpımlarının toplamıdır. Sepetin farklıysa oranın da farklı olur."]),
     EGD("e08","İşsizlik ve istihdam",4,[
       "İşsizlik oranı, işgücüne katılan ve iş arayan kişilerin işgücüne oranıdır. Türkiye’de TÜİK, Hanehalkı İşgücü Araştırması ile bu oranı aylık olarak yayımlar.",
       "Geniş tanımlı işsizlik (atıl işgücü), iş aramayı bırakmış ama çalışmaya hazır olanları ve daha fazla çalışmak isteyen yarı zamanlı çalışanları da kapsar; bu nedenle resmî oranın üzerinde çıkar.",
       "İstihdam ve işgücüne katılım oranı, ekonomik sağlığın en önemli göstergelerindendir."],
       ["İşsizlik oranı = işsizler ÷ işgücü","Geniş tanımlı işsizlik daha kapsamlıdır","İstihdam ve işgücüne katılım birlikte izlenir"],
-      ["Oranı yorumlamak","İşsizlik oranı düşüyor ama işgücüne katılım da düşüyor. Ahmet, işsizliğin gerçekten azalıp azalmadığını anlamak için bu iki göstergeyi birlikte inceledi."]),
+      ["İşsizlik oranı düştü, iyileşme gerçek mi?","İşgücü 32 milyon, işsiz 3,2 milyon: oran %10. Bir ay sonra 0,6 milyon kişi iş aramayı bırakıp işgücünün dışına çıkıyor; kimse iş bulmuyor.","Yeni işsiz sayısı 2,6 milyon, yeni işgücü 31,4 milyon. Oran = 2,6 ÷ 31,4 ≈ %8,3. İşsizlik oranı %10’dan %8,3’e düştü ama tek bir kişi bile iş bulmadı: işgücüne katılım düştü.","İşsizlik oranını işgücüne katılım ve geniş tanımlı işsizlikle birlikte oku; oran düşerken katılım da düşüyorsa iyileşme gerçek olmayabilir."]),
     EGD("e09","Cari denge ve ödemeler dengesi",5,[
       "Ödemeler dengesi, bir ülkenin dünyanın geri kalanıyla yaptığı tüm ekonomik işlemleri kaydeder. Cari işlemler hesabı bunun en çok izlenen parçasıdır.",
       "Cari işlemler hesabı; dış ticaret dengesini, turizm gibi hizmet gelirlerini ve yurt dışına yapılan gelir ödemelerini içerir. Girenden çok çıkan döviz varsa cari açık oluşur.",
       "Cari açık, dış kaynakla finanse edilmek zorundadır. Bu yüzden döviz kuru ve rezervler üzerinde önemli bir belirleyicidir."],
       ["Cari denge: dış ticaret, hizmetler ve gelir kalemleri","Cari açık dış finansman gerektirir","Kur ve rezervleri etkiler"],
-      ["Turizm geliri","Yaz sezonunda turizm gelirleri arttı. Bu, cari işlemler hesabında hizmet gelirlerini artırıyor ve cari açığı azaltıyor. Elif bu yüzden turizm verisinin cari denge için neden önemli olduğunu not aldı."]),
+      ["Turizm cari açığı nasıl etkiler?","Varsayımsal rakamlar (milyar dolar): ihracat 250, ithalat 300; hizmet geliri (turizm dahil) +40; yurt dışına yapılan gelir ödemeleri −10.","Cari denge = dış ticaret (250 − 300 = −50) + hizmetler (+40) + gelirler (−10) = −20 milyar dolar (cari açık). Turizm geliri 10 milyar dolar artarsa hizmet kalemi +50 olur ve açık −10 milyar dolara düşer.","Cari denge; mal ticareti, hizmetler ve gelir kalemlerinin toplamıdır. Turizm gibi hizmet gelirleri açığı doğrudan azaltır."]),
     EGD("e10","Bütçe ve kamu borcu",4,[
       "Merkezi yönetim bütçesi, devletin gelir ve giderlerini gösterir. Giderler gelirden fazlaysa bütçe açığı oluşur.",
       "Devlet açığı, Hazine’nin iç ve dış borçlanmasıyla finanse eder. İç borçlanmada devlet iç borçlanma senetleri (DİBS) ihraç edilir: bono (kısa vadeli) ve tahvil (uzun vadeli).",
       "Hazine, kâr payı ödeyen kira sertifikası da ihraç ederek faizsiz esaslara uygun bir borçlanma yolu sunar. Kamu borcunun GSYH’ye oranı, sürdürülebilirliğin önemli bir göstergesidir."],
       ["Gider > gelir ise bütçe açığı","DİBS: bono (kısa), tahvil (uzun vadeli)","Borç/GSYH oranı sürdürülebilirliği gösterir"],
-      ["Aile bütçesine benzetme","Devlet bütçesini aile bütçesine benzeten Tuna, devletin gelirinin vergi, giderinin ise maaş ve yatırım olduğunu yazdı. Aradaki fark borçlanmayla kapanıyor; ona göre borç/GSYH oranı da bu borcun gelire göre yükünü gösteriyor."]),
+      ["Büyüme borç oranını nasıl düşürür?","Varsayımsal bir ülkede GSYH 800, kamu borç stoku 400 (borç/GSYH %50). Bütçe açığı 20 ve borçlanmayla kapatılıyor.","Borç 420’ye çıkar. GSYH aynı kalsaydı oran 420 ÷ 800 = %52,5 olurdu. Ama GSYH %5 büyüyüp 840 olursa oran 420 ÷ 840 = %50’de kalır: borç arttığı halde oran yükselmedi.","Borç/GSYH oranı yalnızca borçla değil büyümeyle de belirlenir. Hem paya hem paydaya bak."]),
   ]},
   { ad:"Para politikası ve faiz", ozet:"Merkez bankası, politika faizi, kredi ve reel faiz", dersler:[
     EGD("e11","Merkez bankası ve görevleri",4,[
@@ -1424,31 +1424,31 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Merkez bankası, banknot basma yetkisine sahiptir, bankalara kısa vadeli fon sağlar ve döviz rezervlerini yönetir.",
       "Fiyat istikrarını sağlamak için bir enflasyon hedefi belirlenir ve bu hedefe ulaşmak için politika faizi, zorunlu karşılık gibi araçlar kullanılır."],
       ["Temel amaç fiyat istikrarıdır","Banknot basma, rezerv yönetimi ve ödeme sistemleri görev alanıdır","Enflasyon hedefi ve politika faizi başlıca araçtır"],
-      ["Hedefi okumak","Merve, merkez bankasının yıl sonu enflasyon hedefini ve gerçekleşen oranı yan yana yazarak hedefin ne kadar tutturulduğunu izliyor."]),
+      ["Enflasyon hedefi tuttu mu?","Merkez bankasının yıl sonu enflasyon hedefi %20’ydi. Gerçekleşen %28 oldu.","Sapma = 28 − 20 = 8 puan; hedefin %40’ı kadar (8 ÷ 20) üstte. Merve sapmanın nedenlerini merkez bankasının enflasyon raporunda arar: enerji fiyatları, kur etkisi, talep. Sonra sonraki yılın hedefinin ve politika faizinin bu sapmayı nasıl ele aldığına bakar.","Hedef ile gerçekleşen arasındaki fark, para politikasının yeterince sıkı olup olmadığını okumanın ilk adımıdır."]),
     EGD("e12","Politika faizi ve PPK",5,[
       "Politika faizi, merkez bankasının para politikasını yönlendirmek için belirlediği temel faiz oranıdır. Türkiye’de bir hafta vadeli repo ihale faizi politika faizidir.",
       "TCMB’nin Para Politikası Kurulu (PPK), takvimi önceden açıklanan toplantılarda faiz kararını verir. Karar, toplantı sonrası kısa bir metinle duyurulur.",
       "Politika faizi artınca kredi ve mevduat getirileri genellikle yükselir, talep yavaşlar ve enflasyon üzerindeki baskı azalır. İndirimde ise tersi beklenir. Katılım bankalarında bu etki kâr payı oranlarına yansır."],
       ["Politika faizi bir hafta vadeli repo faizidir","PPK kararları önceden açıklanan takvimde verilir","Politika faizi kâr payı oranlarını da etkiler"],
-      ["PPK günü","PPK günü Nur, kararın saatini finansal takvimden kontrol etti. Karar sonrası kur ve borsa hareketlerini izleyip faiz kararının beklentilerle uyumlu olup olmadığına baktı."]),
+      ["Beklenti ile karar farkı","Ankete göre PPK’nın politika faizini %40’ta sabit tutması bekleniyor. Karar açıklandığında faiz 2,5 puan indirimle %37,5 oluyor (varsayımsal).","Beklenti “sabit”, karar “2,5 puan indirim”: sürpriz var. Nur piyasa tepkisini izler: kur, bono faizleri, borsa. Karar metnindeki ileriye dönük ifadelere de bakar; çünkü sonraki kararlar için ipucu orada.","Piyasa tepkisini karar değil, beklentiden sapma doğurur. Karar metni ileriye dönük sinyal verir."]),
     EGD("e13","Faiz ve enflasyon ilişkisi",5,[
       "Merkez bankası enflasyon yüksek olduğunda faizi artırır; böylece borçlanma pahalılaşır, harcama ve kredi talebi azalır ve fiyat artışı yavaşlar. Enflasyon düşük ve ekonomi zayıfken ise faiz indirilebilir.",
       "Politika faizindeki değişiklik, bankaların kredi ve mevduat faizlerine, dolayısıyla tüketici ve yatırımcı kararlarına aktarılır. Bu zincire para politikası aktarım mekanizması denir.",
       "Etkiler gecikmeli ortaya çıkar. Bu yüzden faiz kararının sonuçları genellikle birkaç ay sonra enflasyonda görülür."],
       ["Yüksek enflasyonda faiz artırılır","Etki bankaların faiz ve kâr payı oranlarına aktarılır","Sonuçlar gecikmeli görülür"],
-      ["Gecikmeli etki","Faiz artırıldıktan hemen sonra enflasyon düşmedi. Oğuz, kararın etkisinin birkaç ay sürebildiğini bildiği için sonraki aylık enflasyon verilerini bekleyip değerlendirmeyi öyle yapmaya karar verdi."]),
+      ["Neden hemen düşmedi?","Merkez bankası faizi artırdı ama ertesi ay enflasyon düşmedi. Oğuz kararın başarısız olduğunu düşünüyor.","Etki zincirini sıralar: (1) politika faizi artar, (2) 1-2 ay içinde mevduat ve kredi faizleri ayarlanır, (3) 3-6 ay içinde kredi ve harcama talebi yavaşlar, (4) 6-12 ay içinde fiyat baskısı azalır. Karar ancak bu zincir tamamlandığında enflasyona yansır.","Faiz kararının etkisi 6-12 aya yayılır. Başarı, tek bir ayın enflasyonuyla değil trendle ölçülür."]),
     EGD("e14","Bankacılık sistemi ve kredi yaratma",5,[
       "Bankalar toplanan fonların bir bölümünü kredi veya finansman olarak kullandırır. Bu sayede ekonomideki para arzı genişler. Katılım bankaları bunu faizsiz yöntemlerle yapar.",
       "Merkez bankası, zorunlu karşılık oranı ile bankaların topladığı fonların ne kadarını merkez bankasında tutacağını belirler. Oranın artması kredi vermeyi zorlaştırır, düşmesi kolaylaştırır.",
       "Kredi büyümesi ekonomik canlılığı artırır; çok hızlı büyürse enflasyon ve borçluluk riskini de büyütür. Bu nedenle kredi büyümesi izlenir ve gerektiğinde sınırlandırılır."],
       ["Bankalar fonları finansmana dönüştürür","Zorunlu karşılık kredi imkânını etkiler","Hızlı kredi büyümesi risk yaratabilir"],
-      ["Zorunlu karşılık","Bir bankanın topladığı 100 liranın 10 lirasını zorunlu karşılık olarak tutması gerekiyorsa kullandırabileceği tutar 90 liradır. Oran artarsa bu tutar azalır; Seda bu örnekle kredi imkânının nasıl daraldığını açıkladı."]),
+      ["Zorunlu karşılık kredi imkânını nasıl daraltır?","Bir banka 1.000 milyon TL fon topladı. Zorunlu karşılık oranı %10 iken merkez bankası bunu %15’e çıkarıyor.","%10’da 100 milyon TL merkez bankasında bekler, kullandırılabilir tutar 900 milyon TL’dir. %15’te 150 milyon TL bekler ve kullandırılabilir tutar 850 milyon TL’ye düşer. Oran 5 puan arttığında her 1.000 liralık fonda 50 lira daha az finansman verilebilir.","Zorunlu karşılığı artırmak finansman arzını daraltır. Bu, krediyi yavaşlatmak için kullanılan araçlardan biridir."]),
     EGD("e15","Reel faiz ve reel getiri",4,[
       "Nominal faiz veya kâr payı, enflasyon düşülmeden gösterilen orandır. Reel getiri ise enflasyondan arındırılmış, satın alma gücündeki gerçek değişimi gösterir.",
       "Yaklaşık olarak reel getiri, nominal getirinin enflasyondan düşülmesiyle bulunur. Daha kesin hesapta (1 + nominal) ÷ (1 + enflasyon) − 1 formülü kullanılır.",
       "Yıllık %40 kazanıp enflasyon %45 ise, satın alma gücü azalmıştır; yani reel getiri negatiftir."],
       ["Reel getiri enflasyondan arındırılmıştır","Kesin formül: (1+nominal) ÷ (1+enflasyon) − 1","Negatif reel getiri satın alma gücü kaybıdır"],
-      ["Rakamla","Yıllık %40 nominal getiri, %45 enflasyon: (1,40 ÷ 1,45) − 1 ≈ −%3,4. Pınar bu sonuçla getirisinin satın alma gücünü yaklaşık %3,4 azalttığını gördü."]),
+      ["Nominal kazanç, reel kayıp","Pınar 100.000 TL’yi yıllık %40 getirili bir hesaba yatırdı. Aynı yıl enflasyon %45 oldu.","Nominal olarak hesabı 140.000 TL oldu. Ama aynı sepet 145.000 TL’ye çıktı. Reel getiri = 1,40 ÷ 1,45 − 1 ≈ −%3,4. Başlangıç fiyatlarıyla bugünkü gücü: 140.000 ÷ 1,45 ≈ 96.552 TL; yani 3.448 TL’lik reel kayıp.","Nominal kazanç olsa bile reel getiri negatif olabilir. Getiriyi her zaman enflasyonla kıyasla."]),
   ]},
   { ad:"Döviz ve dış denge", ozet:"Kur, rezerv, dış ticaret ve sermaye akımları", dersler:[
     EGD("e16","Döviz kuru",4,[
@@ -1456,31 +1456,31 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Kuru etkileyen başlıca unsurlar faiz farkları, enflasyon, cari denge, rezervler ve beklentilerdir.",
       "Kur artışı ithalatı pahalılaştırır, dövizle borçlanan şirketlerin ve bireylerin yükünü artırır; ihracatçıya ise fiyat avantajı sağlayabilir."],
       ["Kur: bir paranın başka para cinsinden fiyatı","Arz-talep, faiz farkı, enflasyon ve rezervler etkiler","İthalatı pahalılaştırır, ihracatı destekleyebilir"],
-      ["Dövizli borç","Bir firma dolar cinsinden borçlandı. Gelirleri TL olduğu için kur arttıkça borcunun TL karşılığı yükseldi. Firma, sonraki borçlanmalarda kur riskine karşı gelir ve borç para birimini eşleştirmeyi düşündü."]),
+      ["Dövizli borç kur artışında nasıl büyür?","Bir firma 100.000 dolar borçlandı. Gelirleri TL. Varsayımsal kur 40’tan 46’ya çıktı.","Borç 100.000 × 40 = 4.000.000 TL idi, şimdi 100.000 × 46 = 4.600.000 TL: +600.000 TL (%15). Firmanın geliri aynı kaldığı için borcu geliriyle kıyaslandığında %15 ağırlaştı. Korunma yolları: geliri döviz cinsine kaydırmak, vadeli işlemle kuru sabitlemek veya borcu TL’ye çevirmek.","Kur %15 artarsa dövizli borcun TL yükü de %15 artar. Gelir ve borcun para birimi eşleştirilmelidir."]),
     EGD("e17","Kur rejimleri",4,[
       "Sabit kur rejiminde devlet kuru belirli bir seviyede tutar. Dalgalı kurda kur piyasa koşullarına göre serbestçe belirlenir. Yönetilen dalgalanma ise ikisinin arasıdır: kur dalgalanır, merkez bankası ise aşırı oynaklığa müdahale edebilir.",
       "Türkiye, 2001 krizinden sonra dalgalı kur rejimine geçmiştir. Müdahale araçları arasında rezerv satışı ve faiz ayarlamaları vardır.",
       "Her rejimin avantaj ve riski vardır: sabit kur istikrar sağlar ama rezerv gerektirir; dalgalı kur esneklik verir ama oynaklık yaratır."],
       ["Sabit, dalgalı ve yönetilen rejimler","Türkiye 2001’den beri dalgalı kurdadır","Her rejimin avantaj ve riski vardır"],
-      ["Rejim karşılaştırma","Bir tablo çizen Deniz, sabit kurda istikrarı ama rezerv ihtiyacını, dalgalı kurda esnekliği ama oynaklığı yan yana yazarak her rejimin neden bir tercih olduğunu açıkladı."]),
+      ["Sabit kurun bedeli","Varsayımsal bir ülke kurunu sabit tutuyor. Piyasada günlük 500 milyon dolarlık talep fazlası var.","Merkez bankası kuru tutmak için günde 500 milyon dolar rezerv satar. 10 günde 5 milyar dolar rezerv erir. Rezerv biterse kur tutulamaz ve sert bir kur ayarlaması yaşanır. Dalgalı kurda kur kendisi ayarlandığı için rezerv bu şekilde harcanmaz; bedel kurdaki dalgalanmadır.","Sabit kur rezerv gerektirir ve rezerv tükenince çöker. Dalgalı kur bu riski, oynaklıkla takas eder."]),
     EGD("e18","Rezervler",4,[
       "Merkez bankası rezervleri; döviz, altın ve diğer uluslararası ödeme araçlarından oluşur. Dış ödemeleri karşılamak ve piyasada kur oynaklığını yönetmek için kullanılır.",
       "Brüt rezerv, toplam varlıkları gösterir. Net rezerv ise yükümlülükler düşüldükten sonra kalan tutarı gösterir ve daha anlamlı bir güç göstergesidir.",
       "Rezervler azaldıkça kurun kontrol edilmesi zorlaşır; bu yüzden yatırımcılar rezervleri yakından izler."],
       ["Rezerv: döviz, altın ve ödeme araçları","Net rezerv yükümlülükleri düşer, gücü daha iyi gösterir","Rezerv düşünce kur riski artar"],
-      ["Brüt ve net","Bir haberde brüt rezervin arttığı yazıyordu. Mert net rezervi de kontrol etti ve yükümlülükler çıktıktan sonra tablonun daha zayıf olduğunu gördü."]),
+      ["Brüt rezerv yanıltabilir","Bir haber brüt rezervin 150 milyar dolara çıktığını duyuruyor. Varsayımsal olarak yükümlülükler (swap, bankaların döviz karşılıkları vb.) 90 milyar dolar, kısa vadeli dış borç 100 milyar dolar.","Net rezerv = 150 − 90 = 60 milyar dolar. Net rezervin kısa vadeli dış borca oranı 60 ÷ 100 = %60’tır; yani kısa vadeli borcun tamamı karşılanamıyor. Brüt rezerv iyi görünse de gerçek güç daha düşüktür.","Brüt rezerv iyi görünebilir. Net rezerv ve kısa vadeli dış borca oranı gerçek gücü gösterir."]),
     EGD("e19","Dış ticaret ve rekabet gücü",4,[
       "İhracat, ülkenin yurt dışına mal ve hizmet satmasıdır; ithalat ise dışarıdan mal ve hizmet almasıdır. Fark dış ticaret dengesini oluşturur.",
       "Türkiye ara malı ve enerji ithalatına bağımlı olduğu için ihracat arttığında ithalat da artma eğilimindedir. Bu yüzden dış ticaret açığı ekonomik büyümeyle birlikte genişleyebilir.",
       "Rekabet gücü, kalite, maliyet, teknoloji ve kur gibi unsurlara bağlıdır. Katma değeri yüksek ürünler ihracatın sürdürülebilirliğini artırır."],
       ["İhracat − ithalat = dış ticaret dengesi","Ara malı ve enerji ithalatı açığı etkiler","Katma değer rekabet gücünü artırır"],
-      ["İhracatçının hesabı","Bir tekstil ihracatçısı hammaddeyi ithal ediyor. Kur artınca ürünlerini dışarıya ucuza satabiliyor ama hammadde maliyeti de artıyor. Gül, net etkiyi görmek için hem gelir hem gideri hesaplamasına kattı."]),
+      ["İhracatçıya kur artışı yeter mi?","Bir ihracatçı ürünü 100 dolara satıyor, 60 dolarlık hammaddeyi ithal ediyor ve 1.000 TL yerel gideri var. Kur 40’tan 44’e (%10) çıkıyor.","Önce: gelir 4.000, hammadde 2.400, yerel gider 1.000 → kâr 600 TL. Sonra: gelir 4.400, hammadde 2.640, yerel gider 1.000 → kâr 760 TL. Kâr %26,7 arttı ama gelir %10 artarken hammadde maliyeti de %10 arttığı için avantaj küçüldü. İthal girdi payı yüksek olsaydı kazanç daha da azalırdı.","Kur artışının ihracatçıya net etkisi, gelir artışından ithal girdi maliyeti artışının düşülmesiyle bulunur. İthal girdi payı yüksekse avantaj küçülür."]),
     EGD("e20","Sermaye akımları ve risk primi",5,[
       "Sermaye akımları, yabancı yatırımcıların bir ülkeye giren (veya çıkan) parasıdır. Portföy yatırımları hızlı girip çıkabilir; doğrudan yatırımlar ise daha kalıcıdır.",
       "Ülke risk primi (CDS), bir ülkenin borcunu ödeyememe riskine karşı sigorta maliyetidir. Yükseldiğinde yabancı yatırımcı daha yüksek getiri ister, borçlanma maliyeti artar.",
       "Küresel risk iştahı (risk-on) arttığında gelişmekte olan ülkelere sermaye girer; risk-off dönemlerinde ise çıkış yaşanır."],
       ["Portföy akımları hızlı, doğrudan yatırımlar kalıcıdır","CDS ülkenin risk primini gösterir","Küresel risk iştahı akımları belirler"],
-      ["CDS’i izlemek","Mina bir haberde CDS’in yükseldiğini gördü. Bunun ülkenin borçlanma maliyetinin arttığına işaret ettiğini bildiği için, kur ve faiz üzerindeki olası etkisini ayrıca değerlendirdi."]),
+      ["CDS artışının maliyeti","Ülkenin CDS primi 300 baz puandan 500 baz puana yükseldi. Ülke 1 milyar dolarlık borçlanma yapmayı planlıyor.","100 baz puan = %1’dir. Prim farkı 200 baz puan = %2’dir. 1 milyar dolarlık borçlanma için yıllık ek maliyet yaklaşık %2 × 1.000 milyon = 20 milyon dolar olur.","CDS arttıkça borçlanma maliyeti yaklaşık o kadar artar. 100 baz puan, yüzde 1’e eşittir."]),
   ]},
   { ad:"Küresel ekonomi ve pratik", ozet:"Fed, altın-petrol, döngüler ve haber okuma", dersler:[
     EGD("e21","Fed ve küresel faizler",4,[
@@ -1488,31 +1488,31 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Fed faizi artırdığında dolar değer kazanma eğiliminde olur ve gelişmekte olan ülkelerden sermaye çıkışı yaşanabilir. Faiz indirimi ise genellikle tersi etki yapar.",
       "Fed kararları, FOMC toplantıları sonrası açıklanır. Karar metni ve basın toplantısı, piyasaların beklentisini belirler."],
       ["Fed kararları küresel koşulları etkiler","Faiz artışı doları güçlendirebilir","FOMC toplantıları takip edilir"],
-      ["Fed haftası","Fed toplantısı olan haftada altın ve dolar endeksi sert hareket etti. Efe, kararın beklentilerle uyumlu olup olmadığına bakıp tepkinin neden büyük olduğunu not aldı."]),
+      ["Fed indirimi hangi zincirle yayılır?","Fed’in faizi sabit tutması bekleniyordu; 25 baz puan (%0,25) indirdi.","Zincir: ABD faizi düşer → dolar cazibesini kaybeder → dolar endeksi geriler → faiz getirmeyen altın göreceli olarak cazip hale gelir ve fiyatı yükselir → gelişmekte olan ülkelere sermaye girişi artar → TL üzerindeki baskı azalabilir. Efe tepkinin büyüklüğünü beklentiyle kıyaslayarak yorumlar.","Fed indirimi genellikle doları zayıflatır, altını ve gelişen ülke varlıklarını destekler. Etki, beklentiyle kıyaslanarak okunur."]),
     EGD("e22","Altın ve petrol",4,[
       "Altın, kriz ve belirsizlik dönemlerinde “güvenli liman” olarak görülür. Dolar zayıfladığında ve faizler düştüğünde altına talep artma eğilimindedir.",
       "Petrol, enerji maliyetinin ana unsurudur. Türkiye enerji ithalatçısı olduğu için petrol fiyatı cari açığı ve enflasyonu etkiler.",
       "Brent petrol, uluslararası fiyat referansıdır. Arz kısıtlamaları, küresel büyüme ve jeopolitik gelişmeler fiyatı hareketlendirir."],
       ["Altın güvenli liman olarak görülür","Petrol cari açık ve enflasyonu etkiler","Brent uluslararası referans fiyattır"],
-      ["Petrol ve enflasyon","Petrol fiyatı yükseldiğinde akaryakıt ve nakliye maliyeti arttı, bu da birçok ürünün fiyatına yansıdı. Hüseyin bunu enflasyon haberlerindeki enerji kalemiyle ilişkilendirdi."]),
+      ["Petrol artışı faturayı nasıl büyütür?","Brent petrol 70 dolardan 84 dolara çıktı (%20). Türkiye’nin yıllık petrol ithalat faturası varsayımsal olarak 50 milyar dolar.","Yıllık ek fatura = 50 × %20 = 10 milyar dolar. Bu, cari açığı aynı miktarda artırır. Ayrıca akaryakıt ve nakliye maliyetleri yükseldiği için birçok ürünün fiyatına yansır; TÜFE’de ulaştırma ve enerji kalemleri artar.","Petrol %20 artarsa 50 milyar dolarlık ithalat faturası 10 milyar dolar artar: hem cari açığı hem enflasyonu etkiler."]),
     EGD("e23","Ekonomik döngüler",4,[
       "Ekonomi sürekli aynı hızda büyümez; genişleme, zirve, daralma ve toparlanma dönemlerinden oluşan bir döngü izler.",
       "Üst üste iki çeyrek daralma teknik olarak resesyon sayılır. Stagflasyon ise düşük büyüme, yüksek işsizlik ve yüksek enflasyonun bir arada görüldüğü zor bir durumdur.",
       "Döngünün hangi aşamasında olunduğu, faiz, şirket kârları ve yatırım getirileri üzerinde belirleyicidir."],
       ["Genişleme, zirve, daralma, toparlanma","İki çeyrek üst üste daralma resesyondur","Stagflasyon: düşük büyüme + yüksek enflasyon"],
-      ["Aşamayı tespit etmek","Bir analist, büyüme ve işsizlik verilerini bir çizgi grafikte birleştirerek ekonominin hangi aşamada olduğuna dair bir tahmin yazdı; ama bunun kesin değil, sadece bir değerlendirme olduğunu belirtti."]),
+      ["Resesyon mu, toparlanma mı?","Çeyreklik büyüme: 1. çeyrek +%1,0, 2. çeyrek −%0,5, 3. çeyrek −%0,8, 4. çeyrek +%0,2.","2. ve 3. çeyrekte üst üste daralma var; bu teknik resesyon tanımına uyar. 4. çeyrekte büyüme pozitife dönüyor, yani toparlanma başlıyor olabilir. Yorumu kesinleştirmek için işsizlik ve enflasyona da bakılır: büyüme zayıf, işsizlik artıyor ve enflasyon yüksekse tablo stagflasyondur.","Üst üste iki çeyrek daralma teknik resesyondur; ama tek ölçüt değildir. Karar işsizlik ve enflasyonla birlikte verilir."]),
     EGD("e24","Ekonomik takvimi okumak",4,[
       "Ekonomik takvim, enflasyon, büyüme, işsizlik, faiz kararı gibi önemli verilerin ne zaman açıklanacağını gösterir. Piyasalar bu açıklamalara büyük tepki verebilir.",
       "Piyasada asıl önemli olan sonucun kendisinden çok, beklentiden ne kadar saptığıdır. Beklentiye yakın veri çoğu zaman büyük hareket yaratmaz.",
       "Uygulamadaki Finansal Takvim ekranından yaklaşan PPK, Fed ve enflasyon açıklamalarını izleyebilirsin."],
       ["Takvim önemli açıklamaların zamanını gösterir","Beklentiden sapma, tepkiyi belirler","Finansal Takvim’den yaklaşan olayları izle"],
-      ["Beklenti ve gerçekleşen","Aylık enflasyon beklentisi %3,0 iken açıklanan sonuç %3,1 çıktı. Kerem küçük bir fark olduğu için piyasanın çok tepki vermemesini bekledi ve gerçekten de hareket sınırlı kaldı."]),
+      ["Sapma tepkiyi belirler","Aylık enflasyon beklentisi %3,0. Senaryo A: açıklanan %3,1. Senaryo B: açıklanan %3,8.","A’da sapma 0,1 puandır: küçük olduğu için piyasa tepkisi sınırlı kalır. B’de sapma 0,8 puandır: faiz beklentileri değişir, bono faizleri ve kur sert tepki verebilir. Kerem takvimde beklenti ve sonuç yan yana gelince sapmayı hesaplar. Beklentilere TCMB Piyasa Katılımcıları Anketi gibi kaynaklardan bakılır.","Piyasa sonucu değil, sapmayı fiyatlar. 0,1 puanlık fark sönük, 0,8 puanlık fark sert hareket yaratır."]),
     EGD("e25","Ekonomik haberi yorumlamak",5,[
       "Bir ekonomik haberi okurken önce neyin açıklandığına, hangi dönemi kapsadığına ve beklentiden farkına bakmak gerekir. Başlık yerine veriye ve karşılaştırma dönemine dikkat edilmelidir.",
       "Haberin kaynağı ve verinin birincil kaynağı önemlidir; TÜİK, TCMB, BDDK ve Hazine gibi resmî kaynaklar öncelikli olmalıdır.",
       "Bir haberi kendi durumuna uyarlamak için sorular sorulabilir: bu gelirimi, borcumu, birikimimi veya harcamalarımı nasıl etkiler?"],
       ["Veri, dönem ve beklentiye bak","Birincil resmî kaynakları tercih et","Haberi kendi bütçenle ilişkilendir"],
-      ["Başlığa değil veriye bak","“Enflasyon düştü” başlığını gören Aylin, yıllık mı aylık mı düştüğünü kontrol etti. Yıllık oran düşse bile fiyatların artmaya devam ettiğini fark etti ve bütçesini bu bilgiyle yeniden gözden geçirdi."]),
+      ["“Enflasyon düştü” başlığı","Bir başlık “Enflasyon düştü” diyor. Yıllık enflasyon %65’ten %60’a indi. Aylin’in maaşı bir yılda %40 arttı.","Yıllık enflasyonun %60 olması, bir yılda 100 TL’lik sepetin 160 TL olması demektir; fiyatlar düşmedi, artış yavaşladı. Aylin’in maaşı %40 arttığı için reel değişim = 1,40 ÷ 1,60 − 1 = −%12,5: satın alma gücü yine kaybediyor.","“Enflasyon düştü” fiyatların düştüğü anlamına gelmez, artışın yavaşladığı anlamına gelir. Maaş artışı enflasyonun altındaysa reel kayıp sürer."]),
   ]},
   ],
   sorular:[
@@ -1548,31 +1548,31 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Yatırımda getiri ile birlikte kayıp ihtimali de vardır. Tasarrufun amacı ise paranın korunması ve ihtiyaç anında hazır olmasıdır.",
       "Yatırım yapmadan önce acil durum fonunu oluşturmak, borçları gözden geçirmek ve yatırım amacını belirlemek sağlıklı bir sıradır."],
       ["Tasarruf biriktirir, yatırım değerlendirir","Yatırımda kayıp ihtimali vardır","Önce acil durum fonu ve borç düzeni"],
-      ["Sıralama","Ahmet birikiminin hepsini yatırıma çevirmek yerine önce üç aylık giderini ayrı bir hesapta tuttu, ardından kalan kısmı farklı yatırım araçlarına dağıttı."]),
+      ["Önce hangi sıra?","Ahmet’in 150.000 TL birikimi var. Aylık zorunlu gideri 25.000 TL ve 20.000 TL’lik pahalı bir kredi kartı borcu var.","Sıra: (1) acil durum fonu = 3 × 25.000 = 75.000 TL, likit bir hesapta tutulur, (2) pahalı borç kapatılır: 20.000 TL, (3) kalan yatırılır: 150.000 − 75.000 − 20.000 = 55.000 TL.","Yatırımdan önce sıra: acil durum fonu, pahalı borç, yatırım. Bu örnekte yatırılabilir tutar 55.000 TL’dir."]),
     EGD("f02","Risk ve getiri ilişkisi",4,[
       "Genel kural olarak daha yüksek beklenen getiri, daha yüksek risk demektir. Risk, getirinin dalgalanması ve zarar olasılığıdır.",
       "Düşük riskli araçlar (para piyasası, kısa vadeli borçlanma) daha istikrarlı ama sınırlı getiri sunar. Hisse senetleri uzun vadede daha yüksek getiri potansiyeli taşır ama kısa vadede sert dalgalanabilir.",
       "Her yatırımcının riske tahammülü farklıdır; önemli olan zarar gördüğünde panikle karar vermeyecek bir risk seviyesi seçmektir."],
       ["Yüksek getiri beklentisi daha yüksek risk taşır","Düşük risk istikrarlı ama sınırlı getiri demektir","Riske tahammül kişiye göre değişir"],
-      ["Panik testi","Ela’nın portföyü bir ayda %15 düşse ne yapardı? Cevabı “satarım” ise portföyünün onun için fazla riskli olduğunu fark etti ve hisse payını azalttı."]),
+      ["Kaldırabileceğin kayıptan geriye doğru","Ela’nın 100.000 TL’lik portföyünün %80’i hisse. Hisseler zor bir dönemde %25 düşebilir.","Portföy kaybı ≈ hisse payı × hisse düşüşü = 80.000 × %25 = 20.000 TL (portföyün %20’si). Bu kaybı kaldıramıyorsa hisse payını %40’a indirir: 40.000 × %25 = 10.000 TL (%10). Hisse payını, katlanabileceği en büyük kayıptan geriye doğru belirler.","Portföy kaybı yaklaşık hisse payı × hisse düşüşüdür. Kaldıramayacağın kayıp seviyesinden geriye doğru hisse payını belirle."]),
     EGD("f03","Likidite ve vade",4,[
       "Likidite, bir varlığın değer kaybetmeden ne kadar hızlı nakde çevrilebildiğidir. Vadesiz hesap en likit, gayrimenkul daha az likit varlıklardandır.",
       "Vade, yatırımın ne kadar süre tutulacağıdır. Kısa vadeli ihtiyaç için uzun vadeli ve oynak bir varlık seçmek riskli olabilir.",
       "Paranın ne zaman gerekeceği belli ise, yatırım aracı da vadeyi buna göre seçilmelidir."],
       ["Likidite: değer kaybetmeden hızlı nakde dönebilme","Vade, ihtiyacın zamanıyla uyumlu olmalı","Kısa vadeli ihtiyaca oynak varlık uygun değildir"],
-      ["Altı ay sonra gereken para","Mert altı ay sonra ödeyeceği vergi için biriktirdiği parayı hisse senedine koymak yerine para piyasası fonunda tuttu; çünkü bu süre içinde kayıp riskini almak istemedi."]),
+      ["Vade, ihtiyaç tarihine uymalı","Mert 6 ay sonra ödeyeceği 200.000 TL’lik vergi için biriktiriyor. Hisse fonu ya da para piyasası fonu arasında kalıyor.","Hisse fonu 6 ayda %20 düşerse 160.000 TL kalır ve 40.000 TL açık oluşur; bu tarih ertelenemez. Para piyasası fonu ya da vadesi 6 aya denk gelen katılma hesabında anapara dalgalanması çok düşüktür. Mert para ihtiyaç tarihinde lazım olduğu için ikinci seçeneği seçer.","Paranın gerekeceği tarihe göre araç seç. Kısa vadeli ihtiyaca oynak varlık koymak, kayıp riskini zamanlamaya bağlar."]),
     EGD("f04","Çeşitlendirme",4,[
       "Çeşitlendirme, tüm parayı tek bir varlığa yatırmak yerine farklı varlıklara dağıtmaktır. Bir varlık düşerken diğeri düşmeyebilir ve toplam dalgalanma azalır.",
       "Etkili çeşitlendirme için varlıkların birbirinden farklı davranması gerekir. Aynı sektörden beş hisse almak, gerçek bir çeşitlendirme sağlamaz.",
       "Fonlar, tek bir ürünle çok sayıda varlığa erişim sağladığı için çeşitlendirmenin pratik bir yoludur."],
       ["Farklı varlıklara dağıt","Birbirinden farklı davranan varlıklar seç","Fonlar kolay çeşitlendirme sağlar"],
-      ["Aynı sepet","Kaan beş farklı bankacılık hissesi almıştı. Sektör düşünce hepsinin birlikte düştüğünü görünce portföyüne altın ve para piyasası fonu da ekledi."]),
+      ["Aynı sektör, tek varlık","Kaan beş farklı perakende hissesi aldı. Sektör zor bir dönem yaşıyor ve hepsi %30 düşüyor. Alternatif olarak üç farklı varlığa eşit dağıtsaydı sonuçlar: −%30, %0 ve +%10 olacaktı.","Beş perakende hissesi birlikte hareket ettiği için portföy −%30 olur. Üç farklı varlıkta ortalama = (−30 + 0 + 10) ÷ 3 ≈ −%6,7. Çeşitlendirme, kaybı −%30’dan −%6,7’ye indirdi.","Aynı sektördeki hisseler tek varlık gibi hareket eder. Farklı davranan varlıklarla dağıtmak zararın etkisini azaltır."]),
     EGD("f05","Yatırımcı profili ve hedef",4,[
       "Yatırım hedefi; ne için, ne kadar sürede ve ne kadar tutarda birikim yapılacağını belirler: ev peşinatı, çocuk eğitimi, emeklilik gibi.",
       "Yatırımcı profili; yaş, gelir, hedef, vade ve riske tahammül düzeyine göre belirlenir. Aracı kurumlar ve bankalar bunun için anketler uygular.",
       "Hedef net değilse, doğru araç da seçilemez. Hedefi yazılı hale getirmek ve düzenli olarak gözden geçirmek, kararları tutarlı kılar."],
       ["Hedef: ne için, ne kadar sürede, ne kadar","Profil riske tahammülü de belirler","Hedef yazılı olmalı ve gözden geçirilmelidir"],
-      ["SMART hedef","Burcu “biraz birikim yapmak” yerine “36 ayda 300.000 TL peşinat biriktirmek” hedefini yazdı. Aylık ayırması gereken tutarı hesaplayıp araçlarını buna göre seçti."]),
+      ["Hedef ve aylık tutar","Burcu 36 ayda 300.000 TL ev peşinatı biriktirmek istiyor.","Getirisiz hesap: 300.000 ÷ 36 ≈ 8.333 TL/ay. Aylık %2 getiri varsaysaydı (garanti değil) gereken tutar: 300.000 ÷ 51,99 ≈ 5.770 TL/ay olurdu; çünkü bileşik getiri hedefin bir kısmını karşılar. Burcu planı getirisiz tutarla yapıp getiriyi fazladan bir güvence olarak görür.","Hedef ÷ ay sayısı getirisiz aylık tutarı verir. Getiri varsayımı gereken tutarı düşürür ama garanti değildir."]),
   ]},
   { ad:"Yatırım fonları", ozet:"Fon türleri, katılım fonları, TEFAS ve performans", dersler:[
     EGD("f06","Yatırım fonu nedir?",4,[
@@ -1580,31 +1580,31 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Fona katılan kişi, fon portföyünün küçük bir payına sahip olur. Pay fiyatı, fonun net varlık değerinin pay sayısına bölünmesiyle bulunur ve her iş günü açıklanır.",
       "Fon getirisi ve riski, fonun içeriğine göre değişir. Fon, mevduat gibi sabit getiri vaat etmez; getiri garantisi yoktur."],
       ["Fon ortak havuz ve profesyonel yönetimdir","Pay fiyatı = net varlık değeri ÷ pay sayısı","Getiri garantisi yoktur"],
-      ["Pay fiyatı","Bir fonun net varlık değeri 1.000.000 TL, pay sayısı 500.000 ise pay fiyatı 2 TL’dir. Deniz 1.000 pay alırsa fonun küçük bir kısmına sahip olur."]),
+      ["Pay fiyatı nasıl oluşur?","Bir fonun net varlık değeri 1.000.000 TL, pay sayısı 500.000. Fon bir gün varlıkları sayesinde %1 değer kazanıyor. Sonra yeni bir yatırımcı 20.200 TL yatırıyor.","Başlangıç pay fiyatı 1.000.000 ÷ 500.000 = 2 TL. %1 kazançla net varlık 1.010.000 TL olur, pay fiyatı 2,02 TL. Yeni yatırımcı 20.200 TL ile 20.200 ÷ 2,02 = 10.000 yeni pay alır; hem net varlık hem pay sayısı artar ve pay fiyatı 2,02 TL olarak kalır.","Pay fiyatı = net varlık değeri ÷ pay sayısı. Yatırım girişi fiyatı değiştirmez; fiyatı fonun varlıklarının değeri değiştirir."]),
     EGD("f07","Fon türleri",5,[
       "Fonlar içerdikleri varlıklara göre ayrışır. Para piyasası fonları kısa vadeli ve düşük riskli araçlara, borçlanma araçları fonları tahvil ve bonoya, hisse senedi fonları ise ağırlıklı olarak hisse senetlerine yatırım yapar.",
       "Değişken ve karma fonlar, yönetici esnekliğiyle farklı varlıklar arasında dağılım yapabilir. Fon sepeti fonları ise başka fonlara yatırım yapar. Serbest fonlar daha esnek stratejiler izleyebilir ve daha yüksek risk taşıyabilir.",
       "Fonun adı, strateji ve risk seviyesi hakkında ipucu verir; ancak karar vermeden önce izahname ve fon bilgi formuna da bakılmalıdır."],
       ["Para piyasası: kısa vade, düşük risk","Hisse fonu: ağırlıklı hisse, yüksek dalgalanma","Değişken, karma ve serbest fonlar esnektir"],
-      ["Doğru türü seçmek","Cem iki yıl içinde ihtiyaç duyacağı parayı hisse fonuna değil, daha düşük riskli bir borçlanma araçları fonuna yatırmaya karar verdi; çünkü hisse fonunun kısa vadede dalgalanabileceğini biliyordu."]),
+      ["En kötü senaryoyu karşılıyor mu?","Cem 2 yıl sonra 300.000 TL’ye ihtiyaç duyuyor. Hisse fonu zor bir dönemde %25 düşebilir.","Hepsini hisse fonuna koyarsa en kötü durumda 225.000 TL’ye düşer ve 75.000 TL açık verir. %70 borçlanma araçları fonu, %30 hisse fonu dağıtırsa en kötü durumda kayıp 90.000 × %25 = 22.500 TL olur ve 277.500 TL kalır. Cem hedefe yakın kalması için bu dağılımı seçer.","Hedef tarihte ihtiyaç duyulan tutarı en kötü senaryoda bile karşılamayan türden kaçın. Vade kısaldıkça düşük riskli türlere yönel."]),
     EGD("f08","Katılım fonları",4,[
       "Katılım fonları, yatırım stratejisi faizsiz esaslara uygun olacak şekilde tasarlanmış, uygunluğu bir kurulca denetlenen fonlardır. Faizli araçlar yerine kira sertifikası, katılma hesabı ve katılım endeksine uygun hisse gibi araçlar tercih edilir.",
       "Fonun kurucusu, uygunluk ilkelerini izahnamede belirtir. Bir fonun katılım fonu olup olmadığı, fon bilgi formundan ve fonun kategorisinden anlaşılabilir.",
       "Uygulamadaki Fon Getiri İzleme ekranında Katılıma Uygun Fonlar ve Tüm Fonlar görünümlerini karşılaştırabilirsin."],
       ["Strateji faizsiz esaslara uygundur","Uygunluk bir kurulca denetlenir","Fon Getiri İzleme’de ayrı görünüm vardır"],
-      ["Katılıma uygun mu?","Ali bir fonun katılım fonu olduğunu doğrulamak için fon bilgi formunu ve izahnameyi açtı; uygunluk kurulunun adı ve strateji bölümü orada yazılıydı."]),
+      ["Katılım fonunu üç yerden doğrula","Ali bir fonun katılım fonu olduğunu doğrulamak istiyor.","Üç kaynağı birbiriyle karşılaştırır: (1) izahnamenin yatırım stratejisi bölümünde faizsiz esaslara uygunluk yazıyor mu, (2) uygunluğu denetleyen kurulun adı ve görevi belirtiliyor mu, (3) uygulamadaki Fon Getiri İzleme ekranında “Katılıma Uygun Fonlar” filtresinde fon görünüyor mu?","Üç kaynak birbirini teyit etmeli: strateji metni, denetim kurulu bilgisi ve uygulamadaki katılıma uygun filtre."]),
     EGD("f09","TEFAS ve fon alım satımı",4,[
       "TEFAS, Türkiye Elektronik Fon Alım Satım Platformu’dur. Aracı kurumlar, bankalar ve portföy yönetim şirketleri aracılığıyla fon alım ve satımı bu platform üzerinden yapılır.",
       "Fon işlemlerinde fiyat, işlem anında değil, belirlenen fiyat açıklama zamanındaki pay fiyatı üzerinden gerçekleşir. Alım ve satım için işlem saatleri, valör (paranın hesaba geçiş süresi) ve minimum tutar fon türüne göre değişir.",
       "Bu yüzden bir fona girmeden önce işlem saatlerini ve paranın ne zaman nakde dönüşeceğini öğrenmek önemlidir."],
       ["TEFAS fon alım satım platformudur","Fiyat, açıklanan pay fiyatıyla belirlenir","Valör ve saat fon türüne göre değişir"],
-      ["Valörü öğrenmek","Nur bir fondan para çekeceği gün hesabına ne zaman geçeceğini bilmediği için önce fonun valör bilgisine baktı ve ihtiyacını buna göre planladı."]),
+      ["Para ne zaman ulaşır?","Nur Cuma 14:00’te bir fonu satmak istiyor. Fonun işlem kesim saati 13:30, valörü bir iş günü (T+1, varsayımsal). Para Salı sabahı lazım.","Emir kesim saatinden sonra verildiği için bir sonraki iş günü fiyatıyla (Pazartesi) işlem görür. Valör T+1 olduğundan para Salı günü hesaba geçer. Salı sabahı lazımsa gecikme riski var; Nur satış emrini Perşembe vererek bu riski ortadan kaldırır.","Kesim saati ve valör, paranın ne zaman ulaşacağını belirler. İhtiyaç gününden en az 2 iş günü önce sat."]),
     EGD("f10","Fon getirisini ve riskini okumak",5,[
       "Fon performansı yalnızca bir dönemlik getiriyle değerlendirilmez. Günlük, haftalık, aylık, yıllık getiriler birlikte incelenmeli, aynı kategorideki fonlarla karşılaştırılmalıdır.",
       "Getiri yanında risk göstergelerine bakmak gerekir: dalgalanma (standart sapma), fon büyüklüğü ve yatırımcı sayısı fonun istikrarı hakkında fikir verir.",
       "Geçmiş getiri, gelecek getirinin garantisi değildir. Son dönemde çok yükselen bir fon, ileride aynı performansı göstermeyebilir."],
       ["Farklı dönemlerin getirilerini birlikte oku","Risk ve büyüklük de önemlidir","Geçmiş getiri garanti değildir"],
-      ["Tek dönem tuzağı","Zeynep bir fonun son bir aylık getirisine bakıp seçmeyi düşündü, ama yıllık getiri ve dalgalanmayı da incelediğinde fonun çok oynak olduğunu fark etti ve kararını yeniden değerlendirdi."]),
+      ["Tek dönem getirisi yanıltır","Zeynep iki fonu karşılaştırıyor. Fon A: son 1 ay +%8, yıllık +%20, yıllık dalgalanma %25. Fon B: son 1 ay +%2, yıllık +%35, yıllık dalgalanma %10 (varsayımsal).","Yalnızca son aya bakarsa A seçilir. Yıllık getiri ve dalgalanmayı birlikte kullanırsa getiri ÷ dalgalanma: A için 20 ÷ 25 = 0,8; B için 35 ÷ 10 = 3,5. B birim risk başına çok daha fazla getiri sağlamıştır. Ayrıca iki fonun aynı kategoride olduğunu da doğrular.","Tek dönem getirisi yanıltır. Yıllık getiriyi dalgalanmayla birlikte oku ve aynı kategorideki fonlarla karşılaştır."]),
   ]},
   { ad:"Maliyet, vergi ve seçim", ozet:"Ücretler, vergi, para piyasası, BYF ve altın fonları", dersler:[
     EGD("f11","Fon maliyetleri",4,[
@@ -1612,31 +1612,31 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Bazı fonlarda giriş veya çıkış komisyonu, performans ücreti bulunabilir. Aynı kategorideki iki fonun getirisi benzerse, ücreti düşük olanın uzun vadede avantajı vardır.",
       "Maliyet bilgisi fon bilgi formunda yer alır; yatırımdan önce bu bölümü kontrol etmek gerekir."],
       ["Giderler fon fiyatına yansır","Komisyon ve performans ücreti olabilir","Ücret bilgisi bilgi formunda yazar"],
-      ["Küçük fark, büyük etki","İki fon aynı getiriyi sağlıyor ama birinin yıllık ücreti daha yüksek. Deniz uzun vadede bu farkın birikerek getiriyi azalttığını hesaplayıp düşük ücretli fonu seçti."]),
+      ["Küçük ücret farkının 10 yıllık etkisi","İki fon aynı yıllık %20 brüt getiri sağlıyor. A’nın yıllık gideri %1, B’nin %2,5. 100.000 TL 10 yıl yatırılacak (getiri sabit varsayımıyla).","A net %19: 100.000 × 1,19^10 ≈ 569.468 TL. B net %17,5: 100.000 × 1,175^10 ≈ 501.624 TL. Fark yaklaşık 67.844 TL. Yıllık yalnızca 1,5 puanlık gider farkı 10 yılda bu kadar büyüdü.","Küçük görünen ücret farkı bileşik etkiyle büyür. Aynı kategorideki fonlarda gider oranını mutlaka karşılaştır."]),
     EGD("f12","Fon kazançlarının vergilendirilmesi",3,[
       "Fon kazançları vergiye tabidir. Vergi çoğunlukla stopaj yoluyla kaynağında kesilir. Stopaj oranları fon türüne, elde tutma süresine ve kişinin gerçek veya tüzel olmasına göre değişir.",
       "Oranlar zaman zaman değiştiği için, güncel oranı resmî mevzuattan veya aracı kurumun duyurularından öğrenmek gerekir.",
       "Net getiri hesaplanırken vergi etkisi de hesaba katılmalıdır; brüt getiri ile net getiri farklıdır."],
       ["Vergi çoğunlukla stopajla kesilir","Oran fon türü ve süreye göre değişir","Net getiri = brüt getiri − vergi"],
-      ["Brüt ve net","Fatma iki yatırımın brüt getirisini karşılaştırırken vergi sonrası net getiriye baktı; çünkü kendi vergi durumuna göre sıralama değişebilirdi."]),
+      ["Net getiri üzerinden karşılaştırma","Fatma iki yatırımı karşılaştırıyor. A: brüt %40 getiri, stopaj %10. B’nin stopajı %17,5. (Oranlar varsayımsaldır; gerçek oranlar mevzuata göre değişir.)","A net = 40 × (1 − 0,10) = %36. B’nin aynı net getiriyi vermesi için brüt getirisi 36 ÷ (1 − 0,175) ≈ %43,6 olmalı. B brüt %42 verseydi net 42 × 0,825 = %34,65 olurdu ve A daha kârlı çıkardı.","Karşılaştırmayı vergi sonrası net getiri üzerinden yap. Stopaj farkı, brüt getirideki farkı tamamen yok edebilir."]),
     EGD("f13","Para piyasası fonları",4,[
       "Para piyasası fonları, kısa vadeli ve düşük riskli araçlara (repo, vadeli mevduat, kısa vadeli borçlanma gibi) yatırım yapar. Günlük getirisi genellikle istikrarlıdır.",
       "Bu fonlar, kısa vadeli birikimin değerlendirilmesi için kullanılır. Dalgalanma düşük olsa da getiri garanti değildir; faiz ortamı değişince getiri de değişir.",
       "Katılım ilkelerine uygun para piyasası fonları da vardır. Uygulamadaki Para Piyasası filtresi bu fonları ayırır."],
       ["Kısa vadeli, düşük riskli araçlara yatırım yapar","Getiri faiz ortamına göre değişir","Katılım uyumlu para piyasası fonları vardır"],
-      ["Bekleme parası","Gül bir ev alımı için biriktirdiği parayı, alım gününe kadar para piyasası fonunda bekletti. Günlük getirinin yatırım kararından önce daha sakin seyrettiğini gördü."]),
+      ["Bekleme parası için araç","Gül 4 ay sonra yapacağı ev alımı için 500.000 TL peşinat biriktirdi. Para piyasası fonu yıllık %36 brüt (varsayımsal) getiri gösteriyor.","Beklenen brüt getiri = 500.000 × 0,36 × 120 ÷ 365 ≈ 59.178 TL. Bu tutar garanti değildir: faiz ortamı düşerse getiri de düşer. Anapara dalgalanması ise çok düşüktür, bu yüzden 4 aylık bekleme için uygundur. Gül ayrıca fonun valörünü kontrol edip alım gününden iki iş günü önce satış emri verir.","Bekleme parası düşük riskli, hızlı çıkılabilir fonda durur. Getiri faiz ortamına göre değişir ve garanti değildir."]),
     EGD("f14","Borsa yatırım fonları ve endeks fonları",4,[
       "Borsa yatırım fonu (BYF), fon payları borsada hisse gibi alınıp satılabilen fonlardır. Genellikle bir endeksi, altını veya bir varlık grubunu izler.",
       "Endeks fonu, bir endeksin (ör. BIST 100) performansını yansıtmayı amaçlar. Aktif yönetim yerine endeksin kendisini takip ettiği için ücretler çoğunlukla daha düşüktür.",
       "BYF’ler gün içinde işlem görebildiği için fiyat sürekli değişir; normal fonlar ise günde bir kez açıklanan fiyatla işlem görür."],
       ["BYF borsada işlem görür","Endeks fonu bir endeksi izler","Normal fon günde bir fiyatla işlem görür"],
-      ["Gün içi işlem","Eren endeksi izlemek isteyip gün içinde alım satım yapabilmek için BYF’yi seçti; ama sık işlem yapmanın komisyon maliyeti getirdiğini de hesaba kattı."]),
+      ["Sık işlemin maliyeti","Eren, 10 TL’lik bir BYF’den 1.000 adet (10.000 TL) alıyor. Alış ve satışta %0,1’er komisyon, alış-satış farkı (makas) yaklaşık %0,2 (varsayımsal).","Bir gidiş-dönüş maliyeti = %0,1 + %0,1 + %0,2 = %0,4 (40 TL). BYF %5 yükselirse net kazanç %4,6 olur. Ama ayda 20 kez alıp satarsa maliyet 20 × %0,4 = %8’e çıkar ve getiriyi yer.","BYF’de her işlemin maliyeti vardır. Sık alım satım, getiriyi maliyetle eritir; bu örnekte 20 işlem ≈ %8."]),
     EGD("f15","Altın ve kıymetli maden fonları",4,[
       "Altın fonları, portföylerinin önemli bir kısmını altına veya altına dayalı araçlara yatıran fonlardır. Fiziki altın saklama zorluğunu ortadan kaldırır.",
       "Altın fiyatı ons altın fiyatına ve dolar/TL kuruna bağlıdır; bu yüzden TL cinsinden değeri hem küresel altın hem de kur hareketinden etkilenir.",
       "Katılım ilkelerine uygun altın fonları da bulunur. Uygulamadaki fon filtresinden Altın kategorisine bakılabilir."],
       ["Fiziki saklama zorluğu yoktur","Değer ons altın ve dolar/TL’ye bağlıdır","Katılım uyumlu altın fonları bulunur"],
-      ["İki etken","Ons altın fiyatı sabit kaldığı halde dolar yükselince altın fonu TL cinsinden değer kazandı. Mina bunun kur etkisinden kaynaklandığını fark etti."]),
+      ["Altın fonu neden yükseldi?","Ons altın 2.000 dolarda sabit kaldı ama dolar/TL kuru 40’tan 46’ya (%15) çıktı. Mina’nın altın fonu yükseldi.","Gram altın (TL) = ons ÷ 31,1035 × kur. Kur 40 iken: 2.000 ÷ 31,1035 × 40 ≈ 2.572 TL. Kur 46 iken ≈ 2.958 TL: %15 artış. Altın fonunun TL değeri de ücretler hariç yaklaşık %15 yükselir; yani getirinin tamamı kurdan geldi.","Altının TL değeri ons altın ve kura bağlıdır. Ons sabitken kur %15 artarsa altın fonu da yaklaşık %15 yükselir."]),
   ]},
   { ad:"Hisse senedi", ozet:"Hisse, endeks, temettü, temel analiz ve emir türleri", dersler:[
     EGD("f16","Hisse senedi nedir?",4,[
@@ -1644,31 +1644,31 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Borsa İstanbul’da işlem gören hisselerin fiyatı arz ve talebe göre sürekli değişir. Şirketin performansı, sektör beklentileri ve genel piyasa koşulları fiyatı etkiler.",
       "Hisse yatırımı kısa vadede yüksek dalgalanma gösterebilir; zarar ihtimali vardır. Uzun vadeli bakış ve çeşitlendirme riski azaltmaya yardımcı olur."],
       ["Hisse, şirketin sermayesinde paydır","Temettü ve oy hakkı verir","Fiyat arz-talebe göre değişir"],
-      ["Sahiplik","Elif bir şirketin hissesini alınca, o şirketin çok küçük bir ortağı oldu. Şirket kâr dağıtırsa payı oranında temettü alma hakkı kazandı."]),
+      ["Temettü ne kadar eder?","Elif bir şirketin 1.000 hissesine sahip. Şirketin toplam 1.000.000 adet hissesi var. Şirket 5.000.000 TL kâr etti ve %40’ını dağıtmaya karar verdi.","Dağıtılan kâr = 5.000.000 × %40 = 2.000.000 TL. Hisse başına = 2.000.000 ÷ 1.000.000 = 2 TL. Elif’in payı = 1.000 × 2 = 2.000 TL. Elif şirketin %0,1’ine sahiptir (1.000 ÷ 1.000.000).","Temettü = dağıtılan kâr ÷ hisse sayısı × sahip olunan hisse. Hissedarlık kâr paylaşımıdır, fiyat garantisi değildir."]),
     EGD("f17","Endeksler ve BIST",4,[
       "Endeks, bir grup hissenin ortak performansını gösterir. BIST 100, Borsa İstanbul’daki büyük hisselerden oluşan ve en çok izlenen endekstir; BIST 30 ise en büyük ve en likit 30 hisseyi içerir.",
       "Endeksler piyasanın genel yönünü gösterir. Bir hisse endeksten farklı hareket edebilir.",
       "Katılım endeksleri faizsiz finans ilkelerine uygun şirketleri içerir. Uygulamadaki BİST Hisse Veri İzleme ekranında BİST ve katılım endeksi görünümlerini izleyebilirsin."],
       ["Endeks, hisse grubunun ortak performansıdır","BIST 100 en çok izlenen endekstir","Hisse endeksten farklı hareket edebilir"],
-      ["Endeks ve hisse","Endeks yükselirken portföyündeki hissenin düştüğünü gören Aylin, hissenin kendi sektörüne ait bir haberden etkilendiğini fark etti."]),
+      ["Hisse hareketini üç katmanda oku","Aylin’in hissesi bir ayda %3 düştü. Aynı dönemde BIST 100 %2 yükseldi, hissenin sektör endeksi %4 düştü.","Üç katmana bakar: piyasa +%2, sektör −%4, hisse −%3. Hisse endeksin 5 puan altında kalmış ama kendi sektörüne göre 1 puan daha iyi: düşüşün büyük kısmı sektör kaynaklıdır. Aylin bu yüzden şirkete özel bir sorun aramak yerine sektör haberlerine bakar.","Hisse hareketini piyasa, sektör ve şirket olarak ayır. Bu örnekte düşüşün büyük kısmı sektör kaynaklıdır."]),
     EGD("f18","Temettü, bedelsiz ve bedelli",5,[
       "Temettü, şirketin kârından hissedarlara dağıttığı paydır. Temettü verimi, hisse başına temettünün hisse fiyatına oranıdır.",
       "Bedelsiz sermaye artırımında şirket, mevcut hissedarlara karşılıksız yeni pay verir; hisse sayısı artar ama toplam değer değişmez, fiyat düzeltilir. Bedelli artırımda ise hissedar yeni pay almak için ödeme yapar.",
       "Bu işlemler fiyat grafiğinde ani değişiklik gibi görünebilir; bu yüzden düzeltilmiş fiyatlara bakmak gerekir."],
       ["Temettü kâr payıdır","Bedelsizde ödeme yok, bedellide ödeme vardır","Fiyat düzeltmesine dikkat"],
-      ["Bedelsiz sonrası","Bir hisse %100 bedelsiz yaptı ve fiyat yarıya indi. Kaan bunu zarar sanmadı; elindeki pay sayısının iki katına çıktığını görüp toplam değerin değişmediğini kontrol etti."]),
+      ["Bedelsiz zarar mı?","Kaan’ın 1.000 hissesi var, fiyat 100 TL (portföy 100.000 TL). Şirket %100 bedelsiz sermaye artırımı yaptı. Hisse başına 5 TL temettü açıkladı.","Bedelsiz sonrası Kaan’ın 2.000 hissesi olur ve fiyat 50 TL’ye düşer: 2.000 × 50 = 100.000 TL, değişmez. Temettü de bölünmeye göre düzelir: hisse başına 2,50 TL, 2.000 × 2,50 = 5.000 TL; önceki hesapla (1.000 × 5) aynı.","Bedelsiz bölünmede pay sayısı artar, fiyat düşer; toplam değer ve toplam temettü değişmez. Zarar değildir."]),
     EGD("f19","Temel analiz: F/K ve PD/DD",5,[
       "Temel analiz, şirketin finansal tablolarını ve değerini inceleyerek hissenin pahalı mı ucuz mu olduğunu değerlendirmeyi amaçlar.",
       "Fiyat/Kazanç (F/K) oranı, hisse fiyatının hisse başına kâra oranıdır. Piyasa Değeri/Defter Değeri (PD/DD) ise şirketin piyasa değerinin özkaynağına oranıdır.",
       "Bu oranlar tek başına karar vermek için yeterli değildir; sektör ortalamaları ve şirketin büyüme beklentisiyle birlikte yorumlanmalıdır."],
       ["F/K: fiyat ÷ hisse başına kâr","PD/DD: piyasa değeri ÷ defter değeri","Oranlar sektörle birlikte yorumlanır"],
-      ["Rakam deneme","Hisse fiyatı 50 TL, hisse başına kâr 5 TL ise F/K 10’dur. Deniz aynı sektördeki diğer şirketlerin F/K oranına da bakarak 10’un yüksek mi düşük mü olduğunu değerlendirdi."]),
+      ["F/K ucuz mu diyor?","Deniz’in baktığı şirketin hisse fiyatı 50 TL, hisse başına kârı 5 TL, hisse başına defter değeri 40 TL. Sektörün ortalama F/K’sı 14.","F/K = 50 ÷ 5 = 10. PD/DD = 50 ÷ 40 = 1,25. Sektör ortalamasına göre F/K yaklaşık (14 − 10) ÷ 14 ≈ %29 daha düşük: ucuz görünüyor. Ama Deniz kârın tek seferlik mi sürekli mi olduğunu ve şirketin büyüme beklentisini de kontrol eder.","F/K tek başına ucuz demek değildir. Sektör ortalaması ve kârın sürdürülebilirliğiyle birlikte yorumlanır."]),
     EGD("f20","Emir türleri ve işlem mantığı",4,[
       "Piyasa emri, mevcut en iyi fiyattan hemen işlem yapmayı sağlar. Limit emri ise belirlediğin fiyat veya daha iyi bir fiyattan işlem yapılmasını ister; fiyat o seviyeye gelmezse işlem gerçekleşmez.",
       "Alış ve satış arasındaki farka makas denir. Likiditesi düşük hisselerde makas geniş olabilir.",
       "Her işlemde komisyon ve vergiler maliyet oluşturur. Sık işlem yapmak bu maliyetleri artırır."],
       ["Piyasa emri hemen gerçekleşir","Limit emri belirlediğin fiyatı bekler","Makas ve komisyon maliyettir"],
-      ["Limit emri","Seda bir hisseyi 100 TL’den almak istiyordu ama fiyat 102 TL idi. 100 TL’den limit emri verdi; fiyat düşmezse işlem gerçekleşmeyecekti ve bunu baştan kabul etti."]),
+      ["Piyasa emri mi, limit emri mi?","Seda’nın almak istediği hissede alış-satış fiyatları 101,90 / 102,00 TL. 1.000 adet almak istiyor ve 100 TL’yi hedefliyor.","Piyasa emriyle anında 102,00 TL’den alır: 102.000 TL. 100 TL limit emri verirse fiyat 100’e inerse 100.000 TL öder (2.000 TL daha ucuz), ama fiyat o seviyeye hiç inmezse işlem gerçekleşmez. Seda bunu bilerek limit emrini seçer.","Piyasa emri kesinlik, limit emri fiyat kontrolü sağlar. İkisi arasındaki takas: gerçekleşme garantisi mi, fiyat garantisi mi?"]),
   ]},
   { ad:"Sabit getirili araçlar ve strateji", ozet:"Tahvil, sukuk, altın-döviz, portföy ve davranış", dersler:[
     EGD("f21","Tahvil, bono ve faiz ilişkisi",5,[
@@ -1676,31 +1676,31 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Faiz oranları ile tahvil fiyatları ters yönde hareket eder: faizler yükselirse mevcut tahvillerin fiyatı düşer, faizler düşerse tahvil fiyatı yükselir.",
       "Vadeye kadar tutulan tahvilde getiri bellidir; vade dolmadan satılırsa fiyat dalgalanması getiriyi değiştirebilir."],
       ["Bono kısa, tahvil uzun vadelidir","Faiz yükselirse tahvil fiyatı düşer","Vadeye kadar tutulursa getiri bellidir"],
-      ["Faiz artışı","Faizler artınca elindeki düşük getirili tahvilin fiyatının düştüğünü gören Hakan, vadeye kadar tutmayı planladığı için kaybı kalıcı saymadı."]),
+      ["Faiz artınca tahvil neden düşer?","Hakan’ın 1.000 TL nominal, yıllık %30 kuponlu, 4 yıl vadesi kalmış bir tahvili var. Piyasa faizleri %40’a çıktı.","Yeni tahvillerin getirisi %40 olduğu için bu tahvilin fiyatı, kalan kuponlar ve anaparanın %40 ile iskonto edilmesiyle bulunur: yaklaşık 815 TL (−%18,5). Hakan vadeye kadar tutarsa 4 yıl boyunca 300 TL kupon ve sonunda 1.000 TL alır; kayıp yalnızca satarsa gerçekleşir.","Faiz yükselirse tahvil fiyatı düşer. Vadeye kadar tutan yatırımcı anapara ve kuponu alır; fiyat kaybı ancak vade dolmadan satarsa gerçekleşir."]),
     EGD("f22","Kira sertifikası yatırımcı gözüyle",4,[
       "Kira sertifikası, faizsiz esaslara uygun bir sabit getirili araçtır. Getiri, dayanak varlıktan elde edilen kira gelirine dayanır.",
       "Yatırımcı; ihraççıyı, vadeyi, getiri yapısını (sabit veya değişken), dayanak varlığı ve ikincil piyasada işlem görüp görmediğini kontrol etmelidir.",
       "Sertifikaların bir kısmı borsada işlem görür; bu yüzden vade dolmadan satış ve fiyat dalgalanması mümkündür."],
       ["Getiri kira gelirine dayanır","İhraççı, vade ve dayanak varlık kontrol edilir","İkincil piyasada fiyat dalgalanabilir"],
-      ["Kontrol listesi","Burcu bir kira sertifikasına yatırım yapmadan önce ihraççı, vade, getiri tipi ve işlem gördüğü piyasayı bir listeye yazdı ve eksik bilgi kalmadığını doğruladı."]),
+      ["Vadeden önce satmanın fiyatı","Burcu’nun 100.000 TL nominal, 6 ayda bir 18.000 TL kira ödeyen 2 yıl vadeli sertifikasından 1 yıl sonra 2 ödeme kaldı. Piyasa 6 aylık %20 getiri bekliyor (varsayımsal).","Vadeye kadar tutarsa toplam 4 × 18.000 + 100.000 = 172.000 TL alır. Şimdi satmak isterse alıcı kalan nakit akışını %20 ile iskonto eder: 18.000 ÷ 1,2 + 118.000 ÷ 1,44 ≈ 96.944 TL (−%3,1). Burcu vadeyi beklemek ile satmak arasındaki farkı bu hesapla görür.","Vadeye kadar tutulursa ödemeler bellidir. Vade dolmadan satışta piyasa getirisi artmışsa fiyat nominalin altında kalabilir."]),
     EGD("f23","Altın ve döviz yatırımı",4,[
       "Altın ve döviz, TL’deki değer kaybına karşı koruma amacıyla tercih edilir. İkisi de faiz veya kâr payı getirmez; kazanç yalnızca fiyat artışından gelir.",
       "Kur ve altın fiyatları kısa vadede sert dalgalanabilir. Uzun vadede enflasyonu yakalamayı garanti etmez.",
       "Bu yüzden bu araçlar tek başına değil, portföyün bir parçası olarak ele alınmalıdır."],
       ["Kazanç yalnızca fiyat artışından gelir","Kısa vadede sert dalgalanabilir","Portföyün bir parçası olmalıdır"],
-      ["Tek araç riski","Ahmet tüm birikimini dolara yatırmıştı. Kur bir süre geriledi. Bu deneyimden sonra birikimini altın, döviz ve katılma hesabı arasında dağıttı."]),
+      ["Tek araç yerine üçe bölmek","Ahmet 100.000 TL’sini yalnızca dolara yatırdı; dolar %5 düştü. Alternatif olarak üçe bölseydi: dolar −%5, altın +%8 (TL), katılma hesabı +%3 olacaktı.","Yalnızca dolarda sonuç −%5 (−5.000 TL). Üçe bölünmüş portföyde ortalama = (−5 + 8 + 3) ÷ 3 = +%2 (+2.000 TL). Ahmet dalgalanmayı azaltmanın sonucu garantilemediğini, yalnızca riski yaydığını not alır.","Tek araçta −%5 olan sonuç, üç araca bölününce +%2 olabilir. Dağıtım dalgalanmayı azaltır ama getiriyi garanti etmez."]),
     EGD("f24","Portföy oluşturma ve yeniden dengeleme",5,[
       "Portföy, sahip olunan tüm yatırım araçlarının toplamıdır. Varlık dağılımı, hangi varlıkta ne kadar bulunduğunu gösterir ve getirinin büyük bölümünü bu dağılım belirler.",
       "Zamanla bazı varlıklar değer kazanır, bazıları kaybeder ve dağılım hedeften sapar. Yeniden dengeleme, portföyü belirlenen hedef dağılıma geri döndürmektir.",
       "Yeniden dengeleme belirli aralıklarla (ör. yılda bir) veya dağılım belirli bir eşiği aştığında yapılabilir. Uygulamadaki Portföyüm ekranı, varlıkların dağılımını izlemene yardımcı olur."],
       ["Varlık dağılımı getirinin büyük kısmını belirler","Yeniden dengeleme hedefe dönmektir","Portföyüm ekranı dağılımı gösterir"],
-      ["%60–%40 hedefi","Hedef dağılımı %60 hisse, %40 sabit getirili olan Eylül’ün hisse payı yükselişle %72’ye çıktı. Hedefe dönmek için hisselerin bir kısmını satıp sabit getirili araçlara aktardı."]),
+      ["Yeniden dengeleme kaç lira?","Eylül’ün hedefi %60 hisse, %40 sabit getirili. 1.000.000 TL’lik portföy bir yılda hisse +%20, sabit getirili +%5 getirdi.","Hisse 600.000 × 1,20 = 720.000 TL, sabit getirili 400.000 × 1,05 = 420.000 TL; toplam 1.140.000 TL ve hisse payı %63,2. Hedef hisse tutarı 0,60 × 1.140.000 = 684.000 TL. Bu yüzden 720.000 − 684.000 = 36.000 TL’lik hisse satıp sabit getirili araçlara aktarır; sabit getirili 456.000 TL (%40) olur.","Yeniden dengeleme, yükselen varlığın bir kısmını satıp gerideki varlığa aktarmaktır. Burada işlem tutarı 36.000 TL’dir."]),
     EGD("f25","Yatırımcıların yaptığı hatalar",5,[
       "Yatırımcıların sık yaptığı hatalardan biri sürü davranışıdır: herkes aldığı için almak, herkes sattığı için satmak. Bu, genellikle zirveden alıp dipte satmaya yol açar.",
       "Kayıptan kaçınma, kaybeden bir yatırımı “yeniden yükselir” umuduyla elde tutmak ve kazanan yatırımı erken satmaktır. Aşırı güven ise yeterli araştırma yapmadan büyük pozisyon almaktır.",
       "Bu hataları azaltmak için yazılı bir yatırım planı yapmak, düzenli ve küçük tutarlarla yatırım yapmak, duygusal kararlardan kaçınmak ve aşırı işlemden uzak durmak yardımcı olur."],
       ["Sürü davranışı zirveden almaya yol açar","Kayıptan kaçınma ve aşırı güven yaygındır","Yazılı plan ve düzenli yatırım yardımcı olur"],
-      ["Plan olmadan işlem","Kerem sosyal medyada bir hissenin yükseldiğini görüp plansız aldı; fiyat düşünce paniğe kapılıp sattı. Sonraki seferde alış fiyatı, hedef fiyat ve çıkış koşulunu önceden yazmaya karar verdi."]),
+      ["Plansız işlem, panik ve plan","Kerem sosyal medyada bir hisse için “yükseliyor” gördü, 100 TL’den aldı. Fiyat 85 TL’ye inince panikle sattı; sonra fiyat 130 TL’ye çıktı.","Gerçekleşen kayıp hisse başına 15 TL, kaçırılan kazanç 45 TL. Plan yapsaydı yazılı kural olurdu: giriş 100, hedef 130, zarar kes 90 ve pozisyon boyutu portföyün %5’i. Zarar kes 90’da çalışırsa kayıp −%10 × %5 = portföyün %0,5’i olurdu.","Plan önceden yazılır: giriş, hedef, zarar kes ve pozisyon boyutu. Panik yerine kural işler; burada en kötü durumda portföy kaybı %0,5’tir."]),
   ]},
   ],
   sorular:[
@@ -1736,31 +1736,31 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Bir ay boyunca tüm harcamaları kaydetmek, çoğu kişi için sürpriz sonuçlar çıkarır; küçük harcamalar toplamda büyük tutarlara ulaşabilir.",
       "Kayıt tutmak için bir defter, tablo veya uygulama kullanılabilir. Önemli olan düzenli ve dürüst kayıttır."],
       ["Önce gelir ve giderleri görünür kıl","Giderler sabit ve değişken olarak ayrılır","Küçük harcamalar toplamda büyür"],
-      ["30 günlük kayıt","Elif bir ay boyunca harcamalarını not etti ve kahve ile yemek siparişi için ayda yaklaşık 3.000 TL harcadığını gördü. Bu, aklındaki rakamdan çok daha yüksekti."]),
+      ["Kalanı bulmak","Elif’in aylık geliri 55.000 TL. Kira 18.000, faturalar 4.000, abonelikler 1.000; market 12.000, ulaşım 3.000, dışarıda yeme-içme 6.000 TL.","Sabit giderler 23.000 TL, değişken giderler 21.000 TL; toplam 44.000 TL. Kalan = 55.000 − 44.000 = 11.000 TL (gelirin %20’si). Dışarıda yeme-içme gelirin %10,9’una denk geliyor; tasarruf potansiyeli en çok değişken kalemlerde.","Kayıt tutunca “kalan” rakamı bulunur. Tasarruf potansiyeli çoğunlukla değişken giderlerdedir."]),
     EGD("o02","Bütçe yöntemleri",4,[
       "50/30/20 yönteminde gelirin %50’si zorunlu giderlere, %30’u isteklere, %20’si tasarruf ve borç ödemesine ayrılır. Oranlar kişisel durumlara göre değiştirilebilir.",
       "Sıfır tabanlı bütçede gelirin her lirası bir kategoriye atanır; gelir eksi tüm ayırmalar sıfır olur. Zarf yönteminde ise her kategori için nakit veya sanal zarf belirlenir.",
       "Doğru yöntem, sürdürebildiğin yöntemdir. Basit bir yöntem, karmaşık ama bırakılan bir yöntemden iyidir."],
       ["50/30/20 başlangıç için pratik bir kuraldır","Sıfır tabanlı bütçede her lira atanır","Sürdürülebilir yöntem en iyisidir"],
-      ["60.000 TL’lik gelir","Gelir 60.000 TL ise 50/30/20 ile 30.000 TL zorunlu gider, 18.000 TL istek, 12.000 TL tasarruf ve borç ödemesidir. Burak kirası yüksek olduğu için oranı 60/20/20 olarak uyarladı."]),
+      ["Oranı kendine uyarlamak","Burak’ın geliri 60.000 TL. Zorunlu giderleri 36.000 TL (%60). 50/30/20 kuralını uygulamak istiyor.","50/30/20 ile zorunlu gider 30.000 TL olmalıydı; Burak’ta 36.000 TL. Oranı 60/20/20’ye uyarlar: 36.000 zorunlu, 12.000 istek, 12.000 tasarruf. Tasarruf payını sıfırlamak yerine isteklerden keser.","50/30/20 bir başlangıçtır. Zorunlu giderler yüksekse oranı uyarla ama tasarruf payını sıfırlama."]),
     EGD("o03","İhtiyaç, istek ve dürtüsel harcama",4,[
       "İhtiyaç, yaşamı sürdürmek için gerekli olan harcamalardır: barınma, gıda, ulaşım, sağlık. İstek ise yaşamı kolaylaştıran ama zorunlu olmayan harcamalardır.",
       "Dürtüsel harcama, planlanmadan, anlık bir duyguyla yapılan alışverişlerdir. İndirimler, reklamlar ve taksit imkânı bu harcamayı kolaylaştırır.",
       "Büyük harcamalarda 24-48 saat bekleme kuralı, dürtüsel kararları azaltmaya yardımcı olur. Bekledikten sonra hâlâ istiyorsan, bunu bütçene yerleştirebilirsin."],
       ["İhtiyaç zorunlu, istek isteğe bağlıdır","Dürtüsel harcama plansızdır","24-48 saat bekleme kuralı yardımcı olur"],
-      ["48 saat kuralı","Seda bir telefon için indirim görünce hemen almak istedi. 48 saat bekledi; ikinci gün heyecan azalınca eski telefonunun hâlâ iş gördüğünü fark edip almaktan vazgeçti."]),
+      ["Üç soru testi","Seda’nın telefonu çalışıyor ama 40.000 TL’lik yeni bir modelin indiriminden etkilendi.","Üç soru sorar: (1) ihtiyaç mı, istek mi? (2) nakit karşılığı var mı, yoksa taksitle mi alacak? (3) 48 saat sonra hâlâ istiyor mu? Ayrıca kullanım başına maliyete bakar: 3 yıl kullanırsa 40.000 ÷ 36 ≈ 1.111 TL/ay. Mevcut telefonunu değiştirmenin faydası bu tutara değer mi?","Büyük alımlarda üç soru: ihtiyaç mı? Nakitle mi? 48 saat sonra hâlâ istiyor muyum?"]),
     EGD("o04","Tasarruf alışkanlığı",4,[
       "“Önce kendine öde” ilkesi, gelir geldiğinde birikimi ilk olarak ayırmak ve geri kalanı harcamak demektir. Kalan parayı biriktirmeyi beklemek çoğu zaman sonuç vermez.",
       "Otomatik transfer, bu alışkanlığı kolaylaştırır: maaş gününde belirli bir tutar otomatik olarak birikim hesabına aktarılır.",
       "Küçük ama düzenli tutarlar, zamanla büyük birikimlere dönüşür. Tutarı artırmak için gelir artışlarının bir kısmını tasarrufa ayırmak etkilidir."],
       ["Önce birikimi ayır, kalanı harca","Otomatik transfer alışkanlığı kolaylaştırır","Gelir artışının bir kısmını birikime ayır"],
-      ["Otomatik aktarım","Can maaşının %10’unu maaş günü otomatik olarak katılma hesabına aktaracak şekilde talimat verdi. Altı ay sonra bu birikimi fark etmeden biriktirdiğini gördü."]),
+      ["Önce kendine öde","Can’ın maaşı 50.000 TL. Maaş gününde %10’unu otomatik birikime aktarıyor. Bir yıl sonra maaşı %30 artıyor.","Aylık birikim 5.000 TL, yılda 60.000 TL. Zamlı maaş 65.000 TL: artış 15.000 TL. Artışın yarısını (7.500 TL) birikime ekler: aylık birikim 12.500 TL (maaşın %19,2’si) olur ve yaşam standardı da artışın diğer yarısıyla yükselir.","Otomatik %10 ile yılda 60.000 TL birikir. Zamlarda artışın bir kısmını da ayırmak tasarruf oranını sessizce yükseltir."]),
     EGD("o05","Hedef belirleme",4,[
       "Finansal hedefler; kısa (1 yıldan az), orta (1–5 yıl) ve uzun vadeli (5 yıldan fazla) olarak ayrılır. Her hedef için tutar ve tarih belirlenmelidir.",
       "SMART yaklaşımı: hedef Spesifik, Ölçülebilir, Ulaşılabilir, Gerçekçi ve Zaman sınırlı olmalıdır. “Biraz biriktirmek” yerine “12 ayda 60.000 TL biriktirmek” gibi.",
       "Hedefi aylık tutara bölmek, hedefi yönetilebilir kılar: 60.000 TL ÷ 12 ay = ayda 5.000 TL."],
       ["Hedefler kısa, orta ve uzun vadelidir","SMART: net, ölçülebilir, zaman sınırlı","Aylık tutara bölmek hedefi somutlaştırır"],
-      ["Aylık tutar","Zeynep 18 ay içinde 90.000 TL biriktirmek istiyor. Aylık 5.000 TL ayırması gerektiğini hesapladı ve bütçesinde bu tutar için yer açtı."]),
+      ["SMART testi","Zeynep “90.000 TL biriktirmek” istiyor. Aylık geliri 45.000 TL, zorunlu giderleri 30.000 TL.","SMART: Spesifik: 90.000 TL; Ölçülebilir: aylık takip; Ulaşılabilir: kalan 15.000 TL; Gerçekçi: aylık 5.000 yeterli; Zaman sınırlı: 18 ay. Aylık tutar = 90.000 ÷ 18 = 5.000 TL, kalan paranın üçte biri.","SMART testi: tutar, süre, aylık tutar ve bütçede yer. Dördü de net değilse hedef henüz hazır değildir."]),
   ]},
   { ad:"Birikim ve getiri", ozet:"Acil durum fonu, enflasyon, bileşik getiri ve BES", dersler:[
     EGD("o06","Acil durum fonu",4,[
@@ -1768,31 +1768,31 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Geliri dalgalı olanlar veya tek gelirle geçinen aileler için daha yüksek bir hedef mantıklı olabilir.",
       "Bu para, değeri hızla düşebilecek riskli varlıklara yatırılmamalı; ihtiyaç anında hızlı ve kayıpsız çekilebilmelidir. Özel cari hesap veya kısa vadeli ürünler bu amaca uygun olabilir."],
       ["Hedef: 3–6 aylık zorunlu gider","Riskli varlıklara konulmamalı","Hızla ulaşılabilir olmalı"],
-      ["Hedef hesaplama","Aylık zorunlu gideri 25.000 TL olan Mert, 4 aylık hedef seçerse 100.000 TL’lik bir fona ihtiyaç duyar. Bunu 20 ayda tamamlamak için ayda 5.000 TL ayırmaya karar verdi."]),
+      ["Hedef ve süre","Mert’in aylık zorunlu gideri 25.000 TL. 4 aylık acil durum fonu hedefliyor.","Hedef = 25.000 × 4 = 100.000 TL. Ayda 5.000 TL ayırırsa süre = 100.000 ÷ 5.000 = 20 ay; ayda 8.000 TL ayırırsa 100.000 ÷ 8.000 = 12,5 ay (13 ay). Mert fonun yalnızca likit ve kayıpsız çekilebilir araçlarda durmasını sağlar.","Hedef = aylık zorunlu gider × ay sayısı; süre = hedef ÷ aylık birikim."]),
     EGD("o07","Enflasyon ve birikimin korunması",4,[
       "Enflasyon, birikimin satın alma gücünü zamanla azaltır. Bu yüzden yalnızca nakit olarak tutulan birikim, değer kaybeder.",
       "Birikimi enflasyona karşı korumak için getirisi enflasyonu yakalayabilecek araçlar değerlendirilir; ancak bu araçların riski de vardır ve getiri garanti değildir.",
       "Önemli olan, enflasyon karşısındaki reel getiriyi izlemek ve birikimi tek bir araca bağımlı bırakmamaktır."],
       ["Enflasyon satın alma gücünü azaltır","Reel getiriyi izle","Tek araca bağımlı kalma"],
-      ["Reel kayıp","Nakit tuttuğu 100.000 TL’nin bir yıl sonra daha az mal aldığını fark eden Tuna, birikimin bir kısmını faizsiz esaslara uygun getirisi olan araçlara aktardı."]),
+      ["Nakit mi, getirili hesap mı?","Tuna’nın 100.000 TL’si var. Yıllık enflasyon %45. Seçenek A: nakit; B: yıllık %42 getirili katılma hesabı.","A: 100.000 ÷ 1,45 ≈ 68.966 TL satın alma gücü (−%31). B: 100.000 × 1,42 = 142.000 TL, satın alma gücü 142.000 ÷ 1,45 ≈ 97.931 TL (−%2,1). B kaybı azalttı ama sıfırlamadı: reel getiri hâlâ hafif negatif.","Nakit tutmak büyük reel kayba yol açar. Getirili araç kaybı azaltır; yine de reel getiriyi enflasyonla kıyaslamak gerekir."]),
     EGD("o08","Bileşik getiri ve 72 kuralı",5,[
       "Bileşik getiri, kazancın da kazanç getirmesidir. Her dönemin getirisi anaparaya eklenir ve sonraki dönem bu toplam üzerinden hesaplanır.",
       "Formül: Gelecek değer = Anapara × (1 + dönemlik oran) ^ dönem sayısı. Süre uzadıkça etki hızla büyür.",
       "72 kuralı: 72’yi yıllık getiri yüzdesine bölersen paranın kaç yılda ikiye katlanacağını yaklaşık bulursun. Örneğin %12 getiriyle yaklaşık 6 yıl. Bu kural sabit getiri varsayar ve yaklaşık bir tahmindir."],
       ["Bileşik getiri: kazancın da kazanç getirmesi","FV = P × (1 + r) ^ n","72 kuralı yaklaşık bir tahmindir"],
-      ["Hesaplayarak görmek","10.000 TL yıllık %10 bileşik getiriyle 10 yıl sonra yaklaşık 25.937 TL olur. Aynı tutar basit getiriyle 20.000 TL olurdu. Pınar farkı hesaplayıcıda deneyerek gördü."]),
+      ["Zamanın etkisi","Pınar 10.000 TL’yi yıllık %10 getiriyle 10 yıl değerlendirecek. Basit ve bileşik yöntemlerin farkını görmek istiyor.","Basit: 10.000 + 10 × 1.000 = 20.000 TL. Bileşik: 10.000 × 1,1^10 ≈ 25.937 TL. Fark 5.937 TL. 72 kuralı: 72 ÷ 10 = 7,2 yılda para yaklaşık ikiye katlanır; gerçekten 7,3 yılda 20.000 TL’yi geçer.","Bileşik getiri zamanla büyür: 10 yılda 25.937 TL, basitte 20.000 TL. 72 kuralı kaba bir ikiye katlanma tahmini verir."]),
     EGD("o09","Basit ve bileşik hesaplama, kâr payı",4,[
       "Basit getiride kazanç, sadece ana para üzerinden hesaplanır. Bileşikte ise kazanç anaparaya eklenir. Kısa vadeli hesaplarda fark küçüktür; uzun vadede büyür.",
       "Katılma hesaplarında kâr payı vade sonunda ödenir; kâr payı anaparaya eklenip yeniden vadeye konursa bileşik etki oluşur.",
       "Getiri karşılaştırırken aynı baz üzerinden (yıllık basit veya yıllık bileşik) kıyaslamak gerekir; aksi halde yanlış sonuç çıkar."],
       ["Basit: yalnızca anaparaya","Bileşik: kazanç anaparaya eklenir","Aynı baz üzerinden kıyasla"],
-      ["Aynı baz","İki hesabın oranları farklı açıklanmıştı. Deniz hesaplayıcıda ikisini de yıllık bileşik orana çevirip karşılaştırınca sıralamanın değiştiğini gördü."]),
+      ["Aynı baza çevirmek","İki hesap var. A: yıllık basit %40. B: aylık %3,2 kâr payı ödüyor ve her ay anaparaya ekleniyor.","B’nin aylık %3,2’si yıllık basit 12 × 3,2 = %38,4 gibi görünür, ama aylık bileşiklendiği için gerçek yıllık getiri 1,032^12 − 1 ≈ %45,9’dur. A’nın %40’ı ile aynı baza (yıllık bileşik) çevirince B daha yüksek çıkar.","Farklı sıklıktaki oranlar aynı baza çevrilmeden karşılaştırılmaz. Uygulamadaki Hesapla araçları bu dönüşümü yapar."]),
     EGD("o10","Bireysel emeklilik ve uzun vadeli birikim",5,[
       "Bireysel Emeklilik Sistemi (BES), uzun vadeli, gönüllü bir birikim sistemidir. Katkı payları emeklilik yatırım fonlarında değerlendirilir ve devlet katkısı gibi teşvikler uygulanabilir.",
       "Birikim, belirli şartlar sağlandığında (süre ve yaş) emeklilik hakkıyla birlikte alınabilir. Erken çıkışta devlet katkısı ve getirisi gibi kısımlarda kayıplar olabilir; kurallar mevzuata göre değişir.",
       "Katılım ilkelerine uygun emeklilik fonları da bulunur. Sözleşmeden önce giderleri, fon seçeneklerini ve çıkış koşullarını incelemek gerekir."],
       ["BES uzun vadeli gönüllü birikim sistemidir","Devlet katkısı gibi teşvikler olabilir","Erken çıkış ve giderler incelenmelidir"],
-      ["Sözleşme kontrolü","Hakan BES sözleşmesi imzalamadan önce giderleri, fon seçeneklerini ve erken çıkış koşullarını bir tabloya yazıp karşılaştırdı."]),
+      ["Gider farkı 20 yılda ne yapar?","Hakan yıllık 36.000 TL BES katkısı yapacak (20 yıl). Fon A yıllık %2, fon B %1,2 gider alıyor. Brüt getiri %15 (sabit, varsayımsal).","A net %13: gelecek değer ≈ 2.914.086 TL. B net %13,8: ≈ 3.200.665 TL. Fark yaklaşık 286.579 TL. Hakan ayrıca devlet katkısı gibi teşvikleri, erken çıkış koşullarını ve fon seçeneklerini sözleşmeden karşılaştırır.","Gider farkı küçük görünse de 20 yılda yüz binlerce lira fark yaratır. Sözleşmeden önce gider, fon ve çıkış koşullarını karşılaştır."]),
   ]},
   { ad:"Borç ve kredi", ozet:"Borç türleri, finansman maliyeti, kredi kartı ve kredi notu", dersler:[
     EGD("o11","Borç türleri ve ne zaman borçlanmalı?",4,[
@@ -1800,31 +1800,31 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Borçlanmadan önce şu sorular sorulmalıdır: Bu borcu ödeyebilecek miyim? Gelirim düşerse ne olur? Alternatif var mı?",
       "Aylık borç ödemelerinin gelire oranı yükseldikçe finansal baskı artar. Bu oranı düşük tutmak, beklenmedik durumlara karşı koruma sağlar."],
       ["Borç gelecekteki geliri bugüne taşır","Borçlanmadan önce ödeme gücünü sorgula","Borç/gelir oranı düşük tutulmalıdır"],
-      ["Borç/gelir oranı","Aylık geliri 60.000 TL, borç ödemeleri 30.000 TL olan Ece’nin oranı %50’dir. Yeni bir borç düşünürken bunun çok yüksek olduğunu fark etti ve ertelemeye karar verdi."]),
+      ["Yeni borçtan önce oran","Ece’nin geliri 60.000 TL, mevcut borç ödemeleri 30.000 TL. Yeni bir 6.000 TL’lik aylık taksit düşünüyor.","Mevcut oran = 30.000 ÷ 60.000 = %50. Yeni taksitle (30.000 + 6.000) ÷ 60.000 = %60. Pratik bir uyarı eşiği olarak %35-40 sık kullanılır (kesin kural değildir). Ece mevcut oranın zaten yüksek olduğunu görüp yeni borcu erteler.","Yeni borçtan önce hesapla: (mevcut + yeni ödeme) ÷ gelir. Pratik uyarı eşiği %35-40 civarıdır."]),
     EGD("o12","Finansman maliyetini doğru okumak",5,[
       "Aylık taksit tek başına yeterli bilgi vermez. Toplam geri ödeme, vade, kâr payı veya faiz oranı, masraflar ve sigorta birlikte değerlendirilmelidir.",
       "İki teklifi karşılaştırırken, aynı tutar ve aynı vade için toplam geri ödemeyi yan yana yazmak en doğru yöntemdir.",
       "Katılım finansmanında toplam bedel baştan bellidir. Farklı bankaların tekliflerini Hesapla bölümündeki araçlarla ve Taksit Karşılaştırma ekranıyla karşılaştırabilirsin."],
       ["Taksit yerine toplam maliyete bak","Aynı tutar ve vadede karşılaştır","Masraf ve sigortayı unutma"],
-      ["Toplam geri ödeme","Aynı taşıt için iki teklifte aylık taksit 15.000 ve 14.500 TL; ama ikincisi daha uzun vadeli. Mehmet toplam geri ödemeyi hesaplayınca ikinci teklifin daha pahalı olduğunu gördü."]),
+      ["Düşük taksit pahalı olabilir","Mehmet aynı 600.000 TL maliyetli mal için iki teklif aldı. A: 36 ay, 19.000 TL/ay, dosya masrafı 6.000 TL. B: 48 ay, 16.500 TL/ay, dosya masrafı 3.000 TL.","A toplam = 19.000 × 36 + 6.000 = 690.000 TL. B toplam = 16.500 × 48 + 3.000 = 795.000 TL. B’nin taksiti 2.500 TL düşük ama toplamda 105.000 TL pahalı.","Karşılaştırma ölçütü toplam geri ödemedir (masraflar dahil). Aylık taksit düşük diye seçilen teklif daha pahalı olabilir."]),
     EGD("o13","Kredi kartı kullanımı",4,[
       "Kredi kartı, harcamayı ileri bir tarihe erteleyen bir araçtır. Hesap özeti borcunun tamamı son ödeme gününe kadar ödenirse ek maliyet oluşmaz.",
       "Yalnızca asgari tutarı ödemek, kalan borca yüksek maliyet işletilmesine neden olur ve borç büyür. Limiti gelir olarak görmemek ve harcamayı bütçeye göre yapmak gerekir.",
       "Taksitli harcamalar ileriki ayların gelirini bağlar; birden fazla taksit üst üste bindiğinde bütçe zorlanabilir."],
       ["Borcun tamamını ödemek ek maliyeti önler","Asgari ödeme borcu büyütür","Limit gelir değildir"],
-      ["Taksit yükü","Gül üç ayrı alışverişi 12’şer taksite bölmüştü. Aylık taksit toplamı maaşının yarısına ulaştı; yeni taksit almadan önce bunu bütçesine yazarak sınır koydu."]),
+      ["Asgari ödemenin maliyeti","Gül’ün hesap özeti borcu 30.000 TL. Asgari ödeme 6.000 TL; kalan 24.000 TL’ye aylık %4 maliyet işleniyor (varsayımsal). Ayrıca 12’şer taksitlik üç alışverişin aylık taksit toplamı 22.500 TL, maaşı 45.000 TL.","Borcun tamamını ödeseydi ek maliyet 0 olurdu. Asgari ödemede ilk ay maliyet = 24.000 × %4 = 960 TL ve kalan borç büyür. Taksit yükü: 22.500 ÷ 45.000 = %50; maaşın yarısı. Gül yeni taksit almadan önce bunu kendine sınır koyar.","Borcun tamamını ödemek ek maliyeti önler. Asgari ödeme borcu büyütür; taksit yükünü gelire oranla izle."]),
     EGD("o14","Kredi notu ve Findeks",4,[
       "Kredi notu, bir kişinin borç ödeme geçmişini ve riskini özetleyen bir göstergedir. Türkiye’de Kredi Kayıt Bürosu (KKB) Findeks raporu ve notunu hazırlar.",
       "Ödemeleri zamanında yapmak, kart limitinin çoğunu kullanmamak ve gereksiz sık başvuru yapmamak notu olumlu etkiler. Gecikmeler ve ödenmeyen borçlar notu düşürür.",
       "Finansman başvurusu öncesinde kendi raporunu kontrol etmek, hataları fark etmeyi ve başvurularını daha bilinçli yapmayı sağlar."],
       ["Not, ödeme geçmişini özetler","Zamanında ödeme notu artırır","Başvuru öncesi raporu kontrol et"],
-      ["Rapor kontrolü","Nilay konut finansmanı başvurusundan önce Findeks raporunu inceledi ve kapattığı bir kartın hâlâ açık göründüğünü fark edip düzelttirdi."]),
+      ["Raporda ne kontrol edilir?","Nilay konut finansmanından önce Findeks raporunu açtı. Toplam kart limiti 100.000 TL, toplam borç 40.000 TL. Kapattığı 25.000 TL’lik bir kredi hâlâ borçlu görünüyor.","Dört kontrol yapar: hesap listesi doğru mu, ödeme gecikmeleri var mı, sorgu sayısı, limit kullanım oranı (40.000 ÷ 100.000 = %40; düşük olması tercih edilir). Kapatılmış krediyi borçlu gösteren kayıt hatalıdır; KKB’ye ve ilgili bankaya itiraz eder.","Raporda dört kontrol: hesap listesi, gecikmeler, sorgu sayısı ve limit kullanım oranı. Hata varsa KKB ve bankaya itiraz edilir."]),
     EGD("o15","Borç yönetimi stratejileri",5,[
       "Birden fazla borcu olanlar için iki yaygın yöntem vardır: kartopu yönteminde en küçük borç önce kapatılır, motivasyon artar. Çığ yönteminde ise en yüksek maliyetli borç önce kapatılır, toplam maliyet azalır.",
       "Hangisi seçilirse seçilsin, tüm borçlar için asgari ödemeler zamanında yapılmalı ve ek ödeme tek bir borca yönlendirilmelidir.",
       "Ödeme güçlüğünde bankayla konuşmak, yeniden yapılandırma imkânlarını öğrenmek gecikmeden daha iyi bir yoldur."],
       ["Kartopu: küçük borç önce","Çığ: maliyetli borç önce","Zorlanınca bankayla erken konuş"],
-      ["Strateji seçimi","Kerem’in üç borcu var. Toplam maliyeti azaltmak için en yüksek maliyetlisini önce kapatmayı seçti ve diğer ikisinde asgari ödemeyi aksatmadı."]),
+      ["Kartopu mu, çığ mı?","Kerem’in iki borcu var: A: 40.000 TL, aylık %4; B: 10.000 TL, aylık %3. Fazladan 5.000 TL ayırabiliyor.","Çığ: fazladan 5.000 TL A’ya gider: A’nın sonraki ay faizi (40.000 − 5.000) × %4 = 1.400 TL (1.600 yerine). Kartopu: B’ye gider: (10.000 − 5.000) × %3 = 150 TL (300 yerine). Çığ ilk ay 200 TL, kartopu 150 TL tasarruf sağlar; ama kartopu B’yi 2 ayda kapatarak motivasyon kazandırır.","Çığ (en pahalı borç önce) matematiksel olarak ucuzdur, kartopu psikolojik olarak kolaydır. İkisinde de asgari ödemeler aksatılmaz."]),
   ]},
   { ad:"Koruma, vergi ve haklar", ozet:"Sigorta, tekafül, vergi ve tüketici hakları", dersler:[
     EGD("o16","Sigorta temelleri",4,[
@@ -1832,31 +1832,31 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Poliçe, kapsamı, istisnaları, teminat tutarını ve muafiyetleri gösterir. Sadece prime bakmak yerine neyin kapsam dışı kaldığına bakmak önemlidir.",
       "Zorunlu sigortalar (ör. trafik sigortası, DASK) yasa gereği yaptırılır; diğerleri ihtiyaca göre seçilir."],
       ["Sigorta riskin maddi kaybını devreder","Kapsam ve istisnalar önemlidir","Bazı sigortalar zorunludur"],
-      ["Poliçeyi okumak","Ece konut sigortası yaptırırken yalnızca primi değil, hangi hasarların kapsam dışı kaldığını da kontrol etti ve bir istisnayı fark edip ek teminat istedi."]),
+      ["Prim farkı mı, kapsam farkı mı?","Ece iki konut sigortası teklifi aldı. A: yıllık prim 3.000 TL, sel kapsam dışı. B: prim 4.500 TL, sel dahil, %5 muafiyet. Evinde 200.000 TL’lik sel hasarı oldu.","A’da sel kapsam dışı: 200.000 TL kendi cebinden. B’de muafiyet 200.000 × %5 = 10.000 TL; 190.000 TL tazminat alır. Prim farkı yalnızca 1.500 TL idi; ama kapsam farkı 190.000 TL’lik koruma sağladı.","Yalnızca primi değil, prim ve kapsam dışı riski birlikte kıyasla. 1.500 TL’lik prim farkı büyük bir hasarda çok değerli olabilir."]),
     EGD("o17","Katılım sigortacılığı (tekafül)",4,[
       "Katılım sigortacılığı (tekafül), sigortanın faiz, belirsizlik ve kumar unsurlarından arındırılmış hâlidir. Katılımcılar bir havuza katkı yapar ve zarar gören üyeler bu havuzdan karşılanır; yani karşılıklı yardımlaşma esastır.",
       "Havuz yönetimi, uygunluğu denetleyen danışma kurulu ve faizsiz yatırım ilkeleriyle yürütülür. Türkiye’de katılım sigorta ve katılım emeklilik ürünleri bulunur.",
       "Seçerken şirketin lisansı, ürün kapsamı ve danışma kurulu bilgisi kontrol edilmelidir."],
       ["Karşılıklı yardımlaşma esaslıdır","Havuz, faizsiz ilkelerle yönetilir","Lisans ve danışma kurulu kontrol edilmelidir"],
-      ["Karşılaştırma","Hasan konvansiyonel ve katılım sigortası tekliflerinin kapsamını yan yana koydu; kapsam benzer olunca ilkesel tercihe göre karar verdi."]),
+      ["Üç şeyi karşılaştırmak","Hasan konvansiyonel sigorta için yıllık 5.000 TL, katılım (tekafül) sigortası için 5.200 TL katkı teklifi aldı. Kapsamlar benzer.","Dört başlıkta karşılaştırır: kapsam ve istisnalar, fiyat (fark %4), şirketin lisansı, danışma kurulu bilgisi. Katkı payı fazlasının nasıl işlendiği (havuzda kalması veya katılımcılarla paylaşılması) sözleşmeye göre değişebilir; bu yüzden sözleşmeyi okur.","Kapsam ve fiyat benzerse karar ilkeye göre verilir. Lisans ve danışma kurulu bilgisi şarttır; fazla yönetimi sözleşmeden okunur."]),
     EGD("o18","Vergi temelleri",4,[
       "Vergi, devletin kamu hizmetlerini finanse etmek için aldığı zorunlu ödemedir. Gelir üzerinden alınan gelir vergisi, harcama üzerinden alınan KDV ve yatırım kazancından kesilen stopaj en bilinenleridir.",
       "Bir ürünün fiyatında KDV genellikle dahildir; fatura üzerinden ayrıca görünür. Maaş gelirinden vergi işverence kesilir.",
       "Vergi oranları ve istisnalar sık değişebilir; bu yüzden güncel bilgi için Gelir İdaresi Başkanlığı’nın resmî kaynaklarına veya bir mali müşavire başvurulmalıdır."],
       ["Gelir vergisi, KDV ve stopaj temel türlerdir","Maaştan vergiyi işveren keser","Güncel oran için resmî kaynağa bakılmalıdır"],
-      ["Fatura","Fatma bir alışveriş faturasında KDV tutarını ayrı satırda görünce vergiye dahil fiyatı ödediğini fark etti ve kendi bütçesinde vergi payını hesapladı."]),
+      ["KDV ve stopaj hesabı","Fatma 12.000 TL KDV dahil fiyatlı bir ürün aldı. KDV oranı %20 varsayımsal. Ayrıca bir hesabından 10.000 TL brüt kâr payı elde etti; stopaj %5 varsayımsal.","KDV hariç fiyat = 12.000 ÷ 1,20 = 10.000 TL; KDV = 2.000 TL. Net kâr payı = 10.000 − (10.000 × %5) = 9.500 TL. Oranlar zaman zaman değiştiği için Fatma güncel değerleri Gelir İdaresi Başkanlığı’nın sayfasından kontrol eder.","KDV dahil fiyat ÷ (1 + oran) = KDV hariç fiyat. Net getiri = brüt − stopaj; oranlar değişebilir, güncel olanı resmî kaynaktan öğren."]),
     EGD("o19","Tüketici hakları",5,[
       "6502 sayılı Tüketicinin Korunması Hakkında Kanun, tüketicinin ayıplı mal, aldatıcı reklam ve haksız şartlara karşı haklarını düzenler.",
       "Mesafeli satışlarda (internetten alışveriş gibi) tüketici, genellikle 14 gün içinde sebep göstermeden cayma hakkına sahiptir. İstisna ürünler vardır; ürün sayfasındaki ve sözleşmedeki şartlar okunmalıdır.",
       "Sorun yaşandığında önce satıcıyla yazılı iletişim kurulur, çözülmezse Tüketici Hakem Heyeti veya Tüketici Mahkemesi’ne başvurulabilir."],
       ["6502 sayılı Kanun tüketiciyi korur","Mesafeli satışlarda genellikle 14 gün cayma hakkı vardır","Başvuru yolu: satıcı, hakem heyeti, mahkeme"],
-      ["İade","Elif internetten aldığı ayakkabıyı denedi ve uymadığı için 14 gün içinde iade etti. İade bedelinin ödeme şekline göre geri yatmasını bekledi."]),
+      ["Cayma süresi nasıl işler?","Elif 18 Eylül’de internetten ayakkabı sipariş etti, 22 Eylül’de teslim aldı. Ayakkabı uymadı.","Cayma süresi teslimden itibaren 14 gündür: 22 Eylül + 14 gün = 6 Ekim. Elif cayma bildirimini 4 Ekim’de yaptı; süre içinde. Ürünü bildirimden itibaren 10 gün içinde göndermelidir; satıcı da bedeli 14 gün içinde iade eder. İstisna ürünler (kişiye özel, hijyen vb.) için ürün sayfasındaki şartlara bakar.","Süre teslimden başlar. Cayma bildirimini süre içinde yap, malı 10 gün içinde gönder; satıcı bedeli 14 gün içinde iade eder."]),
     EGD("o20","Taksitli alışveriş ve ayıplı mal",4,[
       "Taksitli alışverişte toplam bedel peşin fiyattan farklı olabilir. Taksit sayısı arttıkça toplam ödeme tutarı genellikle artar. Bu yüzden peşin ve taksitli fiyat yan yana yazılmalıdır.",
       "Ayıplı mal, satıldığı anda sözleşmeye veya özelliklerine uygun olmayan üründür. Tüketici ücretsiz onarım, değişim, bedel iadesi veya bedel indirimi gibi haklardan yararlanabilir.",
       "Garanti belgesi, fatura ve ürün kutusu gibi belgeleri saklamak, hak talebinde kolaylık sağlar."],
       ["Taksit toplam ödemeyi artırabilir","Ayıplı malda onarım, değişim, iade veya indirim hakkı vardır","Fatura ve garanti belgesi saklanmalıdır"],
-      ["Belge saklama","Cem bir buzdolabının garanti belgesini ve faturasını dosyalamıştı. Arıza çıkınca bu belgelerle yetkili servise başvurdu ve işlemini hızlıca tamamladı."]),
+      ["Taksidin gerçek bedeli","Cem’in alacağı buzdolabı peşin 40.000 TL. 6 taksitle 7.500 TL (toplam 45.000 TL), 12 taksitle 4.200 TL (toplam 50.400 TL). Üç ay sonra buzdolabı arızalanıyor.","6 taksit peşin fiyattan %12,5 (45.000 ÷ 40.000), 12 taksit %26 (50.400 ÷ 40.000) daha pahalı. Arıza için ayıplı mal hakları devreye girer: ücretsiz onarım, değişim, bedel indirimi veya iade seçeneklerinden uygun olanı; fatura ve garanti belgesiyle servise başvurur.","Taksit toplam bedeli artırır; peşin ve taksitli fiyatı yan yana yaz. Ayıplı malda seçimlik haklar vardır; belgeleri sakla."]),
   ]},
   { ad:"Dijital güvenlik ve plan", ozet:"Dolandırıcılık, güvenlik, riskli ürünler ve kişisel plan", dersler:[
     EGD("o21","Dolandırıcılık türleri",5,[
@@ -1864,31 +1864,31 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Gerçek bir banka hiçbir zaman telefonla tek kullanımlık şifreni, kart şifreni veya CVV kodunu istemez. Acele ettiren, tehdit eden veya fırsat vaat eden mesajlar uyarı işaretidir.",
       "Şüpheli bir arama veya mesajda bağlantıya tıklama; aramayı kapat ve bankayı kendi uygulamasından ya da resmî numarasından ara."],
       ["Banka OTP, kart şifresi ve CVV istemez","Acele ve tehdit uyarı işaretidir","Resmî kanaldan kendin ara"],
-      ["Sahte arama","Mina’yı arayan kişi “hesabınızda şüpheli işlem var” diyerek kendisinden gelen SMS şifresini istedi. Mina aramayı kapattı ve bankayı resmî numarasından arayıp böyle bir işlem olmadığını öğrendi."]),
+      ["Üç kırmızı bayrak","Mina’yı bir kişi arıyor: “hesabınızda şüpheli işlem var, size gelen SMS şifresini söyleyin, hemen uzaktan erişim uygulaması yükleyin.”","Üç kırmızı bayrak var: (1) acele ettiriyor, (2) tek kullanımlık şifre istiyor, (3) uygulama yüklemesini istiyor. Mina aramayı kapatır, bankanın uygulamasından hesap hareketlerine bakar ve bankayı resmî numarasından arar: böyle bir işlem yok.","Acele, şifre/CVV talebi ve uygulama yükletme isteği üç kırmızı bayraktır. Biri bile varsa kapat ve resmî kanaldan kendin ara."]),
     EGD("o22","Dijital güvenlik alışkanlıkları",4,[
       "Güçlü ve her hesap için farklı şifre kullanmak, bir hesabın ele geçirilmesinin diğerlerini etkilemesini önler. Şifre yöneticisi bu konuda kolaylık sağlar.",
       "İki adımlı doğrulama, şifre ele geçirilse bile hesabın korunmasını sağlar. Uygulamaları yalnızca resmî mağazalardan indir, telefonunu güncel tut ve açık Wi-Fi ağlarında bankacılık işlemi yapmaktan kaçın.",
       "Şüpheli bir işlem fark edersen kartı hemen kapat, şifreleri değiştir ve bankanı bilgilendir."],
       ["Her hesap için farklı güçlü şifre","İki adımlı doğrulamayı aç","Şüphede kartı kapat ve bankayı ara"],
-      ["Tek şifre hatası","Ahmet birçok hesapta aynı şifreyi kullanıyordu. Bir sitenin veri sızıntısı yaşadığını duyunca tüm hesaplarının şifresini değiştirdi ve iki adımlı doğrulamayı açtı."]),
+      ["Sızıntı sonrası sıra","Ahmet birçok hesapta aynı şifreyi kullanıyordu. Kullandığı bir sitenin veri sızıntısı yaşadığını öğrendi.","Sıra: (1) önce e-posta şifresini değiştirir, çünkü tüm şifre sıfırlamaları oradan geçer, (2) sonra bankacılık ve ödeme hesapları, (3) her hesap için farklı şifre ve şifre yöneticisi, (4) iki adımlı doğrulamayı açar, (5) hesap hareketlerini kontrol eder.","Önce e-postayı koru, sonra bankacılığı. Her hesap için farklı şifre ve iki adımlı doğrulama kullan."]),
     EGD("o23","Kripto ve spekülatif ürünler",5,[
       "Kripto varlıklar, merkezî bir otoritesi olmayan, değeri çok kısa sürede sert dalgalanabilen dijital varlıklardır. Yüksek getiri potansiyeli kadar yüksek kayıp riski de taşırlar.",
       "Kaldıraçlı işlemler, vadeli ve opsiyon gibi ürünler yatırılan tutardan fazla kayba yol açabilir. Sosyal medyada “kesin kazanç” vaat eden sinyal grupları genellikle risk taşır.",
       "Kaybetmeyi göze alamayacağın parayı spekülatif ürünlere yatırma. Böyle ürünlere ayrılacak payı, toplam portföyün küçük bir bölümüyle sınırlı tut."],
       ["Fiyatlar kısa sürede sert dalgalanabilir","Kaldıraç kaybı büyütebilir","Kaybı göze alabileceğin kadar pay ayır"],
-      ["Küçük pay","Berk birikiminin yalnızca küçük bir kısmını riskli ürünlere ayırdı ve bunu kaybedebileceği para olarak tanımladı; geri kalanı daha düşük riskli araçlarda tuttu."]),
+      ["Pay sınırı kaybı sınırlar","Berk’in 500.000 TL’lik birikimi var. Kripto ve benzeri riskli ürünlere %5 ayırıyor. Fiyatlar %60 düşüyor.","Riskli ürün tutarı 500.000 × %5 = 25.000 TL. %60 düşüşte kayıp 25.000 × %60 = 15.000 TL: portföyün yalnızca %3’ü. Aynı ürünü 10 kat kaldıraçla alsaydı, yalnızca %10’luk ters hareket pozisyonu sıfırlardı.","Pay sınırı kaybı sınırlar: %5 pay, −%60 düşüşte portföyün %3’ü. Kaldıraç ise küçük bir ters harekette tüm tutarı silebilir."]),
     EGD("o24","Lisanslı kurum kontrolü",4,[
       "Yatırım hizmeti veren kurumların lisanslı ve yetkili olması gerekir. Aracı kurumlar SPK, bankalar BDDK tarafından düzenlenir ve denetlenir.",
       "Bir kurumun yetkili olup olmadığını SPK ve BDDK’nın resmî sayfalarındaki listelerden kontrol edebilirsin. SPK’nın Finansal Okuryazarlık Platformu da ücretsiz eğitim içerikleri sunar.",
       "“Garantili yüksek getiri” vaat eden, acele ettiren ve ödemeyi kişisel hesaba isteyen teklifler dolandırıcılık işaretidir."],
       ["Aracı kurum SPK, banka BDDK denetimindedir","Yetki resmî listelerden kontrol edilir","Garantili yüksek getiri vaadi uyarıdır"],
-      ["Yetki kontrolü","Gül, sosyal medyada gördüğü bir yatırım şirketinin SPK listesinde olmadığını fark etti ve ödeme yapmaktan vazgeçti."]),
+      ["Gerçekçi olmayan vaat","Gül’e sosyal medyada bir şirket “ayda %20 garantili getiri” vaat ediyor.","Aylık %20 yıllık bileşik 1,2^12 − 1 ≈ %792 eder; yani 100.000 TL bir yılda yaklaşık 892.000 TL olur. Böyle bir getiri mümkün değildir. Gül ayrıca şirketin SPK ve BDDK’nın resmî listelerinde olmadığını görür.","“Ayda %20 garantili” yıllık bileşik yaklaşık %792 eder. Gerçekçi olmayan vaat ve lisanssız kurum, dolandırıcılık işaretidir."]),
     EGD("o25","Kişisel finansal plan oluşturmak",5,[
       "Kişisel finansal plan; hedefler, gelir-gider dengesi, acil durum fonu, borç yönetimi, birikim ve yatırım ile korumayı (sigorta) bir araya getirir.",
       "Plan şu adımlarla yapılır: durumunu gör (gelir, gider, borç, birikim), hedeflerini belirle, öncelik sırasına koy (acil durum fonu, borç, birikim, yatırım), aylık tutarlara böl ve düzenli gözden geçir.",
       "Plan, hayat koşulları değiştikçe güncellenmelidir. Küçük başlamak ve devam etmek, mükemmel bir plan yapıp uygulamamaktan daha değerlidir."],
       ["Durum, hedef, öncelik, aylık tutar, gözden geçirme","Acil durum fonu ve borç önceliklidir","Plan düzenli güncellenmelidir"],
-      ["Bir sayfalık plan","Zeynep tek sayfalık bir plan hazırladı: 4 aylık acil durum fonu, kart borcunu kapatma, ardından aylık düzenli birikim. Her çeyrekte planını gözden geçirmek için kendine bir hatırlatma kurdu."]),
+      ["Bir sayfalık plan","Zeynep’in aylık geliri 55.000 TL, zorunlu giderleri 30.000 TL. 24.000 TL kart borcu var ve 4 aylık acil durum fonu (120.000 TL) hedefliyor.","Aylık serbest tutar 25.000 TL. İlk 2 ay: 12.000 TL borca, 13.000 TL acil fona (toplam 24.000 borç kapanır, 26.000 fon). Sonraki aylar: 25.000 TL fona; kalan 94.000 ÷ 25.000 ≈ 3,76 → 4 ay. Toplam 6 ayda iki hedef de tamamlanır. Zeynep çeyrekte bir planı gözden geçirmeyi takvimine yazar.","Sıra: pahalı borç, acil durum fonu, yatırım. Bu varsayımla iki hedef 6 ayda tamamlanır."]),
   ]},
   ],
   sorular:[
@@ -2485,8 +2485,14 @@ function Egitim({kimlik, nav}:{kimlik:any; nav:(e:string)=>void}){
         </div>
         <div style={{...kart,background:C.orangeLight,borderColor:C.orange+"66"}}>
           <p style={{margin:"0 0 6px",fontSize:12,fontWeight:700,color:C.orange}}>💡 ÖRNEK SENARYO</p>
-          <p style={{margin:"0 0 4px",fontSize:14,fontWeight:700,color:C.label}}>{d.sen[0]}</p>
-          <p style={{margin:0,fontSize:13.5,lineHeight:1.6,color:C.label}}>{d.sen[1]}</p>
+          <p style={{margin:"0 0 10px",fontSize:15,fontWeight:700,lineHeight:1.35,color:C.label}}>{d.sen[0]}</p>
+          <p style={{margin:"0 0 3px",fontSize:11,fontWeight:700,letterSpacing:0.4,color:C.sub}}>DURUM</p>
+          <p style={{margin:"0 0 10px",fontSize:13.5,lineHeight:1.6,color:C.label}}>{d.sen[1]}</p>
+          <p style={{margin:"0 0 3px",fontSize:11,fontWeight:700,letterSpacing:0.4,color:C.sub}}>NASIL ÇÖZÜLÜR?</p>
+          <p style={{margin:"0 0 10px",fontSize:13.5,lineHeight:1.6,color:C.label}}>{d.sen[2]}</p>
+          <div style={{padding:"9px 11px",borderRadius:10,background:m.renk+"26",border:`1px solid ${m.renk}66`,fontSize:13.5,lineHeight:1.55,color:C.label}}>
+            <b>Çıkarım: </b>{d.sen[3]}
+          </div>
         </div>
         <div style={{display:"flex",gap:8,marginTop:6}}>
           <button className="eg-btn" disabled={!onceki} onClick={()=>{ if(onceki) dersAc(m.id, onceki.id, "geri"); }} style={{flex:1,padding:"12px 12px",borderRadius:12,border:`1px solid ${C.border}`,background:"transparent",color:C.label,fontSize:14,fontWeight:700,fontFamily:"inherit",cursor:onceki?"pointer":"default",opacity:onceki?1:0.35}}>‹ Önceki</button>
@@ -2589,7 +2595,7 @@ function Egitim({kimlik, nav}:{kimlik:any; nav:(e:string)=>void}){
   return (
     <div ref={ustRef} style={{scrollMarginTop:"calc(env(safe-area-inset-top,0px) + 70px)"}}>
       <style>{EGITIM_CSS}</style>
-      <div key={anahtar} className={sinif}>{icerik}</div>
+      <div key={anahtar} className={sinif} style={{overflowX:"hidden"}}>{icerik}</div>
     </div>
   );
 }
