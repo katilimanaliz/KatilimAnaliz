@@ -2625,6 +2625,7 @@ function Egitim({kimlik, nav}:{kimlik:any; nav:(e:string)=>void}){
 // • ÜYELİĞE BAĞLI: giriş yapmayan kullanıcı kullanamaz (misafire "Üye ol"). Veriler Firestore musteriPortfoyu/{uid}/kayitlar/{id} altında; yalnızca hesap sahibi okuyup yazar.
 // • Hesap silinirken bu veriler de silinir (kpKullaniciVerisiniSil). Yerel depoda kalıcı kopya tutulmaz (yalnızca v229 cihaz kayıtlarının tek seferlik aktarımı okunur).
 // • Ücretsiz: 5 müşteri · müşteri başına 5 hafıza maddesi · son 5 görüşme; sesli not, notlarda arama ve yedek Pro (kimlik.pro).
+// • GÜNLÜK HATIRLATMA: yerel bildirim (@capacitor/local-notifications) — telefon kendi zamanlar; sunucu/FCM yok. Müşteri adı gösterimi kullanıcı ayarıyla kapatılabilir.
 // • Tam ekran katman (zIndex 250); tüm tanımlar tek bir kapsülde (IIFE), CSS .bmx altında kapsüllü — uygulamanın geri kalanıyla çakışmaz.
 // ═══════════════════════════════════════════════════════════════════════
 const BM_CSS = `
@@ -3038,8 +3039,17 @@ to{opacity:1;transform:none}
 .bmx .onay-kart p{font-size:14px;color:var(--sub);line-height:1.5;padding:6px 0}
 .bmx .onay-kart b{color:var(--text)}
 .bmx .ekran .btn.blok{margin-top:10px}
+.bmx .bildirim-kart{display:flex;flex-direction:column;gap:6px}
+.bmx .bildirim-saat{margin-top:4px}
+.bmx .bildirim-saat input{width:100%;height:48px;border:1px solid var(--line);background:var(--card2);border-radius:13px;padding:0 13px;font-size:16px;color:var(--text);outline:none}
+.bmx .cta-bildirim{display:flex;gap:12px;align-items:flex-start;border-color:var(--blue-line);background:var(--blue-soft)}
+.bmx .cta-ik{width:38px;height:38px;border-radius:12px;background:var(--card);color:var(--blue-t);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.bmx .cta-govde{flex:1;min-width:0}
+.bmx .cta-govde strong{display:block;font-size:14.5px}
+.bmx .cta-govde p{font-size:13px;color:var(--sub);margin:2px 0 10px}
+.bmx .cta-govde .iki{gap:8px}
 `;
-const MusteriPortfoyumEkrani = (() => {
+const MusteriPortfoyumEkrani: any = (() => {
 /* ───────── Tarih yardımcıları (yerel tarih, "YYYY-MM-DD") ───────── */
 const pad = (n: any) => String(n).padStart(2, "0");
 const iso = (d: any) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -3198,6 +3208,77 @@ function istatistik(ms: any, bugun: any) {
     else if (m.next.planli && n <= 14) planli++;
   }
   return { toplam: ms.length, bugun: bugunN, gecikmis, planli };
+}
+
+
+/* ───────── Günlük hatırlatma: YEREL bildirim (telefon kendi zamanlar; sunucu/FCM YOK, müşteri verisi cihazdan çıkmaz) ─────────
+   Eklenti: @capacitor/local-notifications (native build gerekir). Eklenti/izin yoksa sessizce atlanır. */
+const BM_AYAR_ANAHTAR = "kp_mp_bildirim_v1_"; // yalnızca ayar (açık/saat/ad göster); MÜŞTERİ VERİSİ DEĞİL
+const BM_BILDIRIM_ID = 920000;
+const BM_PLAN_GUN = 14; // iOS en fazla 64 bekleyen yerel bildirim tutar; 14 güvenli
+function bmAyarOku(uidK: string): any {
+  const v = { acik: false, saat: "09:00", adGoster: true, cta: true };
+  try {
+    const raw = localStorage.getItem(BM_AYAR_ANAHTAR + uidK);
+    if (!raw) return v;
+    const j = JSON.parse(raw);
+    return { acik: !!j.acik, saat: /^\d{2}:\d{2}$/.test(j.saat) ? j.saat : "09:00", adGoster: j.adGoster !== false, cta: j.cta !== false };
+  } catch (e) { return v; }
+}
+function bmAyarYaz(uidK: string, a: any) { try { localStorage.setItem(BM_AYAR_ANAHTAR + uidK, JSON.stringify(a)); } catch (e) {} }
+async function bmLN(): Promise<any> { const m: any = await import("@capacitor/local-notifications"); return m.LocalNotifications; }
+async function bmBildirimIzin(iste: boolean): Promise<string> {
+  const LN = await bmLN();
+  let r = await LN.checkPermissions();
+  if (r.display === "prompt" || r.display === "prompt-with-rationale") { if (!iste) return "prompt"; r = await LN.requestPermissions(); }
+  return r.display;
+}
+async function bmBildirimTemizle(): Promise<void> {
+  if (!IS_NATIVE) return;
+  try { const LN = await bmLN(); await LN.cancel({ notifications: Array.from({ length: BM_PLAN_GUN }, (_x, i) => ({ id: BM_BILDIRIM_ID + i })) }); } catch (e) {}
+}
+function bmBildirimMetni(liste: any[], adGoster: boolean): any {
+  const n = liste.length;
+  let body = "Müşteri Portföyüm'ü açıp kimi arayacağına bak.";
+  if (adGoster) {
+    if (n === 1) body = `${liste[0].ad} · ${liste[0].next.metin}`;
+    else { const ad = liste.slice(0, 3).map((m: any) => m.ad).join(", "); body = n > 3 ? `${ad} ve ${n - 3} müşteri daha` : ad; }
+  }
+  return { title: `Bugün ${n} müşteri aksiyonun var`, body: body.slice(0, 180) };
+}
+// Her gün için: o güne kadar vadesi gelmiş (gecikmiş + o gün) TÜM aksiyonlar sayılır — kullanıcı uygulamayı açmasa da tamamlanmamış işler ertesi güne taşınır.
+function bmPlanHazirla(musteriler: any[], bugun: string, ayar: any, simdi: any): any[] {
+  const [hh, mm] = ayar.saat.split(":").map(Number);
+  const cikti: any[] = [];
+  for (let i = 0; i < BM_PLAN_GUN; i++) {
+    const gun = addDays(bugun, i);
+    const g = parse(gun);
+    const at = new Date(g.getFullYear(), g.getMonth(), g.getDate(), hh, mm, 0);
+    if (at.getTime() <= simdi.getTime() + 30000) continue; // geçmiş saat (bugün için) atlanır
+    const liste = musteriler.filter((m: any) => m.next && m.next.tarih <= gun)
+      .sort((a: any, b: any) => oncelik(b, gun).puan - oncelik(a, gun).puan || (a.next.tarih < b.next.tarih ? -1 : 1));
+    if (!liste.length) continue;
+    const { title, body } = bmBildirimMetni(liste, ayar.adGoster);
+    cikti.push({ id: BM_BILDIRIM_ID + i, title, body, schedule: { at, allowWhileIdle: true }, extra: { tip: "musteri-portfoyum" } });
+  }
+  return cikti;
+}
+async function bmBildirimPlanla(ayar: any, musteriler: any[], bugun: string): Promise<number> {
+  if (!IS_NATIVE) return 0;
+  const LN = await bmLN();
+  await bmBildirimTemizle();
+  const plan = bmPlanHazirla(musteriler, bugun, ayar, new Date());
+  if (plan.length) await LN.schedule({ notifications: plan });
+  return plan.length;
+}
+// Bildirime dokunulunca çağrılır (kök bileşen modülü açar). Dönen fonksiyon dinleyiciyi kaldırır.
+async function bmBildirimDinle(onTap: any): Promise<any> {
+  if (!IS_NATIVE) return () => {};
+  try {
+    const LN = await bmLN();
+    const h = await LN.addListener("localNotificationActionPerformed", (e: any) => { const x = e && e.notification && e.notification.extra; if (x && x.tip === "musteri-portfoyum") onTap(); });
+    return () => { try { h.remove(); } catch (e) {} };
+  } catch (e) { return () => {}; }
 }
 
 /* ───────── İkonlar ───────── */
@@ -3780,6 +3861,13 @@ function AnaSayfa({ state, bugun, ui, yuk }: any) {
     <div className="ekran">
       {ust}
       {!ui.pro ? <KotaKarti sayi={ms.length} ui={ui} /> : null}
+      {ui.bildirimDestek && !ui.ayar.acik && ui.ayar.cta ? (
+        <div className="kart-b cta-bildirim">
+          <div className="cta-ik"><Ik n="bell" s={20} /></div>
+          <div className="cta-govde"><strong>Bugün aranacakları bildirimle al</strong><p>Her sabah kimi arayacağını telefonuna hatırlatalım.</p>
+            <div className="iki"><button className="btn ikincil kucuk" onClick={() => ui.ayarDegistir({ cta: false })}>Şimdi değil</button><button className="btn pri kucuk" onClick={ui.bildirimAc}>Aç</button></div></div>
+        </div>
+      ) : null}
       <div className="stats">
         <button className="stat" onClick={() => ui.git("musteriler", "tumu")}><span className="stat-n">{st.toplam}</span><span className="stat-l"><Ik n="users" s={15} /> Müşteri</span></button>
         <button className="stat" onClick={() => ui.git("takipler", "bugun")}><span className="stat-n">{st.bugun}</span><span className="stat-l"><i className="nk r" /> Bugün takip</span></button>
@@ -3929,6 +4017,22 @@ function DahaFazla({ state, ui }: any) {
         <div className="gz-ik uyari"><Ik n="alert" s={22} /></div>
         <div><strong>Girmemen gerekenler</strong>
           <p>TC kimlik no, hesap no, IBAN, kart bilgisi ve bakiye gibi bilgileri yazma. Müşterilerine ait kişisel veriyi girerken bankanın kendi politikasına ve ilgili mevzuata uymak senin sorumluluğundadır.</p></div>
+      </div>
+      <Baslik>Bildirimler</Baslik>
+      <div className="kart-b bildirim-kart">
+        <label className="anahtar"><input type="checkbox" checked={!!ui.ayar.acik} onChange={(e) => { if (e.target.checked) ui.bildirimAc(); else ui.bildirimKapat(); }} /><span className="sw" /><span><strong>Günlük hatırlatma</strong><small>{
+          !ui.bildirimDestek ? "Yalnızca iOS/Android uygulamasında çalışır"
+          : ui.bd.hata === "eklenti" ? "Bu özellik için uygulamanın güncel sürümü gerekli"
+          : ui.ayar.acik && ui.bd.izin && ui.bd.izin !== "granted" ? "Bildirim izni kapalı: telefon ayarlarından aç"
+          : ui.ayar.acik ? `Her gün ${ui.ayar.saat}'te bugün aranacakları bildirir`
+          : "Bugün aranacak müşterileri telefonuna bildirir"}</small></span></label>
+        {ui.ayar.acik ? (
+          <>
+            <div className="alan bildirim-saat"><label htmlFor="b-saat">Hatırlatma saati</label><input id="b-saat" type="time" value={ui.ayar.saat} onChange={(e) => { if (/^\d{2}:\d{2}$/.test(e.target.value)) ui.ayarDegistir({ saat: e.target.value }); }} /></div>
+            <label className="anahtar"><input type="checkbox" checked={!!ui.ayar.adGoster} onChange={(e) => ui.ayarDegistir({ adGoster: e.target.checked })} /><span className="sw" /><span><strong>Müşteri adını göster</strong><small>Kilit ekranında müşteri adı görünebilir. Kapatırsan bildirimde yalnızca sayı yazar.</small></span></label>
+            {ui.bd.plan > 0 ? <p className="ipucu"><Ik n="bell" s={14} /> Önümüzdeki {BM_PLAN_GUN} gün için {ui.bd.plan} hatırlatma planlandı. Tamamlanmayan aksiyonlar ertesi güne taşınır.</p> : <p className="ipucu"><Ik n="bell" s={14} /> Şu an planlanacak aksiyon yok. Takip tarihi ekledikçe hatırlatmalar otomatik planlanır.</p>}
+          </>
+        ) : null}
       </div>
       <Baslik>Veri</Baslik>
       <div className="liste-grup">
@@ -4175,6 +4279,11 @@ function BmHesapli({ kimlik, nav, cik, uid }: any) {
   // Pro: gerçek üyelik durumu (kimlik.pro). Durum yüklenirken yanlış paywall göstermemek için Pro sayılır.
   const pro = !!(kimlik && kimlik.pro && kimlik.pro.aktif) || !!(kimlik && kimlik.proYukleniyor);
   if (proSheet) sonPro.current = proSheet;
+  // Günlük hatırlatma (yerel bildirim): ayarlar cihaza özgü, müşteri verisi içermez
+  const [ayar, setAyar] = useState<any>(() => bmAyarOku(uid));
+  const ayarRef = useRef<any>(ayar);
+  const bugunRef = useRef<any>(bugun); bugunRef.current = bugun;
+  const [bd, setBd] = useState<any>({ izin: "", plan: 0, hata: "" });
 
   useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = 0; }, [tab]);
   const showToast = useCallback((msg: string, actions: any[] = []) => {
@@ -4234,6 +4343,23 @@ function BmHesapli({ kimlik, nav, cik, uid }: any) {
   // Ekrandan çıkarken bekleyen değişiklikler hemen gönderilir (React'ten bağımsız, arka planda tamamlanır)
   useEffect(() => { canli.current = true; return () => { canli.current = false; clearTimeout(zamanlayici.current); if (flushRef.current) flushRef.current(); }; }, []);
 
+  // ── Bildirim planlama: veri/ayar/gün değişince (1 sn birleştirme) sonraki 14 gün yeniden zamanlanır ──
+  const planla = useCallback(async () => {
+    if (!IS_NATIVE) return;
+    const a = ayarRef.current;
+    try {
+      if (!a.acik) { await bmBildirimTemizle(); setBd((b: any) => ({ ...b, plan: 0 })); return; }
+      const izin = await bmBildirimIzin(false);
+      if (izin !== "granted") { await bmBildirimTemizle(); setBd((b: any) => ({ ...b, izin, plan: 0 })); return; }
+      const n = await bmBildirimPlanla(a, stateRef.current.musteriler, bugunRef.current);
+      setBd((b: any) => ({ ...b, izin: "granted", plan: n, hata: "" }));
+    } catch (e) { console.error("Bildirim planlanamadı:", e); setBd((b: any) => ({ ...b, hata: "eklenti" })); }
+  }, []);
+  useEffect(() => {
+    if (faz !== "hazir" || !IS_NATIVE) return;
+    const t = setTimeout(() => { planla(); }, 1000);
+    return () => clearTimeout(t);
+  }, [state.musteriler, ayar, faz, bugun, planla]);
   // Aramadan dönünce (uygulama yeniden görünür olunca) görüşme notu için tek dokunuşluk hatırlatma.
   useEffect(() => {
     const f = () => {
@@ -4252,7 +4378,18 @@ function BmHesapli({ kimlik, nav, cik, uid }: any) {
   const musteri = (id: string) => state.musteriler.find((m: any) => m.id === id);
 
   const ui: any = {
-    dispatch, toast: showToast, bugun, siraRef, pro, senk, eski,
+    dispatch, toast: showToast, bugun, siraRef, pro, senk, eski, ayar, bd, bildirimDestek: IS_NATIVE,
+    ayarDegistir: (patch: any) => { const y = { ...ayarRef.current, ...patch }; ayarRef.current = y; setAyar(y); bmAyarYaz(uid, y); },
+    bildirimAc: async () => {
+      if (!IS_NATIVE) { showToast("Bildirimler yalnızca iOS/Android uygulamasında çalışır"); return; }
+      try {
+        const izin = await bmBildirimIzin(true);
+        if (izin !== "granted") { setBd((b: any) => ({ ...b, izin })); showToast("Bildirim izni kapalı. Telefon ayarlarından Katılım Plus bildirimlerini aç."); return; }
+        const y = { ...ayarRef.current, acik: true, cta: false }; ayarRef.current = y; setAyar(y); bmAyarYaz(uid, y);
+        showToast("Günlük hatırlatma açıldı"); planla();
+      } catch (e) { console.error("Bildirim izni alınamadı:", e); setBd((b: any) => ({ ...b, hata: "eklenti" })); showToast("Bildirimler için uygulamanın güncel sürümü gerekli."); }
+    },
+    bildirimKapat: () => { const y = { ...ayarRef.current, acik: false }; ayarRef.current = y; setAyar(y); bmAyarYaz(uid, y); bmBildirimTemizle(); setBd((b: any) => ({ ...b, plan: 0 })); showToast("Günlük hatırlatma kapatıldı"); },
     // Pro kapısı: izin varsa true; yoksa Pro ekranını açar ve false döner.
     proAc: (ozellik: string, devam?: any) => setProSheet({ ozellik, devam }),
     proGerek: (ozellik: string, devam?: any) => { if (pro) return true; setProSheet({ ozellik, devam }); return false; },
@@ -4363,6 +4500,9 @@ function BmHesapli({ kimlik, nav, cik, uid }: any) {
   );
 }
 
+// Kök bileşenin kullandığı yardımcılar: bildirime dokunulunca modülü açma ve çıkışta planlı bildirimleri iptal etme
+(BmApp as any).bildirimDinle = bmBildirimDinle;
+(BmApp as any).bildirimTemizle = bmBildirimTemizle;
 return BmApp;
 })();
 
@@ -34956,6 +35096,15 @@ function App(){
     backHedefOzel.current=geriHedefi||null;setScreen(sc);
   };
   useEffect(()=>{ navRef.current=nav; }); // deps YOK — her render sonrasi calisip navRef'i taze tutar
+  // ── MÜŞTERİ PORTFÖYÜM YEREL BİLDİRİMLERİ (2026-10-04) ───────────────────────
+  // Günlük hatırlatma YEREL bildirimdir (telefon kendi zamanlar; sunucu yok). Bildirime dokunulunca modül açılır; kullanıcı ÇIKIŞ yapınca
+  // (kimlik yüklemesi BİTTİKTEN sonra — yoksa uygulama açılışında yanlışlıkla silinir) planlı bildirimler (müşteri adı içerebilir) iptal edilir.
+  useEffect(()=>{
+    let temizle:any=null; let iptal=false;
+    (async()=>{ const t=await MusteriPortfoyumEkrani.bildirimDinle(()=>{ navRef.current?.("musteriPortfoyum"); }); if(iptal) t(); else temizle=t; })();
+    return ()=>{ iptal=true; if(temizle) temizle(); };
+  },[]);
+  useEffect(()=>{ if(!kimlik.kimlikYukleniyor && !kimlik.kullanici) MusteriPortfoyumEkrani.bildirimTemizle(); },[kimlik.kimlikYukleniyor, kimlik.kullanici?.uid]);
   const girisTamamlandi=()=>{ const h=girisSonrasiHedef.current; girisSonrasiHedef.current=null; nav(h||"profil"); };
   // Müşteri Portföyüm üyelik ister: misafir "Üye ol / Giriş yap"a basınca hesap ekranına gider, işlem bitince bu ekrana döner.
   const musteriPortfoyuIcinHesapAc=(mod:"giris"|"kayit")=>{
