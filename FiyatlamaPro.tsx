@@ -6542,10 +6542,10 @@ function KarPayiOranlari({nav,kimlik}:{nav:any;kimlik:ReturnType<typeof useKpKim
         <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden"}}>
           {/* Sütun başlıkları — tıklanınca o para birimine göre büyükten küçüğe sıralar */}
           <div style={{display:"flex",alignItems:"center",padding:"10px 12px",borderBottom:`1px solid ${C.border}`,background:WA(0.03)}}>
-            <span style={{flex:2,fontSize:10,fontWeight:700,color:C.sub,textTransform:"uppercase",letterSpacing:0.3}}>Banka</span>
+            <span style={{flex:genisEkran?2:2.4,fontSize:10,fontWeight:700,color:C.sub,textTransform:"uppercase",letterSpacing:0.3}}>Banka</span>
             {([["tl","TL"],["usd","USD"],["eur","EUR"],["altin","Altın"]] as const).map(([v,l])=>(
               <span key={v} onClick={()=>setSiralamaParaBirimi(v)} style={{
-                flex:0.92,textAlign:"right",fontSize:10,fontWeight:700,cursor:"pointer",
+                flex:genisEkran?0.92:0.85,textAlign:"right",fontSize:10,fontWeight:700,cursor:"pointer",
                 color:siralamaParaBirimi===v?C.blue:C.sub,textTransform:"uppercase",letterSpacing:0.3,
               }}>{l}{siralamaParaBirimi===v?" ▼":""}</span>
             ))}
@@ -6556,14 +6556,32 @@ function KarPayiOranlari({nav,kimlik}:{nav:any;kimlik:ReturnType<typeof useKpKim
               display:"flex",alignItems:"center",padding:"11px 12px",
               borderBottom:i<bankalarSirali.length-1?`1px solid ${C.border}`:"none",
             }}>
+              {/* ⚠️ 2026-10-04 (kullanıcı ekran görüntüsü: Katılma Hesabı satırlarında "Başvuru Yap" düğmesi yarım kesik, 🔔 alarm düğmesi HİÇ görünmüyordu):
+                  İlk sütun (flex:2 + overflow:hidden + nowrap) logo + banka adı + Başvuru Yap + 🔔'yi TEK satıra sığdırmaya çalışıyordu; mobilde sığmayınca
+                  son iki öğe kırpılıyordu. Finansman sekmesindeki davranışla AYNI: MASAÜSTÜNDE (genisEkran) hepsi tek satırda, MOBİLDE ad üstte,
+                  düğmeler ALTTA ayrı satırda. Mobilde ad sütunu 2→2.4, rakam sütunları 0.92→0.85 (rakamlar 360-430pt'de sığıyor; ölçüldü);
+                  360pt gibi çok dar ekranda 🔔 sarmalanıp bir alt satıra iner (yine görünür). */}
+              {genisEkran ? (
               <span style={{flex:2,fontSize:12.5,fontWeight:700,color:C.label,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingRight:6,display:"flex",alignItems:"center",gap:6}}>
                 <BankaLogoRozet ad={b.ad} boyut={20}/>
                 {b.ad} <BankaBasvurButonu ad={b.ad}/>
                 <button onClick={(e)=>{e.stopPropagation();bankaAlarmAc(b.ad,KAR_PAYI_URUN_SECENEKLERI,siralamaParaBirimi);}} aria-label={CV("Oran Alarmı Kur")} style={{width:22,height:22,borderRadius:11,border:`1px solid ${WA(0.15)}`,background:"transparent",display:"inline-flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0,fontSize:11,marginLeft:2}}>🔔</button>
               </span>
+              ) : (
+              <div style={{flex:2.4,minWidth:0,paddingRight:6}}>
+                <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12.5,fontWeight:700,color:C.label}}>
+                  <BankaLogoRozet ad={b.ad} boyut={20}/>
+                  <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{b.ad}</span>
+                </div>
+                <div style={{marginTop:4,display:"flex",flexWrap:"wrap",alignItems:"center",gap:"4px 6px"}}>
+                  <BankaBasvurButonu ad={b.ad}/>
+                  <button onClick={(e)=>{e.stopPropagation();bankaAlarmAc(b.ad,KAR_PAYI_URUN_SECENEKLERI,siralamaParaBirimi);}} aria-label={CV("Oran Alarmı Kur")} style={{width:22,height:22,borderRadius:11,border:`1px solid ${WA(0.15)}`,background:"transparent",display:"inline-flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0,fontSize:11,marginLeft:2}}>🔔</button>
+                </div>
+              </div>
+              )}
               {([["tl",b.tl],["usd",b.usd],["eur",b.eur],["altin",b.altin]] as const).map(([v,deger])=>(
                 <span key={v} style={{
-                  flex:0.92,textAlign:"right",fontSize:12.5,fontFamily:"monospace",fontWeight:siralamaParaBirimi===v?800:700,
+                  flex:genisEkran?0.92:0.85,textAlign:"right",fontSize:12.5,fontFamily:"monospace",fontWeight:siralamaParaBirimi===v?800:700,
                   color:siralamaParaBirimi===v?C.blue:C.label,
                 }}>{deger!=null?`%${fmtN(deger,2)}`:"—"}</span>
               ))}
