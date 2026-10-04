@@ -211,6 +211,49 @@ function midasBayatMi(veriZamani) {
   return yasDk > BAYAT_ESIK_DK;
 }
 
+// ── MIDAS ZENGIN ALAN BIRLESTIRME (2026-10-04) ────────────────────────────
+// Kullanici raporu: BIST Hisse Detay'daki Taban/Tavan/Ag. Ort./Sermaye/Halka
+// Acik/Net Kar/Hacim(TL) kartlari bos geliyor. SEBEP: 09 Eylul'den beri
+// TERCIH="tradingview" (fiyat tazeligi icin) ve tradingViewNormalize bu
+// alanlari null birakiyor. COZUM: Fiyat/degisim TradingView'dan gelmeye
+// DEVAM EDER; Midas listesi zaten her istekte cekildigi icin (ek istek YOK)
+// bu alanlar TradingView kaydinda null ise Midas'tan DOLDURULUR.
+// Asla ustune yazmaz, uydurma deger uretmez; Midas'ta yoksa null kalir.
+const MIDAS_SABIT_ALANLAR = ["sermaye", "halkaAciklikOrani", "netKar"];
+const MIDAS_GUNLUK_ALANLAR = [
+  "taban", "tavan", "agirlikliOrtalama", "hacimTL",
+  "haftalikYuksek", "haftalikDusuk", "aylikYuksek", "aylikDusuk", "volatilite",
+];
+const MIDAS_KAPALI_MAKS_YAS_GUN = 10; // hafta sonu / bayram tatilini kapsar
+
+// Gunluk alanlar (taban/tavan, VWAP, hacim TL...) ancak Midas'in damgasi
+// guncelse eklenir — donmus (gunlerce eski) Midas verisi taze TV fiyatiyla
+// yan yana yanlis gorunurdu. Piyasa aciksa 45 dk esigi, kapaliysa son
+// seans verisi (en fazla 10 gun) kabul edilir.
+function midasGunlukTazeMi(veriZamani) {
+  if (!veriZamani) return false;
+  if (piyasaAcikMi()) return !midasBayatMi(veriZamani);
+  const yasGun = (Date.now() - new Date(veriZamani).getTime()) / 86400000;
+  return yasGun >= 0 && yasGun <= MIDAS_KAPALI_MAKS_YAS_GUN;
+}
+
+function midasZenginBirlestir(hedefListe, midasListesi, gunlukDahil) {
+  const harita = new Map();
+  for (const m of midasListesi) if (m && m.ticker) harita.set(m.ticker, m);
+  const alanlar = gunlukDahil ? MIDAS_SABIT_ALANLAR.concat(MIDAS_GUNLUK_ALANLAR) : MIDAS_SABIT_ALANLAR;
+  let doldurulan = 0;
+  for (const h of hedefListe) {
+    const m = harita.get(h.ticker);
+    if (!m) continue;
+    let dolduMu = false;
+    for (const a of alanlar) {
+      if (h[a] == null && typeof m[a] === "number") { h[a] = m[a]; dolduMu = true; }
+    }
+    if (dolduMu) doldurulan++;
+  }
+  return doldurulan;
+}
+
 async function tradingViewCek() {
   const govde = {
     filter: [{ left: "type", operation: "equal", right: "stock" }],
@@ -754,6 +797,14 @@ export default async function handler(req, res) {
       }
     }
 
+    // ── MIDAS ZENGIN ALANLARI (2026-10-04) — kaynak TradingView ise bos kalan
+    // Taban/Tavan/Sermaye/... alanlarini Midas'tan doldur (bkz. midasZenginBirlestir).
+    let zenginDoldurulan = 0, zenginGunluk = false;
+    if (kaynak === "tradingview" && midasHisseler.length >= 100) {
+      zenginGunluk = midasGunlukTazeMi(veriZamani);
+      zenginDoldurulan = midasZenginBirlestir(hisseler, midasHisseler, zenginGunluk);
+    }
+
     // ── EK VERİ BİRLEŞTİRME (2026-08-18) ────────────────────────────────────
     // Midas ana kaynak olduğunda sektör/beta/6A-YTD gibi alanlar null kalıyor
     // (Midas bu alanları sağlamıyor). Redis'te (günde 1-2 kez cron ile
@@ -852,6 +903,7 @@ export default async function handler(req, res) {
       // veri yok, tüm bu alanlar "—" görünür), null (kaynak zaten tradingview
       // olduğu için birleştirmeye hiç gerek kalmadı).
       ekVeriKaynak,
+      zenginAlanlar: { midastanDoldurulan: zenginDoldurulan, gunlukDahil: zenginGunluk },
       ...(yedekHata ? { yedekHata } : {}),
       data: hisseler,
     });
