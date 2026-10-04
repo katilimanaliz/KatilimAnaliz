@@ -788,7 +788,7 @@ const YAPILANDIRMA = {
 //    yalnız 30 dk'da bir, dürüst User-Agent, BANKA_KURLARI=kapali acil anahtarı; engellenirse (403/429) durur ve uygulama elle JSON'a düşer.
 // ZAMAN: Hobby fonksiyon süresi kısa → tüm istekler PARALEL, her istek 6 sn'de zaman aşımına uğrar.
 // DOĞRULAMA: döviz/altın satırı kendi içinde tutarlı olmalı (satış>alış, makas=satış−alış, makas%=makas÷alış); gümüşte satış>alış ve satış≤alış×1,5.
-//    Tutmayan satır ATILIR, uydurma/varsayılan değer YOK.
+//    (gram gümüş: bankanın kendi /gumus sayfası, 6 banka denenir; sayfası olmayan atlanır). Tutmayan satır ATILIR, uydurma/varsayılan değer YOK.
 // ═══════════════════════════════════════════════════════════════════════
 const BANKA_KURLARI = (() => {
   const HEDEF_BANKALAR = [
@@ -816,6 +816,8 @@ const BANKA_KURLARI = (() => {
   // Kıymetli madenler: her bankanın sayfasında hem "Gram Altın Banka Kurları" tablosu hem de o bankanın kendi "Gram Gümüş" satırı var.
   const ALTIN_SAYFALARI = ["kuveyt-turk", "albaraka-turk", "vakif-katilim", "dunya-katilim", "emlak-katilim", "ziraat-katilim"];
   const ALTIN_ADRES = (banka) => `https://altin.doviz.com/${banka}/gram-altin`;
+  // Gram gümüş AYRI sayfada (altın sayfasında DEĞİL — canlıda gümüş 0 çıkınca anlaşıldı): "<Banka> Gram Gümüş ... Alış / Satış 93,44 / 102,57"
+  const GUMUS_ADRES = (banka) => `https://altin.doviz.com/${banka}/gumus`;
   const SAYFA_BANKA_AD = { "kuveyt-turk": "Kuveyt Türk", "albaraka-turk": "Albaraka Türk", "vakif-katilim": "Vakıf Katılım", "dunya-katilim": "Dünya Katılım", "emlak-katilim": "Emlak Katılım", "ziraat-katilim": "Ziraat Katılım" };
   const USER_AGENT = "KatilimPlus-KurMakasi/1.0 (+https://www.katilimplus.com)";
   const ZAMAN_ASIMI_MS = 6000;
@@ -871,12 +873,11 @@ const BANKA_KURLARI = (() => {
     }
     return sonuc;
   }
-  // "<Banka> Gram Gümüş Gram Gümüş 97,65 100,23" — bankanın KENDİ gümüş satırı (makas sütunu yok)
-  function gumusSatiriniCikar(html, bankaAd) {
-    const b = HEDEF_BANKALAR.find((x) => x.ad === bankaAd);
-    if (!b) return null;
+  // Gümüş sayfası: "<Banka> Gram Gümüş ... Alış / Satış 93,44 / 102,57" — sayfa o bankanın gümüşüdür; 'Gram Gümüş' ifadesi ve mantık kontrolü şart.
+  function gumusSayfasiniCikar(html) {
     const metin = duzMetin(html);
-    const m = new RegExp(`${b.desen}\\s+Gram Gümüş\\s+Gram Gümüş\\s+${SAYI}\\s+${SAYI}`).exec(metin);
+    if (!/Gram Gümüş/.test(metin)) return null;
+    const m = new RegExp(`Alış\\s*/\\s*Satış[\\s·:]*${SAYI}\\s*/\\s*${SAYI}`).exec(metin);
     if (!m) return null;
     const alis = trSayi(m[1]), satis = trSayi(m[2]);
     if (alis === null || satis === null || !(satis > alis) || satis > alis * 1.5) return null; // mantıksız satır atılır
@@ -914,22 +915,22 @@ const BANKA_KURLARI = (() => {
     return { toplam, hatalar, istek, engellendi: false };
   }
 
-  // Gram altın (karşılaştırma tablosu) + gram gümüş (bankanın kendi satırı). Her sayfa isteği hem altını hem o bankanın gümüşünü verir. PARALEL.
+  // Gram altın (karşılaştırma tablosu, her sayfa tüm bankaları verir) + gram gümüş (bankanın KENDİ gümüş sayfası). Hepsi PARALEL; gümüş sayfası olmayan banka (404) sessizce atlanır.
   async function madenTopla(getir = sayfaGetir) {
     const altin = {}, gumus = {}, hatalar = [];
     let engellendi = false;
-    await Promise.all(ALTIN_SAYFALARI.map(async (slug) => {
-      try {
-        const html = await getir(ALTIN_ADRES(slug));
-        for (const [ad, v] of Object.entries(bankaSatirlariniCikar(html))) if (!altin[ad]) altin[ad] = v;
-        const g = gumusSatiriniCikar(html, SAYFA_BANKA_AD[slug]);
-        if (g) gumus[SAYFA_BANKA_AD[slug]] = g;
-      } catch (e) {
-        hatalar.push(`${slug}/gram-altin: ${e.message}`);
-        if (e.durum === 403 || e.durum === 429) engellendi = true;
-      }
-    }));
-    return { altin, gumus, hatalar, istek: ALTIN_SAYFALARI.length, engellendi };
+    const hata = (etiket, e) => { if (e.durum === 404) return; hatalar.push(`${etiket}: ${e.message}`); if (e.durum === 403 || e.durum === 429) engellendi = true; };
+    await Promise.all(ALTIN_SAYFALARI.flatMap((slug) => [
+      (async () => {
+        try { for (const [ad, v] of Object.entries(bankaSatirlariniCikar(await getir(ALTIN_ADRES(slug))))) if (!altin[ad]) altin[ad] = v; }
+        catch (e) { hata(`${slug}/gram-altin`, e); }
+      })(),
+      (async () => {
+        try { const g = gumusSayfasiniCikar(await getir(GUMUS_ADRES(slug))); if (g) gumus[SAYFA_BANKA_AD[slug]] = g; }
+        catch (e) { hata(`${slug}/gumus`, e); }
+      })(),
+    ]));
+    return { altin, gumus, hatalar, istek: ALTIN_SAYFALARI.length * 2, engellendi };
   }
 
   // Gün içindeki örneklerden banka başına MEDYAN alış/satış
@@ -1019,7 +1020,7 @@ const BANKA_KURLARI = (() => {
     }
   }
 
-  return { handler: bkHandler, bankaSatirlariniCikar, gumusSatiriniCikar, paraTopla, madenTopla, gunMedyani };
+  return { handler: bkHandler, bankaSatirlariniCikar, gumusSayfasiniCikar, paraTopla, madenTopla, gunMedyani };
 })();
 
 export default async function handler(req, res) {
