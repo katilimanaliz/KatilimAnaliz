@@ -4661,7 +4661,7 @@ const ICON_MAP: Record<string, any> = {
   hazineSwap: RefreshCw,
   hazineBono: ScrollText,
   hazineSenaryo: TrendingUp,
-  hazineKurMakasi: Percent,   // 2026-10-04: Kur Makası ve Marj
+  hazineKurMakasi: Percent,   // 2026-10-04: Katılım Bankaları Kur İzleme (eski ad: Kur Makası ve Marj)
   // Katılım Fonu
   vadeliKatilim: Wallet,
   getiridenAnapara: Target,
@@ -5910,7 +5910,7 @@ function bankaSiteBul(ad: string): string | null {
 // ikon (lucide ExternalLink) kullanılıyor. `vurgulu` prop'u (varsayılan
 // false) EN İYİ/öne çıkan seçenek için DOLU (mavi zemin, beyaz yazı) bir
 // varyant sağlıyor — diğerleri hâlâ ince kenarlıklı, düz zeminli.
-function BankaBasvurButonu({ad, vurgulu}:{ad:string; vurgulu?:boolean}){
+function BankaBasvurButonu({ad, vurgulu, etiket}:{ad:string; vurgulu?:boolean; etiket?:string}){
   const url = bankaSiteBul(ad);
   if (!url) return null;
   return (
@@ -5921,7 +5921,7 @@ function BankaBasvurButonu({ad, vurgulu}:{ad:string; vurgulu?:boolean}){
       background: vurgulu ? C.blue : "transparent",
       border:`1px solid ${C.blue}`,
     }}>
-      {CV("Başvuru Yap")} <ExternalLink size={11} color={vurgulu?"#fff":C.blue}/>
+      {CV(etiket||"Başvuru Yap")} <ExternalLink size={11} color={vurgulu?"#fff":C.blue}/>
     </a>
   );
 }
@@ -5932,12 +5932,12 @@ function BankaBasvurButonu({ad, vurgulu}:{ad:string; vurgulu?:boolean}){
 // dairesel kenarlıklı, dış-link ikonlu küçük bir rozet. Dar/tek satırlık
 // grid düzenlerinde ("Başvuru Yap" yazısının sığmadığı yerlerde) kullanılır.
 // Eşleşme yoksa (BankaBasvurButonu'ndaki gibi) hiçbir şey göstermiyor.
-function BankaBasvurIkonu({ad, boyut=26}:{ad:string; boyut?:number}){
+function BankaBasvurIkonu({ad, boyut=26, etiket}:{ad:string; boyut?:number; etiket?:string}){
   const url = bankaSiteBul(ad);
   if (!url) return null;
   return (
     <a href={url} target="_blank" rel="noopener noreferrer" onClick={(e)=>e.stopPropagation()}
-       aria-label={CV("Başvuru Yap")} style={{
+       aria-label={CV(etiket||"Başvuru Yap")} style={{
       width: boyut, height: boyut, borderRadius: "50%", flexShrink: 0, justifySelf: "end",
       display: "flex", alignItems: "center", justifyContent: "center",
       border: `1px solid ${C.blue}`, textDecoration: "none",
@@ -9747,6 +9747,8 @@ function SagRay({nav, piyasaGorunen, piyasaSurukle, piyasaOzetiSecim, setPiyasaO
       {genisEkran && <PiyasaOzetiBlok dikey piyasaGorunen={piyasaGorunen} piyasaSurukle={piyasaSurukle}
         piyasaOzetiSecim={piyasaOzetiSecim} setPiyasaOzetiDuzenleAcik={setPiyasaOzetiDuzenleAcik}
         setSeciliKur={setSeciliKur} nav={nav}/>}
+
+      {genisEkran && <KurIzlemeKarti nav={nav}/>}
 
       {genisEkran && <YaklasanTakvimBlok tekKutu yaklasanTakvim={yaklasanTakvim} nav={nav}/>}
 
@@ -25419,7 +25421,7 @@ const MENU = {
   zekatHesabi:{title:"Zekât Hesaplayıcı",back:"araclarMenu"},
   erkenKapamaKarari:{title:"Erken Kapama Kararı",back:"hesaplaMenu"},
   vadeFarkiKarari:{title:"Vade Farkı Kararı",back:"hesaplaMenu"},
-  erkenKapamaKomisyonu:{title:"Erken Kapama Komisyonu",back:"hesaplaMenu"},
+  erkenKapamaKomisyonu:{title:"Erken Kapama Komisyonu Hesaplama",back:"hesaplaMenu"},
   tlYpKarari:{title:"TL/YP Borçlanma Kararı",back:"hesaplaMenu"},
   kiraSertifikasi:{title:"Kira Sertifikası İhraçları",back:"araclarMenu"},
   taksitKarsilastirma:{title:"Taksit Karşılaştırma",back:"hesaplaMenu"},
@@ -25430,7 +25432,7 @@ const MENU = {
   hazineSwap:{title:"Swap Hesaplama",back:"hesaplaMenu"},
   hazineBono:{title:"Hazine Sukuk Getiri Hesaplama",back:"hesaplaMenu"},
   hazineSenaryo:{title:"Kur Hareketi Senaryo",back:"hesaplaMenu"},
-  hazineKurMakasi:{title:"Kur Makası ve Marj",back:"hesaplaMenu"},
+  hazineKurMakasi:{title:"Katılım Bankaları Kur İzleme",back:"hesaplaMenu"},
   piyasaHaberleri:{title:"Piyasa Haberleri",back:"home"},
   finansalGostergeler:{title:"Finansal Göstergeler",back:"piyasaMenu"},
   ayarlar:{title:"Ayarlar",back:"home"},
@@ -25634,7 +25636,7 @@ const MENU_ARAMA_LIST=[
   {key:"toggFinansman",      label:"Togg Finansmanı Hesaplama",            icon:"⚡", grup:"Bireysel Finansman"},
   {key:"esnekOdemePlanlari", label:"Esnek Ödeme Planları Hesaplama",       icon:"📋", grup:"Bireysel Finansman"},
   {key:"spotFinansman",      label:"Spot Finansman Hesaplama",             icon:"⚡", grup:"Tüzel Finansman"},
-  {key:"erkenKapamaKomisyonu", label:"Erken Kapama Komisyonu",              icon:"💸", grup:"Tüzel Finansman", alt:["erken kapama","erken odeme","erken odeme ucreti","komisyon","tazminat","ticari kredi kapama","kapama ucreti","2020/4"]},
+  {key:"erkenKapamaKomisyonu", label:"Erken Kapama Komisyonu Hesaplama",    icon:"💸", grup:"Tüzel Finansman", alt:["erken kapama","erken odeme","erken odeme ucreti","komisyon","tazminat","ticari kredi kapama","kapama ucreti","2020/4"]},
   {key:"vadeFarkiKarari",    label:"Vade Farkı Kararı",                    icon:"⏳", grup:"Tüzel Finansman", alt:["vade farki","pesin iskonto","pesin mi vadeli mi","tedarikci","iskonto","pesin odeme","karar"]},
   {key:"tlYpKarari",         label:"TL/YP Borçlanma Kararı",               icon:"💱", grup:"Tüzel Finansman", alt:["tl mi yp mi","doviz kredisi","yp finansman","kur riski","basabas kur","doviz borclanma","karar"]},
   {key:"taksitliTicari",     label:"Taksitli Ticari Finansman Hesaplama",  icon:"🏗️", grup:"Tüzel Finansman"},
@@ -25667,7 +25669,7 @@ const MENU_ARAMA_LIST=[
   {key:"hazineSwap",         label:"Swap Hesaplama",                             icon:"🔄", grup:"Hesaplama Araçları"},
   {key:"hazineBono",         label:"Hazine Sukuk Getiri Hesaplama",              icon:"📜", grup:"Hesaplama Araçları", alt:["sukuk","kira sertifikası","bono","hazine"]},
   {key:"hazineSenaryo",      label:"Kur Hareketi Senaryo",                       icon:"📊", grup:"Hesaplama Araçları"},
-  {key:"hazineKurMakasi",    label:"Kur Makası ve Marj",                         icon:"🏦", grup:"Hesaplama Araçları", alt:["kur marjı","makas","spread","döviz","banka kuru","alış satış","hazine","kur farkı"]},
+  {key:"hazineKurMakasi",    label:"Katılım Bankaları Kur İzleme",               icon:"🏦", grup:"Hesaplama Araçları", alt:["kur izleme","kur makası","kur marjı","makas","spread","döviz","banka kuru","alış satış","hazine","kur farkı"]},
   {key:"piyasaHaberleri",    label:"Piyasa Haberleri",                            icon:"📡", grup:"Piyasa & Veriler"},
   {key:"asistan",            label:"Yapay Zeka Asistan",                   icon:"🤖", grup:"Araçlar"},
   {key:"sozluk",             label:"Katılım Bankacılığı Sözlüğü",          icon:"📖", grup:"Araçlar"},
@@ -25705,7 +25707,7 @@ const HESAPLA_ARAC_LISTESI = [
   // Tüzel Finansman
   {key:"spotFinansman",      icon:"⚡", label:"Spot Finansman Hesaplama",             kat:"ticari"},
   {key:"vadeFarkiKarari",    icon:"⏳", label:"Vade Farkı Kararı",                    kat:"ticari"},
-  {key:"erkenKapamaKomisyonu", icon:"💸", label:"Erken Kapama Komisyonu",             kat:"ticari"},
+  {key:"erkenKapamaKomisyonu", icon:"💸", label:"Erken Kapama Komisyonu Hesaplama",   kat:"ticari"},
   {key:"tlYpKarari",         icon:"💱", label:"TL/YP Borçlanma Kararı",               kat:"ticari"},
   {key:"taksitliTicari",     icon:"🏗️", label:"Taksitli Ticari Finansman Hesaplama",  kat:"ticari"},
   {key:"esnekOdemePlanlari", icon:"📋", label:"Esnek Ödeme Planları Hesaplama",       kat:"ticari"},
@@ -25723,7 +25725,7 @@ const HESAPLA_ARAC_LISTESI = [
   {key:"hazineSwap",         icon:"🔄", label:"Swap Hesaplama",                      kat:"hazine"},
   {key:"hazineBono",         icon:"📜", label:"Hazine Sukuk Getiri Hesaplama",       kat:"hazine"},
   {key:"hazineSenaryo",      icon:"📊", label:"Kur Hareketi Senaryo Analizi",        kat:"hazine"},
-  {key:"hazineKurMakasi",    icon:"🏦", label:"Kur Makası ve Marj",                  kat:"hazine"},
+  {key:"hazineKurMakasi",    icon:"🏦", label:"Katılım Bankaları Kur İzleme",        kat:"hazine"},
 ];
 
 // ⚠️ 2026-09-26 (kullanıcı isteği: "hesaplama modüllerinde de ücretsiz
@@ -25842,19 +25844,35 @@ function kmMakas(alis: any, satis: any): number | null {
   return ((s - a) / ((s + a) / 2)) * 100;
 }
 // Bankaları makası DAR olandan GENİŞE sıralar; verisi eksik/geçersiz olanlar sona atılır.
-function kmSirala(bankalar: any[], para: string): any[] {
+function kmSirala(bankalar: any[], para: string, kip: "makas" | "al" | "sat" = "makas"): any[] {
   const liste = (bankalar || []).map((b: any) => {
     const v = b && b[para] ? b[para] : {};
     const alis = kmSayi(v.alis), satis = kmSayi(v.satis);
     return { ad: String(b.ad), alis, satis, makas: kmMakas(alis, satis) };
   });
-  return liste.sort((x: any, y: any) => (x.makas === null ? 1 : 0) - (y.makas === null ? 1 : 0) || (x.makas ?? 0) - (y.makas ?? 0) || x.ad.localeCompare(y.ad, "tr"));
+  const gecersizSona = (x: any, y: any) => (x.makas === null ? 1 : 0) - (y.makas === null ? 1 : 0);
+  // "al": bankadan ALIRKEN en ucuz = en DÜŞÜK satış; "sat": bankaya SATARKEN en iyi = en YÜKSEK alış. Geçersiz (makası hesaplanamayan) satırlar hep sonda.
+  if (kip === "al") return liste.sort((x: any, y: any) => gecersizSona(x, y) || (x.satis ?? 0) - (y.satis ?? 0) || x.ad.localeCompare(y.ad, "tr"));
+  if (kip === "sat") return liste.sort((x: any, y: any) => gecersizSona(x, y) || (y.alis ?? 0) - (x.alis ?? 0) || x.ad.localeCompare(y.ad, "tr"));
+  return liste.sort((x: any, y: any) => gecersizSona(x, y) || (x.makas ?? 0) - (y.makas ?? 0) || x.ad.localeCompare(y.ad, "tr"));
+}
+// Ortak veri yükleyici (Kur İzleme ekranı + sağ ray kartı): MUTLAK YOL (kar-payi.json'daki AYNI ders: native WebView göreli yolda pakete gömülü eski kopyayı okur).
+// 1) OTOMATİK kaynak (piyasa-fiyatlar?tip=banka-kurlari: sunucu ölçümleri); 2) bankada geçerli alış/satış yoksa ya da hata verirse YEDEK elle JSON.
+function kmVeriGetir(): Promise<any> {
+  const veriVarMi = (d: any) => !!d && Array.isArray(d.bankalar) && d.bankalar.some((b: any) => KM_PARALAR.some(p => kmMakas(b?.[p]?.alis, b?.[p]?.satis) !== null));
+  return fetch(`${API_BASE}/api/piyasa-fiyatlar?tip=banka-kurlari`, { cache: "no-store" })
+    .then(r => r.ok ? r.json() : null)
+    .catch(() => null)
+    .then(d => veriVarMi(d) ? d : fetch(`${API_BASE}/banka-kurlari.json`, { cache: "no-store" })
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))));
 }
 function kmOlcumMetni(veri: any): { metin: string; eski: boolean } | null {
   if (!veri || !veri.guncelleme) return null;
   const d = new Date(String(veri.guncelleme).length <= 10 ? veri.guncelleme + "T12:00:00" : veri.guncelleme);
   if (isNaN(d.getTime())) return null;
-  const fark = Math.floor((Date.now() - d.getTime()) / 86400000);
+  // TAKVİM GÜNÜ farkı: ölçüm günü 12:00 ile BUGÜN 12:00 karşılaştırılır (eskiden şimdiki an alındığı için sabah saatlerinde bir gün eksik görünüyordu)
+  const bugunOglen = new Date(); bugunOglen.setHours(12, 0, 0, 0);
+  const fark = Math.round((bugunOglen.getTime() - d.getTime()) / 86400000);
   const tarih = d.toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" });
   const saat = veri.olcumSaati ? `, ${veri.olcumSaati}` : "";
   const goreli = fark <= 0 ? "bugün" : fark === 1 ? "1 gün önce" : `${fark} gün önce`;
@@ -25879,7 +25897,7 @@ function kmMarjHesapla(yon: "al" | "sat", bankaKuru: any, referans: any, tutar: 
   return { oran, tl, vergiOran, vergiTl, toplamOran, toplamTl };
 }
 
-function HtKurMakasi() {
+function HtKurMakasi({ genisEkran }: { genisEkran?: boolean }) {
   const [sekme, setSekme] = useState<"bankalar" | "hesapla">("bankalar");
   const [para, setPara] = useState<string>("USD");
   const [veri, setVeri] = useState<any>(null);
@@ -25895,16 +25913,11 @@ function HtKurMakasi() {
   const [refElle, setRefElle] = useState("");
   const [kambiyoVar, setKambiyoVar] = useState(true);   // varsayılan: vergi uygulanır; muaf müşteri kapatır
   const [canli, setCanli] = useState<any>(null);
+  const [siralama, setSiralama] = useState<"makas" | "al" | "sat">("makas");   // makas (varsayılan) | alırken en ucuz | satarken en iyi
+  const masaustu = !!genisEkran;   // masaüstü: banka listesi SOLDA + Marj Hesapla SAĞDA sabit; sekme yok
 
   useEffect(() => {
-    // MUTLAK YOL (kar-payi.json'daki AYNI ders): native WebView göreli yolda pakete gömülü eski kopyayı okur.
-    // 1) OTOMATİK kaynak (sunucu ölçümleri); 2) bankada geçerli alış/satış yoksa ya da hata verirse YEDEK elle JSON.
-    const veriVarMi = (d: any) => !!d && Array.isArray(d.bankalar) && d.bankalar.some((b: any) => KM_PARALAR.some(p => kmMakas(b?.[p]?.alis, b?.[p]?.satis) !== null));
-    fetch(`${API_BASE}/api/piyasa-fiyatlar?tip=banka-kurlari`, { cache: "no-store" })
-      .then(r => r.ok ? r.json() : null)
-      .catch(() => null)
-      .then(d => veriVarMi(d) ? d : fetch(`${API_BASE}/banka-kurlari.json`, { cache: "no-store" })
-        .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+    kmVeriGetir()
       .then(d => setVeri(d))
       .catch(e => setHata(e.message))
       .finally(() => setYukleniyor(false));
@@ -25914,7 +25927,7 @@ function HtKurMakasi() {
       .catch(() => {});
   }, []);
 
-  const siralanmis = useMemo(() => kmSirala(veri?.bankalar || [], para), [veri, para]);
+  const siralanmis = useMemo(() => kmSirala(veri?.bankalar || [], para, siralama), [veri, para, siralama]);
   const veriVar = siralanmis.some((b: any) => b.makas !== null);
   const olcum = kmOlcumMetni(veri);
   const tutarSayi = kmSayi(tutar);
@@ -25926,10 +25939,13 @@ function HtKurMakasi() {
 
   return (
     <div style={{ padding: "0 16px 32px" }}>
-      <Seg options={[{ v: "bankalar", l: "Katılım Bankaları" }, { v: "hesapla", l: "Marj Hesapla" }]} value={sekme} onChange={setSekme} />
+      {!masaustu && <Seg options={[{ v: "bankalar", l: "Katılım Bankaları" }, { v: "hesapla", l: "Marj Hesapla" }]} value={sekme} onChange={setSekme} />}
 
-      {sekme === "bankalar" && (<>
+      <div style={masaustu ? { display: "grid", gridTemplateColumns: "minmax(0,1fr) 380px", gap: 20, alignItems: "start" } : undefined}>
+      <div style={{ minWidth: 0 }}>
+      {(masaustu || sekme === "bankalar") && (<>
         <Seg options={KM_PARALAR.map(p => ({ v: p, l: KM_PARA_ETIKET[p] }))} value={para} onChange={(v: string) => { setPara(v); setTutar(KM_VARSAYILAN_TUTAR[v]); setAcik(null); }} />
+        <Seg options={[{ v: "makas", l: "En dar makas" }, { v: "al", l: "Alırken en ucuz" }, { v: "sat", l: "Satarken en iyi" }]} value={siralama} onChange={(v: any) => { setSiralama(v); setAcik(null); }} />
         <Card>
           <p style={{ margin: 0, fontSize: 12, color: C.sub, lineHeight: 1.6 }}>
             Katılım bankalarının ilan ettiği <b style={{ color: C.soft }}>gösterge döviz ve gram altın/gümüş alış-satış kurları</b> ve <b style={{ color: C.soft }}>makas</b> (satış − alış farkının orta kura oranı, %).
@@ -25950,6 +25966,7 @@ function HtKurMakasi() {
                 {[["Banka", 2.1, "left"], ["Alış", 1, "right"], ["Satış", 1, "right"], ["Makas", 0.9, "right"]].map(([l, f, a]: any) => (
                   <span key={l} style={{ flex: f, textAlign: a, fontSize: 10, fontWeight: 700, color: C.sub, textTransform: "uppercase", letterSpacing: 0.3 }}>{l}</span>
                 ))}
+                <span style={{ width: 30, flexShrink: 0 }} />
               </div>
               {siralanmis.map((b: any, i: number) => {
                 const enDar = i === 0 && b.makas !== null;
@@ -25963,7 +25980,7 @@ function HtKurMakasi() {
                         <BankaLogoRozet ad={b.ad} boyut={20} />
                         <span style={{ minWidth: 0 }}>
                           <span style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: C.label, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.ad}</span>
-                          {enDar && <span style={{ display: "block", fontSize: 8, fontWeight: 700, color: C.green, marginTop: 1 }}>EN DAR MAKAS</span>}
+                          {enDar && <span style={{ display: "block", fontSize: 8, fontWeight: 700, color: C.green, marginTop: 1 }}>{siralama === "al" ? "ALIRKEN EN UCUZ" : siralama === "sat" ? "SATARKEN EN İYİ" : "EN DAR MAKAS"}</span>}
                         </span>
                       </div>
                       <span style={{ flex: 1, textAlign: "right", fontSize: 11.5, fontFamily: "monospace", fontWeight: 600, color: C.label }}>{fmt4(b.alis)}</span>
@@ -25971,6 +25988,7 @@ function HtKurMakasi() {
                       <span style={{ flex: 0.9, textAlign: "right", fontSize: 12, fontFamily: "monospace", fontWeight: 800, color: genis ? C.red : (enDar ? C.green : C.blue) }}>
                         {b.makas === null ? "—" : `%${fmtN(b.makas, 2)}`}{genis ? " ⚠" : ""}
                       </span>
+                      <span style={{ width: 30, flexShrink: 0, display: "flex", justifyContent: "flex-end" }}><BankaBasvurIkonu ad={b.ad} boyut={24} etiket="Hesap Aç" /></span>
                     </div>
                     {secili && (
                       <div style={{ padding: "0 12px 12px 38px", fontSize: 11.5, color: C.sub, lineHeight: 1.6 }}>
@@ -25981,6 +25999,14 @@ function HtKurMakasi() {
                             <div>Toplam: <b style={{ color: C.label }}>{fmtN((alSatMaliyet as number) + b.satis * tutarSayi * KM_KAMBIYO_ORAN / 100, 0)} TL</b> <span style={{ fontSize: 10.5 }}>(vergiden muafsan yalnız makas maliyeti)</span></div>
                           </>)}
                           {genis && <div style={{ color: C.red, marginTop: 4 }}>⚠ Olağan dışı geniş makas (%{KM_GENIS_MAKAS} üstü): hafta sonu/gece kuru ya da giriş hatası olabilir, ölçümü doğrula.</div>}
+                          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginTop: 8 }}>
+                            <button onClick={(e) => { e.stopPropagation(); setMPara(para); setYon("al"); setBankaKuru(String(b.satis).replace(".", ",")); setMTutar(tutar); setRefElle(""); if (!masaustu) setSekme("hesapla"); }}
+                              style={{ padding: "4px 10px", borderRadius: 8, fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", color: C.blue, background: "transparent", border: `1px solid ${C.blue}` }}>
+                              Bu kurla marj hesapla ›
+                            </button>
+                            <BankaBasvurButonu ad={b.ad} etiket="Hesap Aç" />
+                          </div>
+                          {bankaSiteBul(b.ad) && <div style={{ fontSize: 10, marginTop: 4 }}>“Hesap Aç” bankanın internet sitesine gider; gösterge kurdur, işlem anındaki kur esastır.</div>}
                         </>)}
                       </div>
                     )}
@@ -25995,7 +26021,9 @@ function HtKurMakasi() {
         )}
       </>)}
 
-      {sekme === "hesapla" && (<>
+      </div>
+      <div style={{ minWidth: 0 }}>
+      {(masaustu || sekme === "hesapla") && (<>
         <Card>
           <SecTitle>Kur Marjı Hesaplama</SecTitle>
           <p style={{ margin: "0 0 12px", fontSize: 12, color: C.sub, lineHeight: 1.6 }}>
@@ -26003,7 +26031,7 @@ function HtKurMakasi() {
           </p>
           <Seg options={KM_MARJ_PARALAR.map(p => ({ v: p, l: KM_MARJ_ETIKET[p] }))} value={mPara} onChange={(v: string) => { setMPara(v); setRefElle(""); setBankaKuru(""); setMTutar(KM_VARSAYILAN_TUTAR[v]); }} />
           <Seg options={[{ v: "al", l: "Bankadan alıyorum" }, { v: "sat", l: "Bankaya satıyorum" }]} value={yon} onChange={setYon} />
-          <HtField label={`${yon === "al" ? "Bankanın SATIŞ kuru" : "Bankanın ALIŞ kuru"} (${kmMaden(mPara) ? "TL/gr" : "TL"})`} value={bankaKuru} onChange={setBankaKuru} suffix={kmMaden(mPara) ? "TL/gr" : "TL"} placeholder={kmMaden(mPara) ? (mPara === "XAU" ? "6700,00" : "100,00") : "48,9550"} />
+          <HtField label={`${yon === "al" ? "Bankanın SATIŞ kuru" : "Bankanın ALIŞ kuru"} (${kmMaden(mPara) ? "TL/gr" : "TL"})`} value={bankaKuru} onChange={setBankaKuru} suffix={kmMaden(mPara) ? "TL/gr" : "TL"} placeholder="" />
           <HtField label="Tutar" value={mTutar} onChange={setMTutar} suffix={kmBirim(mPara)} placeholder={KM_VARSAYILAN_TUTAR[mPara]} />
           <HtField label={`Referans kur (${kmMaden(mPara) ? "TL/gr" : "TL"})${refCanli !== null && !kmSayi(refElle) ? " — canlı" : ""}`} value={refElle !== "" ? refElle : (refCanli !== null ? fmtN(refCanli, kmMaden(mPara) ? 2 : 4) : "")} onChange={setRefElle} suffix={kmMaden(mPara) ? "TL/gr" : "TL"} placeholder="elle gir" />
           {yon === "al" && (
@@ -26016,7 +26044,7 @@ function HtKurMakasi() {
             </label>
           )}
           <p style={{ margin: "2px 0 0", fontSize: 10.5, color: C.sub, lineHeight: 1.5 }}>
-            Canlı referans piyasa kuru yaklaşık bir orta kurdur; bankalararası, TCMB gösterge kurunu ya da altın/gümüş için kendi referansını biliyorsan buraya elle yazabilirsin.
+            Canlı referans, uygulamanın piyasa verisindeki serbest piyasa (Kapalı Çarşı) SATIŞ kurudur (kaynak: Truncgil); bankalararası ya da TCMB gösterge kurunu, altın/gümüş için kendi referansını biliyorsan buraya elle yazabilirsin.
           </p>
         </Card>
         {sonuc ? (
@@ -26047,11 +26075,61 @@ function HtKurMakasi() {
           <div style={{ textAlign: "center", padding: 16, color: C.sub, fontSize: 12 }}>{referans === null ? "Referans kur alınamadı: elle yaz." : "Bankanın kurunu yazınca marj hesaplanır."}</div>
         )}
       </>)}
+      </div>
+      </div>
 
       <div style={{ background: C.greenLight, borderRadius: 10, padding: "10px 14px" }}>
         <p style={{ margin: 0, fontSize: 11, color: C.green, lineHeight: 1.5 }}>
           ℹ️ Gösterge niteliğindedir; bankanın işlem anında uyguladığı kur esastır.
         </p>
+      </div>
+    </div>
+  );
+}
+
+// ── MASAÜSTÜ SAĞ RAY: KATILIM BANKALARI KUR İZLEME KARTI (2026-10-05) ───────────────────────────
+// Ana Sayfa (SagRay) ve Piyasa & Veriler sağ rayında. En dar makaslı 3 banka; veri yoksa kart HİÇ görünmez (rayda boş kutu olmasın).
+function KurIzlemeKarti({ nav }: any) {
+  const [para, setPara] = useState<string>("USD");
+  const [veri, setVeri] = useState<any>(null);
+  useEffect(() => { kmVeriGetir().then(d => setVeri(d)).catch(() => {}); }, []);
+  const liste = useMemo(() => kmSirala(veri?.bankalar || [], para).filter((b: any) => b.makas !== null).slice(0, 3), [veri, para]);
+  const olcum = kmOlcumMetni(veri);
+  const maden = para === "XAU" || para === "XAG";
+  if (!veri || !KM_PARALAR.some(p => kmSirala(veri.bankalar || [], p).some((b: any) => b.makas !== null))) return null;
+  const kutu: any = TEMA === "acik" ? { background: "#E9EEF4", border: "1px solid rgba(22,34,46,0.08)" } : { background: "#16222E", border: `1px solid ${WA(0.07)}` };
+  return (
+    <div style={{ marginBottom: 18 }}>
+      <div style={{ display: "flex", alignItems: "center", marginBottom: 8, cursor: "pointer" }} onClick={() => nav("hazineKurMakasi")}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: (TEMA === "acik" ? "#1A2430" : "#A8C2DC"), flex: 1 }}>{CV("Katılım Bankaları Kur İzleme")}</span>
+        <span style={{ fontSize: 11.5, fontWeight: 700, color: C.blue }}>{CV("Tümü")} ›</span>
+      </div>
+      <div style={{ borderRadius: 16, overflow: "hidden", ...kutu }}>
+        <div style={{ display: "flex", gap: 4, padding: "8px 10px 4px" }}>
+          {KM_PARALAR.map(p => (
+            <button key={p} onClick={() => setPara(p)} style={{ flex: 1, padding: "5px 0", borderRadius: 8, border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 10.5, fontWeight: 700, background: para === p ? C.blue : "transparent", color: para === p ? "#fff" : WA(0.6) }}>{KM_MARJ_ETIKET[p]}</button>
+          ))}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", padding: "4px 12px 2px" }}>
+          {[["Banka", 1.7, "left"], ["Alış", 1, "right"], ["Satış", 1, "right"], ["Makas", 0.8, "right"]].map(([l, f, a]: any) => (
+            <span key={l} style={{ flex: f, textAlign: a, fontSize: 9, fontWeight: 700, color: WA(0.45), textTransform: "uppercase", letterSpacing: 0.3 }}>{l}</span>
+          ))}
+        </div>
+        {liste.map((b: any, i: number) => (
+          <div key={b.ad} className="press-card" onClick={() => nav("hazineKurMakasi")} style={{ display: "flex", alignItems: "center", padding: "9px 12px", cursor: "pointer", borderTop: `1px solid ${WA(0.07)}` }}>
+            <div style={{ flex: 1.7, minWidth: 0, display: "flex", alignItems: "center", gap: 5, paddingRight: 4 }}>
+              <BankaLogoRozet ad={b.ad} boyut={16} />
+              <span style={{ fontSize: 11, fontWeight: 700, color: WA(0.85), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.ad.replace(" Katılım", "").replace(" Türk", "")}</span>
+            </div>
+            <span style={{ flex: 1, textAlign: "right", fontSize: 11, fontFamily: "monospace", fontWeight: 600, color: WA(0.85) }}>{fmtN(b.alis, maden ? 2 : 4)}</span>
+            <span style={{ flex: 1, textAlign: "right", fontSize: 11, fontFamily: "monospace", fontWeight: 600, color: WA(0.85) }}>{fmtN(b.satis, maden ? 2 : 4)}</span>
+            <span style={{ flex: 0.8, textAlign: "right", fontSize: 11, fontFamily: "monospace", fontWeight: 800, color: i === 0 ? C.green : C.blue }}>%{fmtN(b.makas, 2)}</span>
+          </div>
+        ))}
+        {liste.length === 0 && <div style={{ padding: "12px", fontSize: 11, color: WA(0.5), textAlign: "center", borderTop: `1px solid ${WA(0.07)}` }}>{CV("Bu ürün için ilan edilmiş kur yok.")}</div>}
+        <div style={{ padding: "7px 12px 9px", fontSize: 9.5, color: WA(0.45), borderTop: `1px solid ${WA(0.07)}`, lineHeight: 1.45 }}>
+          {olcum ? olcum.metin : ""}{olcum ? " · " : ""}{CV("en dar makaslı 3 banka · gösterge kurdur")}
+        </div>
       </div>
     </div>
   );
@@ -37183,6 +37261,7 @@ function App(){
               <PiyasaOzetiBlok dikey piyasaGorunen={piyasaGorunen} piyasaSurukle={piyasaSurukle}
                 piyasaOzetiSecim={piyasaOzetiSecim} setPiyasaOzetiDuzenleAcik={setPiyasaOzetiDuzenleAcik}
                 setSeciliKur={setSeciliKur} nav={nav}/>
+              <KurIzlemeKarti nav={nav}/>
               <KatilimEndeksiTopHareketliler nav={nav} onSecim={irHisseFonDetay} adet={10}/>
             </div>
           )}
@@ -37564,7 +37643,7 @@ function App(){
         {screen==="hazineSwap"&&<HtSwapHesaplama/>}
         {screen==="hazineBono"&&<HtHazineBonosu/>}
         {screen==="hazineSenaryo"&&<HtKurSenaryo/>}
-        {screen==="hazineKurMakasi"&&<HtKurMakasi/>}
+        {screen==="hazineKurMakasi"&&<HtKurMakasi genisEkran={genisEkran}/>}
         {screen==="piyasaHaberleri"&&<PiyasaHaberleri
           kimlik={kimlik}
           nav={nav}
