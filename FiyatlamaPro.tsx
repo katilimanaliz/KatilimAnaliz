@@ -2656,7 +2656,7 @@ const BM_CSS = `
 .bmx a{color:inherit;text-decoration:none}
 .bmx ul{margin:0;padding:0;list-style:none}
 .bmx :focus-visible{outline:2px solid var(--blue);outline-offset:2px}
-.bmx .app{height:100%;max-width:480px;margin:0 auto;display:flex;flex-direction:column;position:relative;background:var(--bg);overflow:hidden}
+.bmx .app{height:100%;max-width:480px;margin:0 auto;display:flex;flex-direction:column;position:relative;background:var(--bg);overflow:hidden} @media (min-width:900px){.bmx .app{max-width:980px} .bmx .ekran.misafir,.bmx .ekran.dar{max-width:520px;margin-left:auto;margin-right:auto}}
 @media (min-width:520px){.bmx .app{border-left:1px solid var(--line);border-right:1px solid var(--line)}
 }
 .bmx .main{flex:1;min-height:0;position:relative;display:flex;flex-direction:column}
@@ -4186,7 +4186,7 @@ function BmYukleniyor() {
 }
 function BmHata({ kod, tekrar, geri }: any) {
   return (
-    <div className="main"><div className="scroll"><div className="ekran">
+    <div className="main"><div className="scroll"><div className="ekran dar">
       <Bos ikon="alert" baslik="Kayıtların yüklenemedi" metin="Bağlantını kontrol edip tekrar dene. Kayıtların silinmedi." eylem="Tekrar dene" onEylem={tekrar} />
       <button className="btn ikincil blok" onClick={geri}>Geri dön</button>
       {kod ? <p className="teknik">Teknik ayrıntı: {kod}</p> : null}
@@ -4195,7 +4195,7 @@ function BmHata({ kod, tekrar, geri }: any) {
 }
 function BmOnay({ onKabul, geri }: any) {
   return (
-    <div className="main"><div className="scroll"><div className="ekran">
+    <div className="main"><div className="scroll"><div className="ekran dar">
       <div className="bos-ikon" style={{ margin: "18px auto 6px" }}><Ik n="shield" s={32} w={1.5} /></div>
       <h1 className="onay-bas">Başlamadan önce</h1>
       <div className="kart-b onay-kart">
@@ -25897,7 +25897,7 @@ function kmMarjHesapla(yon: "al" | "sat", bankaKuru: any, referans: any, tutar: 
   return { oran, tl, vergiOran, vergiTl, toplamOran, toplamTl };
 }
 
-function HtKurMakasi({ genisEkran }: { genisEkran?: boolean }) {
+function HtKurMakasi({ genisEkran, kimlik, nav }: { genisEkran?: boolean; kimlik?: any; nav?: (ekran: string) => void }) {
   const [sekme, setSekme] = useState<"bankalar" | "hesapla">("bankalar");
   const [para, setPara] = useState<string>("USD");
   const [veri, setVeri] = useState<any>(null);
@@ -25915,6 +25915,11 @@ function HtKurMakasi({ genisEkran }: { genisEkran?: boolean }) {
   const [canli, setCanli] = useState<any>(null);
   const [siralama, setSiralama] = useState<"makas" | "al" | "sat">("makas");   // makas (varsayılan) | alırken en ucuz | satarken en iyi
   const masaustu = !!genisEkran;   // masaüstü: banka listesi SOLDA + Marj Hesapla SAĞDA sabit; sekme yok
+  const [alarmBanka, setAlarmBanka] = useState<string | null>(null);   // 🔔 banka kuru alarmı penceresi
+  const alarmAc = (banka: string) => {
+    if (!kpProGerekliMi(kimlik?.pro, nav as any)) return;   // Pro değilse ProSatinAl'a yönlendirir, pencere açılmaz (banka oranı alarmıyla AYNI kapı)
+    setAlarmBanka(banka);
+  };
 
   useEffect(() => {
     kmVeriGetir()
@@ -25966,7 +25971,7 @@ function HtKurMakasi({ genisEkran }: { genisEkran?: boolean }) {
                 {[["Banka", 2.1, "left"], ["Alış", 1, "right"], ["Satış", 1, "right"], ["Makas", 0.9, "right"]].map(([l, f, a]: any) => (
                   <span key={l} style={{ flex: f, textAlign: a, fontSize: 10, fontWeight: 700, color: C.sub, textTransform: "uppercase", letterSpacing: 0.3 }}>{l}</span>
                 ))}
-                <span style={{ width: 30, flexShrink: 0 }} />
+                <span style={{ width: 56, marginLeft: 8, flexShrink: 0 }} />
               </div>
               {siralanmis.map((b: any, i: number) => {
                 const enDar = i === 0 && b.makas !== null;
@@ -25979,16 +25984,19 @@ function HtKurMakasi({ genisEkran }: { genisEkran?: boolean }) {
                       <div style={{ flex: 2.1, minWidth: 0, display: "flex", alignItems: "center", gap: 6, paddingRight: 4 }}>
                         <BankaLogoRozet ad={b.ad} boyut={20} />
                         <span style={{ minWidth: 0 }}>
-                          <span style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: C.label, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.ad}</span>
+                          <span style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: C.label, lineHeight: 1.25 }}>{b.ad}</span>
                           {enDar && <span style={{ display: "block", fontSize: 8, fontWeight: 700, color: C.green, marginTop: 1 }}>{siralama === "al" ? "ALIRKEN EN UCUZ" : siralama === "sat" ? "SATARKEN EN İYİ" : "EN DAR MAKAS"}</span>}
                         </span>
                       </div>
-                      <span style={{ flex: 1, textAlign: "right", fontSize: 11.5, fontFamily: "monospace", fontWeight: 600, color: C.label }}>{fmt4(b.alis)}</span>
-                      <span style={{ flex: 1, textAlign: "right", fontSize: 11.5, fontFamily: "monospace", fontWeight: 600, color: C.label }}>{fmt4(b.satis)}</span>
+                      <span style={{ flex: 1, textAlign: "right", fontSize: 11, fontFamily: "monospace", fontWeight: 600, color: C.label }}>{fmt4(b.alis)}</span>
+                      <span style={{ flex: 1, textAlign: "right", fontSize: 11, fontFamily: "monospace", fontWeight: 600, color: C.label, paddingLeft: 4 }}>{fmt4(b.satis)}</span>
                       <span style={{ flex: 0.9, textAlign: "right", fontSize: 12, fontFamily: "monospace", fontWeight: 800, color: genis ? C.red : (enDar ? C.green : C.blue) }}>
                         {b.makas === null ? "—" : `%${fmtN(b.makas, 2)}`}{genis ? " ⚠" : ""}
                       </span>
-                      <span style={{ width: 30, flexShrink: 0, display: "flex", justifyContent: "flex-end" }}><BankaBasvurIkonu ad={b.ad} boyut={24} etiket="Hesap Aç" /></span>
+                      <span style={{ width: 56, marginLeft: 8, flexShrink: 0, display: "flex", justifyContent: "flex-end", gap: 6 }}>
+                        <button onClick={(e) => { e.stopPropagation(); alarmAc(b.ad); }} aria-label={CV("Kur Alarmı Kur")} style={{ width: 24, height: 24, borderRadius: 12, border: `1px solid ${WA(0.15)}`, background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, fontSize: 12, padding: 0 }}>🔔</button>
+                        <BankaBasvurIkonu ad={b.ad} boyut={24} etiket="Hesap Aç" />
+                      </span>
                     </div>
                     {secili && (
                       <div style={{ padding: "0 12px 12px 38px", fontSize: 11.5, color: C.sub, lineHeight: 1.6 }}>
@@ -26003,6 +26011,10 @@ function HtKurMakasi({ genisEkran }: { genisEkran?: boolean }) {
                             <button onClick={(e) => { e.stopPropagation(); setMPara(para); setYon("al"); setBankaKuru(String(b.satis).replace(".", ",")); setMTutar(tutar); setRefElle(""); if (!masaustu) setSekme("hesapla"); }}
                               style={{ padding: "4px 10px", borderRadius: 8, fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", color: C.blue, background: "transparent", border: `1px solid ${C.blue}` }}>
                               Bu kurla marj hesapla ›
+                            </button>
+                            <button onClick={(e) => { e.stopPropagation(); alarmAc(b.ad); }}
+                              style={{ padding: "4px 10px", borderRadius: 8, fontSize: 10.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", color: C.blue, background: "transparent", border: `1px solid ${C.blue}` }}>
+                              🔔 Kur Alarmı Kur
                             </button>
                             <BankaBasvurButonu ad={b.ad} etiket="Hesap Aç" />
                           </div>
@@ -26083,6 +26095,13 @@ function HtKurMakasi({ genisEkran }: { genisEkran?: boolean }) {
           ℹ️ Gösterge niteliğindedir; bankanın işlem anında uyguladığı kur esastır.
         </p>
       </div>
+      {alarmBanka && (
+        <BankaKurAlarmModal banka={alarmBanka} varsayilanUrun={para} onClose={() => setAlarmBanka(null)}
+          guncel={(urun, taraf) => {
+            const bk = (veri?.bankalar || []).find((x: any) => String(x?.ad) === alarmBanka);
+            return kmSayi(bk?.[urun]?.[taraf]);
+          }} />
+      )}
     </div>
   );
 }
@@ -26111,19 +26130,19 @@ function KurIzlemeKarti({ nav }: any) {
           ))}
         </div>
         <div style={{ display: "flex", alignItems: "center", padding: "4px 12px 2px" }}>
-          {[["Banka", 1.7, "left"], ["Alış", 1, "right"], ["Satış", 1, "right"], ["Makas", 0.8, "right"]].map(([l, f, a]: any) => (
+          {[["Banka", "1 1 0", "left"], ["Alış", "0 0 58px", "right"], ["Satış", "0 0 58px", "right"], ["Makas", "0 0 42px", "right"]].map(([l, f, a]: any) => (
             <span key={l} style={{ flex: f, textAlign: a, fontSize: 9, fontWeight: 700, color: WA(0.45), textTransform: "uppercase", letterSpacing: 0.3 }}>{l}</span>
           ))}
         </div>
         {liste.map((b: any, i: number) => (
           <div key={b.ad} className="press-card" onClick={() => nav("hazineKurMakasi")} style={{ display: "flex", alignItems: "center", padding: "9px 12px", cursor: "pointer", borderTop: `1px solid ${WA(0.07)}` }}>
-            <div style={{ flex: 1.7, minWidth: 0, display: "flex", alignItems: "center", gap: 5, paddingRight: 4 }}>
+            <div style={{ flex: "1 1 0", minWidth: 0, display: "flex", alignItems: "center", gap: 5, paddingRight: 4 }}>
               <BankaLogoRozet ad={b.ad} boyut={16} />
-              <span style={{ fontSize: 11, fontWeight: 700, color: WA(0.85), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.ad.replace(" Katılım", "").replace(" Türk", "")}</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: WA(0.85), lineHeight: 1.2, minWidth: 0 }}>{b.ad}</span>
             </div>
-            <span style={{ flex: 1, textAlign: "right", fontSize: 11, fontFamily: "monospace", fontWeight: 600, color: WA(0.85) }}>{fmtN(b.alis, maden ? 2 : 4)}</span>
-            <span style={{ flex: 1, textAlign: "right", fontSize: 11, fontFamily: "monospace", fontWeight: 600, color: WA(0.85) }}>{fmtN(b.satis, maden ? 2 : 4)}</span>
-            <span style={{ flex: 0.8, textAlign: "right", fontSize: 11, fontFamily: "monospace", fontWeight: 800, color: i === 0 ? C.green : C.blue }}>%{fmtN(b.makas, 2)}</span>
+            <span style={{ flex: "0 0 58px", textAlign: "right", fontSize: 11, fontFamily: "monospace", fontWeight: 600, color: WA(0.85), whiteSpace: "nowrap" }}>{fmtN(b.alis, maden ? 2 : 4)}</span>
+            <span style={{ flex: "0 0 58px", textAlign: "right", fontSize: 11, fontFamily: "monospace", fontWeight: 600, color: WA(0.85), whiteSpace: "nowrap" }}>{fmtN(b.satis, maden ? 2 : 4)}</span>
+            <span style={{ flex: "0 0 42px", textAlign: "right", fontSize: 11, fontFamily: "monospace", fontWeight: 800, color: i === 0 ? C.green : C.blue, whiteSpace: "nowrap" }}>%{fmtN(b.makas, 2)}</span>
           </div>
         ))}
         {liste.length === 0 && <div style={{ padding: "12px", fontSize: 11, color: WA(0.5), textAlign: "center", borderTop: `1px solid ${WA(0.07)}` }}>{CV("Bu ürün için ilan edilmiş kur yok.")}</div>}
@@ -27691,6 +27710,10 @@ function FiyatAlarmlarim(){
     if(a.tip==="banka_oran"){
       return `${a.yon==="ustunde"?"≥":"≤"} %${a.hedefFiyat!=null?String(a.hedefFiyat).replace(".",","):"—"}`;
     }
+    if(a.tip==="banka_kur"){
+      const n=(a.urun==="XAU"||a.urun==="XAG")?2:4;
+      return `${a.yon==="ustunde"?"≥":"≤"} ${a.hedefFiyat!=null?Number(a.hedefFiyat).toLocaleString("tr-TR",{minimumFractionDigits:n,maximumFractionDigits:n}):"—"} TL${(a.urun==="XAU"||a.urun==="XAG")?"/gr":""}`;
+    }
     // 2026-08-06: Yeni abonelik türleri. Bunlar da fiyat alanları boş geldiği
     // için ALTTAKİ yuzde dalına düşmemeli — KAP'ta yaşanan çökme aynısı olurdu.
     if(a.tip==="endeks"){
@@ -27763,7 +27786,7 @@ function FiyatAlarmlarim(){
         </div>
       ):alarmlar.map((a:any)=>(
         <div key={a.id} style={{background:WA(0.04),border:`1px solid ${(ABONELIK_TIPLERI.includes(a.tip)||a.aktif)?WA(0.08):"rgba(74,222,128,0.25)"}`,borderRadius:14,padding:"13px 14px",marginBottom:10,display:"flex",alignItems:"center",gap:10}}>
-          <span style={{fontSize:20,flexShrink:0}}>{a.tip==="kap"?"📄":a.tip==="endeks"?"☪":a.tip==="zekat"?"🌙":(a.tip==="banka_degisim"||a.tip==="banka_oran")?"🏦":(a.aktif?"🔔":"✅")}</span>
+          <span style={{fontSize:20,flexShrink:0}}>{a.tip==="kap"?"📄":a.tip==="endeks"?"☪":a.tip==="zekat"?"🌙":(a.tip==="banka_degisim"||a.tip==="banka_oran")?"🏦":a.tip==="banka_kur"?"💱":(a.aktif?"🔔":"✅")}</span>
           <div style={{flex:1,minWidth:0}}>
             <p style={{margin:0,fontSize:13.5,fontWeight:700,color:C.soft}}>{a.ad}</p>
             <p style={{margin:"2px 0 0",fontSize:11.5,color:WA(0.55)}}>{kosulMetni(a)}</p>
@@ -29814,6 +29837,105 @@ function OranDegisimBildirimi({kapsam, nav, kimlik}:{kapsam:"finansman"|"katilma
         background:acikMi||durum==="duraklatildi"?"transparent":"#3B82F6",
         color:acikMi||durum==="duraklatildi"?WA(0.65):"#fff",
       }}>{durum==="yukleniyor"||durum==="isliyor"?"…":(acikMi||durum==="duraklatildi")?CV("Kapat"):CV("Aç")}</button>
+    </div>
+  );
+}
+
+// ── BANKA KURU ALARMI PENCERESİ (2026-10-05) — SADECE PRO ───────────────────────────────────────
+// Kur İzleme satırındaki 🔔. Sunucu: /api/bildirim?islem=alarm-ekle tip:"banka_kur" (Pro denetimi sunucuda da yapılır).
+// Veri Kur İzleme ölçümlerinden (30 dk'da bir, mesai içi) geldiği için alarm anlık değil, ölçüm sıklığında kontrol edilir.
+const KUR_ALARM_URUNLER = [{key:"USD",etiket:"USD/TRY"},{key:"EUR",etiket:"EUR/TRY"},{key:"XAU",etiket:"Gram Altın"},{key:"XAG",etiket:"Gram Gümüş"}];
+function BankaKurAlarmModal({banka, varsayilanUrun, guncel, onClose}:{
+  banka:string; varsayilanUrun:string; guncel:(urun:string,taraf:string)=>number|null; onClose:()=>void;
+}){
+  const [urun,setUrun]=useState(varsayilanUrun);
+  const [taraf,setTaraf]=useState<"satis"|"alis">("satis");
+  const [yon,setYon]=useState<"ustunde"|"altinda">("altinda");
+  const [deger,setDeger]=useState("");
+  const [durum,setDurum]=useState<"bos"|"gonderiliyor"|"basarili"|"hata">("bos");
+  const [hata,setHata]=useState("");
+  const maden=urun==="XAU"||urun==="XAG";
+  const mevcut=guncel(urun,taraf);
+  const fmt=(n:number)=>fmtN(n,maden?2:4);
+
+  const gonder=()=>{
+    const token=pushTokenAl();
+    if(!token){
+      let neden=""; try{ neden=localStorage.getItem("kp_push_hata")||""; }catch{}
+      setHata(bildirimHataMesaji(neden));
+      return;
+    }
+    const n=parseFloat(String(deger).replace(/\./g,"").replace(",","."));
+    if(!n||n<=0){ setHata("Geçerli bir hedef kur girin."); return; }
+    const urunEtiket=KUR_ALARM_URUNLER.find(u=>u.key===urun)?.etiket||urun;
+    setDurum("gonderiliyor"); setHata("");
+    fetch(`${API_BASE}/api/bildirim?islem=alarm-ekle`,{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        token, uid: kpAlarmUid, sembol:"x", ad:`${banka} ${urunEtiket} ${taraf==="satis"?"satış":"alış"}`,
+        tip:"banka_kur", banka, urun, taraf, yon, hedefFiyat:n,
+      }),
+    }).then(r=>r.json().then(d=>({ok:r.ok,d})))
+      .then(({ok,d})=>{
+        if(ok&&d?.basarili){ setDurum("basarili"); olayGonder("alarm_kuruldu",{tip:"banka_kur",banka,urun,taraf}); }
+        else { setDurum("bos"); setHata(d?.hata||"Alarm kurulamadı."); }
+      })
+      .catch(()=>{ setDurum("bos"); setHata("Bağlantı hatası, tekrar deneyin."); });
+  };
+
+  const secimDugme=(aktif:boolean,renk?:string):any=>({
+    padding:"7px 12px",borderRadius:9,border:`1.5px solid ${aktif?(renk||"#3B82F6"):WA(0.15)}`,
+    background:aktif?"rgba(59,130,246,0.15)":"transparent",
+    color:aktif?(TEMA==="acik"?"#2E6DA8":"#7DB2FF"):WA(0.6),
+    fontWeight:700,fontSize:11.5,cursor:"pointer",fontFamily:"inherit",
+  });
+
+  return(
+    <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.7)",zIndex:600,display:"flex",alignItems:"flex-end",...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}}>
+      <div style={{background:C.card,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:680,margin:"0 auto",maxHeight:"85vh",display:"flex",flexDirection:"column"}}>
+        <div style={{padding:"16px 20px 12px",borderBottom:`1px solid ${WA(0.1)}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,gap:10}}>
+          <div style={{minWidth:0}}>
+            <p style={{margin:0,fontSize:15,fontWeight:700,color:C.label}}>💱 {CV("Banka Kuru Alarmı")}</p>
+            <p style={{margin:"2px 0 0",fontSize:12,color:WA(0.55),overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{banka}</p>
+          </div>
+          <button onClick={onClose} aria-label="Kapat" style={{background:WA(0.1),border:"none",width:32,height:32,borderRadius:16,fontSize:20,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>×</button>
+        </div>
+
+        <div style={{flex:1,overflowY:"auto",padding:"16px 20px 32px"}}>
+          {durum==="basarili"?(
+            <div style={{textAlign:"center",padding:"10px 0"}}>
+              <p style={{margin:0,fontSize:24}}>✅</p>
+              <p style={{margin:"6px 0 0",fontSize:13,fontWeight:700,color:C.green}}>{CV("Alarm kuruldu!")}</p>
+              <p style={{margin:"5px 2px 0",fontSize:11.5,color:WA(0.5)}}>{CV("Kur hedefinize ulaşınca bildirim alacaksınız. Kurlar mesai saatlerinde yaklaşık 30 dakikada bir güncellenir.")}</p>
+              <button onClick={onClose} style={{marginTop:14,width:"100%",padding:"11px",borderRadius:10,border:"none",background:"#3B82F6",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>{CV("Tamam")}</button>
+            </div>
+          ):(
+            <div>
+              <p style={{margin:"0 0 6px",fontSize:11,fontWeight:700,color:WA(0.5)}}>{CV("Ürün")}</p>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:14}}>
+                {KUR_ALARM_URUNLER.map(u=>(<button key={u.key} onClick={()=>{setUrun(u.key);setHata("");}} style={secimDugme(urun===u.key)}>{u.etiket}</button>))}
+              </div>
+              <p style={{margin:"0 0 6px",fontSize:11,fontWeight:700,color:WA(0.5)}}>{CV("Hangi kur")}</p>
+              <div style={{display:"flex",gap:6,marginBottom:10}}>
+                <button onClick={()=>{setTaraf("satis");setHata("");}} style={{...secimDugme(taraf==="satis"),flex:1}}>{CV("Satış (bankadan alırken)")}</button>
+                <button onClick={()=>{setTaraf("alis");setHata("");}} style={{...secimDugme(taraf==="alis"),flex:1}}>{CV("Alış (bankaya satarken)")}</button>
+              </div>
+              <p style={{margin:"0 2px 10px",fontSize:12,color:WA(0.65)}}>{mevcut!==null?`${CV("Güncel")}: ${fmt(mevcut)} TL${maden?"/gr":""}`:CV("Bu ürün için güncel kur bulunamadı.")}</p>
+              <div style={{display:"flex",gap:6,marginBottom:8}}>
+                <button onClick={()=>{setYon("ustunde");setHata("");}} style={{flex:1,padding:"7px",borderRadius:8,border:`1px solid ${yon==="ustunde"?C.green:WA(0.15)}`,background:yon==="ustunde"?"rgba(74,222,128,0.12)":"transparent",color:yon==="ustunde"?C.green:WA(0.6),fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>↑ {CV("Üstüne çıkınca")}</button>
+                <button onClick={()=>{setYon("altinda");setHata("");}} style={{flex:1,padding:"7px",borderRadius:8,border:`1px solid ${yon==="altinda"?C.red:WA(0.15)}`,background:yon==="altinda"?"rgba(248,113,113,0.12)":"transparent",color:yon==="altinda"?C.red:WA(0.6),fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>↓ {CV("Altına inince")}</button>
+              </div>
+              <Field label={`Hedef Kur (${maden?"TL/gr":"TL"})`} value={deger} onChange={setDeger} type="text" suffix={maden?"TL/gr":"TL"}/>
+              <p style={{margin:"5px 2px 0",fontSize:10.5,color:WA(0.4)}}>{CV("Gösterge kurlara göre çalışır; bankanın işlem anındaki kuru farklı olabilir.")}</p>
+              {hata&&<p style={{margin:"8px 2px 0",fontSize:11.5,color:C.red}}>{hata}</p>}
+              <div style={{display:"flex",gap:8,marginTop:12}}>
+                <button onClick={onClose} style={{flex:1,padding:"11px",borderRadius:10,border:`1px solid ${WA(0.15)}`,background:"transparent",color:WA(0.6),fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>{CV("İptal")}</button>
+                <button onClick={gonder} disabled={durum==="gonderiliyor"} style={{flex:1,padding:"11px",borderRadius:10,border:"none",background:"#3B82F6",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>{durum==="gonderiliyor"?"…":CV("Alarm Kur")}</button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -37643,7 +37765,7 @@ function App(){
         {screen==="hazineSwap"&&<HtSwapHesaplama/>}
         {screen==="hazineBono"&&<HtHazineBonosu/>}
         {screen==="hazineSenaryo"&&<HtKurSenaryo/>}
-        {screen==="hazineKurMakasi"&&<HtKurMakasi genisEkran={genisEkran}/>}
+        {screen==="hazineKurMakasi"&&<HtKurMakasi genisEkran={genisEkran} kimlik={kimlik} nav={nav}/>}
         {screen==="piyasaHaberleri"&&<PiyasaHaberleri
           kimlik={kimlik}
           nav={nav}
