@@ -120,6 +120,15 @@
 // tasit24,ihtiyac12,ihtiyac24} (finansman). Veri kar-payi.json'dan (repodaki
 // public/kar-payi.json) okunuyor. uid Pro değilse 403. Detaylar için
 // aşağıdaki "BANKA ORANI ALARMLARI" bölümüne bakın.
+// ── 10) BANKA KURU ALARMI (2026-10-05 eklendi) — SADECE PRO ──
+//
+//   POST ?islem=alarm-ekle { token, uid, tip:"banka_kur", banka, urun, taraf,
+//                            yon:"ustunde"|"altinda", hedefFiyat, ad? }
+//
+// urun ∈ {USD,EUR,XAU,XAG} (XAU/XAG = gram altın/gümüş, TL/gr); taraf ∈ {alis,satis}. Veri, Kur İzleme toplayıcısının
+// Redis'e yazdığı ölçümlerden (api/piyasa-fiyatlar.js ?tip=banka-kurlari → "bankakur:songun" + "bankakur:ornek:<gün>") okunur;
+// ayrı bir dış istek yapılmaz. Tek seferlik eşik (banka_oran ile AYNI): tetiklenince aktif:false. Güvenlik: ölçüm 3 saatten
+// eskiyse (gece/hafta sonu) değerlendirilmez; iki ardışık ölçüm arasında %3'ten büyük sıçrama varsa o turda tetiklenmez.
 
 import { Redis } from "@upstash/redis";
 import { randomUUID, timingSafeEqual } from "crypto";
@@ -1071,6 +1080,68 @@ const BANKA_URUN_ETIKET = {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
+// BANKA KURU ALARMI (2026-10-05) — SADECE PRO
+// ═══════════════════════════════════════════════════════════════════════════
+// "X bankasının USD satış kuru Y TL'nin altına inince/üstüne çıkınca haber ver." Veri Kur İzleme toplayıcısının ölçümleri.
+const KUR_ALARM_URUNLERI = new Set(["USD", "EUR", "XAU", "XAG"]);   // XAU/XAG = gram altın/gümüş (TL/gr)
+const KUR_ALARM_TARAFLARI = new Set(["alis", "satis"]);
+const KUR_ONEK = "BANKAKUR:";
+const MAKS_BANKA_KURU_ALARM_TOKEN_BASINA = 30;   // Pro zaten sınırsız; bu SADECE kötüye kullanım tavanı
+const KUR_VERI_TAZE_MS = 3 * 3600 * 1000;        // ölçüm bundan eskiyse alarm DEĞERLENDİRİLMEZ (gece/hafta sonu eski ölçümle tetiklenmesin)
+const KUR_KURULUS_VERI_MS = 4 * 24 * 3600 * 1000; // alarm KURARKEN referans için kabul edilen en eski ölçüm (hafta sonu + tatil payı)
+const KUR_SUPHELI_SICRAMA = 0.03;                // iki ardışık ölçüm arası bundan büyük sıçrama → o turda tetikleme (ayrıştırma hatası koruması)
+const KUR_URUN_ETIKET = { USD: "USD/TRY", EUR: "EUR/TRY", XAU: "Gram Altın", XAG: "Gram Gümüş" };
+const KUR_TARAF_ETIKET = { alis: "alış", satis: "satış" };
+
+function kurFmt(urun, v) {
+  const n = urun === "XAU" || urun === "XAG" ? 2 : 4;
+  return Number(v).toLocaleString("tr-TR", { minimumFractionDigits: n, maximumFractionDigits: n });
+}
+
+// Son işlem gününün ölçüm listesi (eskiden yeniye). Her öğe: { t, v, ts }. Veri yoksa/okunamazsa null.
+async function bankaKuruOku() {
+  try {
+    const gun = await redis.get("bankakur:songun");
+    if (!gun) return null;
+    const ham = await redis.lrange(`bankakur:ornek:${String(gun)}`, 0, -1);
+    const liste = [];
+    for (const x of ham || []) {
+      let o = x;
+      if (typeof o === "string") { try { o = JSON.parse(o); } catch { continue; } }
+      if (!o || !o.v || !o.t) continue;
+      const ts = Date.parse(`${String(o.t)}:00+03:00`);   // t = "YYYY-MM-DDTHH:MM" (Türkiye saati)
+      if (!isFinite(ts)) continue;
+      liste.push({ t: o.t, v: o.v, ts });
+    }
+    return liste.length ? liste : null;
+  } catch (e) {
+    console.error("bankakur olcumu okunamadi:", e.message);
+    return null;
+  }
+}
+
+function bankaKuruDegeri(ornek, banka, urun, taraf) {
+  if (!ornek || !ornek.v) return null;
+  const anahtar = Object.keys(ornek.v).find((k) => bankaAdiEslesir(k, banka));
+  if (!anahtar) return null;
+  const x = ornek.v[anahtar]?.[urun]?.[taraf];
+  return typeof x === "number" && isFinite(x) && x > 0 ? x : null;
+}
+
+// Bu banka/ürün/taraf için EN SON ve bir önceki değer. Altın/gümüş saatte bir ölçüldüğü için "son ölçüm"
+// ürünü içermeyebilir — o yüzden ürünü içeren en son ölçümü geriye doğru ararız.
+function bankaKuruSonDegerler(liste, banka, urun, taraf) {
+  let son = null, onceki = null;
+  for (let i = (liste || []).length - 1; i >= 0; i--) {
+    const d = bankaKuruDegeri(liste[i], banka, urun, taraf);
+    if (d == null) continue;
+    if (!son) son = { deger: d, ts: liste[i].ts };
+    else { onceki = d; break; }
+  }
+  return { son, onceki };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // BANKA ORANI DEĞİŞİM ABONELİĞİ (2026-10-03) — SADECE PRO
 // ═══════════════════════════════════════════════════════════════════════════
 // "Herhangi bir bankanın herhangi bir oranı değişince haber ver." Eşik yok; KAP gibi bir ABONELİK: tetiklenince
@@ -1705,6 +1776,94 @@ async function alarmEkle(req, res) {
     return;
   }
 
+  // ── BANKA KURU ALARMI (2026-10-05) — SADECE PRO ───────────────────────────
+  // banka_oran ile AYNI kapı/mantık (tek seferlik eşik, tetiklenince aktif:false); veri Kur İzleme ölçümlerinden.
+  if (tip === "banka_kur") {
+    if (!uid) {
+      res.status(403).json({ hata: "Banka kuru alarmı için giriş yapmış olman gerekiyor." });
+      return;
+    }
+    const pro = await kullaniciProMu(uid);
+    if (!pro) {
+      res.status(403).json({ hata: "Banka kuru alarmı Pro üyelere özel. Pro'ya geçerek kullanabilirsin." });
+      return;
+    }
+    const banka = req.body?.banka;
+    const urun = req.body?.urun;
+    const taraf = req.body?.taraf;
+    if (!banka || typeof banka !== "string" || banka.length > 60 || !KUR_ALARM_URUNLERI.has(urun) || !KUR_ALARM_TARAFLARI.has(taraf)) {
+      res.status(400).json({ hata: "Geçerli bir 'banka', 'urun' (USD|EUR|XAU|XAG) ve 'taraf' (alis|satis) gerekli" });
+      return;
+    }
+    const h = parseFloat(hedefFiyat);
+    if (hedefFiyat == null || !isFinite(h) || h <= 0) {
+      res.status(400).json({ hata: "Geçerli bir 'hedefFiyat' (hedef kur, TL) gerekli" });
+      return;
+    }
+    if (yon !== "ustunde" && yon !== "altinda") {
+      res.status(400).json({ hata: "'yon' 'ustunde' ya da 'altinda' olmalı" });
+      return;
+    }
+
+    const kurListe = await bankaKuruOku();
+    const { son: mevcut } = bankaKuruSonDegerler(kurListe, banka, urun, taraf);
+    if (!mevcut || Date.now() - mevcut.ts > KUR_KURULUS_VERI_MS) {
+      res.status(502).json({ hata: `${banka} için ${KUR_URUN_ETIKET[urun]} ${KUR_TARAF_ETIKET[taraf]} kuru şu an alınamadı, alarm oluşturulamadı.` });
+      return;
+    }
+    if (yon === "ustunde" && mevcut.deger >= h) {
+      res.status(400).json({ hata: `Kur şu an zaten hedefin üstünde (${kurFmt(urun, mevcut.deger)} ≥ ${kurFmt(urun, h)}). Güncel kurun üstünde bir hedef girin.`, mevcutFiyat: mevcut.deger });
+      return;
+    }
+    if (yon === "altinda" && mevcut.deger <= h) {
+      res.status(400).json({ hata: `Kur şu an zaten hedefin altında (${kurFmt(urun, mevcut.deger)} ≤ ${kurFmt(urun, h)}). Güncel kurun altında bir hedef girin.`, mevcutFiyat: mevcut.deger });
+      return;
+    }
+
+    const sembol = `${KUR_ONEK}${banka}|${urun}|${taraf}`;
+    const adEtiket = ad && ad !== "x" ? String(ad).slice(0, 100) : `${banka} ${KUR_URUN_ETIKET[urun]} ${KUR_TARAF_ETIKET[taraf]}`;
+
+    try {
+      const { basarili, sonuc } = await kilitliCalistir(
+        redis, ALARM_KILIT_ANAHTAR, 15,
+        async () => {
+          const alarmlar = await alarmlariOku();
+          const sayisi = alarmlar.filter((a) => a.tip === "banka_kur" && a.aktif && (a.uid === uid || a.token === token)).length;
+          if (sayisi >= MAKS_BANKA_KURU_ALARM_TOKEN_BASINA) {
+            return { hataKodu: 429, hata: `En fazla ${MAKS_BANKA_KURU_ALARM_TOKEN_BASINA} aktif banka kuru alarmı kurabilirsiniz.` };
+          }
+          if (alarmlar.length >= MAKS_TOPLAM_ALARM) {
+            console.error("KURESEL ALARM TAVANI ASILDI (banka_kur):", alarmlar.length);
+            return { hataKodu: 503, hata: "Sistem şu anda yeni alarm kabul edemiyor. Lütfen daha sonra tekrar deneyin." };
+          }
+          const yeniAlarm = {
+            id: randomUUID(),
+            token, uid, sembol, ad: adEtiket,
+            tip: "banka_kur",
+            yon,
+            hedefFiyat: h,
+            yuzde: null,
+            baslangicFiyat: mevcut.deger,
+            banka, urun, taraf,
+            olusturulmaTs: Date.now(),
+            aktif: true,
+            tetiklenmeTs: null,
+            tetiklenmeFiyat: null,
+          };
+          await redis.set(ALARM_KV_ANAHTAR, [...alarmlar, yeniAlarm]);
+          return { alarm: yeniAlarm };
+        },
+        { denemeSayisi: 10, bekleMs: 300 }
+      );
+      if (!basarili) { res.status(409).json({ hata: "Şu anda başka bir alarm işlemi sürüyor, lütfen tekrar deneyin." }); return; }
+      if (sonuc?.hataKodu) { res.status(sonuc.hataKodu).json({ hata: sonuc.hata }); return; }
+      res.status(200).json({ basarili: true, alarm: sonuc.alarm });
+    } catch (e) {
+      res.status(500).json({ hata: "Banka kuru alarmı oluşturulamadı", detay: e.message });
+    }
+    return;
+  }
+
   // ── ABD HİSSE ALARMI (2026-10-03) — SADECE fiyat alarmı ───────────────────
   // KAP/endeks abonelikleri yukarıda "BIST:" öneki şart koştuğu için zaten reddedildi; zekât/banka_oran kendi
   // sembollerini kullanır. Buraya "US:" ile ulaşan her şey yalnızca hedef | yuzde olabilir.
@@ -2154,7 +2313,7 @@ async function alarmKontrol(req, res) {
         // filtresine EKLENMEZSE alarmFiyatTablosu onlar için boşuna fiyat
         // aramaya çalışır ve her turda hata üretir.
         const kapAlarmlar = aktifAlarmlar.filter((a) => a.tip === "kap");
-        const fiyatAlarmlar = aktifAlarmlar.filter((a) => a.tip !== "kap" && a.tip !== "zekat" && a.tip !== "endeks" && a.tip !== "banka_oran" && a.tip !== "banka_degisim");
+        const fiyatAlarmlar = aktifAlarmlar.filter((a) => a.tip !== "kap" && a.tip !== "zekat" && a.tip !== "endeks" && a.tip !== "banka_oran" && a.tip !== "banka_degisim" && a.tip !== "banka_kur");
 
         // Aynı sembolü birden fazla alarm izliyorsa fiyatı TEK kere çekelim.
         const benzersizSemboller = [...new Set(fiyatAlarmlar.map((a) => a.sembol))];
@@ -2186,6 +2345,14 @@ async function alarmKontrol(req, res) {
           if (!karPayiVeri) bankaOranNot = "kar-payi.json alinamadi — banka orani alarmlari bu turda atlandi";
           // Olay günlüğü tek karşılaştırmayla tüm aboneler (aktif ya da duraklatılmış) için güncel tutulur
           else if (bankaDegisimVarMi) bankaDegisimDurum = await bankaDegisimGuncelle(karPayiVeri);
+        }
+
+        // Banka kuru alarmları (2026-10-05): ölçüm listesi TEK kere okunur (Kur İzleme toplayıcısının Redis kaydı; dış istek yok).
+        const bankaKurAlarmlar = aktifAlarmlar.filter((a) => a.tip === "banka_kur");
+        let kurListe = null, bankaKuruNot = null, bankaKuruTetiklenen = 0, bankaKuruSupheli = 0;
+        if (bankaKurAlarmlar.length > 0) {
+          kurListe = await bankaKuruOku();
+          if (!kurListe) bankaKuruNot = "banka kuru olcumu alinamadi — banka kuru alarmlari bu turda atlandi";
         }
 
         let tetiklenen = 0;
@@ -2428,6 +2595,46 @@ async function alarmKontrol(req, res) {
             continue;
           }
 
+          // ── BANKA KURU ALARMI (2026-10-05) ───────────────────────────────────
+          // banka_oran ile AYNI "tek seferlik eşik" mantığı; veri Kur İzleme ölçümlerinden. Veri yoksa/bayatsa alarm dokunulmadan
+          // bırakılır (sonraki turda tekrar denenir) — eski ölçümle ASLA tetiklenmez.
+          if (alarm.tip === "banka_kur") {
+            if (!kurListe) { guncelListe.push(alarm); continue; }
+            const { son, onceki } = bankaKuruSonDegerler(kurListe, alarm.banka, alarm.urun, alarm.taraf);
+            if (!son || Date.now() - son.ts > KUR_VERI_TAZE_MS) { guncelListe.push(alarm); continue; }
+            // Tek ölçümlük ayrıştırma hatası/anormal sıçrama koruması: bir sonraki ölçüm teyit ederse (artık "önceki" olur) tetiklenir.
+            if (onceki != null && Math.abs(son.deger - onceki) / onceki > KUR_SUPHELI_SICRAMA) { bankaKuruSupheli++; guncelListe.push(alarm); continue; }
+
+            const guncelKur = son.deger;
+            let tetiklendiMi = false, mesaj = "";
+            if (alarm.yon === "ustunde" && guncelKur >= alarm.hedefFiyat) {
+              tetiklendiMi = true;
+              mesaj = `${alarm.ad} hedefinize ulaştı/geçti: ${kurFmt(alarm.urun, guncelKur)} TL (hedef: ${kurFmt(alarm.urun, alarm.hedefFiyat)} TL). Gösterge kurdur; işlem anındaki kur esastır.`;
+            } else if (alarm.yon === "altinda" && guncelKur <= alarm.hedefFiyat) {
+              tetiklendiMi = true;
+              mesaj = `${alarm.ad} hedefinizin altına indi: ${kurFmt(alarm.urun, guncelKur)} TL (hedef: ${kurFmt(alarm.urun, alarm.hedefFiyat)} TL). Gösterge kurdur; işlem anındaki kur esastır.`;
+            }
+            if (!tetiklendiMi) { guncelListe.push(alarm); continue; }
+
+            bankaKuruTetiklenen++;
+            const gonderildi = await tekTokeneGonder(alarm.token, `💱 Banka Kuru: ${alarm.ad}`, mesaj, {
+              tip: "banka-kuru-alarmi", banka: String(alarm.banka), urun: String(alarm.urun), taraf: String(alarm.taraf), alarmId: String(alarm.id),
+            });
+            if (gonderildi === true) gonderilenBildirim++;
+            else if (gonderildi && gonderildi.hata) {
+              gonderimHatalari.push({ alarm: alarm.ad, tokenIlk10: (alarm.token || "").slice(0, 10), hata: gonderildi.hata });
+            }
+            const olduMu = !!(gonderildi && gonderildi.hata &&
+              String(gonderildi.hata).includes("registration-token-not-registered"));
+            if (olduMu) {
+              olenAbonelik++;
+              guncelListe.push({ ...alarm, aktif: false, kapaliSebep: "token-gecersiz", tetiklenmeTs: Date.now() });
+              continue;
+            }
+            guncelListe.push({ ...alarm, aktif: false, tetiklenmeTs: Date.now(), tetiklenmeFiyat: guncelKur });
+            continue;
+          }
+
           const guncelFiyat = fiyatlar[alarm.sembol];
           if (guncelFiyat == null) {
             guncelListe.push(alarm); // fiyat alınamadıysa bir sonraki kontrole bırak
@@ -2508,6 +2715,9 @@ async function alarmKontrol(req, res) {
           endeksTetiklenen,
           bankaOraniAlarmi: bankaOranAlarmlar.length,
           bankaOraniTetiklenen,
+          bankaKuruAlarmi: bankaKurAlarmlar.length,
+          bankaKuruTetiklenen,
+          bankaKuruSupheli,
           bankaDegisimAboneligi: bankaDegisimAlarmlar.length,
           bankaDegisimTetiklenen,
           olenAbonelik,
@@ -2524,6 +2734,7 @@ async function alarmKontrol(req, res) {
           ...(kapNot ? { kapNot } : {}),
           ...(endeksNot ? { endeksNot } : {}),
           ...(bankaOranNot ? { bankaOranNot } : {}),
+          ...(bankaKuruNot ? { bankaKuruNot } : {}),
         };
       },
       { denemeSayisi: 3, bekleMs: 1000 }
