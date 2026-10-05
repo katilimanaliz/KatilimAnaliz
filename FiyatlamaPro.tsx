@@ -1137,6 +1137,10 @@ function ProSatinAl({kimlik,nav,onHesapGerekli}:{kimlik:ReturnType<typeof useKpK
           {" · "}
           <span onClick={()=>nav("kvkkAydinlatma")} style={{textDecoration:"underline",cursor:"pointer"}}>{CV("KVKK Aydınlatma Metni")}</span>
         </span>
+        {/* ⚠️ 2026-10-05: App Store 3.1.2 — abonelik ekranında Kullanım Koşulları (EULA) bağlantısı ZORUNLU. Apple'ın standart EULA'sı kullanılıyor. */}
+        <div style={{marginTop:6,fontSize:11.5,color:WA(0.45)}}>
+          <a href="https://www.apple.com/legal/internet-services/itunes/dev/stdeula/" target="_blank" rel="noopener noreferrer" style={{textDecoration:"underline",color:"inherit"}}>{CV("Kullanım Koşulları (EULA)")}</a>
+        </div>
         <p style={{fontSize:10,color:WA(0.35),margin:"8px 0 0"}}>{CV("Abonelik yönetimi ve iptali: Ayarlar → Apple Kimliği / Google Hesabı → Abonelikler.")}</p>
       </div>
     </div>
@@ -1159,7 +1163,7 @@ function YasalMetinEkrani({baslik,children}:{baslik:string;children:React.ReactN
   return(
     <div style={{padding:"0 16px 32px"}}>
       <Card>
-        <p style={{margin:"0 0 4px",fontSize:11,color:WA(0.4)}}>{CV("Son güncelleme: 21 Eylül 2026")}</p>
+        <p style={{margin:"0 0 4px",fontSize:11,color:WA(0.4)}}>{CV("Son güncelleme: 5 Ekim 2026")}</p>
         {children}
       </Card>
     </div>
@@ -4518,15 +4522,18 @@ function KvkkAydinlatma(){
       <YmP>Hesap oluşturduğunuzda: ad soyad, e-posta adresi ve şifreniz (Firebase Authentication tarafından şifrelenmiş biçimde saklanır, biz ham şifrenizi hiçbir zaman görmeyiz/saklamayız).</YmP>
       <YmP>Uygulamayı kullanırken: cihaz push bildirim jetonu (bildirim göndermek için), favori/geçmiş hesaplama kayıtlarınız (cihazınızda veya hesabınıza bağlı olarak saklanır).</YmP>
       <YmP>Kimlik doğrulama sağlayıcı tercihinize göre: Google veya Apple hesabınızdan paylaşmayı seçtiğiniz ad ve e-posta bilgisi.</YmP>
+      <YmP>Pro abonelik satın aldığınızda: hesap kimliğinize bağlı abonelik durumu, abonelik türü ve dönem bilgisi. Kredi kartı veya banka bilgisi tarafımızca toplanmaz; ödeme Apple veya Google tarafından alınır.</YmP>
+      <YmP>Müşteri Portföyüm'ü kullanırsanız: sizin girdiğiniz müşteri adı, telefon, sektör ve görüşme/takip notları. Bu kayıtlarla ilgili bağlı olduğunuz kurumun politikalarına ve ilgili mevzuata uymak sizin sorumluluğunuzdadır.</YmP>
+      <YmP>AI Asistan'ı kullanırsanız: yazdığınız sorular (yanıt üretmek için işlenir).</YmP>
 
       <YmBaslik>3. İşleme Amaçları</YmBaslik>
-      <YmP>Hesabınızı oluşturmak ve kimliğinizi doğrulamak, Uygulama içi tercihlerinizi (favoriler, hesaplama geçmişi, alarmlar) cihazlar arasında senkronize etmek, size push bildirimi göndermek, hesap güvenliğini sağlamak, yasal yükümlülüklerimizi yerine getirmek.</YmP>
+      <YmP>Hesabınızı oluşturmak ve kimliğinizi doğrulamak, Uygulama içi tercihlerinizi (favoriler, hesaplama geçmişi, alarmlar) cihazlar arasında senkronize etmek, size push bildirimi göndermek, Pro aboneliğinizi doğrulayıp Pro özellikleri sunmak, Müşteri Portföyüm kayıtlarınızı hesabınızda saklamak, AI Asistan yanıtları üretmek, hesap güvenliğini sağlamak, yasal yükümlülüklerimizi yerine getirmek.</YmP>
 
       <YmBaslik>4. Hukuki Sebep</YmBaslik>
       <YmP>Kişisel verileriniz; açık rızanızın alınması, bir sözleşmenin kurulması veya ifasıyla doğrudan ilgili olması ve veri sorumlusunun meşru menfaati hukuki sebeplerine dayanılarak işlenmektedir.</YmP>
 
       <YmBaslik>5. Kişisel Verilerin Aktarımı</YmBaslik>
-      <YmP>Kimlik doğrulama ve bildirim altyapısı için verileriniz, hizmet sağlayıcımız Google LLC'nin (Firebase) sunucularında işlenmektedir. Verileriniz, yasal zorunluluklar dışında üçüncü taraflarla pazarlama amacıyla paylaşılmaz veya satılmaz.</YmP>
+      <YmP>Kimlik doğrulama, bildirim ve bulut kayıt altyapısı için verileriniz hizmet sağlayıcımız Google LLC'nin (Firebase) sunucularında; Pro abonelik doğrulaması için RevenueCat, Inc.'in sunucularında; AI Asistan sorularınız ise Google'ın yapay zekâ hizmetinde işlenmektedir. Bu hizmet sağlayıcıların sunucuları yurt dışında bulunabilir; verileriniz bu nedenle yurt dışına aktarılabilir. Verileriniz, yasal zorunluluklar dışında üçüncü taraflarla pazarlama amacıyla paylaşılmaz veya satılmaz.</YmP>
 
       <YmBaslik>6. Saklama Süresi</YmBaslik>
       <YmP>Kişisel verileriniz, hesabınız aktif olduğu sürece ve ilgili mevzuatta öngörülen zamanaşımı süreleri boyunca saklanır. Hesabınızı sildiğinizde, verileriniz makul bir süre içinde silinir veya anonim hale getirilir.</YmP>
@@ -4548,13 +4555,13 @@ function GizlilikPolitikasi(){
       <YmP>• Cihaz bilgileri: push bildirim jetonu, platform (iOS/Android/web).</YmP>
       <YmP>• Kullanım verileri: favori hesaplamalarınız, hesaplama geçmişiniz, fiyat alarmlarınız — hesabınız yoksa sadece cihazınızda (localStorage), hesabınız varsa hesabınıza bağlı olarak saklanır.</YmP>
       <YmP>• Müşteri Portföyüm (üye girişi gerektirir): kullanıcının elle girdiği müşteri adı, telefon, sektör ve görüşme/takip notları hesabınıza bağlı olarak bulut altyapımızda (Google Firebase) saklanır ve yalnızca hesabınız tarafından okunup yazılabilir. Banka sistemlerinden hiçbir veri alınmaz. Müşterilerinize ait kişisel verileri girerken bağlı olduğunuz kurumun politikalarına ve ilgili mevzuata uymak kullanıcının sorumluluğundadır; hesabınızı sildiğinizde bu kayıtlar da silinir.</YmP>
-      <YmP>• Uygulama, kredi kartı veya banka hesap bilgisi TOPLAMAZ — hiçbir finansal işlem/ödeme özelliği bulunmamaktadır.</YmP>
+      <YmP>• Ödemeler: Pro abonelik satın alımı Apple App Store veya Google Play üzerinden yapılır. Uygulama kredi kartı veya banka hesap bilginizi görmez ve TOPLAMAZ. Abonelik durumunuzu doğrulamak için hesap kimliğiniz ve satın alma bilginiz (abonelik türü, başlangıç ve bitiş tarihi) abonelik altyapı sağlayıcımız RevenueCat'e iletilir. Uygulama üzerinden banka işlemi veya para transferi yapılmaz.</YmP>
 
       <YmBaslik>2. Verileri Nasıl Kullanıyoruz</YmBaslik>
       <YmP>Verileriniz yalnızca hesabınızı yönetmek, Uygulama deneyiminizi kişiselleştirmek (favoriler, geçmiş, alarmlar), size bildirim göndermek ve Uygulamayı iyileştirmek için kullanılır. Verileriniz reklam amacıyla üçüncü taraflara satılmaz.</YmP>
 
       <YmBaslik>3. Üçüncü Taraf Hizmetler</YmBaslik>
-      <YmP>Kimlik doğrulama ve bildirimler için Google Firebase kullanıyoruz. Piyasa verileri (fon, hisse, döviz, altın fiyatları) TEFAS, Fonoloji, TradingView gibi kaynaklardan çekilir — bu kaynaklara kişisel verinizin hiçbiri iletilmez, sadece genel piyasa verisi talep edilir.</YmP>
+      <YmP>Kimlik doğrulama (Google ve Apple ile giriş dahil) ve bildirimler için Google Firebase kullanıyoruz. Pro abonelik yönetimi için RevenueCat, Inc. hizmetini kullanıyoruz; hesap kimliğiniz ve satın alma bilgileriniz bu hizmet tarafından işlenir. AI Asistan'a yazdığınız sorular, yanıt üretmek için sunucumuz aracılığıyla Google'ın yapay zekâ hizmetine (Gemini) iletilir; bu sorulara kimlik, şifre veya finansal hesap bilgisi yazmamanızı öneririz. Piyasa verileri (fon, hisse, döviz, altın fiyatları) TEFAS, Fonoloji, TradingView gibi kaynaklardan çekilir — bu kaynaklara kişisel verinizin hiçbiri iletilmez, sadece genel piyasa verisi talep edilir. Bu hizmet sağlayıcıların sunucuları yurt dışında bulunabilir.</YmP>
 
       <YmBaslik>4. Çerezler ve Yerel Depolama</YmBaslik>
       <YmP>Uygulama, tercihlerinizi (tema, dil, favoriler) cihazınızda yerel depolama (localStorage) ile saklar. Bu veriler cihazınızdan ayrılmaz, sunucularımıza otomatik olarak gönderilmez.</YmP>
