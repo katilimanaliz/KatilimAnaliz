@@ -1,5 +1,5 @@
 {
-  "guncelleme": "2026-09-28",
+  "guncelleme": "2026-10-06",
   "bankalar": [
     {
       "ad": "Adil Katılım",
@@ -17,14 +17,14 @@
     },
     {
       "ad": "Dünya Katılım",
-      "tl": 33.76,
-      "usd": 1.81,
+      "tl": 34.50,
+      "usd": 1.78,
       "eur": 1.73,
       "altin": 1.67
     },
     {
       "ad": "Emlak Katılım",
-      "tl": 31.11,
+      "tl": 30.95,
       "usd": 0.7,
       "eur": 0.6,
       "altin": 0.1
@@ -38,35 +38,35 @@
     },
     {
       "ad": "Hayat Finans",
-      "tl": 37.03,
+      "tl": 37.01,
       "usd": 2.42,
-      "eur": 2.13,
+      "eur": 2.14,
       "altin": null
     },
     {
       "ad": "Kuveyt Türk",
-      "tl": 32.66,
-      "usd": 1.17,
-      "eur": 0.86,
+      "tl": 32.59,
+      "usd": 1.19,
+      "eur": 0.87,
       "altin": 0.14
     },
     {
       "ad": "T.O.M. Katılım",
-      "tl": 41.50,
+      "tl": 40.03,
       "usd": 4.0,
       "eur": 1.75,
       "altin": null
     },
     {
       "ad": "Türkiye Finans",
-      "tl": 28.49,
+      "tl": 28.61,
       "usd": 0.61,
       "eur": 0.44,
       "altin": 0.04
     },
     {
       "ad": "Vakıf Katılım",
-      "tl": 31.46,
+      "tl": 31.39,
       "usd": 1.01,
       "eur": 0.69,
       "altin": null
