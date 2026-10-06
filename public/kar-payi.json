@@ -81,9 +81,9 @@
   ],
   "finansman": {
     "guncelleme": {
-      "konut": "2026-09-28",
-      "tasit": "2026-09-28",
-      "ihtiyac": "2026-09-28"
+      "konut": "2026-10-06",
+      "tasit": "2026-10-06",
+      "ihtiyac": "2026-10-06"
     },
     "bankalar": [
       {
@@ -115,7 +115,7 @@
       },
       {
         "ad": "Türkiye Finans",
-        "konut60": 2.90,
+        "konut60": 2.96,
         "konut120": 2.88,
         "tasit12": 3.44,
         "tasit24": 3.35,
