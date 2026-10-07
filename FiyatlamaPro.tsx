@@ -28267,6 +28267,41 @@ function pushTokenAl():string|null{
 // bunun üzerine kurulu (bkz. api/bildirim.js).
 let kpAlarmUid: string | null = null;
 
+// ── 2026-10-07 GÜVENLİK: alarm uçlarına Firebase ID token'ı eklenir ──
+// Sunucu (api/bildirim.js → alarmKimlikUid) uid'i artık gövdedeki değere değil, bu başlıktaki token'dan okur (başkasının uid'iyle
+// alarm listeleme/silme ve Pro taklidi engellenir). Tek noktada fetch sarmalanır; token alınamazsa istek eskisi gibi gider.
+async function kpIdTokenAl(): Promise<string | null> {
+  try {
+    if (IS_NATIVE) {
+      const mod: any = await import("@capacitor-firebase/authentication");
+      const r: any = await Promise.race([mod.FirebaseAuthentication.getIdToken({forceRefresh:false}), new Promise<any>(res => setTimeout(() => res(null), 4000))]);
+      return r?.token || null;
+    }
+    const app = await kpFirebaseWebApp();
+    const { getAuth } = await import("firebase/auth");
+    const u = getAuth(app).currentUser;
+    return u ? await u.getIdToken() : null;
+  } catch (_) { return null; }
+}
+(function kpAlarmFetchYamala() {
+  try {
+    const w: any = window;
+    if (w.__kpAlarmFetch) return;
+    w.__kpAlarmFetch = true;
+    const orj = w.fetch.bind(w);
+    w.fetch = async (girdi: any, init?: any) => {
+      try {
+        const url = typeof girdi === "string" ? girdi : String(girdi?.url || "");
+        if (kpAlarmUid && /\/api\/bildirim\?islem=(alarm-|haber-bildirim-ayarla)/.test(url) && !/alarm-kontrol/.test(url)) {
+          const t = await kpIdTokenAl();
+          if (t) { const h = new Headers(init?.headers || {}); h.set("x-firebase-idtoken", t); init = { ...(init || {}), headers: h }; }
+        }
+      } catch (_) { /* token eklenemedi: istek eskisi gibi gider */ }
+      return orj(girdi, init);
+    };
+  } catch (_) { /* fetch sarmalanamadı: davranış değişmez */ }
+})();
+
 // ── PRO DURUMU + nav — KÖK BİLEŞEN DIŞINDAKİ bileşenler için (2026-09-27) ──
 // RaporModal gibi prop almayan/çok yerden çağrılan bileşenler Pro durumuna
 // ve nav'a buradan erişiyor; kök bileşendeki bir effect her render'da
