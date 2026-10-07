@@ -250,6 +250,163 @@ async function kpProDurumGetir(uid:string): Promise<KpProDurum>{
 // kaydı): modül yalnızca gerektiğinde yüklenir, native tarafta hiç import
 // edilmez. `getApps().length` kontrolü, birden fazla yerden çağrıldığında
 // Firebase'in ikinci kez initializeApp() ile hata vermesini önler.
+// ── AYARLAR ↔ HESAP SENKRONU (2026-10-07) ──────────────────────────────────
+// Favoriler, hesaplama geçmişi ve ayarlar HESABA bağlıdır (Firestore ayarlar/{uid}); kullanıcı cihaz değiştirince verisi gelir.
+// Yerel kopya (localStorage) AYNEN çalışır; aşağıdaki liste dışındaki anahtarlara DOKUNULMAZ.
+// DAHİL DEĞİL (bilinçli): kp_hesaplama_kullanim_v1 (günlük ücretsiz araç sayacı — cihaz/gün bazlı), kea_hisseler & fonTahminListesi (piyasa verisi önbelleği),
+//   kp_haber_* (sunucuda abonelik), kp_push_token / kp_cihaz_id / kp_onboarding_v1 / kp_appstore_banner (cihaza özel), kp_portfoy / kp_egitim_v1 (zaten kendi senkronları var).
+// KURALLAR: ilk birleştirmede (bu cihazın bu anahtar için daha önce senkron kaydı yoksa) iki taraf da LİSTE ise birleşim (hiçbir şey kaybolmaz);
+//   aksi halde "son yazan kazanır" (anahtar başına zaman damgası). Giriş sonrası yerel veri değiştiyse uygulama TEK SEFERLİK yenilenir (tema/dil/liste yeni değerle açılsın).
+// Buluta okunamazsa (izin/ağ hatası) HİÇBİR ŞEY yazılmaz (bulut verisinin yanlışlıkla ezilmesi önlenir).
+const KP_AYAR_ANAHTARLARI = [
+  "katilimAnaliz_favoriler_v1", "vk_gecmis", "vk_settings", "kp_tema", "kp_dil", "kp_piyasa_ozeti_secim",
+  "kp_portfoy_para", "kp_portfoy_gizli", "kp_zekat", "katilimAnaliz_vadeTakibi_v1", "gk_ekstra",
+  "katilimAnaliz_kullaniciAdi_v1", "hv_piyasa",
+];
+const KP_AYAR_META_ANAHTAR = "kp_ayar_meta_v1";
+const KP_AYAR_MAKS_BAYT = 200000;
+let kpAyarUid: string | null = null;
+let kpAyarHazir = false;
+let kpAyarBekleyen: Record<string, boolean> = {};
+let kpAyarZamanlayici: any = null;
+let kpAyarOrjSetItem: ((k: string, v: string) => void) | null = null;
+
+function kpAyarMetaOku(): Record<string, number> {
+  try { const m = JSON.parse(localStorage.getItem(KP_AYAR_META_ANAHTAR) || "{}"); return m && typeof m === "object" ? m : {}; } catch (_) { return {}; }
+}
+function kpAyarMetaYaz(m: Record<string, number>) { try { localStorage.setItem(KP_AYAR_META_ANAHTAR, JSON.stringify(m)); } catch (_) {} }
+
+function kpAyarYerelDegisti(k: string) {
+  const m = kpAyarMetaOku(); m[k] = Date.now(); kpAyarMetaYaz(m);
+  kpAyarBekleyen[k] = true;
+  clearTimeout(kpAyarZamanlayici);
+  kpAyarZamanlayici = setTimeout(() => { kpAyarBekleyenleriYaz(); }, 2000);
+}
+
+async function kpAyarBekleyenleriYaz(): Promise<void> {
+  const uid = kpAyarUid;
+  const anahtarlar = Object.keys(kpAyarBekleyen);
+  if (!uid || !kpAyarHazir || anahtarlar.length === 0) return;
+  kpAyarBekleyen = {};
+  try {
+    const meta = kpAyarMetaOku();
+    const harita: any = {};
+    for (const k of anahtarlar) {
+      const v = localStorage.getItem(k);
+      if (v === null || v.length > KP_AYAR_MAKS_BAYT) continue;
+      harita[k] = { v, t: Number(meta[k]) || Date.now() };
+    }
+    if (Object.keys(harita).length === 0) return;
+    const app = await kpFirebaseWebApp();
+    const { getFirestore, doc, setDoc } = await import("firebase/firestore");
+    await setDoc(doc(getFirestore(app), "ayarlar", uid), { anahtarlar: harita, guncelleme: new Date().toISOString() }, { merge: true });
+  } catch (e) {
+    console.error("Ayarlar buluta yazılamadı:", e);
+    for (const k of anahtarlar) kpAyarBekleyen[k] = true;   // sonraki değişiklikte / gizlenmede tekrar denenir
+  }
+}
+
+(function kpAyarKancasiKur() {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) return;
+    const st: any = Storage.prototype;
+    if (st.__kpAyarKanca) return;
+    const orj = st.setItem;
+    kpAyarOrjSetItem = (k: string, v: string) => { orj.call(window.localStorage, k, v); };
+    st.setItem = function (k: string, v: string) {
+      orj.call(this, k, v);
+      try { if (this === window.localStorage && kpAyarUid && kpAyarHazir && KP_AYAR_ANAHTARLARI.indexOf(k) >= 0) kpAyarYerelDegisti(k); } catch (_) {}
+    };
+    st.__kpAyarKanca = true;
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") kpAyarBekleyenleriYaz(); });
+  } catch (_) {}
+})();
+
+function kpAyarListeBirlestir(k: string, a: any[], b: any[]): any[] {
+  const anahtar = (x: any) => (x && typeof x === "object" && x.id != null) ? "id:" + x.id : JSON.stringify(x);
+  const gorulen = new Set<string>(); const out: any[] = [];
+  for (const x of [...a, ...b]) { const kk = anahtar(x); if (!gorulen.has(kk)) { gorulen.add(kk); out.push(x); } }
+  if (k === "vk_gecmis") return out.sort((x: any, y: any) => (Number(y && y.id) || 0) - (Number(x && x.id) || 0)).slice(0, 10);
+  return out;
+}
+
+// true döner → bu cihazdaki yerel veri DEĞİŞTİ (arayüzün yeni değerle açılması için yenileme gerekir)
+async function kpAyarSenkronBaslat(uid: string): Promise<boolean> {
+  kpAyarHazir = false; kpAyarUid = uid;
+  try {
+    const app = await kpFirebaseWebApp();
+    const { getFirestore, doc, getDoc, setDoc } = await import("firebase/firestore");
+    const ref = doc(getFirestore(app), "ayarlar", uid);
+    const snap = await getDoc(ref);
+    const bulut: any = snap.exists() ? ((snap.data() as any)?.anahtarlar || {}) : {};
+    const meta = kpAyarMetaOku();
+    const yazilacak: any = {};
+    let degisti = false;
+    const yerelYaz = (k: string, v: string) => { if (kpAyarOrjSetItem) kpAyarOrjSetItem(k, v); else localStorage.setItem(k, v); degisti = true; };
+    for (const k of KP_AYAR_ANAHTARLARI) {
+      const yv = localStorage.getItem(k);
+      const b = bulut[k];
+      const bv: string | null = b && typeof b.v === "string" ? b.v : null;
+      const bt = Number(b && b.t) || 0;
+      const yt = Number(meta[k]) || 0;
+      if (bv === null && yv === null) continue;
+      if (bv === null) { if (yv!.length <= KP_AYAR_MAKS_BAYT) { const t = yt || Date.now(); yazilacak[k] = { v: yv, t }; meta[k] = t; } continue; }
+      if (yv === null) { yerelYaz(k, bv); meta[k] = bt; continue; }
+      if (bv === yv) { meta[k] = Math.max(yt, bt); continue; }
+      let sonV = yv, sonT = yt;
+      let yl: any = null, bl: any = null;
+      if (yt === 0) { try { yl = JSON.parse(yv); bl = JSON.parse(bv); } catch (_) { yl = null; bl = null; } }
+      if (yt === 0 && Array.isArray(yl) && Array.isArray(bl)) {
+        sonV = JSON.stringify(kpAyarListeBirlestir(k, yl, bl)); sonT = Date.now();
+      } else if (bt > yt) { sonV = bv; sonT = bt; }
+      if (sonV !== yv) yerelYaz(k, sonV);
+      meta[k] = sonT;
+      if (sonV !== bv && sonV.length <= KP_AYAR_MAKS_BAYT) yazilacak[k] = { v: sonV, t: sonT };
+    }
+    kpAyarMetaYaz(meta);
+    if (Object.keys(yazilacak).length > 0) {
+      await setDoc(ref, { anahtarlar: yazilacak, guncelleme: new Date().toISOString() }, { merge: true });
+    }
+    kpAyarHazir = true;
+    return degisti;
+  } catch (e) {
+    console.error("Ayarlar senkronu başlatılamadı (buluta HİÇBİR ŞEY yazılmayacak):", e);
+    return false;
+  }
+}
+
+// ── NATIVE → WEB FIREBASE OTURUM KÖPRÜSÜ (2026-10-06) ──────────────────────
+// SORUN: iPhone/Android uygulamasında giriş native eklentiyle (@capacitor-firebase/authentication) yapılıyor; Firestore ise WEB SDK ile okunuyor.
+// Web SDK'nın oturumu olmadığı için istekler request.auth=null gidiyor → Müşteri Portföyüm / pro/{uid} / portfoy / egitim "permission-denied".
+// ÇÖZÜM: native kullanıcının ID token'ı sunucuda doğrulanır (bildirim.js ?islem=firebase-oturum), aynı uid için custom token döner,
+// web SDK bununla signInWithCustomToken yapar. Mevcut oturumlar da düzelir (yeniden giriş gerekmez). Hata olursa uygulama eskisi gibi çalışır.
+async function kpWebOturumKopru(uid: string): Promise<void> {
+  try {
+    const app = await kpFirebaseWebApp();
+    const { getAuth, signInWithCustomToken } = await import("firebase/auth");
+    const auth: any = getAuth(app);
+    try { if (auth.authStateReady) await auth.authStateReady(); } catch (_) { /* eski SDK: atla */ }
+    if (auth.currentUser && auth.currentUser.uid === uid) return;
+    const mod = await import("@capacitor-firebase/authentication");
+    const { token } = await mod.FirebaseAuthentication.getIdToken({ forceRefresh: false });
+    if (!token) return;
+    const r = await fetch(`${API_BASE}/api/bildirim?islem=firebase-oturum`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken: token }),
+    });
+    const j = await r.json().catch(() => null);
+    if (!r.ok || !j || !j.customToken) { console.error("Web oturum köprüsü: sunucu token vermedi", r.status); return; }
+    await signInWithCustomToken(auth, j.customToken);
+  } catch (e) { console.error("Web oturum köprüsü başarısız:", e); }
+}
+async function kpWebOturumKapat(): Promise<void> {
+  try {
+    const app = await kpFirebaseWebApp();
+    const { getAuth, signOut } = await import("firebase/auth");
+    const auth = getAuth(app);
+    if (auth.currentUser) await signOut(auth);
+  } catch (e) { console.error("Web oturumu kapatılamadı:", e); }
+}
+
 async function kpFirebaseWebApp(){
   const { initializeApp, getApps } = await import("firebase/app");
   return getApps().length ? getApps()[0] : initializeApp(FIREBASE_WEB_CONFIG);
@@ -267,7 +424,7 @@ async function kpKullaniciVerisiniSil(uid: string) {
       const sn = await getDocs(collection(db, "musteriPortfoyu", uid, "kayitlar"));
       for (const d of sn.docs) await deleteDoc(d.ref);
     } catch (e) { console.error("Müşteri Portföyüm kayıtları silinemedi:", e); }
-    for (const koleksiyon of ["musteriPortfoyu", "egitim", "liderlik", "portfoy"]) {
+    for (const koleksiyon of ["musteriPortfoyu", "egitim", "liderlik", "portfoy", "ayarlar"]) {
       try { await deleteDoc(doc(db, koleksiyon, uid)); } catch (e) { console.error(koleksiyon + " dokümanı silinemedi:", e); }
     }
   } catch (e) { console.error("Kullanıcı verisi silinemedi:", e); }
@@ -368,9 +525,11 @@ function useKpKimlik(){
           const mod=await import("@capacitor-firebase/authentication");
           const FA=mod.FirebaseAuthentication;
           const {user}=await FA.getCurrentUser();
+          if(user) await kpWebOturumKopru(user.uid); else await kpWebOturumKapat();   // web SDK oturumu hazır olmadan kullanici set EDİLMEZ (Firestore okumaları sıraya girsin)
           if(!iptal) setKullanici(user?{uid:user.uid,email:user.email,ad:user.displayName,saglayici:user.providerId||"bilinmiyor",dogrulandi:!!user.emailVerified,olusturmaTarihi:(user as any).metadata?.creationTime||null}:null);
-          await FA.addListener("authStateChange",(event:any)=>{
+          await FA.addListener("authStateChange",async(event:any)=>{
             const u=event?.user;
+            if(u) await kpWebOturumKopru(u.uid); else await kpWebOturumKapat();
             if(!iptal) setKullanici(u?{uid:u.uid,email:u.email,ad:u.displayName,saglayici:u.providerId||"bilinmiyor",dogrulandi:!!u.emailVerified,olusturmaTarihi:u.metadata?.creationTime||null}:null);
           });
         } else {
@@ -516,6 +675,7 @@ function useKpKimlik(){
       if(gercekIsNative){
         const mod=await import("@capacitor-firebase/authentication");
         await mod.FirebaseAuthentication.signOut();
+        await kpWebOturumKapat();
       } else {
         const app=await kpFirebaseWebApp();
         const {getAuth,signOut}=await import("firebase/auth");
@@ -4520,14 +4680,15 @@ function KvkkAydinlatma(){
 
       <YmBaslik>2. İşlenen Kişisel Veriler</YmBaslik>
       <YmP>Hesap oluşturduğunuzda: ad soyad, e-posta adresi ve şifreniz (Firebase Authentication tarafından şifrelenmiş biçimde saklanır, biz ham şifrenizi hiçbir zaman görmeyiz/saklamayız).</YmP>
-      <YmP>Uygulamayı kullanırken: cihaz push bildirim jetonu (bildirim göndermek için), favori/geçmiş hesaplama kayıtlarınız (cihazınızda veya hesabınıza bağlı olarak saklanır).</YmP>
+      <YmP>Uygulamayı kullanırken: cihaz push bildirim jetonu (bildirim göndermek için), favori ve geçmiş hesaplama kayıtlarınız ile uygulama tercihleriniz (cihazınızda ve hesabınıza bağlı olarak bulutta).</YmP>
+      <YmP>Hesabınıza bağlı diğer bulut kayıtları: portföy kalemleriniz ve eğitim ilerlemeniz; liderlik tablosuna katılırsanız takma adınız ve toplam puanınız (herkese açık). Fiyat alarmlarınız sunucumuzda tutulur.</YmP>
       <YmP>Kimlik doğrulama sağlayıcı tercihinize göre: Google veya Apple hesabınızdan paylaşmayı seçtiğiniz ad ve e-posta bilgisi.</YmP>
       <YmP>Pro abonelik satın aldığınızda: hesap kimliğinize bağlı abonelik durumu, abonelik türü ve dönem bilgisi. Kredi kartı veya banka bilgisi tarafımızca toplanmaz; ödeme Apple veya Google tarafından alınır.</YmP>
       <YmP>Müşteri Portföyüm'ü kullanırsanız: sizin girdiğiniz müşteri adı, telefon, sektör ve görüşme/takip notları. Bu kayıtlarla ilgili bağlı olduğunuz kurumun politikalarına ve ilgili mevzuata uymak sizin sorumluluğunuzdadır.</YmP>
       <YmP>AI Asistan'ı kullanırsanız: yazdığınız sorular (yanıt üretmek için işlenir).</YmP>
 
       <YmBaslik>3. İşleme Amaçları</YmBaslik>
-      <YmP>Hesabınızı oluşturmak ve kimliğinizi doğrulamak, Uygulama içi tercihlerinizi (favoriler, hesaplama geçmişi, alarmlar) cihazlar arasında senkronize etmek, size push bildirimi göndermek, Pro aboneliğinizi doğrulayıp Pro özellikleri sunmak, Müşteri Portföyüm kayıtlarınızı hesabınızda saklamak, AI Asistan yanıtları üretmek, hesap güvenliğini sağlamak, yasal yükümlülüklerimizi yerine getirmek.</YmP>
+      <YmP>Hesabınızı oluşturmak ve kimliğinizi doğrulamak, Portföyünüzü, favorilerinizi, hesaplama geçmişinizi, tercihlerinizi ve eğitim ilerlemenizi cihazlar arasında senkronize etmek, fiyat alarmlarınızı çalıştırmak, size push bildirimi göndermek, Pro aboneliğinizi doğrulayıp Pro özellikleri sunmak, Müşteri Portföyüm kayıtlarınızı hesabınızda saklamak, AI Asistan yanıtları üretmek, hesap güvenliğini sağlamak, yasal yükümlülüklerimizi yerine getirmek.</YmP>
 
       <YmBaslik>4. Hukuki Sebep</YmBaslik>
       <YmP>Kişisel verileriniz; açık rızanızın alınması, bir sözleşmenin kurulması veya ifasıyla doğrudan ilgili olması ve veri sorumlusunun meşru menfaati hukuki sebeplerine dayanılarak işlenmektedir.</YmP>
@@ -4553,7 +4714,8 @@ function GizlilikPolitikasi(){
       <YmBaslik>1. Topladığımız Veriler</YmBaslik>
       <YmP>• Hesap bilgileri: ad soyad, e-posta, şifre (Firebase Authentication ile şifrelenmiş) — hesap oluşturmanız hâlinde.</YmP>
       <YmP>• Cihaz bilgileri: push bildirim jetonu, platform (iOS/Android/web).</YmP>
-      <YmP>• Kullanım verileri: favori hesaplamalarınız, hesaplama geçmişiniz, fiyat alarmlarınız — hesabınız yoksa sadece cihazınızda (localStorage), hesabınız varsa hesabınıza bağlı olarak saklanır.</YmP>
+      <YmP>• Kullanım verileri: favori hesaplamalarınız, hesaplama geçmişiniz ve tercihleriniz (tema, dil, Piyasa Özeti seçimi, Zekât ve Vade Takibi kayıtları dahil) cihazınızda (localStorage) saklanır; hesabınız varsa cihaz değiştirdiğinizde de erişebilmeniz için hesabınıza bağlı olarak bulutta da saklanır. Ayrıca hesabınıza bağlı olarak bulutta saklananlar: portföy kalemleriniz (ürün, miktar, alış fiyatı ve tarihi) ve eğitim ilerlemeniz. Eğitim liderlik tablosuna katılırsanız takma adınız ve toplam puanınız herkese açık görünür.</YmP>
+      <YmP>• Alarmlar ve bildirimler: Fiyat alarmlarınız ve bildirim jetonunuz sunucumuzda tutulur; hesabınız varsa hesabınıza bağlanır.</YmP>
       <YmP>• Müşteri Portföyüm (üye girişi gerektirir): kullanıcının elle girdiği müşteri adı, telefon, sektör ve görüşme/takip notları hesabınıza bağlı olarak bulut altyapımızda (Google Firebase) saklanır ve yalnızca hesabınız tarafından okunup yazılabilir. Banka sistemlerinden hiçbir veri alınmaz. Müşterilerinize ait kişisel verileri girerken bağlı olduğunuz kurumun politikalarına ve ilgili mevzuata uymak kullanıcının sorumluluğundadır; hesabınızı sildiğinizde bu kayıtlar da silinir.</YmP>
       <YmP>• Ödemeler: Pro abonelik satın alımı Apple App Store veya Google Play üzerinden yapılır. Uygulama kredi kartı veya banka hesap bilginizi görmez ve TOPLAMAZ. Abonelik durumunuzu doğrulamak için hesap kimliğiniz ve satın alma bilginiz (abonelik türü, başlangıç ve bitiş tarihi) abonelik altyapı sağlayıcımız RevenueCat'e iletilir. Uygulama üzerinden banka işlemi veya para transferi yapılmaz.</YmP>
 
@@ -4564,13 +4726,13 @@ function GizlilikPolitikasi(){
       <YmP>Kimlik doğrulama (Google ve Apple ile giriş dahil) ve bildirimler için Google Firebase kullanıyoruz. Pro abonelik yönetimi için RevenueCat, Inc. hizmetini kullanıyoruz; hesap kimliğiniz ve satın alma bilgileriniz bu hizmet tarafından işlenir. AI Asistan'a yazdığınız sorular, yanıt üretmek için sunucumuz aracılığıyla Google'ın yapay zekâ hizmetine (Gemini) iletilir; bu sorulara kimlik, şifre veya finansal hesap bilgisi yazmamanızı öneririz. Piyasa verileri (fon, hisse, döviz, altın fiyatları) TEFAS, Fonoloji, TradingView gibi kaynaklardan çekilir — bu kaynaklara kişisel verinizin hiçbiri iletilmez, sadece genel piyasa verisi talep edilir. Bu hizmet sağlayıcıların sunucuları yurt dışında bulunabilir.</YmP>
 
       <YmBaslik>4. Çerezler ve Yerel Depolama</YmBaslik>
-      <YmP>Uygulama, tercihlerinizi (tema, dil, favoriler) cihazınızda yerel depolama (localStorage) ile saklar. Bu veriler cihazınızdan ayrılmaz, sunucularımıza otomatik olarak gönderilmez.</YmP>
+      <YmP>Uygulama, tercihlerinizi (tema, dil, favoriler) cihazınızda yerel depolama (localStorage) ile saklar. Hesabınız yoksa bu veriler cihazınızdan ayrılmaz; hesabınız varsa cihazlar arası erişim için hesabınıza bağlı olarak buluta da kaydedilir.</YmP>
 
       <YmBaslik>5. Veri Güvenliği</YmBaslik>
       <YmP>Şifreniz hiçbir zaman düz metin olarak saklanmaz — kimlik doğrulama tamamen Google Firebase Authentication altyapısı üzerinden, endüstri standardı şifreleme ile yürütülür.</YmP>
 
       <YmBaslik>6. Haklarınız</YmBaslik>
-      <YmP>Hesabınızı ve ilişkili verilerinizi istediğiniz zaman Profil → Hesabımı Sil yoluyla kalıcı olarak silebilirsiniz. KVKK kapsamındaki detaylı haklarınız için KVKK Aydınlatma Metni'ne bakınız.</YmP>
+      <YmP>Hesabınızı ve ilişkili verilerinizi istediğiniz zaman Profil → Hesabımı Sil yoluyla kalıcı olarak silebilirsiniz; hesap silme Müşteri Portföyüm kayıtlarınızı, portföyünüzü, eğitim ilerlemenizi, liderlik kaydınızı ve hesabınızda saklanan ayarlarınızı (favoriler, geçmiş vb.) da siler. Bu politikanın tam metni katilimplus.com/gizlilik adresinde de yayımlanır. KVKK kapsamındaki detaylı haklarınız için KVKK Aydınlatma Metni'ne bakınız.</YmP>
 
       <YmBaslik>7. Çocukların Gizliliği</YmBaslik>
       <YmP>Uygulama, 18 yaş altı bireylere yönelik değildir ve bilerek 18 yaş altı kullanıcılardan veri toplamaz.</YmP>
@@ -35150,6 +35312,24 @@ function App(){
     return () => { iptal = true; };
   }, [kimlik.kullanici?.uid]);
 
+  // ── AYARLAR ↔ HESAP SENKRONU (2026-10-07): favoriler, hesaplama geçmişi, tema/dil, Piyasa Özeti seçimi vb. (bkz. KP_AYAR_ANAHTARLARI).
+  // Giriş/uygulama açılışında BİR KEZ birleştirilir; yerel veri değiştiyse oturum başına TEK yenileme (döngü korumalı).
+  useEffect(() => {
+    const uid = kimlik.kullanici?.uid || null;
+    if (!uid) { kpAyarUid = null; kpAyarHazir = false; return; }
+    let iptal = false;
+    (async () => {
+      const degisti = await kpAyarSenkronBaslat(uid);
+      if (iptal || !degisti) return;
+      try {
+        if (sessionStorage.getItem("kp_ayar_yenilendi")) return;
+        sessionStorage.setItem("kp_ayar_yenilendi", "1");
+      } catch (_) { return; }
+      window.location.reload();
+    })();
+    return () => { iptal = true; };
+  }, [kimlik.kullanici?.uid]);
+
   // ── ALARMLAR ↔ HESAP SENKRONU (2026-09-27) ───────────────────────────────
   // Portföy senkron effect'iyle AYNI tetikleyici (kullanici?.uid), ama ayrı
   // bir effect — ikisi bağımsız kaygılar, biri başarısız olursa diğerini
@@ -36200,7 +36380,7 @@ function App(){
         }
         return <PortfoyDuzenleModal kalem={dk} onKapat={()=>setPortfoyDuzenleId(null)}
                       onKaydet={(g)=>portfoyAlisGuncelle(dk.id,g.partiIndex,g)}/>; })()}
-      {gostergeTablo&&<GostergeTabloModal ad={gostergeTablo.ad} seri={gostergeTablo.seri||[]} birim={gostergeTablo.birim} onClose={()=>setGostergeTablo(null)}/>}
+      {gostergeTablo&&<GostergeTabloModal ad={gostergeTablo.ad} seri={gostergeTablo.seri||[]} birim={gostergeTablo.birim} proAktif={kimlik.pro.aktif} onClose={()=>setGostergeTablo(null)} onProGerekli={()=>{ setGostergeTablo(null); nav("proSatinAl"); }}/>}
       {gostergeUyari&&<div style={{position:"fixed",top:64,left:`calc(50% + ${SIDEBAR_W/2}px)`,transform:"translateX(-50%)",background:C.thead,color:"#fff",borderRadius:20,padding:"10px 20px",fontSize:13,fontWeight:600,zIndex:700,boxShadow:"0 4px 14px rgba(0,0,0,0.35)"}}>{gostergeUyari}</div>}
       {hakkindaAcik&&<HakkindaModal onClose={()=>setHakkindaAcik(false)}/>}
       {onboardingAcik&&<OnboardingModal genisEkran={genisEkran} onClose={()=>setOnboardingAcik(false)}/>}
