@@ -1193,6 +1193,56 @@ function ProSatinAl({kimlik,nav,onHesapGerekli}:{kimlik:ReturnType<typeof useKpK
   const [donem,setDonem]=useState<"aylik"|"yillik">("yillik");
   const [gonderiliyor,setGonderiliyor]=useState(false);
   const [geriYukleniyor,setGeriYukleniyor]=useState(false);
+  // ── DENEME SÜRESİ APPLE'DAN OKUNUR (2026-10-07) ─────────────────────────────
+  // Eskiden "7 gün ücretsiz" metni kodda SABİTTİ: App Store Connect'te tanıtım teklifi tanımlı olmadığında veya kullanıcının deneme hakkı
+  // bittiğinde de gösteriliyor, ilk günden ücret çekiliyordu. Artık yalnızca (1) pakette ÜCRETSİZ tanıtım teklifi varsa VE (2) bu Apple
+  // Kimliği teklife uygunsa gösterilir. Bilinmiyorsa / okunamazsa deneme vaat EDİLMEZ (güvenli varsayılan). Değer: gün sayısı, 0 = yok.
+  const [deneme,setDeneme]=useState<{aylik:number,yillik:number}>({aylik:0,yillik:0});
+  useEffect(()=>{
+    let iptal=false;
+    if(!((window as any).Capacitor?.isNativePlatform?.() ?? false)) return;
+    (async()=>{
+      try{
+        const { Purchases } = await import("@revenuecat/purchases-capacitor");
+        const offerings = await kpZamanAsimi(Purchases.getOfferings(), 8000, "offerings");
+        const paketler:any[] = (offerings as any)?.current?.availablePackages || [];
+        const gunHesapla=(ip:any):number=>{
+          if(!ip || Number(ip.price) !== 0) return 0;   // yalnızca ÜCRETSİZ tanıtım teklifi
+          const n=Number(ip.periodNumberOfUnits)||0;
+          const birim=String(ip.periodUnit||"").toUpperCase();
+          return n * (birim==="DAY"?1:birim==="WEEK"?7:birim==="MONTH"?30:birim==="YEAR"?365:0);
+        };
+        const adaylar:Record<string,number>={};
+        for(const pk of paketler){
+          const tip=pk?.packageType;
+          const g=gunHesapla(pk?.product?.introPrice);
+          if(g>0 && (tip==="MONTHLY"||tip==="ANNUAL")) adaylar[pk.product.identifier]=g;
+        }
+        const idler=Object.keys(adaylar);
+        const uygun:Record<string,boolean>={};
+        if(idler.length>0){
+          try{
+            const e:any = await kpZamanAsimi((Purchases as any).checkTrialOrIntroductoryPriceEligibility({ productIdentifiers: idler }), 6000, "uygunluk");
+            for(const id of idler){
+              const st = e?.[id]?.status;
+              uygun[id] = (st===2 || st==="INTRO_ELIGIBILITY_STATUS_ELIGIBLE");
+            }
+          }catch(_){ /* uygunluk okunamadı → deneme vaat etme */ }
+        }
+        const sonuc={aylik:0,yillik:0};
+        for(const pk of paketler){
+          const id=pk?.product?.identifier;
+          if(id && uygun[id]){
+            if(pk.packageType==="MONTHLY") sonuc.aylik=adaylar[id];
+            if(pk.packageType==="ANNUAL") sonuc.yillik=adaylar[id];
+          }
+        }
+        if(!iptal) setDeneme(sonuc);
+      }catch(e){ console.error("Deneme teklifi okunamadı (deneme vaat edilmeyecek):", e); }
+    })();
+    return ()=>{ iptal=true; };
+  },[]);
+  const denemeGun = donem==="aylik" ? deneme.aylik : deneme.yillik;
 
   const geriYukle=async()=>{
     setGeriYukleniyor(true);
@@ -1310,7 +1360,7 @@ function ProSatinAl({kimlik,nav,onHesapGerekli}:{kimlik:ReturnType<typeof useKpK
             <span style={{fontSize:15,fontWeight:700}}>₺999,99</span>
           </button>
         </div>
-        <p style={{textAlign:"center",fontSize:11.5,color:WA(0.45),margin:"10px 2px 0"}}>{CV("7 gün ücretsiz dene, istediğin an iptal et.")}</p>
+        <p style={{textAlign:"center",fontSize:11.5,color:WA(0.45),margin:"10px 2px 0"}}>{denemeGun>0 ? `${denemeGun} gün ücretsiz dene, istediğin an iptal et.` : CV("İstediğin an iptal edebilirsin.")}</p>
       </Card>
 
       <Card>
@@ -1342,7 +1392,7 @@ function ProSatinAl({kimlik,nav,onHesapGerekli}:{kimlik:ReturnType<typeof useKpK
         </div>
       )}
       <button onClick={satinAl} disabled={gonderiliyor} style={{width:"100%",padding:"15px 0",borderRadius:14,border:"none",background:"linear-gradient(135deg,#1B9E7A,#2CCB9A)",color:"#06120E",fontSize:15,fontWeight:700,cursor:gonderiliyor?"default":"pointer",opacity:gonderiliyor?0.6:1,marginTop:4}}>
-        {gonderiliyor?"…":CV(kimlik.kullanici?"7 Gün Ücretsiz Dene":"Hesap Aç ve 7 Gün Ücretsiz Dene")}
+        {gonderiliyor?"…":(denemeGun>0 ? (kimlik.kullanici?`${denemeGun} Gün Ücretsiz Dene`:`Hesap Aç ve ${denemeGun} Gün Ücretsiz Dene`) : CV(kimlik.kullanici?"Pro'ya Geç":"Hesap Aç ve Pro'ya Geç"))}
       </button>
       {!kimlik.kullanici && (
         <p style={{textAlign:"center",fontSize:12,color:WA(0.55),margin:"10px 0 0"}}>
@@ -1351,7 +1401,7 @@ function ProSatinAl({kimlik,nav,onHesapGerekli}:{kimlik:ReturnType<typeof useKpK
         </p>
       )}
       <p style={{textAlign:"center",fontSize:10.5,color:WA(0.4),margin:"10px 10px 0",lineHeight:1.5}}>
-        {CV("Deneme sonrası")} {donem==="yillik"?"yıllık ₺999,99":"aylık ₺99,99"} {CV("olarak devam eder. Dönem bitmeden en az 24 saat önce iptal etmezsen abonelik App Store/Google Play hesabın üzerinden otomatik yenilenir.")}
+        {denemeGun>0 ? CV("Deneme sonrası") : CV("Abonelik")} {donem==="yillik"?"yıllık ₺999,99":"aylık ₺99,99"} {denemeGun>0 ? CV("olarak devam eder. Dönem bitmeden en az 24 saat önce iptal etmezsen abonelik App Store/Google Play hesabın üzerinden otomatik yenilenir.") : CV("olarak hemen başlar. Dönem bitmeden en az 24 saat önce iptal etmezsen abonelik App Store/Google Play hesabın üzerinden otomatik yenilenir.")}
       </p>
 
       {/* ⚠️ 2026-09-26: "Satın Alımları Geri Yükle" — App Store incelemesinin
@@ -3787,7 +3837,7 @@ function ProKarti({ ozellik, sayi, pro, onGec, onKapat }: any) {
         <thead><tr><th scope="col"><span className="sr">Özellik</span></th><th scope="col">Ücretsiz</th><th scope="col" className="pro-s">Pro</th></tr></thead>
         <tbody>{KARSILASTIRMA.map(([a, u, p]) => <tr key={a}><th scope="row">{a}</th><td>{u}</td><td className="pro-s">{p}</td></tr>)}</tbody>
       </table>
-      <p className="pw-fiyat">Fiyat ve ücretsiz deneme bilgisi bir sonraki ekranda.</p>
+      <p className="pw-fiyat">Fiyat bilgisi bir sonraki ekranda.</p>
       <button className="btn pri blok" onClick={onGec}>Pro'ya geç</button>
       <button className="btn ikincil blok" onClick={onKapat}>Şimdilik değil</button>
       <p className="pw-not">Verilerin silinmez: ücretsiz sürümde mevcut kayıtlarını görmeye devam edersin.</p>
@@ -6999,7 +7049,7 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
     oncelik: 2, katilimUygun: false,
     fiyat: f.fiyat ?? null, fiyatTarihi: f.tarih ?? null, islemDurumu: null,
     gunluk: f.gunluk ?? null, haftalik: f.haftalik ?? null, aylik: f.aylik ?? null,
-    uc_aylik: f.uc_aylik ?? null, ytd: f.ytd ?? null, yillik: f.yillik ?? null,
+    uc_aylik: f.uc_aylik ?? null, altiAylik: f.altiAylik ?? null, ytd: f.ytd ?? null, yillik: f.yillik ?? null,
     portfoy: f.portfoyBuyuklukTL ?? 0, yatirimci: f.kisiSayisi ?? 0,
     kaynak: "tefas-resmi",
   }), []);
@@ -18599,7 +18649,7 @@ const GK_ARALIKLAR=[
   {key:"1hafta",label:"1 Hafta",fon:"haftalik",tufe:null,           tufeAy:null},
   {key:"1ay",  label:"1 Ay",  fon:"aylik",     tufe:"TUFE_AYLIK",   tufeAy:null},
   {key:"3ay",  label:"3 Ay",  fon:"uc_aylik",  tufe:null,           tufeAy:3},
-  {key:"6ay",  label:"6 Ay",  fon:null,        tufe:null,           tufeAy:6},
+  {key:"6ay",  label:"6 Ay",  fon:"altiAylik", tufe:null,           tufeAy:6},   // fon: liste uçları altiAylik alanı döndürürse kullanılır; yoksa satır "—" görünür (rakam uydurulmaz)
   {key:"1yil", label:"1 Yıl", fon:"yillik",    tufe:"TUFE_YILLIK",  tufeAy:null},
   {key:"ybb",  label:"YBB",   fon:"ytd",       tufe:null,           tufeAy:null},
 ];
@@ -18717,7 +18767,7 @@ function GetiriKarsilastirma(){
           const v=paraFonlari.map((f:any)=>f?.[alan]).filter((x:any)=>typeof x==="number"&&isFinite(x)&&x!==0);
           return v.length? v.reduce((a:number,b:number)=>a+b,0)/v.length : null;
         };
-        setFonOrt({haftalik:ort("haftalik"),aylik:ort("aylik"),uc_aylik:ort("uc_aylik"),yillik:ort("yillik"),ytd:ort("ytd")});
+        setFonOrt({haftalik:ort("haftalik"),aylik:ort("aylik"),uc_aylik:ort("uc_aylik"),altiAylik:ort("altiAylik"),yillik:ort("yillik"),ytd:ort("ytd")});
       })
       .catch(()=>{});
   },[]);
@@ -18779,6 +18829,9 @@ function GetiriKarsilastirma(){
       // kisaAd: grafikteki eğik etikette tam ad ilk sıradayken sola taşıp
       // kesiliyordu — grafikte kısa ad, alttaki listede tam ad kullanılır.
       liste.push({ad:"Para Piyasası Fonları (Ort.)",kisaAd:"Para P. Fonları",getiri:Math.round(fonOrt[fonAlan]*100)/100});
+    } else if(fonAlan){
+      // Bu dönem için veri kaynağında alan yok / boş: satır kaybolmasın, "—" görünsün (hata değil veri sınırlaması)
+      liste.push({ad:"Para Piyasası Fonları (Ort.)",kisaAd:"Para P. Fonları",getiri:null});
     } else if(!fonAlan){
       // 6 Ay: veri kaynağında (TEFAS) 6 aylık alan yok — satır tamamen
       // kaybolmasın, listede "—" olarak görünsün ki kullanıcı bunun bir hata
@@ -18808,7 +18861,8 @@ function GetiriKarsilastirma(){
       ekstraListe.filter(e=>e.tip==="fon").forEach(e=>{
         const fon=fonListe.find((f:any)=>String(f.kod||"").toUpperCase()===e.kod);
         const v=fon?.[fonAlan];
-        if(typeof v==="number"&&isFinite(v)) liste.push({ad:e.kod,getiri:Math.round(v*100)/100,silinebilir:e.etiket});
+        // Veri yoksa fon KAYBOLMASIN: "—" ile listelenir (silinebilir kalır)
+        liste.push({ad:e.kod,getiri:(typeof v==="number"&&isFinite(v))?Math.round(v*100)/100:null,silinebilir:e.etiket});
       });
     }
     return liste.sort((a,b)=>{
@@ -33133,7 +33187,7 @@ function PortfoyEkleModal({onKapat, onEklendi, settings, duzenlenecekKalem}:{onK
             kod: f.kod, ad: f.ad || "", yonetici: "", kategori: f.kategori || "",
             fiyat: f.fiyat ?? null, fiyatTarihi: f.tarih ?? null,
             gunluk: f.gunluk ?? null, haftalik: f.haftalik ?? null, aylik: f.aylik ?? null,
-            uc_aylik: f.uc_aylik ?? null, ytd: f.ytd ?? null, yillik: f.yillik ?? null,
+            uc_aylik: f.uc_aylik ?? null, altiAylik: f.altiAylik ?? null, ytd: f.ytd ?? null, yillik: f.yillik ?? null,
             portfoy: f.portfoyBuyuklukTL ?? 0, yatirimci: f.kisiSayisi ?? 0,
             kaynak: "tefas-resmi",
           }));
@@ -37884,11 +37938,6 @@ function App(){
             {/* ── Uygulama Dili — TR/EN. Seçim localStorage kp_dil'e yazılır ve
                 uygulama yeniden yüklenir; kp_screen sayesinde Profil'de kalınır.
                 Bayrak emojisi Windows'ta görünmediği için renkli rozet kullanılır. */}
-            {IS_NATIVE && (
-              <div style={{fontSize:10,color:WA(0.4),lineHeight:1.5,margin:"0 0 14px",wordBreak:"break-word"}}>
-                Teşhis · {kpTani.surum} · giriş: {kimlik.kullanici ? "var" : "yok"} · açılış: {kpTani.acilis||"?"}{kpTani.acilisHata?` (hata: ${kpTani.acilisHata})`:""} · olay: {kpTani.olay||"yok"} · köprü: {kpKopruDurum} · uid: {kpTani.uid||"-"} · RC: {kpTani.rc||"-"} / kullanıcı {kpTani.rcKullanici||"-"} / hak {kpTani.rcHakedis||"-"}{kpTani.rcHata?` (hata: ${kpTani.rcHata})`:""} · FS: {kpTani.fs||"-"} · Pro: {kimlik.pro.aktif ? "evet" : "hayır"}
-              </div>
-            )}
             <div style={{fontSize:13,fontWeight:600,color:WA(0.5),marginBottom:8}}>{TR("Uygulama Dili")}</div>
             <div style={{display:"flex",gap:8,marginBottom:14}}>
               {[{id:"tr",ad:"Türkçe",rozet:"TR",renk:"#E30A17"},{id:"en",ad:"English",rozet:"EN",renk:"#1D4ED8"}].map(d=>{
