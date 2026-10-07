@@ -202,9 +202,12 @@ async function kpRevenueCatAktifMi(): Promise<boolean>{
     if(!yapilandirildi) return false;
     const { Purchases } = await import("@revenuecat/purchases-capacitor");
     const { customerInfo } = await Purchases.getCustomerInfo();
+    kpTaniYaz("rcKullanici", String((customerInfo as any)?.originalAppUserId || "?").slice(0, 8));
+    kpTaniYaz("rcHakedis", Object.keys(customerInfo.entitlements.active || {}).join(",") || "(aktif hak yok)");
     return typeof customerInfo.entitlements.active["katılım_plus_pro"] !== "undefined";
   }catch(e){
     console.error("RevenueCat durumu okunamadı:", e);
+    kpTaniYaz("rcHata", String((e as any)?.message || e));
     return false;
   }
 }
@@ -222,10 +225,12 @@ async function kpRevenueCatAktifMi(): Promise<boolean>{
 // işaretleme yöntemi bilinçli olarak KALDIRILMADI, beta testi kolaylaştırıyor.
 async function kpProDurumGetir(uid:string): Promise<KpProDurum>{
   const revenueCatAktif = await kpRevenueCatAktifMi();
+  kpTaniYaz("rc", revenueCatAktif ? "aktif" : "yok/pasif"); kpTaniYaz("fs", "okunuyor"); kpTaniYaz("uid", uid.slice(0, 6));
   try{
     const app=await kpFirebaseWebApp();
     const {getFirestore,doc,getDoc}=await import("firebase/firestore");
     const snap=await getDoc(doc(getFirestore(app),"pro",uid));
+    kpTaniYaz("fs", snap.exists() ? ("belge var, aktif=" + String((snap.data() as any)?.aktif)) : "belge yok");
     if(!snap.exists()) return { aktif:revenueCatAktif, bitisTarihi:null, kaynak:revenueCatAktif?"revenuecat":null };
     const d=snap.data() as any;
     const bitisTarihi:string|null = d?.bitisTarihi || null;
@@ -241,6 +246,7 @@ async function kpProDurumGetir(uid:string): Promise<KpProDurum>{
     };
   }catch(e){
     console.error("Pro durumu okunamadı:", e);
+    kpTaniYaz("fs", "hata:" + String((e as any)?.code || (e as any)?.message || e));
     return { aktif:revenueCatAktif, bitisTarihi:null, kaynak:revenueCatAktif?"revenuecat":null };
   }
 }
@@ -383,6 +389,9 @@ async function kpAyarSenkronBaslat(uid: string): Promise<boolean> {
 // ZAMAN AŞIMI: köprü ne olursa olsun uygulamanın kimlik yüklemesini en fazla ~12 sn bekletir (takılırsa giriş sonsuza kadar "yükleniyor" kalmasın).
 // kpKopruDurum: hangi aşamada kalındığını gösterir (Müşteri Portföyüm hata ekranında "Teknik ayrıntı"da görünür).
 let kpKopruDurum = "baslamadi";
+// ── OTURUM / PRO TEŞHİSİ (2026-10-07, GEÇİCİ): Profil ekranının altında küçük gri satır (yalnız mobil uygulamada). Sorun çözülünce kaldırılabilir. ──
+const kpTani: Record<string, string> = { surum: "v244-tani" };
+function kpTaniYaz(k: string, v: string) { kpTani[k] = String(v).slice(0, 80); }
 function kpZamanAsimi<T>(p: Promise<T>, ms: number, ad: string): Promise<T> {
   return new Promise<T>((coz, red) => {
     const t = setTimeout(() => red(new Error("zaman-asimi:" + ad)), ms);
@@ -569,10 +578,17 @@ function useKpKimlik(){
             if(iptal||sira!==sonSira) return;
             kullaniciAyarla(u);
           };
-          await FA.addListener("authStateChange",(event:any)=>{ uygula(event?.user||null); });
-          let {user}=await FA.getCurrentUser();
+          let olaySay=0;
+          await FA.addListener("authStateChange",(event:any)=>{ olaySay++; kpTaniYaz("olay", olaySay + "x son:" + (event?.user ? "var" : "yok")); uygula(event?.user||null); });
+          let user:any=null;
+          try{ user=(await FA.getCurrentUser()).user; }catch(e:any){ kpTaniYaz("acilisHata", String(e?.message||e)); }
+          kpTaniYaz("acilis", user ? "var" : "yok");
           // Native oturum geri yüklemesi uygulama açılışında birkaç yüz ms gecikebilir: boşsa kısa süre tekrar sor (olay gelirse zaten dinleyici yakalar)
-          for(let i=0;i<2&&!user&&!iptal;i++){ await new Promise(r=>setTimeout(r,350)); user=(await FA.getCurrentUser()).user; }
+          for(let i=0;i<2&&!user&&!iptal;i++){
+            await new Promise(r=>setTimeout(r,350));
+            try{ user=(await FA.getCurrentUser()).user; }catch(e:any){ kpTaniYaz("acilisHata", String(e?.message||e)); }
+            kpTaniYaz("acilis", (user ? "var" : "yok") + " (" + (i+2) + ". deneme)");
+          }
           await uygula(user||null);
         } else {
           const app=await kpFirebaseWebApp();
@@ -37847,6 +37863,11 @@ function App(){
             {/* ── Uygulama Dili — TR/EN. Seçim localStorage kp_dil'e yazılır ve
                 uygulama yeniden yüklenir; kp_screen sayesinde Profil'de kalınır.
                 Bayrak emojisi Windows'ta görünmediği için renkli rozet kullanılır. */}
+            {IS_NATIVE && (
+              <div style={{fontSize:10,color:WA(0.4),lineHeight:1.5,margin:"0 0 14px",wordBreak:"break-word"}}>
+                Teşhis · {kpTani.surum} · giriş: {kimlik.kullanici ? "var" : "yok"} · açılış: {kpTani.acilis||"?"}{kpTani.acilisHata?` (hata: ${kpTani.acilisHata})`:""} · olay: {kpTani.olay||"yok"} · köprü: {kpKopruDurum} · uid: {kpTani.uid||"-"} · RC: {kpTani.rc||"-"} / kullanıcı {kpTani.rcKullanici||"-"} / hak {kpTani.rcHakedis||"-"}{kpTani.rcHata?` (hata: ${kpTani.rcHata})`:""} · FS: {kpTani.fs||"-"} · Pro: {kimlik.pro.aktif ? "evet" : "hayır"}
+              </div>
+            )}
             <div style={{fontSize:13,fontWeight:600,color:WA(0.5),marginBottom:8}}>{TR("Uygulama Dili")}</div>
             <div style={{display:"flex",gap:8,marginBottom:14}}>
               {[{id:"tr",ad:"Türkçe",rozet:"TR",renk:"#E30A17"},{id:"en",ad:"English",rozet:"EN",renk:"#1D4ED8"}].map(d=>{
