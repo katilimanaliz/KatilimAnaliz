@@ -397,14 +397,15 @@ const DUYURU_ARSIV_BOYU = 20;      // saklanacak duyuru sayısı
 const DUYURU_ARSIV_GUN = 30;       // bundan eski duyurular istemciye verilmez
 
 async function bildirimGonder(req, res) {
+  // 2026-10-07 guvenlik: admin anahtari URL'de (?anahtar=) KABUL EDILMEZ (URL'ler log/gecmise duser); yalniz header veya govde,
+  // karsilastirma sabit zamanli.
   const gelenAnahtarHeader = req.headers["x-admin-key"];
-  const gelenAnahtarQuery = req.query?.anahtar;
   const gelenAnahtarBody = req.body?.anahtar;
+  const adminGizli = process.env.ADMIN_GIZLI_ANAHTAR;
   if (
-    !process.env.ADMIN_GIZLI_ANAHTAR ||
-    (gelenAnahtarHeader !== process.env.ADMIN_GIZLI_ANAHTAR &&
-      gelenAnahtarQuery !== process.env.ADMIN_GIZLI_ANAHTAR &&
-      gelenAnahtarBody !== process.env.ADMIN_GIZLI_ANAHTAR)
+    !adminGizli ||
+    !((gelenAnahtarHeader && rcGuvenliEsitMi(gelenAnahtarHeader, adminGizli)) ||
+      (gelenAnahtarBody && rcGuvenliEsitMi(gelenAnahtarBody, adminGizli)))
   ) {
     res.status(401).json({ hata: "Yetkisiz istek" });
     return;
@@ -599,7 +600,8 @@ async function duyurulariListele(req, res) {
 // tekrar tanımlanırsa iki dosya sessizce birbirinden sapabilirdi.
 
 async function haberBildirimAyarla(req, res) {
-  const { token, acik, kategoriler, uid } = req.body || {};
+  let { token, acik, kategoriler, uid } = req.body || {};
+  uid = await alarmKimlikUid(req, uid);
   if (!token || typeof acik !== "boolean") {
     res.status(400).json({ hata: "'token' ve boolean 'acik' alanları zorunlu" });
     return;
@@ -645,14 +647,15 @@ async function haberBildirimAyarla(req, res) {
 }
 
 async function haberBildirimGonder(req, res) {
+  // 2026-10-07 guvenlik: admin anahtari URL'de (?anahtar=) KABUL EDILMEZ (URL'ler log/gecmise duser); yalniz header veya govde,
+  // karsilastirma sabit zamanli.
   const gelenAnahtarHeader = req.headers["x-admin-key"];
-  const gelenAnahtarQuery = req.query?.anahtar;
   const gelenAnahtarBody = req.body?.anahtar;
+  const adminGizli = process.env.ADMIN_GIZLI_ANAHTAR;
   if (
-    !process.env.ADMIN_GIZLI_ANAHTAR ||
-    (gelenAnahtarHeader !== process.env.ADMIN_GIZLI_ANAHTAR &&
-      gelenAnahtarQuery !== process.env.ADMIN_GIZLI_ANAHTAR &&
-      gelenAnahtarBody !== process.env.ADMIN_GIZLI_ANAHTAR)
+    !adminGizli ||
+    !((gelenAnahtarHeader && rcGuvenliEsitMi(gelenAnahtarHeader, adminGizli)) ||
+      (gelenAnahtarBody && rcGuvenliEsitMi(gelenAnahtarBody, adminGizli)))
   ) {
     res.status(401).json({ hata: "Yetkisiz istek" });
     return;
@@ -1376,6 +1379,7 @@ async function alarmEkle(req, res) {
   let { token, sembol, ad, tip, yon, hedefFiyat, yuzde, uid } = req.body || {};
   // uid isteğe bağlı — göndermeyen (misafir) istemciler eskisi gibi çalışır.
   if (uid != null && typeof uid !== "string") uid = null;
+  uid = await alarmKimlikUid(req, uid);
   if (token && APNS_HEX_REGEX.test(token)) {
     const cevrilen = await hamTokeniDonustur(token);
     if (cevrilen) token = cevrilen;
@@ -2006,8 +2010,25 @@ async function alarmEkle(req, res) {
 // Zaten uid'i OLAN (başka bir hesaba bağlı) alarmlara DOKUNULMAZ — aksi
 // halde paylaşılan bir cihazda A hesabıyla kurulmuş bir alarm, B hesabıyla
 // girişte sessizce B'ye geçerdi.
+// ── 2026-10-07 GUVENLIK: alarm uclarinda istemcinin gonderdigi uid'e KORKORUNE guvenilmez ──
+// Istemci `x-firebase-idtoken` basligiyla Firebase ID token'i gonderir; gecerliyse uid TOKEN'DAN okunur (govdedeki uid yok sayilir).
+// Token yoksa/gecersizse: ALARM_UID_ZORUNLU="1" iken uid yok sayilir (yalniz token'a bagli misafir davranisi);
+// degilse (gecis donemi, eski istemciler) govdedeki uid eskisi gibi kabul edilir. Istemciler guncellenince ortam degiskeni "1" yapilir.
+async function alarmKimlikUid(req, govdeUid) {
+  const aday = typeof govdeUid === "string" && govdeUid ? govdeUid : null;
+  const h = req.headers["x-firebase-idtoken"];
+  if (typeof h === "string" && h && h.length <= 4096) {
+    try {
+      const dec = await admin.auth().verifyIdToken(h, true);
+      return dec.uid;
+    } catch (_) { /* gecersiz/suresi dolmus: asagidaki kurala dus */ }
+  }
+  return process.env.ALARM_UID_ZORUNLU === "1" ? null : aday;
+}
+
 async function alarmHesabaBagla(req, res) {
-  const { token, uid } = req.body || {};
+  let { token, uid } = req.body || {};
+  uid = await alarmKimlikUid(req, uid);
   if (!token || !uid || typeof uid !== "string") {
     res.status(400).json({ hata: "'token' ve 'uid' alanları zorunlu" });
     return;
@@ -2038,7 +2059,8 @@ async function alarmHesabaBagla(req, res) {
 }
 
 async function alarmListele(req, res) {
-  const { token, uid } = req.body || {};
+  let { token, uid } = req.body || {};
+  uid = await alarmKimlikUid(req, uid);
   if (!token) {
     res.status(400).json({ hata: "'token' alanı zorunlu" });
     return;
@@ -2053,7 +2075,8 @@ async function alarmListele(req, res) {
 }
 
 async function alarmSil(req, res) {
-  const { token, id, uid } = req.body || {};
+  let { token, id, uid } = req.body || {};
+  uid = await alarmKimlikUid(req, uid);
   if (!token || !id) {
     res.status(400).json({ hata: "'token' ve 'id' alanları zorunlu" });
     return;
@@ -2202,7 +2225,8 @@ async function alarmFiyatTablosu(benzersizSemboller) {
 // yeniden açmak, eşik hâlâ sağlandığı için anında tekrar tetiklenmesine yol
 // açardı — bilinçli olarak reddediliyor.
 async function alarmDurum(req, res) {
-  const { token, id, aktif, uid } = req.body || {};
+  let { token, id, aktif, uid } = req.body || {};
+  uid = await alarmKimlikUid(req, uid);
   if (!token || !id || typeof aktif !== "boolean") {
     res.status(400).json({ hata: "'token', 'id' ve boolean 'aktif' alanları zorunlu" });
     return;
@@ -2286,7 +2310,7 @@ async function alarmKontrol(req, res) {
   const gelenAnahtarHeader = req.headers["x-admin-key"];
   const gelenAnahtarQuery = req.query?.anahtar;
   const beklenenAnahtar = process.env.ALARM_KONTROL_ANAHTARI || process.env.ADMIN_GIZLI_ANAHTAR;
-  if (!beklenenAnahtar || (gelenAnahtarHeader !== beklenenAnahtar && gelenAnahtarQuery !== beklenenAnahtar)) {
+  if (!beklenenAnahtar || !((gelenAnahtarHeader && rcGuvenliEsitMi(gelenAnahtarHeader, beklenenAnahtar)) || (gelenAnahtarQuery && rcGuvenliEsitMi(gelenAnahtarQuery, beklenenAnahtar)))) {
     res.status(401).json({ hata: "Yetkisiz istek" });
     return;
   }
@@ -3038,7 +3062,7 @@ async function firebaseOturum(req, res) {
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-admin-key");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-admin-key, x-firebase-idtoken");
 
   if (req.method === "OPTIONS") {
     res.status(204).end();

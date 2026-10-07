@@ -95,6 +95,7 @@
 export const config = { maxDuration: 280 };
 
 import { Redis } from "@upstash/redis";
+import { timingSafeEqual } from "node:crypto";
 import { fonVerisiCek, ŞÜPHELİ_EŞİK, siraliBekle, mapFon, sonTakasGunuAralik, VAKIF_KODLARI } from "./_lib/fonFetch.js";
 import { kilitliCalistir } from "./_lib/kilitliOnbellek.js";
 
@@ -167,10 +168,24 @@ const FON_HOLDINGS_CACHE_TTL_SANIYE = 86400; // 24 saat — periyodik veri, gün
 // anahtarıyla AYNI şekli taşır (kaynak alanı "manuel-2026-09-07" olarak
 // işaretlenir ki ileride otomatik veri geri geldiğinde bu anahtarların
 // elle temizlenmesi gerektiği unutulmasın).
+// ── 2026-10-07 GUVENLIK: cron/yazma uclari FAIL-CLOSED ──
+// Onceki desen `if (secret && ...)` secret ortam degiskeni tanimli degilse ucu HERKESE aciyordu; ayrica `x-vercel-cron: 1` basligi
+// herkes tarafindan taklit edilebilir (kimlik degildir). Artik: yalnizca Authorization: Bearer <uca ozel secret> veya
+// <CRON_SECRET> (Vercel cron'un kendi gonderdigi) kabul edilir; secret tanimli degilse istek reddedilir. Karsilastirma sabit zamanlidir.
+function bearerEsitMi(gelen, secret) {
+  if (!secret) return false;
+  const x = Buffer.from(String(gelen || ""));
+  const y = Buffer.from(`Bearer ${secret}`);
+  return x.length === y.length && timingSafeEqual(x, y);
+}
+function cronYetkiliMi(req, ozelSecret) {
+  const g = req.headers.authorization;
+  return bearerEsitMi(g, ozelSecret) || bearerEsitMi(g, process.env.CRON_SECRET);
+}
+
 async function manuelHoldingsYaz(req, res) {
   const manuelSecret = process.env.MANUEL_YAZ_SECRET;
-  const gelenAuth = req.headers.authorization;
-  if (manuelSecret && gelenAuth !== `Bearer ${manuelSecret}`) {
+  if (!cronYetkiliMi(req, manuelSecret)) {
     return res.status(401).json({ success: false, error: "Yetkisiz" });
   }
   const kod = String(req.query?.kod || "").toUpperCase().trim();
@@ -561,9 +576,7 @@ const HOLDINGS_YENILE_ZAMAN_BUTCESI_MS = 8000; // güvenlik payı — Vercel zam
 
 async function holdingsGunlukYenile(req, res) {
   const cronSecret = process.env.FON_TAHMIN_CRON_SECRET;
-  const gelenAuth = req.headers.authorization;
-  const vercelCronMu = req.headers["x-vercel-cron"] === "1";
-  if (cronSecret && !vercelCronMu && gelenAuth !== `Bearer ${cronSecret}`) {
+  if (!cronYetkiliMi(req, cronSecret)) {
     return res.status(401).json({ success: false, error: "Yetkisiz" });
   }
 
@@ -1133,7 +1146,11 @@ async function bistEndeksUyeligiGetirVeGuncelle() {
 // için günlük tazeleme fazlasıyla yeterli, sık çağrı getmidas.com'a
 // gereksiz yük bindirmesin diye tercih edilmedi).
 async function bistEndeksUyeligiCronYaz(req, res) {
-  if (req.query?.gizliAnahtar !== process.env.FON_TAHMIN_CRON_SECRET) {
+  // gizliAnahtar sorgu parametresi geriye uyum icin kalir (cron-job.org URL'si); Bearer da kabul edilir. Secret yoksa RED.
+  const _gz = process.env.FON_TAHMIN_CRON_SECRET;
+  const _gzGelen = String(req.query?.gizliAnahtar || "");
+  const _gzOk = (_gz && _gzGelen.length === _gz.length && timingSafeEqual(Buffer.from(_gzGelen), Buffer.from(_gz))) || cronYetkiliMi(req, _gz);
+  if (!_gzOk) {
     return res.status(401).json({ success: false, error: "yetkisiz" });
   }
   const sonuc = await bistEndeksUyeligiGetirVeGuncelle();
@@ -1278,8 +1295,7 @@ async function tahminSapmaAnalizi(req, res) {
 // CRON_SECRET ile korunuyor (cron uçlarıyla aynı desen).
 async function fonTahminGecmisTemizle(req, res) {
   const cronSecret = process.env.FON_TAHMIN_CRON_SECRET;
-  const gelenAuth = req.headers.authorization;
-  if (cronSecret && gelenAuth !== `Bearer ${cronSecret}`) {
+  if (!cronYetkiliMi(req, cronSecret)) {
     return res.status(401).json({ success: false, error: "Yetkisiz" });
   }
   const tarihler = String(req.query?.tarihler || "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -1329,9 +1345,7 @@ async function fonTahminSnapshotCalistir(req, res) {
   // (FON_TAHMIN_CRON_SECRET) tanımlanınca, değeri Uğur'un kendisi belirlediği
   // için elinde kalır — mevcut sisteme dokunulmamış olur.
   const cronSecret = process.env.FON_TAHMIN_CRON_SECRET;
-  const gelenAuth = req.headers.authorization;
-  const vercelCronMu = req.headers["x-vercel-cron"] === "1";
-  if (cronSecret && !vercelCronMu && gelenAuth !== `Bearer ${cronSecret}`) {
+  if (!cronYetkiliMi(req, cronSecret)) {
     return res.status(401).json({ success: false, error: "Yetkisiz" });
   }
 
@@ -1835,9 +1849,7 @@ function kategoriDagilimHesapla(data) {
 
 async function cronYaz(req, res) {
   const cronSecret = process.env.CRON_SECRET;
-  const gelenAuth = req.headers.authorization;
-  const vercelCronMu = req.headers["x-vercel-cron"] === "1";
-  if (cronSecret && !vercelCronMu && gelenAuth !== `Bearer ${cronSecret}`) {
+  if (!cronYetkiliMi(req, cronSecret)) {
     return res.status(401).json({ success: false, error: "Yetkisiz" });
   }
 
@@ -2131,9 +2143,7 @@ async function tefasKategoriTekSorgu(kategoriKod) {
 // rahatça biter).
 async function kategoriTablosuGuncelle(req, res) {
   const cronSecret = process.env.FON_TAHMIN_CRON_SECRET;
-  const gelenAuth = req.headers.authorization;
-  const vercelCronMu = req.headers["x-vercel-cron"] === "1";
-  if (cronSecret && !vercelCronMu && gelenAuth !== `Bearer ${cronSecret}`) {
+  if (!cronYetkiliMi(req, cronSecret)) {
     return res.status(401).json({ success: false, error: "Yetkisiz" });
   }
 
@@ -2582,9 +2592,7 @@ async function tefasTumCronYaz(req, res) {
   // Ayrı, özel bir gizli anahtar — mevcut CRON_SECRET/FON_TAHMIN_CRON_SECRET'e
   // dokunulmuyor (aynı desende: bkz. fonTahminSnapshotCalistir'deki gerekçe).
   const cronSecret = process.env.TEFAS_TUM_CRON_SECRET;
-  const gelenAuth = req.headers.authorization;
-  const vercelCronMu = req.headers["x-vercel-cron"] === "1";
-  if (cronSecret && !vercelCronMu && gelenAuth !== `Bearer ${cronSecret}`) {
+  if (!cronYetkiliMi(req, cronSecret)) {
     return res.status(401).json({ success: false, error: "Yetkisiz" });
   }
 
