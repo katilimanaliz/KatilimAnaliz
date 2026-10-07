@@ -29602,6 +29602,63 @@ function PiyasaSatiri({ad,sembol,paraOnek,dec,onTikla,sira,alisGoster}:{ad:strin
   );
 }
 
+// ─── DÖVİZ GEÇMİŞ TARİH SATIRI (2026-10-07) ────────────────────────────────
+// Tarih seçilince Döviz sekmesi canlı satır yerine bu satırı gösterir. Kaynak /api/gecmis?uzun= (Yahoo günlük kapanış). Geçmişte
+// ALIŞ/SATIŞ makası YOK, tek kapanış kuru var: "Satış" sütununa kapanış yazılır, "Alış" "—" kalır (rakam uydurulmaz). Günlük %,
+// seçilen günün bir önceki işlem gününe göre değişimidir. Piyasa kapalıysa (hafta sonu/tatil) önceki işlem günü gösterilir.
+const DOVIZ_GECMIS_ONBELLEK: Record<string, Promise<PortfoyNokta[]>> = {};
+function dovizGecmisSeri(sembol: string, aralik: string): Promise<PortfoyNokta[]> {
+  const k = `${sembol}|${aralik}`;
+  if (!DOVIZ_GECMIS_ONBELLEK[k]) {
+    DOVIZ_GECMIS_ONBELLEK[k] = fetch(`${API_BASE}/api/gecmis?uzun=${aralik}&sembol=${encodeURIComponent(sembol)}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => (Array.isArray(d?.noktalar) ? d.noktalar.filter((n: any) => n && typeof n.fiyat === "number" && n.tarih) : []))
+      .catch(() => []);
+    DOVIZ_GECMIS_ONBELLEK[k].then(x => { if (!x.length) delete DOVIZ_GECMIS_ONBELLEK[k]; });
+  }
+  return DOVIZ_GECMIS_ONBELLEK[k];
+}
+function DovizGecmisSatiri({ad,sembol,dec,sira,tarih}:{ad:string,sembol:string,dec:number,sira:number,tarih:string}){
+  const [sonuc,setSonuc]=useState<{fiyat:number|null,gun:string|null,degisim:number|null}|null>(null);
+  useEffect(()=>{
+    let iptal=false;
+    setSonuc(null);
+    dovizGecmisSeri(sembol, portfoyUzunAralik(tarih)).then(seri=>{
+      if(iptal) return;
+      let idx=-1;
+      for(let i=seri.length-1;i>=0;i--){ if(seri[i].tarih<=tarih){ idx=i; break; } }
+      const g=idx>=0?seri[idx]:null;
+      // Seçilen günden 10+ gün önceki nokta "o günün kuru" sayılmaz (veri boşluğu) → "—"
+      const eskiMi=g!=null && (Date.parse(tarih+"T00:00:00Z")-Date.parse(g.tarih+"T00:00:00Z"))>10*86400000;
+      if(!g||eskiMi){ setSonuc({fiyat:null,gun:null,degisim:null}); return; }
+      const onceki=idx>0?seri[idx-1].fiyat:null;
+      setSonuc({fiyat:g.fiyat,gun:g.tarih,degisim:(onceki&&onceki>0)?((g.fiyat-onceki)/onceki*100):null});
+    });
+    return ()=>{iptal=true;};
+  },[sembol,tarih]);
+  const fmt=(v:number)=>new Intl.NumberFormat("tr-TR",{minimumFractionDigits:dec,maximumFractionDigits:dec}).format(v);
+  const gunEtiket=sonuc?.gun&&sonuc.gun!==tarih?sonuc.gun.split("-").reverse().slice(0,2).join("."):null;
+  const poz=(sonuc?.degisim??0)>=0;
+  const kart=TEMA==="acik"
+    ? {padding:"12px 12px",borderRadius:12,marginBottom:8,background:(sira%2===1?"#F3F6FA":"#E9EEF4"),border:"1px solid rgba(22,34,46,0.08)"}
+    : {padding:"12px 12px",borderRadius:12,marginBottom:8,background:(sira%2===1?"#1A2633":"#16222E"),border:`1px solid ${WA(0.07)}`};
+  return(
+    <div style={{display:"flex",alignItems:"center",gap:8,...kart}}>
+      <span style={{flex:1,fontSize:13,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),minWidth:0}}>
+        {ad}{gunEtiket&&<span style={{display:"block",fontSize:10,fontWeight:600,color:WA(0.45)}}>{gunEtiket} kapanışı</span>}
+      </span>
+      <span style={{width:70,textAlign:"right",fontSize:13,fontWeight:700,color:WA(0.35),fontFamily:"monospace",flexShrink:0}}>—</span>
+      <span style={{width:74,textAlign:"right",fontSize:13,fontWeight:700,color:C.soft,fontFamily:"monospace",flexShrink:0}}>
+        {sonuc==null?<span className="skeleton" style={{display:"inline-block",width:52,height:12,borderRadius:6,verticalAlign:"middle"}}/>:(sonuc.fiyat!=null?fmt(sonuc.fiyat):"—")}
+      </span>
+      <span style={{width:60,textAlign:"right",fontSize:11,fontWeight:700,color:sonuc?.degisim!=null?(poz?C.green:C.red):WA(0.3),flexShrink:0}}>
+        {sonuc?.degisim!=null?`${poz?"+":""}${sonuc.degisim.toFixed(2).replace(".",",")}%`:"—"}
+      </span>
+      <span style={{width:52,flexShrink:0}}/>
+    </div>
+  );
+}
+
 // ─── ALTIN ÜRÜNLERİ TABLOSU (Çeyrek/Yarım/Tam/Ata/Ayar) ────────────────────
 // Harem Altın / Hakan Altın gibi sitelerin herkese açık bir API'si yok ve
 // scraping girişiminde bot koruması isteği engelliyor (denendi, doğrulandı) —
@@ -30328,6 +30385,23 @@ function AltinUrunleriTablo(){
   const [veri,setVeri]=useState<any>(null);
   const [yukleniyor,setYukleniyor]=useState(true);
   const [altinAlarmSecili,setAltinAlarmSecili]=useState<any>(null);
+  // Tarih seçici (2026-10-07): boş = canlı; dolu = o günün kapanış alış/satışı. Kaynak sunucunun günlük kaydı
+  // (/api/piyasa-fiyatlar?tip=altin-gecmis) — kayıt başladığı günden öncesi için veri YOK ("—" + açıklama).
+  const [gTarih,setGTarih]=useState("");
+  const [gecmis,setGecmis]=useState<any>(null);
+  const [gecmisYuk,setGecmisYuk]=useState(false);
+  const bugunIsoA=(()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;})();
+  const gecmisMod=/^\d{4}-\d{2}-\d{2}$/.test(gTarih) && gTarih<bugunIsoA;
+  useEffect(()=>{
+    if(!gecmisMod){ setGecmis(null); setGecmisYuk(false); return; }
+    let iptal=false;
+    setGecmisYuk(true); setGecmis(null);
+    fetch(`${API_BASE}/api/piyasa-fiyatlar?tip=altin-gecmis&tarih=${gTarih}`)
+      .then(r=>r.ok?r.json():null)
+      .then(d=>{ if(!iptal){ setGecmis(d||{kayit:null}); setGecmisYuk(false); } })
+      .catch(()=>{ if(!iptal){ setGecmis({kayit:null,hata:true}); setGecmisYuk(false); } });
+    return ()=>{iptal=true;};
+  },[gTarih,gecmisMod]);
 
   useEffect(()=>{
     let iptal=false;
@@ -30341,7 +30415,11 @@ function AltinUrunleriTablo(){
   const fmtPara=(v:number, birim:string)=>`${birim}${new Intl.NumberFormat("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}).format(v)}`;
 
   const satirRender = (ad:string, sembol:string, i:number, birim:string="₺") => {
-    const d = veri?.[sembol];
+    const gk = gecmisMod ? gecmis?.kayit?.[sembol] : null;
+    const gok = gecmisMod ? gecmis?.oncekiKayit?.[sembol] : null;
+    const d = gecmisMod
+      ? (gk && gk.a!=null && gk.b!=null ? {bid:gk.b, ask:gk.a, close:(gok && gok.a!=null && gok.b!=null)?(gok.a+gok.b)/2:null} : null)
+      : veri?.[sembol];
     // Değişim yüzdesi (2026-07-23): close = önceki kapanış (AltinAPI'nin
     // sağladığı referans). Orta fiyat (bid+ask ortalaması) ile karşılaştırılır
     // — Harem'in kendi ekranındaki tek yüzde gösterimiyle aynı mantık.
@@ -30355,7 +30433,7 @@ function AltinUrunleriTablo(){
     // rakam göstermektense hiç göstermemek tercih edildi.
     const degisimYuzdeHam = (d && d.close && d.bid!=null && d.ask!=null) ? (((d.bid+d.ask)/2 - d.close) / d.close * 100) : null;
     const degisimYuzde = (degisimYuzdeHam!=null && Math.abs(degisimYuzdeHam)<=10) ? degisimYuzdeHam : null;
-    const tiklanabilir = d && d.bid!=null && d.ask!=null;
+    const tiklanabilir = !gecmisMod && d && d.bid!=null && d.ask!=null;
     return (
       <div key={sembol} onClick={()=>tiklanabilir&&setAltinAlarmSecili({ad,sembol,bid:d.bid,ask:d.ask,birim})} style={{display:"flex",alignItems:"center",gap:8,
         padding:"11px 14px",borderRadius:12,marginBottom:8,cursor:tiklanabilir?"pointer":"default",
@@ -30370,7 +30448,7 @@ function AltinUrunleriTablo(){
             </p>
           )}
         </div>
-        {yukleniyor?(
+        {(gecmisMod?gecmisYuk:yukleniyor)?(
           <span style={{fontSize:12,color:WA(0.4)}}>…</span>
         ):(d&&d.ask!=null&&d.bid!=null)?(
           <>
@@ -30388,6 +30466,26 @@ function AltinUrunleriTablo(){
   return(
     <div>
       {altinAlarmSecili&&<AltinAlarmModal urun={altinAlarmSecili} onClose={()=>setAltinAlarmSecili(null)}/>}
+      <div style={{display:"flex",alignItems:"center",gap:8,margin:"2px 0 10px",flexWrap:"wrap"}}>
+        <span style={{fontSize:12,fontWeight:700,color:WA(0.62)}}>Tarih</span>
+        <input type="date" value={gTarih} max={bugunIsoA}
+          onChange={e=>setGTarih(e.target.value)}
+          style={{flex:"0 1 auto",padding:"7px 10px",borderRadius:10,border:`1px solid ${WA(0.15)}`,background:WA(0.05),color:(TEMA==="acik"?C.label:"#fff"),fontSize:13,fontWeight:600,colorScheme:(TEMA==="acik"?"light":"dark")}}/>
+        {gTarih!==""&&(
+          <button onClick={()=>setGTarih("")} style={{padding:"7px 12px",borderRadius:10,border:"none",background:"#3B82F6",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>Güncel</button>
+        )}
+        <span style={{flexBasis:"100%",fontSize:10.5,color:WA(0.45)}}>
+          {!gecmisMod
+            ? "Boş bırakırsan güncel fiyatlar gelir. Geçmiş bir gün seçince o günün son alış/satışı gösterilir."
+            : gecmisYuk
+              ? "Yükleniyor…"
+              : gecmis?.kayit
+                ? `${gecmis.bulunan&&gecmis.bulunan!==gTarih?`${gecmis.bulunan.split("-").reverse().join(".")} kaydı gösteriliyor (seçilen günde kayıt yok). `:""}Gün sonu alış/satış kaydıdır; ürün bazında bazı satırlar boş olabilir.`
+                : gecmis?.hata
+                  ? "Geçmiş veri şu an alınamadı. Biraz sonra tekrar dene."
+                  : `Bu tarih için kayıt yok. Altın geçmişi ${gecmis?.ilkKayit?gecmis.ilkKayit.split("-").reverse().join(".")+" tarihinden itibaren":"yeni birikmeye başladı, yakında"} tutuluyor.`}
+        </span>
+      </div>
       <div style={{display:"flex",alignItems:"center",gap:8,padding:"0 14px 6px"}}>
         <span style={{flex:1,minWidth:0,fontSize:10,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.4}}>Birim</span>
         <span style={{minWidth:92,flexShrink:0,textAlign:"right",fontSize:10,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.4}}>Alış</span>
@@ -35547,6 +35645,8 @@ function App(){
   const girisSonrasiHedef=useRef<string|null>(null);
   const girisHedefIsteniyor=useRef(false);
   const [piyasaTabloFiltre,setPiyasaTabloFiltre]=useState("gostergeler");
+  // Döviz sekmesi tarih seçici (2026-10-07): boş = güncel canlı kurlar; dolu = o günün kapanış kuru (Yahoo geçmişi).
+  const [piyasaGecmisTarih,setPiyasaGecmisTarih]=useState("");
   // "Göstergeler" sekmesi içi alt-kategori (2026-07-23 kategorileştirme):
   // aktivite / enflasyon / para / karpayi / risk. Bankanın kendi makro veri
   // panelindeki 6 kategoriyle aynı isimlendirme (Küresel Piyasalar hariç —
@@ -37652,8 +37752,27 @@ function App(){
               // Emtia, Borsa, Kripto, Fonlar, Göstergeler ve karışık liste olan
               // "Tümü" sekmesinde tablo eski haliyle (tek fiyat) kalıyor.
               const alisSutunuVar = piyasaTabloFiltre==="doviz" || piyasaTabloFiltre==="altin";
+              const bugunIso=(()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;})();
+              const enEskiIso=(()=>{const d=new Date();d.setFullYear(d.getFullYear()-10);d.setDate(d.getDate()+2);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;})();
+              const gecmisTarihGecerli=/^\d{4}-\d{2}-\d{2}$/.test(piyasaGecmisTarih) && piyasaGecmisTarih<bugunIso && piyasaGecmisTarih>=enEskiIso;
               return (
               <>
+                {piyasaTabloFiltre==="doviz"&&(
+                  <div style={{display:"flex",alignItems:"center",gap:8,margin:"2px 0 10px",flexWrap:"wrap"}}>
+                    <span style={{fontSize:12,fontWeight:700,color:WA(0.62)}}>Tarih</span>
+                    <input type="date" value={piyasaGecmisTarih} min={enEskiIso} max={bugunIso}
+                      onChange={e=>setPiyasaGecmisTarih(e.target.value)}
+                      style={{flex:"0 1 auto",padding:"7px 10px",borderRadius:10,border:`1px solid ${WA(0.15)}`,background:WA(0.05),color:(TEMA==="acik"?C.label:"#fff"),fontSize:13,fontWeight:600,colorScheme:(TEMA==="acik"?"light":"dark")}}/>
+                    {piyasaGecmisTarih!==""&&(
+                      <button onClick={()=>setPiyasaGecmisTarih("")} style={{padding:"7px 12px",borderRadius:10,border:"none",background:"#3B82F6",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>Güncel</button>
+                    )}
+                    <span style={{flexBasis:"100%",fontSize:10.5,color:WA(0.45)}}>
+                      {gecmisTarihGecerli
+                        ? "Seçilen günün kapanış kuru gösterilir; geçmişte alış/satış ayrımı yoktur. Piyasa kapalıysa önceki işlem günü gelir."
+                        : "Boş bırakırsan güncel kurlar gelir. Geçmiş bir gün seçince o günün kuru gösterilir."}
+                    </span>
+                  </div>
+                )}
                 <div style={{display:"flex",alignItems:"center",gap:8,padding:"0 4px 6px",borderBottom:`1px solid ${WA(0.1)}`}}>
                   {/* Başlıklar WA(0.35) ile neredeyse görünmezdi; okunur
                       opaklığa çekildi. "Günlük %" iki satıra sarıyordu —
@@ -37665,7 +37784,9 @@ function App(){
                   <span style={{width:52,textAlign:"right",fontSize:10,fontWeight:700,color:WA(0.62),textTransform:"uppercase",letterSpacing:0.3,whiteSpace:"nowrap"}}>{TR("Grafik")}</span>
                 </div>
                 {satirlar.map((r:any,sira:number)=>(
-                  <PiyasaSatiri key={r.sembol} sira={sira} ad={r.ad} sembol={r.sembol} dec={r.dec} paraOnek={r.paraOnek}
+                  (piyasaTabloFiltre==="doviz" && gecmisTarihGecerli)
+                    ? <DovizGecmisSatiri key={r.sembol+"|"+piyasaGecmisTarih} sira={sira} ad={r.ad} sembol={r.sembol} dec={r.dec} tarih={piyasaGecmisTarih}/>
+                    : <PiyasaSatiri key={r.sembol} sira={sira} ad={r.ad} sembol={r.sembol} dec={r.dec} paraOnek={r.paraOnek}
                     alisGoster={alisSutunuVar}
                     onTikla={()=>setSeciliKur({kod:r.ad,ad:r.ad,sembol:r.sembol,birim:r.paraOnek||"₺"})}/>
                 ))}
