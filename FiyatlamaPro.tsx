@@ -29540,7 +29540,7 @@ for(const kat of ["doviz","emtia","borsa","gostergeler","kripto"]){
 const PIYASA_OZETI_VARSAYILAN=["USDTRY=X","EURTRY=X","GBPTRY=X","GRAM_ALTIN","GRAM_GUMUS","XU100.IS","BTC-USD","ETH-USD","BZ=F","^GSPC"];
 
 // Tablo satırı: sembol solda, son fiyat + günlük % ortada, sparkline sağda
-function PiyasaSatiri({ad,sembol,paraOnek,dec,onTikla,sira,alisGoster}:{ad:string,sembol:string,paraOnek?:string,dec:number,onTikla:()=>void,sira?:number,alisGoster?:boolean}){
+function PiyasaSatiri({ad,sembol,paraOnek,dec,onTikla,sira,alisGoster,buyuk}:{ad:string,sembol:string,paraOnek?:string,dec:number,onTikla:()=>void,sira?:number,alisGoster?:boolean,buyuk?:boolean}){
   const CACHE_KEY = `poz_${sembol}`;
   const [veri,setVeri]=useState<any>(()=>{
     try{
@@ -29627,51 +29627,76 @@ function PiyasaSatiri({ad,sembol,paraOnek,dec,onTikla,sira,alisGoster}:{ad:strin
 
   const fmtDeger=(v:number)=>new Intl.NumberFormat("tr-TR",{minimumFractionDigits:dec,maximumFractionDigits:dec}).format(v);
 
+  const metinR=(TEMA==="acik"?C.label:"#fff");
+  const kartBg=(TEMA==="acik"?"#E9EEF4":"#16222E");
+  const altYazi=alisGoster?null:(sembol.startsWith("GRAM_")?"TRY":sembol.replace(/=F$|=X$|\.IS$|-USD$|^\^/,"")+(paraOnek==="$"?" · USD":paraOnek==="₺"?" · TRY":paraOnek==="€"?" · EUR":""));
+  const degMetin=degisim!=null?`${pozitif?"+":""}${degisim.toFixed(2).replace(".",",")}%`:null;
+  const yukIskelet=(g:number,h:number)=><span className="skeleton" style={{display:"inline-block",width:g,height:h,borderRadius:6,verticalAlign:"middle"}}/>;
+
+  // ── TABLO MODU (Döviz): kutu içinde çizgiyle ayrılmış satır; Alış / Satış / Günlük, küçük grafik YOK ──
+  if(alisGoster){
+    return(
+      <div className="press-card" onClick={onTikla} style={{
+        display:"flex",alignItems:"center",gap:8,cursor:"pointer",minHeight:52,padding:"0 14px",
+        borderTop:(sira||0)>0?`1px solid ${WA(0.08)}`:"none",
+        transition:"background-color 700ms ease",...flashStil,
+      }}>
+        <span style={{flex:1,fontSize:14,fontWeight:600,color:metinR,minWidth:0}}>{ad}</span>
+        <span style={{width:78,textAlign:"right",fontSize:13,fontWeight:700,color:C.soft,fontFamily:"monospace",flexShrink:0}}>
+          {alisF!=null?<span className="spark-in">{`${paraOnek||""}${fmtDeger(alisF)}`}</span>:yukleniyor?yukIskelet(48,11):"—"}
+        </span>
+        <span style={{width:82,textAlign:"right",fontSize:13,fontWeight:700,color:C.soft,fontFamily:"monospace",flexShrink:0}}>
+          {guncel!=null?<span className="spark-in">{`${paraOnek||""}${fmtDeger(guncel)}`}</span>:yukleniyor?yukIskelet(52,12):"—"}
+        </span>
+        <span style={{width:62,textAlign:"right",fontSize:12,fontWeight:700,color:degisim!=null?renk:WA(0.3),flexShrink:0}}>
+          {degMetin?<span className="spark-in">{degMetin}</span>:(yukleniyor&&guncel==null)?yukIskelet(38,10):"—"}
+        </span>
+      </div>
+    );
+  }
+
+  // ── ÖNE ÇIKAN KART (Borsa: BIST 100, Kripto: Bitcoin): büyük fiyat + geniş grafik ──
+  if(buyuk){
+    return(
+      <div className="press-card" onClick={onTikla} style={{cursor:"pointer",padding:"16px",borderRadius:14,marginBottom:12,background:kartBg,border:`1px solid ${WA(0.08)}`,transition:"background-color 700ms ease",...flashStil}}>
+        <div style={{fontSize:12,color:WA(0.6)}}>{ad}{altYazi?` · ${altYazi}`:""}</div>
+        <div style={{display:"flex",alignItems:"baseline",gap:10,marginTop:6}}>
+          <span style={{fontSize:28,fontWeight:700,color:metinR,fontFamily:"monospace"}}>
+            {guncel!=null?<span className="spark-in">{`${paraOnek||""}${fmtDeger(guncel)}`}</span>:yukleniyor?yukIskelet(120,26):"—"}
+          </span>
+          {degMetin&&<span style={{fontSize:14,fontWeight:700,color:renk,fontFamily:"monospace"}}>{degMetin}</span>}
+        </div>
+        <svg width="100%" height={64} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{marginTop:10,display:"block"}}>
+          {pathD&&<path className="spark-in" d={pathD} fill="none" stroke={renk} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke"/>}
+        </svg>
+      </div>
+    );
+  }
+
+  // ── KART MODU (Emtia, Borsa, Kripto, VIX/DXY): iki satır — ad + sembol, küçük grafik, fiyat + günlük % ──
   return(
     <div className="press-card" onClick={onTikla} style={{
-      display:"flex",alignItems:"center",gap:8,cursor:"pointer",
-      ...(TEMA==="acik"
-        ? {padding:"12px 12px",borderRadius:12,marginBottom:8,
-           background:((sira||0)%2===1?"#F3F6FA":"#E9EEF4"),
-           border:"1px solid rgba(22,34,46,0.08)"}
-        : {padding:"12px 12px",borderRadius:12,marginBottom:8,
-           background:((sira||0)%2===1?"#1A2633":"#16222E"),
-           border:`1px solid ${WA(0.07)}`}),
-      transition:"background-color 700ms ease",
-      ...flashStil,
+      display:"flex",alignItems:"center",gap:10,cursor:"pointer",minHeight:56,padding:"8px 14px",borderRadius:12,marginBottom:6,
+      background:kartBg,border:`1px solid ${WA(0.08)}`,
+      transition:"background-color 700ms ease",...flashStil,
     }}>
-      <span style={{flex:1,fontSize:13,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),minWidth:0}}>{ad}</span>
-      {/* ALIŞ sütunu yalnızca DÖVİZ ve FİZİKİ ALTIN sekmelerinde gösteriliyor.
-          Emtia, Borsa, Kripto, Fonlar ve Göstergelerde alış-satış makası
-          kavramı yok; oralarda tablo eski haliyle (tek fiyat) kalıyor. */}
-      {alisGoster&&(
-        <span style={{width:70,textAlign:"right",fontSize:13,fontWeight:700,color:C.soft,fontFamily:"monospace",flexShrink:0}}>
-          {alisF!=null
-            ? <span className="spark-in">{`${paraOnek||""}${fmtDeger(alisF)}`}</span>
-            : yukleniyor
-              ? <span className="skeleton" style={{display:"inline-block",width:48,height:11,borderRadius:6,verticalAlign:"middle"}}/>
-              : "—"}
-        </span>
-      )}
-      <span style={{width:alisGoster?74:78,textAlign:"right",fontSize:13,fontWeight:700,color:C.soft,fontFamily:"monospace",flexShrink:0}}>
-        {guncel!=null
-          ? <span className="spark-in">{`${paraOnek||""}${fmtDeger(guncel)}`}</span>
-          : yukleniyor
-            ? <span className="skeleton" style={{display:"inline-block",width:52,height:12,borderRadius:6,verticalAlign:"middle"}}/>
-            : "—"}
-      </span>
-      <span style={{width:alisGoster?60:64,textAlign:"right",fontSize:11,fontWeight:700,color:degisim!=null?renk:WA(0.3),flexShrink:0}}>
-        {degisim!=null
-          ? <span className="spark-in">{`${pozitif?"+":""}${degisim.toFixed(2).replace(".",",")}%`}</span>
-          : (yukleniyor&&guncel==null)
-            ? <span className="skeleton" style={{display:"inline-block",width:38,height:10,borderRadius:5,verticalAlign:"middle"}}/>
-            : "—"}
-      </span>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:14,fontWeight:600,color:metinR}}>{ad}</div>
+        {altYazi&&<div style={{fontSize:11,color:WA(0.5),marginTop:2}}>{altYazi}</div>}
+      </div>
       {(guncel==null&&yukleniyor)
         ? <div className="skeleton" style={{width:52,height:22,borderRadius:6,flexShrink:0}}/>
         : <svg width={52} height={22} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{flexShrink:0}}>
             {pathD&&<path className="spark-in" d={pathD} fill="none" stroke={renk} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"/>}
           </svg>}
+      <div style={{textAlign:"right",minWidth:88,flexShrink:0}}>
+        <div style={{fontSize:14,fontWeight:700,color:metinR,fontFamily:"monospace",whiteSpace:"nowrap"}}>
+          {guncel!=null?<span className="spark-in">{`${paraOnek||""}${fmtDeger(guncel)}`}</span>:yukleniyor?yukIskelet(56,13):"—"}
+        </div>
+        <div style={{fontSize:12,fontWeight:700,color:degisim!=null?renk:WA(0.3),marginTop:2}}>
+          {degMetin?<span className="spark-in">{degMetin}</span>:(yukleniyor&&guncel==null)?yukIskelet(38,10):"—"}
+        </div>
+      </div>
     </div>
   );
 }
@@ -29739,24 +29764,21 @@ function DovizGecmisSatiri({ad,sembol,dec,sira,tarih}:{ad:string,sembol:string,d
   const fmt=(v:number)=>new Intl.NumberFormat("tr-TR",{minimumFractionDigits:dec,maximumFractionDigits:dec}).format(v);
   const gunEtiket=sonuc?.gun&&sonuc.gun!==tarih?sonuc.gun.split("-").reverse().slice(0,2).join("."):null;
   const poz=(sonuc?.degisim??0)>=0;
-  const kart=TEMA==="acik"
-    ? {padding:"12px 12px",borderRadius:12,marginBottom:8,background:(sira%2===1?"#F3F6FA":"#E9EEF4"),border:"1px solid rgba(22,34,46,0.08)"}
-    : {padding:"12px 12px",borderRadius:12,marginBottom:8,background:(sira%2===1?"#1A2633":"#16222E"),border:`1px solid ${WA(0.07)}`};
+  const kart={minHeight:52,padding:"0 14px",borderTop:sira>0?`1px solid ${WA(0.08)}`:"none"};
   return(
     <div style={{display:"flex",alignItems:"center",gap:8,...kart}}>
-      <span style={{flex:1,fontSize:13,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),minWidth:0}}>
+      <span style={{flex:1,fontSize:14,fontWeight:600,color:(TEMA==="acik"?C.label:"#fff"),minWidth:0}}>
         {ad}{gunEtiket&&<span style={{display:"block",fontSize:10,fontWeight:600,color:WA(0.45)}}>{gunEtiket} kapanışı</span>}
       </span>
-      <span style={{width:70,textAlign:"right",fontSize:13,fontWeight:700,color:sonuc?.alis!=null?C.soft:WA(0.35),fontFamily:"monospace",flexShrink:0}}>
+      <span style={{width:78,textAlign:"right",fontSize:13,fontWeight:700,color:sonuc?.alis!=null?C.soft:WA(0.35),fontFamily:"monospace",flexShrink:0}}>
         {sonuc==null?<span className="skeleton" style={{display:"inline-block",width:48,height:11,borderRadius:6,verticalAlign:"middle"}}/>:(sonuc.alis!=null?fmt(sonuc.alis):"—")}
       </span>
-      <span style={{width:74,textAlign:"right",fontSize:13,fontWeight:700,color:C.soft,fontFamily:"monospace",flexShrink:0}}>
+      <span style={{width:82,textAlign:"right",fontSize:13,fontWeight:700,color:C.soft,fontFamily:"monospace",flexShrink:0}}>
         {sonuc==null?<span className="skeleton" style={{display:"inline-block",width:52,height:12,borderRadius:6,verticalAlign:"middle"}}/>:(sonuc.fiyat!=null?fmt(sonuc.fiyat):"—")}
       </span>
-      <span style={{width:60,textAlign:"right",fontSize:11,fontWeight:700,color:sonuc?.degisim!=null?(poz?C.green:C.red):WA(0.3),flexShrink:0}}>
+      <span style={{width:62,textAlign:"right",fontSize:12,fontWeight:700,color:sonuc?.degisim!=null?(poz?C.green:C.red):WA(0.3),flexShrink:0}}>
         {sonuc?.degisim!=null?`${poz?"+":""}${sonuc.degisim.toFixed(2).replace(".",",")}%`:"—"}
       </span>
-      <span style={{width:52,flexShrink:0}}/>
     </div>
   );
 }
@@ -30538,10 +30560,8 @@ function AltinUrunleriTablo(){
     const tiklanabilir = !gecmisMod && d && d.bid!=null && d.ask!=null;
     return (
       <div key={sembol} onClick={()=>tiklanabilir&&setAltinAlarmSecili({ad,sembol,bid:d.bid,ask:d.ask,birim})} style={{display:"flex",alignItems:"center",gap:8,
-        padding:"11px 14px",borderRadius:12,marginBottom:8,cursor:tiklanabilir?"pointer":"default",
-        ...(TEMA==="acik"
-          ? {background:(i%2===1?"#F3F6FA":"#E9EEF4"),border:"1px solid rgba(22,34,46,0.08)"}
-          : {background:(i%2===1?"#1A2633":"#16222E"),border:`1px solid ${WA(0.07)}`})}}>
+        padding:"11px 14px",minHeight:58,boxSizing:"border-box",cursor:tiklanabilir?"pointer":"default",
+        borderTop:(sembol==="ALTIN"||sembol==="CEYREK_YENI")?"none":`1px solid ${WA(0.08)}`}}>
         <div style={{flex:1,minWidth:0}}>
           <p style={{margin:0,fontSize:12.5,fontWeight:700,color:C.soft}}>{ad}</p>
           {degisimYuzde!=null&&(
@@ -30569,12 +30589,11 @@ function AltinUrunleriTablo(){
     <div>
       {altinAlarmSecili&&<AltinAlarmModal urun={altinAlarmSecili} onClose={()=>setAltinAlarmSecili(null)}/>}
       <div style={{display:"flex",alignItems:"center",gap:8,margin:"2px 0 10px",flexWrap:"wrap"}}>
-        <span style={{fontSize:12,fontWeight:700,color:WA(0.62)}}>Tarih</span>
         <input type="date" value={gTarih||bugunIsoA} max={bugunIsoA}
           onChange={e=>setGTarih(e.target.value===bugunIsoA?"":e.target.value)}
-          style={{flex:"0 1 auto",padding:"7px 10px",borderRadius:10,border:`1px solid ${WA(0.15)}`,background:WA(0.05),color:(TEMA==="acik"?C.label:"#fff"),fontSize:13,fontWeight:600,colorScheme:(TEMA==="acik"?"light":"dark")}}/>
+          style={{flex:1,minWidth:0,boxSizing:"border-box",minHeight:44,padding:"0 14px",borderRadius:12,border:`1px solid ${gTarih!==""?"#3B82F6":WA(0.15)}`,background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),color:(TEMA==="acik"?C.label:"#fff"),fontSize:15,fontWeight:600,fontFamily:"monospace",colorScheme:(TEMA==="acik"?"light":"dark")}}/>
         {gTarih!==""&&(
-          <button onClick={()=>setGTarih("")} style={{padding:"7px 12px",borderRadius:10,border:"none",background:"#3B82F6",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>Güncel</button>
+          <button onClick={()=>setGTarih("")} style={{minHeight:44,padding:"0 18px",borderRadius:12,border:"none",background:"#3B82F6",color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer"}}>Güncel</button>
         )}
         {gecmisMod&&!gecmisYuk&&!gecmis?.kayit&&(
           <span style={{flexBasis:"100%",fontSize:10.5,color:WA(0.45)}}>
@@ -30584,24 +30603,44 @@ function AltinUrunleriTablo(){
           </span>
         )}
       </div>
-      <div style={{display:"flex",alignItems:"center",gap:8,padding:"0 14px 6px"}}>
-        <span style={{flex:1,minWidth:0,fontSize:10,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.4}}>Birim</span>
-        <span style={{minWidth:92,flexShrink:0,textAlign:"right",fontSize:10,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.4}}>Alış</span>
-        <span style={{minWidth:92,flexShrink:0,textAlign:"right",fontSize:10,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.4}}>Satış</span>
+      <div style={{display:"flex",gap:8,marginBottom:4,flexWrap:"wrap"}}>
+        {[{e:"Dün",n:1},{e:"1 hafta önce",n:7},{e:"1 ay önce",n:30}].map(q=>{
+          const d0=new Date(); d0.setDate(d0.getDate()-q.n);
+          const iso=`${d0.getFullYear()}-${String(d0.getMonth()+1).padStart(2,"0")}-${String(d0.getDate()).padStart(2,"0")}`;
+          const akt=gTarih===iso;
+          return <button key={q.n} onClick={()=>setGTarih(iso)} style={{minHeight:44,padding:"0 14px",borderRadius:12,cursor:"pointer",fontSize:13,fontWeight:akt?700:600,
+            border:`1px solid ${akt?"#3B82F6":WA(0.12)}`,background:akt?C.blueLight:(TEMA==="acik"?"#E9EEF4":WA(0.05)),color:akt?(TEMA==="acik"?C.label:"#fff"):WA(0.6)}}>{q.e}</button>;
+        })}
       </div>
-      <div>
-        {/* 2026-07-30: Platin ve Paladyum bu ekrandan kaldırıldı (hem ons hem
-            gram). Gerekçe: sekme "Fiziki Altın" oldu ve bu iki metal zaten
-            Emtia sekmesinde ons olarak duruyordu — iki yerde birden görünmeleri
-            tutarsızlıktı. Altın ve Gümüş ons kotasyonları referans olarak
-            kalıyor. Backend sembolleri (XPTUSD/PLATIN/XPDUSD/PALADYUM)
-            SİLİNMEDİ: bu ürünlerle kurulmuş eski portföy kayıtları ve
-            alarmlar çalışmaya devam etmeli. */}
-        {satirRender("Gram Altın (Has · 24 Ayar)", "ALTIN", 0)}
-        {satirRender("Ons Altın", "ONS", 1, "$")}
-        {satirRender("Ons Gümüş", "XAGUSD", 2, "$")}
-        {ALTIN_URUN_TABLOSU_V2.map((u,i)=>satirRender(u.ad, u.sembol, i+3))}
-      </div>
+      {(()=>{
+        const kBg=(TEMA==="acik"?"#E9EEF4":"#16222E");
+        const kutu:any={background:kBg,border:`1px solid ${WA(0.08)}`,borderRadius:14,overflow:"hidden"};
+        const grupB=(t:string)=><p style={{margin:"16px 0 6px 4px",fontSize:11.5,fontWeight:700,letterSpacing:0.8,color:WA(0.55)}}>{t}</p>;
+        const baslikS:any={fontSize:10.5,fontWeight:700,color:WA(0.6),textTransform:"uppercase",letterSpacing:0.8};
+        const metaller=ALTIN_URUN_TABLOSU_V2.filter(u=>u.sembol==="AYAR22"||u.sembol==="AYAR14"||u.sembol==="GUMUSTRY");
+        const ziynet=ALTIN_URUN_TABLOSU_V2.filter(u=>!(u.sembol==="AYAR22"||u.sembol==="AYAR14"||u.sembol==="GUMUSTRY"));
+        return(
+          <div>
+            {grupB("ALTIN VE GÜMÜŞ")}
+            <div style={kutu}>
+              <div style={{display:"flex",alignItems:"center",gap:8,padding:"0 14px",minHeight:38,borderBottom:`1px solid ${WA(0.1)}`}}>
+                <span style={{...baslikS,flex:1,minWidth:0}}>Ürün</span>
+                <span style={{...baslikS,minWidth:92,flexShrink:0,textAlign:"right"}}>Alış</span>
+                <span style={{...baslikS,minWidth:92,flexShrink:0,textAlign:"right"}}>Satış</span>
+              </div>
+              {/* Platin/Paladyum bu ekrandan kaldırıldı (Emtia sekmesinde duruyor); backend sembolleri portföy/alarm için silinmedi. */}
+              {satirRender("Gram Altın (Has · 24 Ayar)", "ALTIN", 0)}
+              {satirRender("Ons Altın", "ONS", 1, "$")}
+              {satirRender("Ons Gümüş", "XAGUSD", 2, "$")}
+              {metaller.map((u,i)=>satirRender(u.ad, u.sembol, i+3))}
+            </div>
+            {grupB("ZİYNET")}
+            <div style={kutu}>
+              {ziynet.map((u,i)=>satirRender(u.ad, u.sembol, i+10))}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -37405,10 +37444,10 @@ function App(){
 
             {piyasaTabloFiltre==="fonlar"?(
               <div className="press-card" onClick={()=>nav("fonGetiriIzleme")} style={{
-                background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,
+                background:(TEMA==="acik"?"#E9EEF4":"#16222E"),border:`1px solid ${C.blue}`,
                 borderRadius:14,padding:"16px",display:"flex",alignItems:"center",gap:12,cursor:"pointer",marginTop:8,
               }}>
-                <span style={{fontSize:22}}>📈</span>
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={C.blue} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>
                 <div style={{flex:1}}>
                   <p style={{margin:0,fontSize:13,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff")}}>Yatırım Fonları Getiri İzleme</p>
                   <p style={{margin:"2px 0 0",fontSize:11,color:WA(0.45)}}>Tüm fonları getiri sırasına göre incele</p>
@@ -37453,11 +37492,34 @@ function App(){
               ];
               return(
                 <div>
+                  {(()=>{
+                    const ihr=gm("DT_IHRACAT")?.deger, ith=gm("DT_ITHALAT")?.deger, dng=gm("DT_DENGE");
+                    if(dng?.deger==null||ihr==null||ith==null) return null;
+                    const mx2=Math.max(Math.abs(ihr),Math.abs(ith))||1;
+                    const kb=(TEMA==="acik"?"#E9EEF4":"#16222E");
+                    const mono:any={fontFamily:"monospace",fontWeight:700,color:(TEMA==="acik"?C.label:"#fff")};
+                    return(
+                      <div onClick={()=>dng?.deger!=null&&gm("DT_DENGE_SERI")?.length>0&&setPiyasaGostergeTablo({ad:"Dış Ticaret Dengesi (Aylık, Milyon $)",seri:gm("DT_DENGE_SERI"),birim:"milyon$"})} style={{background:kb,border:`1px solid ${WA(0.08)}`,borderRadius:14,padding:"16px",marginTop:8,cursor:"pointer"}}>
+                        <div style={{fontSize:12,color:WA(0.6)}}>Dış Ticaret Dengesi (aylık)</div>
+                        <div style={{...mono,fontSize:28,marginTop:6,color:dng.deger<0?C.red:C.green}}>{fmtMr(dng)}</div>
+                        {[{ad:"İhracat",v:ihr,renk:C.blue},{ad:"İthalat",v:ith,renk:WA(0.35)}].map(x=>(
+                          <div key={x.ad} style={{marginTop:12}}>
+                            <div style={{display:"flex",justifyContent:"space-between",fontSize:13,color:(TEMA==="acik"?C.label:"#fff")}}><span>{x.ad}</span><span style={{...mono,fontSize:13}}>{`$${(Math.abs(x.v)/1000).toFixed(2).replace(".",",")} Milyar`}</span></div>
+                            <div style={{height:10,borderRadius:5,background:WA(0.1),marginTop:5,overflow:"hidden"}}><div style={{width:`${Math.max(4,Math.abs(x.v)/mx2*100)}%`,height:"100%",borderRadius:5,background:x.renk}}/></div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
                   <div style={{marginTop:8}}>
                     {DTGOSTERGELER.map((g:any,i:number)=>{
                       const tiklanabilir = g.seri && g.seri.length>0;
+                      const dtGrup=(ad0:string)=>/Cari/.test(ad0)?"ÖDEMELER DENGESİ":/Reel/.test(ad0)?"KUR ENDEKSİ":"İHRACAT VE İTHALAT";
+                      const gb=dtGrup(String(g.ad)); const ogb=i>0?dtGrup(String(DTGOSTERGELER[i-1].ad)):null;
                       return(
-                      <div key={i} onClick={()=>tiklanabilir&&setPiyasaGostergeTablo({ad:g.seriAd,seri:g.seri,birim:g.seriBirim})} style={{display:"flex",justifyContent:"space-between",alignItems:"center",cursor:tiklanabilir?"pointer":"default",
+                      <Fragment key={i}>
+                      {(gb!==ogb)&&<p style={{margin:i===0?"4px 0 6px 4px":"16px 0 6px 4px",fontSize:11.5,fontWeight:700,letterSpacing:0.8,color:WA(0.55)}}>{gb}</p>}
+                      <div onClick={()=>tiklanabilir&&setPiyasaGostergeTablo({ad:g.seriAd,seri:g.seri,birim:g.seriBirim})} style={{display:"flex",justifyContent:"space-between",alignItems:"center",cursor:tiklanabilir?"pointer":"default",
                         ...(TEMA==="acik"
                           ? {padding:"11px 14px",borderRadius:12,marginBottom:8,
                              background:(i%2===1?"#F3F6FA":"#E9EEF4"),
@@ -37477,6 +37539,7 @@ function App(){
                           {tiklanabilir&&<span style={{color:WA(0.3),fontSize:16}}>›</span>}
                         </div>
                       </div>
+                      </Fragment>
                       );
                     })}
                   </div>
@@ -37743,6 +37806,18 @@ function App(){
               // Makro satırlarda küçük grafik YOK (az noktalı aylık/haftalık seri anlamsız çizgi verir);
               // yerine bir önceki dönemin değeri yazılır. Grafik/tablo satıra dokununca açılır.
               const oncekiMetin=piyasaOncekiMetin;
+              // Satır grupları (küçük başlıklar) ve kartlarda zaten gösterilen satırların listeden çıkarılması
+              const grupBasligi=(sid:string,ad:string):string|null=>{
+                if(sid==="aktivite") return /Sanayi|Kapasite/.test(ad)?"ÜRETİM VE KAPASİTE":/Güven/.test(ad)?"GÜVEN ENDEKSLERİ":/İşsizlik/.test(ad)?"İŞGÜCÜ":null;
+                if(sid==="enflasyon") return /Beklenti/.test(ad)?"BEKLENTİLER":"GERÇEKLEŞEN";
+                if(sid==="para") return /SOFR|EURIBOR|FED|ECB|ABD/.test(ad)?"KÜRESEL":"TÜRKİYE";
+                if(sid==="risk") return /Net Rezerv|Swap/.test(ad)?"NET REZERV":"BRÜT KALEMLER";
+                return null;
+              };
+              const gizliSatir=(sid:string,g:any):boolean=>
+                (sid==="para"&&/^TCMB (Politika Faizi|Üst Bant|Alt Bant)/.test(String(g.ad)))
+                || (sid==="enflasyon"&&/^TÜFE \((Yıllık|Aylık)\)/.test(String(g.ad)))
+                || (sid==="aktivite"&&/^GSYH/.test(String(g.ad)));
               const kartBg=(TEMA==="acik"?"#E9EEF4":"#16222E");
               const kartKenar=`1px solid ${WA(0.08)}`;
               const metinRenk=(TEMA==="acik"?C.label:"#fff");
@@ -37803,6 +37878,18 @@ function App(){
                     );
                   })()}
 
+                  {/* ── EKONOMİK AKTİVİTE: GSYH büyüklüğü özet kartı ── */}
+                  {aktifSekme.id==="aktivite"&&gY("GSYH_YILLIK")?.deger!=null&&(
+                    <div onClick={()=>evdsMakro?.GSYH_YILLIK_SERI?.length>0&&setPiyasaGostergeTablo({ad:"GSYH Büyümesi (Çeyreklik, Yıllık Değişim)",seri:evdsMakro.GSYH_YILLIK_SERI})} style={{background:kartBg,border:kartKenar,borderRadius:14,padding:"16px",marginBottom:12,cursor:"pointer"}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
+                        <span style={{fontSize:12,color:WA(0.6)}}>GSYH Büyümesi (yıllık)</span>
+                        <span style={{fontSize:11,color:WA(0.5)}}>{gY("GSYH_YILLIK")?.tarih||""}</span>
+                      </div>
+                      <div style={{...monoStil,fontSize:30,marginTop:6}}>{fmtPct(gY("GSYH_YILLIK"))}</div>
+                      {(()=>{const om=oncekiMetin({seri:evdsMakro?.GSYH_YILLIK_SERI,deger:fmtPct(gY("GSYH_YILLIK"))}); return om?<div style={{fontSize:11,color:WA(0.5),marginTop:4}}>{om}</div>:null;})()}
+                    </div>
+                  )}
+
                   {/* ── ENFLASYON: TÜFE özet kutuları + 12 ay sonrası beklenti çubukları ── */}
                   {aktifSekme.id==="enflasyon"&&(()=>{
                     const bp=gY("BEKLENTI_PIYASA_12AY")?.deger, bh=gY("BEKLENTI_HANE_12AY")?.deger;
@@ -37812,8 +37899,8 @@ function App(){
                     return(
                       <>
                         <div style={{display:"flex",gap:10,marginBottom:10}}>
-                          {[{k:"TÜFE Yıllık",v:tufY},{k:"TÜFE Aylık",v:tufA}].map(x=>(
-                            <div key={x.k} style={{flex:1,minWidth:0,background:kartBg,border:kartKenar,borderRadius:14,padding:"14px"}}>
+                          {[{k:"TÜFE Yıllık",v:tufY,seri:evdsMakro?.TUFE_YILLIK_SERI,seriAd:"TÜFE Yıllık Değişim"},{k:"TÜFE Aylık",v:tufA,seri:evdsMakro?.TUFE_AYLIK_SERI,seriAd:"TÜFE Aylık Değişim"}].map(x=>(
+                            <div key={x.k} onClick={()=>x.seri&&x.seri.length>0&&setPiyasaGostergeTablo({ad:x.seriAd,seri:x.seri})} style={{flex:1,minWidth:0,background:kartBg,border:kartKenar,borderRadius:14,padding:"14px",cursor:"pointer"}}>
                               <div style={{fontSize:12,color:WA(0.6)}}>{x.k}</div>
                               <div style={{...monoStil,fontSize:24,marginTop:4}}>{fmtPct(x.v)}</div>
                               <div style={{fontSize:11,color:WA(0.5),marginTop:2}}>{x.v?.tarih||"—"}</div>
@@ -37901,10 +37988,14 @@ function App(){
                         );
                       })
                     ) : (
-                      aktifSekme.veri.map((g:any,i:number)=>{
+                      (aktifSekme.veri as readonly any[]).filter((g:any)=>!gizliSatir(aktifSekme.id,g)).map((g:any,i:number,arr:any[])=>{
                         const tiklanabilir = g.seri && g.seri.length>0;
+                        const gb=grupBasligi(aktifSekme.id,String(g.ad));
+                        const ogb=i>0?grupBasligi(aktifSekme.id,String(arr[i-1].ad)):null;
                         return(
-                        <div key={i} onClick={()=>tiklanabilir&&setPiyasaGostergeTablo({ad:g.seriAd,seri:g.seri,birim:g.seriBirim})} style={{display:"flex",justifyContent:"space-between",alignItems:"center",cursor:tiklanabilir?"pointer":"default",
+                        <Fragment key={i}>
+                        {gb&&gb!==ogb&&<p style={{margin:i===0?"4px 0 6px 4px":"16px 0 6px 4px",fontSize:11.5,fontWeight:700,letterSpacing:0.8,color:WA(0.55)}}>{gb}</p>}
+                        <div onClick={()=>tiklanabilir&&setPiyasaGostergeTablo({ad:g.seriAd,seri:g.seri,birim:g.seriBirim})} style={{display:"flex",justifyContent:"space-between",alignItems:"center",cursor:tiklanabilir?"pointer":"default",
                           ...(TEMA==="acik"
                             ? {padding:"11px 14px",borderRadius:12,marginBottom:8,
                                background:(i%2===1?"#F3F6FA":"#E9EEF4"),
@@ -37915,6 +38006,11 @@ function App(){
                           <div style={{flex:1,minWidth:0,paddingRight:10}}>
                             <p style={{margin:0,fontSize:13,fontWeight:700,color:C.soft}}>{g.ad}</p>
                             {g.tarih&&<p style={{margin:"1px 0 0",fontSize:10,color:(TEMA==="acik"?"#4A6178":"rgba(255,255,255,0.55)")}}>{g.tarih}{g.canli?" · canlı":""}</p>}
+                            {g.ad==="Kapasite Kullanım Oranı"&&gY("GOSTERGE_KKO")?.deger!=null&&(
+                              <div style={{height:8,borderRadius:4,background:WA(0.1),marginTop:8,overflow:"hidden"}}>
+                                <div style={{width:`${Math.max(0,Math.min(100,parseFloat(gY("GOSTERGE_KKO").deger)))}%`,height:"100%",borderRadius:4,background:C.blue}}/>
+                              </div>
+                            )}
                           </div>
                           <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
                             <div style={{textAlign:"right"}}>
@@ -37924,6 +38020,7 @@ function App(){
                             {tiklanabilir&&<span style={{color:WA(0.3),fontSize:16}}>›</span>}
                           </div>
                         </div>
+                        </Fragment>
                         );
                       })
                     )}
@@ -37964,34 +38061,66 @@ function App(){
               const gecmisTarihGecerli=/^\d{4}-\d{2}-\d{2}$/.test(piyasaGecmisTarih) && piyasaGecmisTarih<bugunIso && piyasaGecmisTarih>=enEskiIso;
               return (
               <>
-                {piyasaTabloFiltre==="doviz"&&(
-                  <div style={{display:"flex",alignItems:"center",gap:8,margin:"2px 0 10px",flexWrap:"wrap"}}>
-                    <span style={{fontSize:12,fontWeight:700,color:WA(0.62)}}>Tarih</span>
-                    <input type="date" value={piyasaGecmisTarih||bugunIso} min={enEskiIso} max={bugunIso}
-                      onChange={e=>setPiyasaGecmisTarih(e.target.value===bugunIso?"":e.target.value)}
-                      style={{flex:"0 1 auto",padding:"7px 10px",borderRadius:10,border:`1px solid ${WA(0.15)}`,background:WA(0.05),color:(TEMA==="acik"?C.label:"#fff"),fontSize:13,fontWeight:600,colorScheme:(TEMA==="acik"?"light":"dark")}}/>
-                    {piyasaGecmisTarih!==""&&(
-                      <button onClick={()=>setPiyasaGecmisTarih("")} style={{padding:"7px 12px",borderRadius:10,border:"none",background:"#3B82F6",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>Güncel</button>
-                    )}
-                  </div>
-                )}
-                <div style={{display:"flex",alignItems:"center",gap:8,padding:"0 4px 6px",borderBottom:`1px solid ${WA(0.1)}`}}>
-                  {/* Başlıklar WA(0.35) ile neredeyse görünmezdi; okunur
-                      opaklığa çekildi. "Günlük %" iki satıra sarıyordu —
-                      whiteSpace:nowrap ile tek satıra sabitlendi. */}
-                  <span style={{flex:1,fontSize:10,fontWeight:700,color:WA(0.62),textTransform:"uppercase",letterSpacing:0.3}}>{TR("Sembol")}</span>
-                  {alisSutunuVar&&<span style={{width:70,textAlign:"right",fontSize:10,fontWeight:700,color:WA(0.62),textTransform:"uppercase",letterSpacing:0.3,whiteSpace:"nowrap"}}>{TR("Alış")}</span>}
-                  <span style={{width:alisSutunuVar?74:78,textAlign:"right",fontSize:10,fontWeight:700,color:WA(0.62),textTransform:"uppercase",letterSpacing:0.3,whiteSpace:"nowrap"}}>{alisSutunuVar?TR("Satış"):TR("Son")}</span>
-                  <span style={{width:alisSutunuVar?60:64,textAlign:"right",fontSize:9.5,fontWeight:700,color:WA(0.62),textTransform:"uppercase",letterSpacing:0.2,whiteSpace:"nowrap"}}>{TR("Günlük %")}</span>
-                  <span style={{width:52,textAlign:"right",fontSize:10,fontWeight:700,color:WA(0.62),textTransform:"uppercase",letterSpacing:0.3,whiteSpace:"nowrap"}}>{TR("Grafik")}</span>
-                </div>
-                {satirlar.map((r:any,sira:number)=>(
-                  (piyasaTabloFiltre==="doviz" && gecmisTarihGecerli)
-                    ? <DovizGecmisSatiri key={r.sembol+"|"+piyasaGecmisTarih} sira={sira} ad={r.ad} sembol={r.sembol} dec={r.dec} tarih={piyasaGecmisTarih}/>
-                    : <PiyasaSatiri key={r.sembol} sira={sira} ad={r.ad} sembol={r.sembol} dec={r.dec} paraOnek={r.paraOnek}
-                    alisGoster={alisSutunuVar}
-                    onTikla={()=>setSeciliKur({kod:r.ad,ad:r.ad,sembol:r.sembol,birim:r.paraOnek||"₺"})}/>
-                ))}
+                {piyasaTabloFiltre==="doviz"&&(()=>{
+                  const isoOnce=(n:number)=>{const d=new Date();d.setDate(d.getDate()-n);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;};
+                  return(
+                  <>
+                    <div style={{display:"flex",alignItems:"center",gap:8,margin:"2px 0 8px"}}>
+                      <input type="date" value={piyasaGecmisTarih||bugunIso} min={enEskiIso} max={bugunIso}
+                        onChange={e=>setPiyasaGecmisTarih(e.target.value===bugunIso?"":e.target.value)}
+                        style={{flex:1,minWidth:0,boxSizing:"border-box",minHeight:44,padding:"0 14px",borderRadius:12,border:`1px solid ${piyasaGecmisTarih!==""?"#3B82F6":WA(0.15)}`,background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),color:(TEMA==="acik"?C.label:"#fff"),fontSize:15,fontWeight:600,fontFamily:"monospace",colorScheme:(TEMA==="acik"?"light":"dark")}}/>
+                      {piyasaGecmisTarih!==""&&(
+                        <button onClick={()=>setPiyasaGecmisTarih("")} style={{minHeight:44,padding:"0 18px",borderRadius:12,border:"none",background:"#3B82F6",color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer"}}>Güncel</button>
+                      )}
+                    </div>
+                    <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+                      {[{e:"Dün",n:1},{e:"1 hafta önce",n:7},{e:"1 ay önce",n:30}].map(q=>{
+                        const iso=isoOnce(q.n); const akt=piyasaGecmisTarih===iso;
+                        return <button key={q.n} onClick={()=>setPiyasaGecmisTarih(iso)} style={{minHeight:44,padding:"0 14px",borderRadius:12,cursor:"pointer",fontSize:13,fontWeight:akt?700:600,
+                          border:`1px solid ${akt?"#3B82F6":WA(0.12)}`,background:akt?C.blueLight:(TEMA==="acik"?"#E9EEF4":WA(0.05)),color:akt?(TEMA==="acik"?C.label:"#fff"):WA(0.6)}}>{q.e}</button>;
+                      })}
+                    </div>
+                  </>
+                  );
+                })()}
+                {(()=>{
+                  const kartBgT=(TEMA==="acik"?"#E9EEF4":"#16222E");
+                  const aramaVar=aramaQ!=="";
+                  const grupBasKart=(t:string,ilk:boolean)=><p style={{margin:ilk?"4px 0 6px 4px":"16px 0 6px 4px",fontSize:11.5,fontWeight:700,letterSpacing:0.8,color:WA(0.55)}}>{t}</p>;
+                  const emtiaGrup=(sym:string)=>/^(GC=F|GRAM_ALTIN|SI=F|GRAM_GUMUS|PL=F|PA=F)$/.test(sym)?"KIYMETLİ MADENLER":/^(BZ=F|CL=F|NG=F|HG=F)$/.test(sym)?"ENERJİ VE METAL":"TARIM";
+                  const heroVar=!aramaVar&&(piyasaTabloFiltre==="borsa"||piyasaTabloFiltre==="kripto");
+                  const satirEl=(r:any,sira:number,buyuk?:boolean)=>(
+                    (piyasaTabloFiltre==="doviz" && gecmisTarihGecerli)
+                      ? <DovizGecmisSatiri key={r.sembol+"|"+piyasaGecmisTarih} sira={sira} ad={r.ad} sembol={r.sembol} dec={r.dec} tarih={piyasaGecmisTarih}/>
+                      : <PiyasaSatiri key={r.sembol} sira={sira} ad={r.ad} sembol={r.sembol} dec={r.dec} paraOnek={r.paraOnek}
+                          alisGoster={alisSutunuVar} buyuk={buyuk}
+                          onTikla={()=>setSeciliKur({kod:r.ad,ad:r.ad,sembol:r.sembol,birim:r.paraOnek||"₺"})}/>
+                  );
+                  if(alisSutunuVar){
+                    return(
+                      <div style={{background:kartBgT,border:`1px solid ${WA(0.08)}`,borderRadius:14,overflow:"hidden"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,padding:"0 14px",minHeight:38,borderBottom:`1px solid ${WA(0.1)}`}}>
+                          <span style={{flex:1,fontSize:10.5,fontWeight:700,color:WA(0.6),letterSpacing:0.8,textTransform:"uppercase"}}>{TR("Sembol")}</span>
+                          <span style={{width:78,textAlign:"right",fontSize:10.5,fontWeight:700,color:WA(0.6),letterSpacing:0.8,textTransform:"uppercase"}}>{TR("Alış")}</span>
+                          <span style={{width:82,textAlign:"right",fontSize:10.5,fontWeight:700,color:WA(0.6),letterSpacing:0.8,textTransform:"uppercase"}}>{TR("Satış")}</span>
+                          <span style={{width:62,textAlign:"right",fontSize:10.5,fontWeight:700,color:WA(0.6),letterSpacing:0.8,textTransform:"uppercase",whiteSpace:"nowrap"}}>{TR("Günlük")}</span>
+                        </div>
+                        {satirlar.map((r:any,sira:number)=>satirEl(r,sira))}
+                      </div>
+                    );
+                  }
+                  return(
+                    <>
+                      {satirlar.map((r:any,sira:number)=>{
+                        if(heroVar&&sira===0) return satirEl(r,sira,true);
+                        let baslik:string|null=null;
+                        if(piyasaTabloFiltre==="emtia"){ const g=emtiaGrup(r.sembol); const og=sira>0?emtiaGrup(satirlar[sira-1].sembol):null; if(g!==og) baslik=g; }
+                        else if(heroVar&&sira===1) baslik=piyasaTabloFiltre==="borsa"?"DİĞER ENDEKSLER":"DİĞER KRİPTO PARALAR · USD";
+                        return <Fragment key={r.sembol}>{baslik&&grupBasKart(baslik,sira===0)}{satirEl(r,sira)}</Fragment>;
+                      })}
+                    </>
+                  );
+                })()}
                 {satirlar.length===0&&(
                   <div style={{textAlign:"center",padding:"30px 0",color:WA(0.35),fontSize:13}}>Sonuç bulunamadı</div>
                 )}
@@ -38000,7 +38129,7 @@ function App(){
                     background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,
                     borderRadius:14,padding:"16px",display:"flex",alignItems:"center",gap:12,cursor:"pointer",marginTop:10,
                   }}>
-                    <span style={{fontSize:22}}>📊</span>
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={C.blue} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
                     <div style={{flex:1}}>
                       <p style={{margin:0,fontSize:13,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff")}}>BİST Hisse Veri İzleme</p>
                       <p style={{margin:"2px 0 0",fontSize:11,color:WA(0.45)}}>Hisse bazında canlı fiyat ve grafik takibi</p>
