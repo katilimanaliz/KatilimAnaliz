@@ -30576,7 +30576,7 @@ function AltinUrunleriTablo(){
           <>
             <span style={{minWidth:92,flexShrink:0,textAlign:"right",fontSize:14,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace",whiteSpace:"nowrap"}}>{fmtPara(d.bid,birim)}</span>
             <span style={{minWidth:92,flexShrink:0,textAlign:"right",fontSize:14,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace",whiteSpace:"nowrap"}}>{fmtPara(d.ask,birim)}</span>
-            {tiklanabilir&&<span style={{color:WA(0.3),fontSize:16,flexShrink:0}}>›</span>}
+            <span style={{color:WA(0.3),fontSize:16,flexShrink:0,width:10,textAlign:"right",visibility:tiklanabilir?"visible":"hidden"}}>›</span>
           </>
         ):(
           <span style={{fontSize:12,color:WA(0.4)}}>—</span>
@@ -30603,15 +30603,6 @@ function AltinUrunleriTablo(){
           </span>
         )}
       </div>
-      <div style={{display:"flex",gap:8,marginBottom:4,flexWrap:"wrap"}}>
-        {[{e:"Dün",n:1},{e:"1 hafta önce",n:7},{e:"1 ay önce",n:30}].map(q=>{
-          const d0=new Date(); d0.setDate(d0.getDate()-q.n);
-          const iso=`${d0.getFullYear()}-${String(d0.getMonth()+1).padStart(2,"0")}-${String(d0.getDate()).padStart(2,"0")}`;
-          const akt=gTarih===iso;
-          return <button key={q.n} onClick={()=>setGTarih(iso)} style={{minHeight:44,padding:"0 14px",borderRadius:12,cursor:"pointer",fontSize:13,fontWeight:akt?700:600,
-            border:`1px solid ${akt?"#3B82F6":WA(0.12)}`,background:akt?C.blueLight:(TEMA==="acik"?"#E9EEF4":WA(0.05)),color:akt?(TEMA==="acik"?C.label:"#fff"):WA(0.6)}}>{q.e}</button>;
-        })}
-      </div>
       {(()=>{
         const kBg=(TEMA==="acik"?"#E9EEF4":"#16222E");
         const kutu:any={background:kBg,border:`1px solid ${WA(0.08)}`,borderRadius:14,overflow:"hidden"};
@@ -30627,6 +30618,7 @@ function AltinUrunleriTablo(){
                 <span style={{...baslikS,flex:1,minWidth:0}}>Ürün</span>
                 <span style={{...baslikS,minWidth:92,flexShrink:0,textAlign:"right"}}>Alış</span>
                 <span style={{...baslikS,minWidth:92,flexShrink:0,textAlign:"right"}}>Satış</span>
+                <span style={{width:10,flexShrink:0}}/>
               </div>
               {/* Platin/Paladyum bu ekrandan kaldırıldı (Emtia sekmesinde duruyor); backend sembolleri portföy/alarm için silinmedi. */}
               {satirRender("Gram Altın (Has · 24 Ayar)", "ALTIN", 0)}
@@ -30634,7 +30626,12 @@ function AltinUrunleriTablo(){
               {satirRender("Ons Gümüş", "XAGUSD", 2, "$")}
               {metaller.map((u,i)=>satirRender(u.ad, u.sembol, i+3))}
             </div>
-            {grupB("ZİYNET")}
+            <div style={{display:"flex",alignItems:"center",gap:8,margin:"16px 15px 6px 4px"}}>
+              <span style={{flex:1,minWidth:0,fontSize:11.5,fontWeight:700,letterSpacing:0.8,color:WA(0.55)}}>ZİYNET</span>
+              <span style={{...baslikS,minWidth:92,flexShrink:0,textAlign:"right"}}>Alış</span>
+              <span style={{...baslikS,minWidth:92,flexShrink:0,textAlign:"right"}}>Satış</span>
+              <span style={{width:10,flexShrink:0}}/>
+            </div>
             <div style={kutu}>
               {ziynet.map((u,i)=>satirRender(u.ad, u.sembol, i+10))}
             </div>
@@ -38065,20 +38062,13 @@ function App(){
                   const isoOnce=(n:number)=>{const d=new Date();d.setDate(d.getDate()-n);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;};
                   return(
                   <>
-                    <div style={{display:"flex",alignItems:"center",gap:8,margin:"2px 0 8px"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,margin:"2px 0 12px"}}>
                       <input type="date" value={piyasaGecmisTarih||bugunIso} min={enEskiIso} max={bugunIso}
                         onChange={e=>setPiyasaGecmisTarih(e.target.value===bugunIso?"":e.target.value)}
                         style={{flex:1,minWidth:0,boxSizing:"border-box",minHeight:44,padding:"0 14px",borderRadius:12,border:`1px solid ${piyasaGecmisTarih!==""?"#3B82F6":WA(0.15)}`,background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),color:(TEMA==="acik"?C.label:"#fff"),fontSize:15,fontWeight:600,fontFamily:"monospace",colorScheme:(TEMA==="acik"?"light":"dark")}}/>
                       {piyasaGecmisTarih!==""&&(
                         <button onClick={()=>setPiyasaGecmisTarih("")} style={{minHeight:44,padding:"0 18px",borderRadius:12,border:"none",background:"#3B82F6",color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer"}}>Güncel</button>
                       )}
-                    </div>
-                    <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
-                      {[{e:"Dün",n:1},{e:"1 hafta önce",n:7},{e:"1 ay önce",n:30}].map(q=>{
-                        const iso=isoOnce(q.n); const akt=piyasaGecmisTarih===iso;
-                        return <button key={q.n} onClick={()=>setPiyasaGecmisTarih(iso)} style={{minHeight:44,padding:"0 14px",borderRadius:12,cursor:"pointer",fontSize:13,fontWeight:akt?700:600,
-                          border:`1px solid ${akt?"#3B82F6":WA(0.12)}`,background:akt?C.blueLight:(TEMA==="acik"?"#E9EEF4":WA(0.05)),color:akt?(TEMA==="acik"?C.label:"#fff"):WA(0.6)}}>{q.e}</button>;
-                      })}
                     </div>
                   </>
                   );
@@ -38157,42 +38147,71 @@ function App(){
           );
         })()}
 
-        {/* ── ARAÇLAR (alt bar sekmesi) ── */}
-        {screen==="araclarMenu"&&(
+        {/* ── ARAÇLAR (alt bar sekmesi) — 2026-10-07 yeni tasarım: üstte 4 öne çıkan kutu, altında gruplanmış kompakt satırlar ── */}
+        {screen==="araclarMenu"&&(()=>{
+          const haftalikDesc=(()=>{const b=new Date();const g=b.getDay();const geri=g===6?5:(g===0?6:(g-1)+7);const pzt=new Date(b);pzt.setDate(b.getDate()-geri);const cum=new Date(pzt);cum.setDate(pzt.getDate()+4);const f=(d:Date)=>d.toLocaleDateString("tr-TR",{day:"numeric",month:"long"});return `${f(pzt)} – ${f(cum)} · ${CV("tablo ve haftalık yorum")}`;})();
+          const kartBg=(TEMA==="acik"?"#E9EEF4":"#16222E");
+          const yaziR=(TEMA==="acik"?C.label:"#fff");
+          const ac=(c:any)=>c.harici?window.open("https://www.katilimplus.com/blog/","_blank"):nav(c.key);
+          const KUTULAR:any[]=[
+            {key:"portfoyum", label:"Portföyüm", desc:"Varlıklarını tek yerden takip et"},
+            {key:"getiriKarsilastirma", label:"Getiri Karşılaştırma", desc:"Döviz, altın, endeks getirileri"},
+            {key:"vadeTakibi", label:"Vade Takip & Hatırlatma Ajandam", desc:"Vadeleri takip et, hatırlatma al"},
+            {key:"zekatHesabi", label:"Zekât Hesaplayıcı", desc:"Güncel altın fiyatıyla nisap"},
+          ];
+          const GRUPLAR:any[]=[
+            {baslik:"PİYASA VE TAKİP", items:[
+              {key:"haftalikOzet", label:"Haftalık Piyasa Özeti", desc:haftalikDesc},
+              {key:"kiraSertifikasi", label:"Kira Sertifikası İhraçları", desc:"Türkiye'de sukuk ihraçları — SPK resmî verisiyle tür ve yıl bazında"},
+            ]},
+            {baslik:"KATILIM BANKACILIĞI", items:[
+              {key:"katilimBankalari", label:"Katılım Bankaları", desc:"Türkiye'deki katılım bankaları, kuruluş tarihleri ve bilgileri"},
+              {key:"katilimSektoru", label:"Katılım Bankacılığı Sektörü", desc:"Sektör payı, fon büyüklükleri ve kârlılık — BDDK resmî verisiyle"},
+              {key:"icazetBelgeleri", label:"İcazet Belgeleri", desc:"Banka ve ürün seç, bankanın kendi yayımladığı icazet belgesine git"},
+              {key:"kfkNedir", label:"Katılım Finans Kefalet (KFK) Nedir?", desc:"9 kefalet paketi, size uygun olanı bulun — Katılım Finans Kefalet A.Ş."},
+              {key:"musteriPortfoyum", label:"Müşteri Portföyüm", desc:"Bankacılar için müşteri, görüşme ve takip defteri. Bugün kimi arayacağını gör; üyelik gerekir, kayıtlar hesabına bağlı saklanır", uyelik:true},
+            ]},
+            {baslik:"ÖĞREN", items:[
+              {key:"egitim", label:"Eğitim", desc:"4 modül, 100 ders; örnek senaryolar, modül sınavı, puan ve liderlik tablosu"},
+              {key:"ekonomiSozluk", label:"Ekonomi Sözlüğü", desc:"196 ekonomi ve finans terimi — enflasyondan rezervlere, sade tanımlarla"},
+              {key:"sozluk", label:"Katılım Bankacılığı Sözlüğü", desc:"Terim ve tanımları hızlıca ara"},
+              {key:"katilimBlog", label:"Katılım Blog", desc:"Kâr payı, murabaha, TLREF ve daha fazlası — anlaşılır rehberler", harici:true},
+            ]},
+          ];
+          return(
           <div style={{background:C.bg,padding:"12px 12px 0",paddingBottom:"calc(108px + env(safe-area-inset-bottom,0px))",boxSizing:"border-box",overflowY:"auto"}}>
-            {[
-              {key:"portfoyum", icon:"📌", label:"Portföyüm", desc:"Hisse, fon, altın, kripto ve emtia varlıklarını tek yerden takip et", renk:C.blue, bg:"rgba(91,155,216,0.15)"},
-              {key:"haftalikOzet", icon:"📰", label:"Haftalık Piyasa Özeti", desc:(()=>{const b=new Date();const g=b.getDay();const geri=g===6?5:(g===0?6:(g-1)+7);const pzt=new Date(b);pzt.setDate(b.getDate()-geri);const cum=new Date(pzt);cum.setDate(pzt.getDate()+4);const f=(d:Date)=>d.toLocaleDateString("tr-TR",{day:"numeric",month:"long"});return `${f(pzt)} – ${f(cum)} · ${CV("tablo ve haftalık yorum")}`;})(), renk:C.blue, bg:"rgba(91,155,216,0.15)"},
-              {key:"getiriKarsilastirma", icon:"📊", label:"Getiri Karşılaştırma", desc:"Döviz, altın, gümüş, endeks getirilerini dönemsel karşılaştır", renk:"#F59E0B", bg:"rgba(245,158,11,0.15)"},
-              {key:"vadeTakibi", icon:"⏰", label:"Vade Takip & Hatırlatma Ajandam", desc:"Finansman ve ödeme vadelerini takip et, hatırlatma al", renk:C.green, bg:"rgba(74,222,128,0.15)"},
-              {key:"katilimBankalari", icon:"🏛️", label:"Katılım Bankaları", desc:"Türkiye'deki katılım bankaları, kuruluş tarihleri ve bilgileri", renk:C.blue, bg:"rgba(91,155,216,0.15)"},
-              {key:"musteriPortfoyum", icon:"🗂️", label:"Müşteri Portföyüm", desc:"Bankacılar için müşteri, görüşme ve takip defteri. Bugün kimi arayacağını gör; üyelik gerekir, kayıtlar hesabına bağlı saklanır", renk:"#5B9BD8", bg:"rgba(91,155,216,0.15)"},
-              {key:"egitim", icon:"🎓", label:"Eğitim", desc:"4 modül, 100 ders; örnek senaryolar, modül sınavı, puan ve liderlik tablosu", renk:"#2CCB9A", bg:"rgba(44,203,154,0.15)"},
-              {key:"icazetBelgeleri", icon:"📑", label:"İcazet Belgeleri", desc:"Banka ve ürün seç, bankanın kendi yayımladığı icazet belgesine git", renk:"#2CCB9A", bg:"rgba(44,203,154,0.15)"},
-              {key:"katilimSektoru", icon:"🏦", label:"Katılım Bankacılığı Sektörü", desc:"Sektör payı, fon büyüklükleri ve kârlılık — BDDK resmî verisiyle", renk:"#5B9BD8", bg:"rgba(91,155,216,0.15)"},
-              {key:"ekonomiSozluk", icon:"📚", label:"Ekonomi Sözlüğü", desc:"196 ekonomi ve finans terimi — enflasyondan rezervlere, sade tanımlarla", renk:"#A78BFA", bg:"rgba(167,139,250,0.15)"},
-              {key:"kfkNedir", icon:"🤝", label:"Katılım Finans Kefalet (KFK) Nedir?", desc:"9 kefalet paketi, size uygun olanı bulun — Katılım Finans Kefalet A.Ş.", renk:"#2CCB9A", bg:"rgba(44,203,154,0.15)"},
-              {key:"zekatHesabi", icon:"🌙", label:"Zekât Hesaplayıcı", desc:"Nisap güncel altın fiyatıyla, varlıkların portföyünden — zekât gününde hatırlatma", renk:"#16A34A", bg:"rgba(22,163,74,0.15)"},
-              {key:"kiraSertifikasi", icon:"📜", label:"Kira Sertifikası İhraçları", desc:"Türkiye'de sukuk ihraçları — SPK resmî verisiyle tür ve yıl bazında", renk:"#F5A623", bg:"rgba(245,166,35,0.15)"},
-              {key:"sozluk",     icon:"📖", label:"Katılım Bankacılığı Sözlüğü",     desc:"Terim ve tanımları hızlıca ara", renk:"#60A5FA", bg:"rgba(96,165,250,0.15)"},
-              {key:"katilimBlog", icon:"📝", label:"Katılım Blog", desc:"Kâr payı, murabaha, TLREF ve daha fazlası — anlaşılır rehberler", renk:"#2CCB9A", bg:"rgba(44,203,154,0.15)", harici:true},
-            ].map(c=>(
-              <div className="press-card" key={c.key} onClick={()=>c.harici?window.open("https://www.katilimplus.com/blog/","_blank"):nav(c.key)} style={{
-                display:"flex",alignItems:"center",gap:14,
-                background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,
-                borderRadius:14,padding:"14px 16px",marginBottom:10,cursor:"pointer",
-              }}>
-                <div style={{width:46,height:46,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon k={c.key} size={28} color={C.blue}/></div>
-                <div style={{flex:1,minWidth:0}}>
-                  {/* ⚠️ 2026-09-17 (tipografi geçişi — araclarMenu): 800→700. */}
-                  <p style={{margin:0,fontSize:14,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff")}}>{CV(c.label)}</p>
-                  <p style={{margin:"2px 0 0",fontSize:11,color:WA(0.45)}}>{CV(c.desc)}</p>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:10}}>
+              {KUTULAR.map(c=>(
+                <div className="press-card" key={c.key} onClick={()=>ac(c)} style={{display:"flex",flexDirection:"column",alignItems:"flex-start",gap:10,minHeight:112,padding:14,borderRadius:14,cursor:"pointer",background:kartBg,border:`1px solid ${WA(0.08)}`,boxSizing:"border-box"}}>
+                  <div style={{width:40,height:40,borderRadius:12,background:C.blueLight,display:"flex",alignItems:"center",justifyContent:"center"}}><Icon k={c.key} size={22} color={C.blue}/></div>
+                  <div>
+                    <p style={{margin:0,fontSize:14,fontWeight:700,color:yaziR,lineHeight:1.25}}>{CV(c.label)}</p>
+                    <p style={{margin:"2px 0 0",fontSize:12,color:WA(0.5),lineHeight:1.35}}>{CV(c.desc)}</p>
+                  </div>
                 </div>
-                <span style={{color:WA(0.3),fontSize:20,flexShrink:0}}>›</span>
+              ))}
+            </div>
+            {GRUPLAR.map(g=>(
+              <div key={g.baslik}>
+                <p style={{margin:"22px 4px 8px",fontSize:11.5,fontWeight:700,letterSpacing:0.8,color:WA(0.55)}}>{CV(g.baslik)}</p>
+                <div style={{background:kartBg,border:`1px solid ${WA(0.08)}`,borderRadius:14,overflow:"hidden"}}>
+                  {g.items.map((c:any,i:number)=>(
+                    <div className="press-card" key={c.key} onClick={()=>ac(c)} style={{display:"flex",alignItems:"center",gap:12,minHeight:64,padding:"10px 14px",cursor:"pointer",borderTop:i>0?`1px solid ${WA(0.08)}`:"none",boxSizing:"border-box"}}>
+                      <div style={{width:32,display:"flex",justifyContent:"center",flexShrink:0}}><Icon k={c.key} size={24} color={C.blue}/></div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <p style={{margin:0,fontSize:14,fontWeight:700,color:yaziR,lineHeight:1.25}}>{CV(c.label)}</p>
+                        <p style={{margin:"2px 0 0",fontSize:12,color:WA(0.5),whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{CV(c.desc)}</p>
+                      </div>
+                      {c.uyelik&&<span style={{flexShrink:0,height:22,padding:"0 8px",borderRadius:11,display:"flex",alignItems:"center",fontSize:11,fontWeight:700,color:C.orange,background:C.orangeLight,border:`1px solid ${C.orange}55`}}>{CV("Üyelik")}</span>}
+                      <span style={{color:WA(0.3),fontSize:18,flexShrink:0}}>›</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
-        )}
+          );
+        })()}
 
         {/* ── PORTFÖYÜM (Araçlar altında) ── */}
         {screen==="portfoyum"&&(
