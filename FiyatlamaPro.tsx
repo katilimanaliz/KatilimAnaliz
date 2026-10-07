@@ -1455,9 +1455,9 @@ function YmBaslik({children}:{children:React.ReactNode}){return <p style={{margi
 function YmP({children}:{children:React.ReactNode}){return <p style={{margin:"0 0 4px",fontSize:13,color:WA(0.7),lineHeight:1.6}}>{children}</p>;}
 
 // ═══════════════════════════════════════════════════════════════════════
-// EĞİTİM BÖLÜMÜ (2026-10-04, 3. sürüm) — 4 modül · 20 ünite · 100 ders · öğretici örnek senaryolar (durum/çözüm/çıkarım) · Pro sınav · puan · seri · liderlik
+// EĞİTİM BÖLÜMÜ (2026-10-07, 4. sürüm: + Dış ticaret, Hazine işlemleri) — 6 modül · 28 ünite · 132 ders · öğretici örnek senaryolar (durum/çözüm/çıkarım) · Pro sınav · puan · seri · liderlik
 // ═══════════════════════════════════════════════════════════════════════
-// ── EĞİTİM İÇERİĞİ (2026-10-04) — 4 modül · 20 ünite · 100 ders · 80 soru · her derste öğretici örnek senaryo (durum / çözüm / çıkarım). Çabuk eskiyen rakamlar bilerek yazılmadı.
+// ── EĞİTİM İÇERİĞİ (2026-10-04) — 6 modül · 28 ünite · 132 ders · 120 soru · her derste öğretici örnek senaryo (durum / çözüm / çıkarım). Çabuk eskiyen rakamlar bilerek yazılmadı.
 // ⚠️ Yayından önce alan uzmanınca gözden geçirilmeli.
 type EgitimDers = { id:string; baslik:string; dk:number; govde:string[]; ozet:string[]; sen:[string,string,string,string] };
 type EgitimUnite = { ad:string; ozet:string; dersler:EgitimDers[] };
@@ -2219,6 +2219,270 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
     EGQ("Oltalama (phishing) nedir?",["Sahte mesaj ve sitelerle bilgi ele geçirme girişimi","Kredi kartı puanı","Bir yatırım aracı","Vergi türü"],0,"Oltalama, sahte site veya mesajlarla kişisel bilgileri ele geçirme girişimidir."),
   ],
 },
+{
+  id:"disticaret", ad:"Dış ticaret", kisa:"Dış ticaret", renk:"#38BDF8", ikon:"🚢", seviye:"Temel → Orta",
+  aciklama:"İhracat, ithalat, teslim şekilleri, ödeme yöntemleri, belgeler ve kur riski",
+  uniteler:[
+  { ad:"Temel kavramlar", ozet:"İhracat, ithalat, dış ticaret dengesi ve teslim şekilleri", dersler:[
+    EGD("dt01","İhracat, ithalat ve dış ticaret dengesi",4,[
+      "İhracat, mal veya hizmetin yurt dışına satılmasıdır; ithalat ise yurt dışından satın alınmasıdır. İhracat bir ülkeye döviz kazandırır, ithalat döviz çıkışına yol açar.",
+      "Dış ticaret dengesi, ihracat ile ithalat arasındaki farktır. İthalat ihracattan büyükse dış ticaret açığı, küçükse fazla oluşur. Cari işlemler dengesi ise mal ticaretine ek olarak hizmetleri (örneğin turizm), gelirleri ve cari transferleri de kapsar.",
+      "Türkiye’de aylık dış ticaret verileri Ticaret Bakanlığı ve TÜİK tarafından yayımlanır. Rakamlar çabuk değiştiği için bu derste güncel tutar verilmemiştir; güncel veriye uygulamanın Dış Ticaret sekmesinden ulaşabilirsin."],
+      ["İhracat döviz getirir, ithalat döviz çıkışı doğurur","Denge = ihracat − ithalat","Cari denge, mal ticaretinden daha geniştir"],
+      ["Açığı doğru okumak","Bir ay için ihracat 22 milyar $, ithalat 30 milyar $ olarak açıklanıyor (varsayımsal). Haberde sadece “açık büyüdü” deniyor.","Denge = 22 − 30 = −8 milyar $ (açık). İhracatın ithalatı karşılama oranı 22 ÷ 30 ≈ %73,3’tür. Oran bir önceki aya göre yükseldiyse açık büyüse bile kapsama iyileşmiş olabilir.","Tutarla birlikte karşılama oranına ve açığın nasıl finanse edildiğine bakmak gerekir."]),
+    EGD("dt02","Neden dış ticaret yapılır? Kurun etkisi",4,[
+      "Ülkeler ve şirketler, görece daha verimli üretebildikleri ürünlerde uzmanlaşıp diğerlerini ithal ederek kaynaklarını daha iyi kullanır. Buna karşılaştırmalı üstünlük fikri denir.",
+      "Döviz kuru dış ticareti doğrudan etkiler. Yerli paranın değer kaybetmesi, ihracatçının döviz gelirini TL cinsinden artırır; ithalatçının maliyetini ise yükseltir.",
+      "Ancak kur avantajı kalıcı değildir. İhracatçının ücret, enerji gibi TL maliyetleri enflasyonla artarsa kur kazancı zamanla erir. İthal girdi kullanan ihracatçıda etki ayrıca azalır."],
+      ["Uzmanlaşma, kaynakları daha verimli kullandırır","Değer kaybeden TL ihracatçıyı destekler, ithalatçıyı zorlar","TL maliyet artışı kur avantajını eritebilir"],
+      ["Kur artınca kâr artar mı?","Bir üreticinin bir ürünü 600 TL’ye mal oluyor ve 20 €’ya satıyor. Kur 32 iken sipariş alıyor; teslimde kur 34 oluyor (varsayımsal).","Kur 32’de gelir 20 × 32 = 640 TL, kâr 40 TL. Kur 34’te gelir 680 TL, kâr 80 TL olur. Fakat bir sonraki dönemde TL maliyet %10 artıp 660 TL’ye çıkarsa, aynı kurda kâr 20 TL’ye düşer.","Kur avantajı geçicidir; asıl rekabet gücü maliyet ve verimlilikten gelir."]),
+    EGD("dt03","Teslim şekilleri (Incoterms)",5,[
+      "Incoterms, Uluslararası Ticaret Odası’nın (ICC) yayımladığı teslim şekilleri kurallarıdır. Mal bedelinin yanında nakliye, sigorta, gümrük masrafı ile hasar ve kayıp riskinin satıcıdan alıcıya nerede geçtiğini belirler. Güncel sürüm Incoterms 2020’dir.",
+      "EXW’de mal satıcının işyerinde teslim edilir ve sonrası alıcıya aittir. FOB’da satıcı malı gemiye yükleyene kadar sorumludur. CIF’te navlun ve sigortayı satıcı öder; ancak risk, mal gemiye yüklendiğinde alıcıya geçer. DAP’ta satıcı malı varış yerinde teslim eder; ithalat gümrüğü alıcıdadır. DDP’de ithalat vergileri dahil her şey satıcıdadır.",
+      "FOB, CIF gibi kurallar yalnızca deniz ve iç su yolu taşımacılığı içindir. Konteyner ve çok türlü taşımada FCA, CIP, DAP gibi kurallar daha uygundur. Sözleşmede kural ile birlikte yer de yazılmalıdır, örneğin “FOB Mersin”."],
+      ["Incoterms maliyet ve riskin geçiş noktasını belirler","CIF’te masraf varışa kadar satıcıda, risk yüklemede alıcıya geçer","Sözleşmede kural ile birlikte yer de yazılmalıdır"],
+      ["FOB mu CIF mi?","Bir ihracatçı alıcıya iki teklif veriyor: FOB Mersin 50.000 € ve CIF Rotterdam 53.500 €. Alıcı kendi nakliye anlaşmasıyla aynı rotayı 3.000 €’ya taşıtabiliyor (varsayımsal).","Teklifler aynı teslim noktasına getirilir. FOB: 50.000 + 3.000 = 53.000 €. CIF: 53.500 €. Alıcı için FOB 500 € daha ucuzdur. CIF farkı olan 3.500 €, navlun ve sigortayı içerir.","Farklı Incoterm’li teklifler, aynı noktaya getirilmeden kıyaslanmamalıdır."]),
+    EGD("dt04","Proforma fatura ve satış sözleşmesi",4,[
+      "Proforma fatura, satıcının alıcıya gönderdiği ön fiyat teklifidir. Mal, miktar, birim fiyat, teslim şekli ve ödeme koşulunu gösterir. Vergi veya muhasebe açısından gerçek fatura yerine geçmez.",
+      "Alıcı proformayı onaylayınca sipariş genellikle netleşir. Ancak büyük veya tekrarlayan işlerde ayrıca yazılı bir satış sözleşmesi yapılır. Sözleşmede taraflar, ürün özellikleri, miktar, fiyat, teslim şekli ve tarihi, ödeme yöntemi, gecikme cezası ve uyuşmazlıkta başvurulacak yer bulunmalıdır.",
+      "Uyuşmazlıkta hangi ülkenin hukukunun ve hangi mahkeme ya da tahkimin geçerli olacağı da yazılmalıdır. Bu satır yazılmazsa sorun çıktığında çözüm yolu uzar."],
+      ["Proforma ön tekliftir, gerçek fatura yerine geçmez","Sözleşmede fiyat, teslim, ödeme ve ceza şartı yazılmalıdır","Hukuk ve yetkili yer belirtilmelidir"],
+      ["Teslim tarihi yazmayan sipariş","Bir ihracatçı proformaya dayanarak %30 avans alıyor. Proformada teslim tarihi yok. Alıcı iki ay sonra malı hâlâ teslim almadığını söylüyor.","Önce yazışmalardan hangi tarihin konuşulduğu araştırılır, sonra sözleşme ile durum netleştirilir. Bundan sonraki siparişlerde teslim tarihi, gecikme cezası, ödeme planı ve yetkili mahkeme veya tahkim sözleşmeye yazılır.","Proforma tek başına yeterli güvence değildir; tarih, ödeme ve uyuşmazlık maddeleri açıkça yazılmalıdır."]),
+  ]},
+  { ad:"Ödeme yöntemleri", ozet:"Peşin, açık hesap, vesaik mukabili, akreditif ve teminat mektubu", dersler:[
+    EGD("dt05","Peşin ve açık hesap",4,[
+      "Peşin (avans) ödemede alıcı, mal sevk edilmeden önce parayı öder. İhracatçı için en güvenli yöntemdir; ithalatçı ise malı alamama riskini taşır.",
+      "Açık hesapta mal önce gönderilir, bedel vade sonunda ödenir. İhracatçı alıcının ödeyememe riskini üstlenir ve vade süresince finansman maliyeti katlanır.",
+      "Bu yüzden açık hesap, uzun süredir çalışılan ve güvenilir müşterilerle tercih edilir. Alıcı riski için ihracat alacak sigortası kullanılabilir."],
+      ["Peşin ödeme ihracatçıyı, açık hesap ithalatçıyı rahatlatır","Açık hesapta karşı taraf riski ihracatçıdadır","Alacak sigortası riski azaltabilir"],
+      ["Açık hesabın görünmeyen maliyeti","Bir ihracatçı, yeni bir müşteriye 90 gün vadeli 120.000 $’lık mal göndermeyi düşünüyor. Kendi finansman maliyeti yıllık %8 (varsayımsal).","Vade maliyeti = 120.000 × 0,08 × 90 ÷ 365 ≈ 2.367 $. Yeni müşteri olduğu için avans veya akreditif talep eder ya da bu maliyeti ve riski fiyata yansıtır.","Açık hesabın maliyeti ve riski vardır; bunlar fiyata ve müşteri seçimine yansımalıdır."]),
+    EGD("dt06","Vesaik mukabili ve kabul karşılığı",4,[
+      "Vesaik mukabili (D/P) yönteminde ihracatçı malı gönderir ve belgeleri (konşimento, fatura vb.) kendi bankası aracılığıyla alıcının bankasına iletir. Alıcı bedeli ödeyince belgeleri alır ve mala sahip çıkar.",
+      "Kabul karşılığı (D/A) yönteminde alıcı, ödeme için bir poliçeyi kabul eder ve belgeleri alır, bedeli vadede öder. Bu yüzden D/A açık hesaba yakın bir risk taşır.",
+      "Her iki yöntemde bankalar yalnızca aracıdır ve ödemeyi garanti etmez. Alıcı belgeleri almazsa mal limanda bekler; bekleme, depolama ve geri dönüş maliyetleri ihracatçıya kalabilir."],
+      ["D/P’de belge, ödeme karşılığı verilir","D/A’da alıcı poliçeyi kabul eder, vadede öder","Bankalar ödemeyi garanti etmez, aracıdır"],
+      ["Alıcı belgeleri almazsa","Vesaik mukabili gönderilen mal limanda bekliyor. Alıcı belgeleri teslim almaktan vazgeçti. Liman bekleme ücreti günlük 150 $ (varsayımsal).","İhracatçının elinde belgeler olduğu için mal üzerindeki kontrol sürer. Malı başka bir alıcıya yönlendirir ya da geri getirir. 20 gün beklemenin maliyeti 150 × 20 = 3.000 $’dır ve alıcıdan talep edilir.","D/P ödeme güvencesi değildir; alıcının vazgeçme riski ihracatçıda kalır."]),
+    EGD("dt07","Akreditif",5,[
+      "Akreditif, alıcının bankasının (açan banka) ihracatçıya, şartlara uygun belgeler sunulduğunda ödeme yapacağını taahhüt ettiği yöntemdir. Taraflar: alıcı, açan banka, ihracatçının tarafındaki ihbar veya teyit bankası ve lehtar olan ihracatçıdır.",
+      "Akreditif belgelerle çalışır, malla değil. Banka, belgelerin akreditif şartlarına tam uyup uymadığına bakar. Kurallar ICC’nin UCP 600 düzenlemesinde yer alır.",
+      "Teyitli akreditifte ihracatçı tarafındaki banka da ödeme taahhüdü verir; bu, açan bankanın veya ülkenin riskini azaltır. Akreditif komisyon karşılığı sunulan bir hizmettir."],
+      ["Banka belgelere bakar, mala değil","Belgeler akreditif şartlarına tam uymalıdır","Teyit, ek bir bankanın taahhüdünü getirir"],
+      ["Bir gün gecikmenin bedeli","Akreditifte son yükleme tarihi 30 Kasım. İhracatçının konşimentosunda yükleme tarihi 2 Aralık görünüyor (varsayımsal).","Belge şarta uymadığı için uyumsuzluk (discrepancy) doğar ve banka ödemeyi reddedebilir. İhracatçı akreditif geldiğinde şartları hemen kontrol edip uygun olmayanlar için değişiklik ister; belgeleri ibraz öncesi bankasına ön kontrol ettirir.","Akreditifte ödeme, belgelerin şartlarla birebir uyumuna bağlıdır; kontrol erken yapılmalıdır."]),
+    EGD("dt08","Teminat mektubu",4,[
+      "Teminat mektubu, bankanın müşterisi adına lehtara verdiği yazılı taahhüttür: müşteri yükümlülüğünü yerine getirmezse banka, mektup tutarını ödemeyi taahhüt eder.",
+      "Başlıca türleri: geçici teminat mektubu (ihaleye katılırken), kesin teminat mektubu (sözleşmenin yerine getirilmesi için) ve avans teminat mektubu (alınan avansın güvencesi). Dış ticarette stand-by akreditif de benzer amaçla kullanılır.",
+      "Bu hizmet için banka komisyon alır ve müşteriden genellikle teminat ister. Mektup tazmin edilirse tutar müşteriden tahsil edilir."],
+      ["Banka, müşterisinin yükümlülüğü için taahhüt verir","Geçici, kesin ve avans teminat mektupları vardır","Komisyon alınır, tazminde müşteriden tahsil edilir"],
+      ["İhale için nakit mi, mektup mu?","Bir firma ihaleye katılacak ve şartnamede 60.000 TL geçici teminat isteniyor. Banka, mektup için yıllık %2 komisyon istiyor; mektup 180 gün geçerli olacak (varsayımsal).","Mektup maliyeti = 60.000 × 0,02 × 180 ÷ 365 ≈ 591,78 TL. Firma 60.000 TL’yi nakit bloke etmek yerine bu komisyonu öder ve nakdini işinde kullanır. Mektup tazmin edilirse tutarı bankaya ödemek zorunda kalır.","Mektup nakit ihtiyacını azaltır, ancak yükümlülük yerine getirilmezse tazmin sorumluluğu doğar."]),
+  ]},
+  { ad:"Belgeler ve gümrük", ozet:"Fatura, konşimento, menşe belgeleri, beyanname ve vergiler", dersler:[
+    EGD("dt09","Ticari fatura ve çeki listesi",4,[
+      "Ticari fatura satışın temel belgesidir: taraflar, mal tanımı, miktar, birim fiyat, para birimi, teslim şekli ve toplam bedel yer alır. Gümrük, banka ve alıcı bu belgeye dayanır.",
+      "Çeki listesi (packing list) ise malın nasıl paketlendiğini gösterir: koli sayısı, net ve brüt ağırlık, ölçüler. Taşıyıcı ve gümrük yüklemeyi bu belgeyle kontrol eder.",
+      "Belgelerdeki bilgiler birbirini tutmalıdır. Miktar, ağırlık veya mal tanımındaki küçük bir tutarsızlık gümrükte gecikmeye, akreditifte ise uyumsuzluğa yol açabilir."],
+      ["Fatura değeri ve şartları gösterir","Çeki listesi paketleme ve ağırlığı gösterir","Belgeler birbiriyle tutarlı olmalıdır"],
+      ["Ağırlık neden tutmadı?","Bir ihracatçı 500 koli mal gönderiyor. Koli başına net 12 kg, ambalajla birlikte 13 kg. Faturada toplam net ağırlık 6.200 kg yazılmış (varsayımsal).","Net ağırlık = 500 × 12 = 6.000 kg, brüt = 500 × 13 = 6.500 kg olmalıdır. Faturadaki 6.200 kg çeki listesiyle uyuşmaz; belgeler düzeltilerek yeniden düzenlenir.","Belgelerdeki tutarsızlık gümrükte ve akreditifte sorun yaratır; yüklemeden önce çapraz kontrol yapılmalıdır."]),
+    EGD("dt10","Konşimento ve taşıma belgeleri",4,[
+      "Deniz taşımasında konşimento (bill of lading) üç işlev görür: taşıma sözleşmesinin kanıtı, malın taşıyıcıya teslim edildiğinin makbuzu ve mal üzerinde hak sağlayan kıymetli evrak.",
+      "“Emre” düzenlenen konşimento ciro edilerek devredilebilir. Alıcı, malı limandan teslim almak için orijinal konşimentoyu ibraz eder. Bu yüzden orijinal belgeleri elinde tutan, mal üzerindeki kontrolü elinde tutar.",
+      "Hava yolunda hava konşimentosu (AWB), karayolunda CMR, demiryolunda CIM kullanılır. Bunlar genellikle mal üzerinde hak sağlayan kıymetli evrak değildir."],
+      ["Konşimento taşıma sözleşmesi, makbuz ve kıymetli evraktır","Orijinal belgeyi elinde tutan malı kontrol eder","Hava, kara ve demiryolu belgeleri kıymetli evrak değildir"],
+      ["Ödeme gelmeden mal verilir mi?","İhracatçı malı deniz yoluyla yolladı. Alıcı ödeme yapmadan malı serbest bırakmak istiyor. Konşimento “emre” düzenlendi ve orijinaller ihracatçının bankasında.","Orijinal konşimento ve ciro olmadan taşıyıcı malı teslim etmez. İhracatçı, ödeme ya da kabul gelene kadar belgeleri bankada tutar.","Orijinal konşimento, ödeme güvencesinin önemli bir parçasıdır."]),
+    EGD("dt11","Menşe belgesi ve A.TR",4,[
+      "Menşe, malın üretildiği veya önemli ölçüde işlendiği ülkedir. Gümrük vergisi, ithalat rejimi ve kota gibi uygulamalar menşeye bağlı olabilir. Menşe şahadetnamesi bu bilgiyi gösterir.",
+      "Türkiye ile AB arasındaki gümrük birliğinde sanayi ürünleri A.TR dolaşım belgesiyle serbest dolaşımda sayılır ve gümrük vergisi ödenmez. Serbest ticaret anlaşması olan ülkelerde ise anlaşmaya göre EUR.1 gibi menşe ispat belgeleri istenir.",
+      "Belge eksik veya yanlışsa tercihli vergi oranı uygulanmaz ve alıcı tam gümrük vergisi öder. Bu da ihracatçının rekabet gücünü doğrudan etkiler."],
+      ["Menşe vergi ve rejimi belirler","A.TR, AB ile sanayi ürünlerinde kullanılır","Doğru belge, tercihli vergi avantajı sağlar"],
+      ["Belgenin parası var","Bir ihracatçı, serbest ticaret anlaşması olan bir ülkeye 100.000 € değerinde mal yolluyor. Normal gümrük vergisi %10, anlaşmalı oran %0 (varsayımsal). Menşe belgesini sunamıyor.","Belge sunulursa vergi 0 €, sunulmazsa 100.000 × %10 = 10.000 € olur. Alıcı bu farkı fiyat indirimi olarak talep eder ya da başka tedarikçiye yönelir.","Doğru menşe belgesi, doğrudan fiyat avantajıdır; yükleme öncesinde hazırlanmalıdır."]),
+    EGD("dt12","Gümrük beyannamesi ve ithalat vergileri",5,[
+      "Mal, gümrükte beyanname ile bildirilir. Beyannamede mal tanımı, miktar, değer, menşe ve GTİP (Gümrük Tarife İstatistik Pozisyonu) yer alır. GTİP, malın hangi vergi oranına tabi olduğunu belirler; yanlış GTİP cezaya yol açabilir.",
+      "İthalatta ödenebilecek başlıca vergiler: gümrük vergisi (matrah, malın CIF değeri), gerekirse ek vergiler ve ÖTV, ve KDV. KDV matrahı, CIF değere gümrük vergisi ve diğer vergilerin eklenmesiyle bulunur.",
+      "İthalatta ödenen KDV genellikle indirilebilir olduğundan etkisi nakit akışında hissedilir. Oranlar ürüne ve döneme göre değişir; güncel oran gümrük müşaviri veya tarife cetvelinden doğrulanmalıdır."],
+      ["GTİP, vergi oranını belirler","KDV matrahına gümrük vergisi de dahildir","Oranlar değişir; güncel tarife kontrol edilmelidir"],
+      ["İthal makinenin vergisi","Bir makinenin CIF değeri 100.000 TL eşdeğeri. Gümrük vergisi %10, ÖTV yok, KDV %20 (varsayımsal oranlar).","Gümrük vergisi = 10.000 TL. KDV matrahı = 100.000 + 10.000 = 110.000 TL. KDV = 22.000 TL. Toplam vergi = 32.000 TL. KDV genellikle indirilebilir olduğundan kalıcı maliyet ağırlıklı olarak 10.000 TL’lik gümrük vergisidir; ancak 32.000 TL’nin peşin ödenmesi nakit planına yazılmalıdır.","Vergi yükü ile nakit çıkışı aynı şey değildir; ikisi ayrı planlanmalıdır."]),
+  ]},
+  { ad:"Kur riski ve finansman", ozet:"Kur riski, doğal korunma, katılım bankasında finansman ve destekler", dersler:[
+    EGD("dt13","Dış ticarette kur riski",4,[
+      "Kur riski, ödeme yapılacağı ya da alınacağı tarihte kurun beklenenden farklı olmasıdır. İthalatçı döviz borçluysa kurun artması maliyetini yükseltir; ihracatçı döviz alacaklıysa kurun düşmesi gelirini azaltır.",
+      "Risk, işlem ile ödeme arasındaki sürede doğar. Vade uzadıkça ve kur oynaklığı arttıkça risk büyür.",
+      "Riski görmek için işlemin TL karşılığı hesaplanıp kurun farklı seviyeleri için senaryo yapılır. Böylece korunmanın gerekip gerekmediğine karar verilir."],
+      ["Kur riski işlem ile ödeme arasında doğar","İthalatçı kur artışından, ihracatçı düşüşten zarar eder","Senaryo hesabı riski görünür kılar"],
+      ["Kur 60 günde nereye gider?","Bir ithalatçı 60 gün sonra 50.000 $ ödeyecek. Bugün kur 40, ödeme günü kur 43 oluyor (varsayımsal).","Bugünkü maliyet 50.000 × 40 = 2.000.000 TL, ödeme günü 50.000 × 43 = 2.150.000 TL. Fark 150.000 TL, yani %7,5’lik ek maliyettir. Kar marjı bunu karşılamıyorsa risk yönetilmelidir.","Kur riski, marjı eritebilecek bir maliyet kalemidir ve önceden hesaplanmalıdır."]),
+    EGD("dt14","Doğal korunma ve forward",5,[
+      "Doğal korunma, aynı para biriminde gelir ve gideri eşleştirmektir. Örneğin dolar gelir elde eden bir ihracatçı, dolarla ithal girdi alırsa kurdaki hareket iki tarafı da etkiler ve net risk azalır.",
+      "Geriye kalan net açık pozisyon için forward gibi araçlarla kur bugünden sabitlenebilir. Forward, kuru ve tarihi önceden belirler; kurun nereye gideceğini tahmin etmez.",
+      "Katılım bankalarında vadeli döviz işlemleri, danışma kurulunun uygun gördüğü yapılarla sunulur; ürünün uygunluğu için bankanın icazet belgesine ve ürün şartlarına bakılır."],
+      ["Önce gelir ve gideri eşleştir, sonra kalanı koru","Forward kuru bugünden sabitler","Uygunluk için icazet belgesi ve ürün şartları kontrol edilir"],
+      ["Sadece net açığı korumak","Bir ihracatçının 6 ay içinde 200.000 $ geliri ve 120.000 $ ithal girdi ödemesi var (varsayımsal).","Net döviz akışı 200.000 − 120.000 = 80.000 $’dır. Kur riskinin asıl taşıyıcısı bu tutardır. İhracatçı yalnızca 80.000 $ için korunma yapar; 120.000 $ zaten dolar girdisiyle dengelenmiştir.","Korunma brüt tutara değil net pozisyona göre kurulursa maliyet de azalır."]),
+    EGD("dt15","Dış ticaret finansmanı ve katılım bankası",5,[
+      "İthalatçı ve ihracatçının finansman ihtiyacı farklıdır. İthalatçı malı almak, ihracatçı ise üretmek ve tahsilata kadar beklemek için nakde ihtiyaç duyar.",
+      "Katılım bankalarında ithalat finansmanı genellikle murabaha ile yapılır: banka malı satıcıdan alır ve kâr payını ekleyerek müşteriye vadeli satar. Toplam bedel baştan bellidir. İhracat tarafında ürün yapıları bankadan bankaya değişir; her ürün için icazet belgesi ve sözleşme şartları incelenmelidir.",
+      "Dövizle satış yapılan finansmanda kur riski müşteride kalır. TL cinsinden satışta ise bedel TL olarak sabitlenir ve müşteri açısından kur riski kalmaz."],
+      ["İthalat finansmanında murabaha kullanılır","Toplam bedel baştan sabittir","Dövizle satışta kur riski müşteride kalır"],
+      ["Murabaha ile makine alımı","Bir firma 100.000 $’lık makineyi 6 ay vadeli almak istiyor. Banka makineyi 100.000 $’a alıyor, %6 kâr payı ekliyor (varsayımsal).","Toplam bedel 100.000 × 1,06 = 106.000 $, kâr payı 6.000 $’dır ve baştan bellidir. Satış dolar cinsindense kur riski firmadadır: geliri TL olan firma, dolar borcunun TL karşılığını izlemelidir.","Murabahada toplam bedel sabittir; para birimi seçimi kur riskini kimin taşıdığını belirler."]),
+    EGD("dt16","İhracat destekleri ve Eximbank",4,[
+      "Türk Eximbank, ülkenin resmî ihracat kredi kuruluşudur. İhracatçılara kredi, sigorta ve garanti ürünleri sunar; alıcı riskine karşı alacak sigortası da bunlardan biridir.",
+      "Ticaret Bakanlığı, fuar katılımı, pazar araştırması, markalaşma ve e-ihracat gibi alanlarda destek programları yürütür. İhracatçı birlikleri ve TİM de bilgi ve yönlendirme sağlar.",
+      "Destek türleri, oranları ve şartları sık değişir. Bu yüzden başvurudan önce güncel mevzuat ve duyurular ilgili kurumun resmî sayfasından kontrol edilmelidir."],
+      ["Eximbank kredi, sigorta ve garanti sunar","Bakanlık fuar, pazar ve e-ihracat gibi alanlarda destek verir","Oran ve şartlar değişir, resmî kaynaktan doğrulanır"],
+      ["İlk ihracatta destek aramak","Küçük bir üretici ilk kez Avrupa’ya satış yapacak. Hem alıcı riskinden hem de fuar masrafından endişeli.","Üç adım izler: (1) ihracatçı birliğinden yönlendirme alır, (2) Ticaret Bakanlığı’nın güncel destek duyurularını ve şartlarını inceler, (3) Eximbank’ın alacak sigortası ve kredi ürünlerini sorar. Başvuru şartlarını, süreleri ve gereken belgeleri yazılı olarak teyit eder.","Destekler fırsat sunar, ancak şartları güncel kaynaktan öğrenilmelidir."]),
+  ]},
+  ],
+  sorular:[
+    EGQ("Dış ticaret dengesi nasıl hesaplanır?",["İhracat + ithalat","İhracat − ithalat","İthalat ÷ ihracat","Cari açık × 2"],1,"Dış ticaret dengesi, ihracat ile ithalat arasındaki farktır; pozitifse fazla, negatifse açık verir."),
+    EGQ("İhracat 22, ithalat 30 milyar $ ise ihracatın ithalatı karşılama oranı yaklaşık nedir?",["%53","%73","%136","%27"],1,"22 ÷ 30 ≈ %73,3."),
+    EGQ("Cari işlemler dengesi aşağıdakilerden hangisini de içerir?",["Yalnızca mal ticareti","Hizmetler, gelirler ve cari transferler","Sadece döviz rezervi","Sadece vergiler"],1,"Cari denge, mal ticaretine ek olarak hizmetleri, gelirleri ve cari transferleri kapsar."),
+    EGQ("TL değer kaybettiğinde, yalnızca TL maliyeti olan bir ihracatçının TL geliri ilk etapta ne olur?",["Artar","Azalır","Değişmez","Sıfırlanır"],0,"Döviz geliri TL’ye çevrilirken daha fazla TL elde edilir; ancak TL maliyetler artarsa bu avantaj zamanla azalır."),
+    EGQ("Incoterms kurallarını yayımlayan kuruluş hangisidir?",["IMF","Uluslararası Ticaret Odası (ICC)","Dünya Bankası","BDDK"],1,"Incoterms, ICC tarafından yayımlanır; güncel sürüm Incoterms 2020’dir."),
+    EGQ("FOB teslimde satıcı hangi noktaya kadar sorumludur?",["Alıcının deposuna","Malı gemiye yükleyene kadar","Malın üretildiği yere","Gümrüğe girişe"],1,"FOB’da satıcı, malı belirlenen limanda gemiye yükleyene kadar sorumludur."),
+    EGQ("CIF teslimde riskin alıcıya geçtiği an hangisidir?",["Mal varış limanına ulaşınca","Mal gemiye yüklenince","Fatura kesilince","Mal gümrükten çıkınca"],1,"CIF’te navlun ve sigorta satıcıda olsa da risk, mal gemiye yüklendiğinde alıcıya geçer."),
+    EGQ("Konteynerle çok türlü taşımada genellikle hangi kural daha uygundur?",["FOB","CIF","FCA / CIP gibi kurallar","Hiçbiri"],2,"FOB ve CIF yalnızca deniz ve iç su yolu içindir; çok türlü taşımada FCA, CIP gibi kurallar daha uygundur."),
+    EGQ("Proforma fatura nedir?",["Vergi açısından geçerli kesin fatura","Ön fiyat teklifi niteliğinde belge","Gümrük beyannamesi","Taşıma belgesi"],1,"Proforma fatura, ön fiyat teklifidir; gerçek fatura yerine geçmez."),
+    EGQ("Açık hesap yönteminde ödeme riskini kim taşır?",["Alıcının bankası","İhracatçı","Taşıyıcı","Gümrük"],1,"Mal önce gönderildiği için alıcının ödeyememe riski ihracatçıdadır."),
+    EGQ("120.000 $’lık 90 günlük vade için yıllık %8 maliyetle vade maliyeti yaklaşık kaçtır?",["1.200 $","2.367 $","9.600 $","7.200 $"],1,"120.000 × 0,08 × 90 ÷ 365 ≈ 2.367 $."),
+    EGQ("Vesaik mukabili (D/P) yönteminde banka ödemeyi garanti eder mi?",["Evet, her zaman","Hayır, aracı olarak belgeleri iletir","Sadece teyitliyse","Sadece TL’de"],1,"D/P’de bankalar aracıdır ve ödemeyi garanti etmez."),
+    EGQ("Akreditifte banka neyi inceler?",["Malın kalitesini","Belgelerin şartlara uygunluğunu","Alıcının bilançosunu","Taşıyıcının ehliyetini"],1,"Akreditif belgelerle çalışır; banka belgelerin şartlara tam uyup uymadığına bakar."),
+    EGQ("Akreditifte yükleme tarihi şartın dışında kalırsa ne olur?",["Hiçbir şey olmaz","Uyumsuzluk doğar, banka ödemeyi reddedebilir","Banka faiz öder","Akreditif iki katına çıkar"],1,"Şarta uymayan belge uyumsuzluk yaratır ve banka ödemeyi reddedebilir."),
+    EGQ("60.000 TL’lik teminat mektubuna yıllık %2 komisyonla 180 günde ödenecek komisyon yaklaşık kaçtır?",["120 TL","591,78 TL","1.200 TL","6.000 TL"],1,"60.000 × 0,02 × 180 ÷ 365 ≈ 591,78 TL."),
+    EGQ("Hangi belge deniz taşımasında mal üzerinde hak sağlayan kıymetli evraktır?",["Çeki listesi","Konşimento","CMR","Proforma fatura"],1,"Deniz konşimentosu mal üzerinde hak sağlayan kıymetli evraktır; hava konşimentosu ve CMR öyle değildir."),
+    EGQ("Türkiye–AB gümrük birliğinde sanayi ürünlerinde kullanılan dolaşım belgesi hangisidir?",["A.TR","B/L","CMR","Proforma"],0,"A.TR dolaşım belgesi, gümrük birliği kapsamında ürünlerin serbest dolaşımını gösterir."),
+    EGQ("Gümrük vergisi %10 ve KDV %20 iken CIF değeri 100.000 TL olan malın toplam ithalat vergisi nedir?",["30.000 TL","32.000 TL","22.000 TL","12.000 TL"],1,"Gümrük vergisi 10.000; KDV matrahı 110.000, KDV 22.000; toplam 32.000 TL."),
+    EGQ("İthalatçı 50.000 $ borcu için kur 40’tan 43’e çıkarsa ek maliyeti nedir?",["50.000 TL","150.000 TL","15.000 TL","300.000 TL"],1,"50.000 × (43 − 40) = 150.000 TL."),
+    EGQ("Katılım bankalarında ithalat finansmanında sık kullanılan yöntem hangisidir?",["Nakit kredi","Murabaha","Kupon faizi","Kredi kartı"],1,"Murabahada banka malı alır ve kâr payı ekleyerek vadeli satar; toplam bedel baştan bellidir."),
+  ],
+},
+{
+  id:"hazine", ad:"Hazine işlemleri", kisa:"Hazine", renk:"#F472B6", ikon:"🏛️", seviye:"Orta → İleri",
+  aciklama:"Döviz, forward, swap, kira sertifikası ve bankada hazine biriminin işleyişi",
+  uniteler:[
+  { ad:"Hazine birimi ve piyasalar", ozet:"Bankada hazine, para piyasası, kur makası ve çapraz kur", dersler:[
+    EGD("h01","Bankada hazine birimi ne yapar?",4,[
+      "Bankanın hazine birimi, bankanın likiditesini, döviz pozisyonunu ve fonlamasını yönetir. Ayrıca müşterilere döviz, kıymetli maden ve vadeli ürünlerde fiyat verir.",
+      "Şubede gördüğün döviz kuru, genellikle hazinenin verdiği fiyata şube marjının eklenmiş halidir. Büyük tutarlı işlemlerde müşteri, doğrudan hazine masasıyla (kurumsal masa) fiyat konuşabilir.",
+      "Burada ‘hazine’ kelimesi bankanın kendi birimini anlatır. Hazine ve Maliye Bakanlığı’nın devlet borçlanması ise ayrı bir konudur ve bu modülün üçüncü ünitesinde işlenir."],
+      ["Hazine; likidite, pozisyon ve fiyatlamayı yönetir","Şube kuru, hazine fiyatı artı marjdır","Büyük tutarlarda fiyat pazarlığı yapılabilir"],
+      ["Büyük tutarda fiyat sormak","Bir şirket 500.000 $ bozdurmak istiyor. Şubede dolar alış kuru 40,33; hazine masası 40,40 veriyor (varsayımsal).","Fark 40,40 − 40,33 = 0,07 TL, 500.000 × 0,07 = 35.000 TL eder. Şirket, tutar büyüdüğünde doğrudan hazine masasından fiyat ister ve farkı karşılaştırır.","Büyük tutarlarda tek bir kura razı olmak yerine fiyat sorulmalı ve karşılaştırılmalıdır."]),
+    EGD("h02","Para piyasası ve kısa vadeli nakit yönetimi",4,[
+      "Para piyasası, vadesi bir yıla kadar olan kısa vadeli fonların işlem gördüğü piyasadır. Sermaye piyasası ise daha uzun vadeli finansmanı kapsar.",
+      "TCMB politika oranı ve piyasa referans oranları (örneğin TLREF), genel getiri seviyesini belirler. Katılım bankaları kâr payı oranlarını belirlerken kendi havuz sonuçlarını ve piyasadaki genel seviyeyi izler.",
+      "Şirketler kısa vadeli nakit fazlasını vade ve erişim ihtiyacına göre değerlendirir: hemen gerekecekse özel cari, birkaç gün veya hafta bekleyecekse kısa vadeli katılma hesabı gibi seçenekler düşünülür."],
+      ["Para piyasası vadesi bir yıla kadar olan fonları kapsar","Referans oranlar genel getiri seviyesini gösterir","Vade, paranın ne zaman gerekeceğine göre seçilir"],
+      ["10 günlük nakit planı","Bir şirketin 10 gün sonra ödeyeceği 2.000.000 TL’si var. Bu sürede yıllık %40 tahmini getirili kısa vadeli bir hesap bulabiliyor (varsayımsal).","Brüt tahmini getiri = 2.000.000 × 0,40 × 10 ÷ 365 ≈ 21.918 TL. Para ödeme gününden önce gerekebilecekse, vadenin bozulması hâlinde getirinin yeniden hesaplanacağı unutulmamalıdır.","Vade, ödeme takvimine göre seçilmeli; getiri kadar erişim de planlanmalıdır."]),
+    EGD("h03","Alış-satış kuru ve makas",4,[
+      "Alış kuru, bankanın dövizi satın aldığı fiyattır; yani müşteri dövizini bu fiyattan bankaya satar. Satış kuru, bankanın dövizi sattığı fiyattır; müşteri bu fiyattan döviz alır.",
+      "İki fiyat arasındaki fark makas (spread) olarak adlandırılır. Yüzde olarak makas = (Satış − Alış) ÷ Alış formülüyle bulunur. Makas, banka için bir maliyet ve kazanç kalemidir.",
+      "Bu yüzden döviz alıp kısa sürede geri satan kişi, kur değişmese bile makas kadar kaybeder. Uygulamadaki Katılım Bankaları Kur İzleme ekranıyla bankaların makasları karşılaştırılabilir."],
+      ["Müşteri bankanın satış kurundan alır, alış kurundan satar","Makas = satış − alış","Hemen geri satmak makas kadar kayıp yaratır"],
+      ["Aynı gün al-sat","Bir müşteri 10.000 $ alıp aynı gün geri satmak istiyor. Dolar alış 40,10, satış 40,40 (varsayımsal).","Alırken 10.000 × 40,40 = 404.000 TL öder, satarken 10.000 × 40,10 = 401.000 TL alır. Kur hiç oynamasa da 3.000 TL kaybeder. Makas oranı 0,30 ÷ 40,10 ≈ %0,75’tir.","Kısa vadeli al-sat kararlarında makas, ilk maliyettir."]),
+    EGD("h04","Çapraz kur ve valör",5,[
+      "Çapraz kur, iki para biriminin, ortak bir üçüncü para birimi üzerinden hesaplanan kurudur. Örneğin EUR/TRY = EUR/USD × USD/TRY.",
+      "Valör, işlemin fiilen gerçekleşip paraların hesaplara geçtiği tarihtir. Spot döviz işlemlerinde standart genellikle iki iş günüdür (T+2); bankalar müşteri için aynı gün (T+0) veya ertesi gün (T+1) valör de sunabilir.",
+      "Bir bankanın EUR/TRY fiyatı, hesaplanan çapraz kurdan farklıysa fark makas ve marjdan gelir. Fiyat sorarken hangi valörle işlem yapıldığı da sorulmalıdır."],
+      ["EUR/TRY = EUR/USD × USD/TRY","Valör, işlemin hesaplara yansıdığı tarihtir","Fiyat ile valör birlikte sorulmalıdır"],
+      ["Euro kuru neden farklı?","EUR/USD 1,08 ve USD/TRY 40,00 iken bir banka bir müşteriye EUR/TRY 43,60’tan satış yapıyor (varsayımsal).","Çapraz kur = 1,08 × 40 = 43,20. Banka 43,60 verdiğinde fark 0,40 TL’dir; 10.000 € için 4.000 TL eder. Bu fark makas ve marjdan gelir; müşteri başka bankalarla karşılaştırarak daha iyi fiyat arayabilir.","Çapraz kuru kendin hesaplayarak banka fiyatını yorumlayabilirsin."]),
+  ]},
+  { ad:"Spot ve vadeli döviz", ozet:"Pozisyon, forward, swap ve opsiyon", dersler:[
+    EGD("h05","Döviz pozisyonu",4,[
+      "Döviz pozisyonu, bir kişi veya şirketin döviz cinsinden varlıkları ile yükümlülükleri arasındaki farktır. Varlıklar fazlaysa uzun (long), yükümlülükler fazlaysa kısa (short) pozisyondan söz edilir.",
+      "Önemli olan brüt tutar değil net pozisyondur. Döviz alacağı ve borcu birbirini karşılayan şirket, yalnızca farkın kur riskini taşır.",
+      "Bankalar için de net döviz pozisyonu düzenleyici sınırlarla izlenir. Bu yüzden hazine birimi pozisyonunu sürekli takip eder."],
+      ["Pozisyon = döviz varlık − döviz yükümlülük","Uzun pozisyon dövizin düşmesinden, kısa pozisyon artmasından zarar eder","Önemli olan net pozisyondur"],
+      ["Net pozisyon ne kadar?","Bir şirketin 1.000.000 € alacağı ve 800.000 € borcu var; kur 45 (varsayımsal). Euro %5 değer kaybederse ne olur?","Net pozisyon 200.000 € uzundur ve TL karşılığı 200.000 × 45 = 9.000.000 TL’dir. %5 düşüşte kayıp 9.000.000 × 0,05 = 450.000 TL olur. Brüt alacak olan 1.000.000 €’nun tamamı değil, yalnız net fark risk taşır.","Riski brüt tutardan değil net pozisyondan hesapla."]),
+    EGD("h06","Forward (vadeli döviz) işlemi",5,[
+      "Forward, bugünden belirlenen bir kurla, ileri bir tarihte döviz alım veya satımı yapmayı bağlayan sözleşmedir. Kur ve tarih baştan sabittir.",
+      "Forward kuru, kurun gelecekte nereye gideceğine dair bir tahmin değildir. Spot kur ile iki para birimi arasındaki getiri farkı üzerinden hesaplanır: Forward ≈ Spot × (1 + TL oranı × gün ÷ 365) ÷ (1 + döviz oranı × gün ÷ 365).",
+      "Katılım bankalarında vadeli işlemler, danışma kurulunun uygun gördüğü yapılarla (örneğin karşılıklı vaat sözleşmeleri) sunulabilir. Uygulamadaki Forward Hesaplama aracıyla varsayımlarını deneyebilirsin."],
+      ["Forward kuru ve tarihi bugünden sabitler","Forward kuru getiri farkına dayanır, tahmin değildir","Kesinlik sağlar, kâr garantisi vermez"],
+      ["Forward ile kesinlik","Bir ithalatçı 3 ay (90 gün) sonra 100.000 $ ödeyecek. Spot 40, TL oranı %45, dolar oranı %4,5 (varsayımsal).","Forward ≈ 40 × (1 + 0,45 × 90 ÷ 365) ÷ (1 + 0,045 × 90 ÷ 365) ≈ 43,95. Maliyet 100.000 × 43,95 = 4.395.000 TL’de sabitlenir. Vade günü spot 46 olursa 205.000 TL kazanç, spot 43 olursa 95.000 TL fırsat kaybı olur.","Forward kuru güvence altına alır; vade günü kur lehine de aleyhine de olabilir."]),
+    EGD("h07","Döviz swap",5,[
+      "Döviz swap, iki ayrı yönlü işlemin birleşimidir: spot döviz alınır ve aynı anda vadeli satılır, ya da tersi. Amaç, kısa vadeli bir para ihtiyacını diğer para biriminden karşılamak ve kur riskini sabitlemektir.",
+      "Spot ile vadeli kur arasındaki fark (swap puanı), bir para biriminin diğerine göre kullanım maliyetini gösterir. Bu fark, iki para birimi arasındaki getiri farkından doğar.",
+      "Bankalar swap ile TL ve döviz likiditesini dengeler; şirketler de TL nakit ihtiyacını dövizden karşılayabilir. Swap yapılarının faizsiz esaslara uygunluğu bankanın kurulunca ayrıca değerlendirilir."],
+      ["Spot ve vadeli işlem birlikte yapılır","Swap puanı, para birimlerinin kullanım maliyetini gösterir","Uygunluk kurul kararına bağlıdır"],
+      ["TL ihtiyacını dövizden çevirmek","Bir şirket 1.000.000 $’ı spot 40’tan satıp 90 gün sonra 43,95’ten geri alacak şekilde swap yapıyor (varsayımsal).","Bugün 40.000.000 TL alır, vadede 43.950.000 TL öder. Fark 3.950.000 TL’dir; 90 günde %9,875, yıllıklandırınca yaklaşık %40,05’e denk gelir. Şirket bu oranı alternatif TL finansman maliyetiyle karşılaştırır.","Swap puanını yıllıklandırarak diğer finansman seçenekleriyle kıyaslayabilirsin."]),
+    EGD("h08","Opsiyon ve vadeli işlem borsası",4,[
+      "Opsiyon, sahibine belirli bir fiyattan (kullanım fiyatı) belirli bir tarihte alma (call) veya satma (put) hakkı veren, yükümlülük getirmeyen sözleşmedir. Bu hak için prim ödenir.",
+      "Alıcının maksimum kaybı ödediği primdir. Satıcı ise prim karşılığında yükümlülük üstlenir ve riski daha yüksektir. Borsa İstanbul’daki VİOP’ta standart kontratlar, teminat ve günlük uzlaşma ile işlem yapılır.",
+      "Opsiyon ve vadeli işlem sözleşmelerinin faizsiz finans ilkelerine uygunluğu, kurul görüşlerine ve ürün yapısına göre değişir; bu işlemlerden önce uygunluk ayrıca kontrol edilmelidir."],
+      ["Opsiyon hak verir, yükümlülük getirmez","Alıcının maksimum kaybı primdir","Uygunluk ürün yapısına ve kurul görüşüne bağlıdır"],
+      ["Kur için sigorta gibi prim","Bir ithalatçı 100.000 $ için kullanım fiyatı 44 olan call opsiyon alıyor ve dolar başına 0,80 TL prim ödüyor (varsayımsal).","Toplam prim 100.000 × 0,80 = 80.000 TL’dir. Vadede kur 47 olursa 44’ten alır; etkin maliyet 44,80’dir. Kur 42 olursa hakkını kullanmaz, piyasadan 42’den alır ve kaybı yalnızca 80.000 TL prim olur.","Opsiyonda alıcının kaybı bellidir; bu güvencenin bedeli primdir."]),
+  ]},
+  { ad:"Borçlanma araçları", ozet:"DİBS, kira sertifikası, fiyat-getiri ilişkisi ve altın", dersler:[
+    EGD("h09","Devlet iç borçlanma senetleri (DİBS)",4,[
+      "Hazine ve Maliye Bakanlığı, ihalelerle yurt içinde borçlanarak devlet iç borçlanma senetleri (DİBS) ihraç eder. Vadesi bir yıla kadar olanlara genellikle bono, daha uzun olanlara tahvil denir.",
+      "İskontolu senetlerde faiz ödemesi yapılmaz; senet nominal değerinden daha düşük bir fiyatla satılır ve vadede nominal değer ödenir. Kuponlu senetlerde ise dönemsel ödemeler yapılır; kuponlar sabit ya da değişken olabilir.",
+      "Senetlerin getirisi, ihale sonuçlarındaki oran ve vadeye göre değişir. Güncel oranlar için Hazine’nin ihale duyurularına bakılır."],
+      ["Bono kısa, tahvil daha uzun vadelidir","İskontolu senet nominalin altında satılır","Güncel oran ihale duyurularından izlenir"],
+      ["İskontolu bonoda fiyat","Nominal 100 TL, 91 gün vadeli iskontolu bono; yıllık basit getiri %40 (varsayımsal).","Fiyat = 100 ÷ (1 + 0,40 × 91 ÷ 365) ≈ 90,93 TL. 91 gün sonra 100 TL ödenir; fark yaklaşık 9,07 TL’dir.","Bono fiyatı ile getiri birbirine bağlıdır; birini bilince diğerini hesaplayabilirsin."]),
+    EGD("h10","Kira sertifikası (sukuk)",5,[
+      "Kira sertifikası, bir varlığın kira geliri veya kullanım hakkı karşılığında ihraç edilen varlığa dayalı güvenlik belgesidir. Yatırımcı borç vermez, varlığın kira gelirinden pay alır.",
+      "Hazine adına ihraç yapan şirket Hazine Müsteşarlığı Varlık Kiralama A.Ş.’dir. Kamu varlıkları kiralanır; yatırımcıya dönemsel kira ödemesi yapılır ve vade sonunda varlık satış bedeli ödenir.",
+      "Sertifikalar sabit getirili, enflasyona endeksli gibi farklı yapılarda olabilir. Net getirinin kesinti ve vergilerle değişebileceği unutulmamalıdır; uygulamadaki Hazine Sukuk Getiri Hesaplama aracı varsayımlarla denenebilir."],
+      ["Kira geliri veya varlığa dayanır, borç faizi değildir","Dönemsel kira ödemesi ve vade sonunda bedel ödenir","Net getiri vergi ve kesintilere bağlıdır"],
+      ["182 günlük sertifika","Bir yatırımcı 100.000 TL nominalli, 182 gün vadeli kira sertifikasına yatırım yapacak. Yıllık basit getiri %38 (varsayımsal).","Brüt getiri = 100.000 × 0,38 × 182 ÷ 365 ≈ 18.948 TL. Vade sonunda anapara ile birlikte yaklaşık 118.948 TL elde eder. Net rakamı kesinti ve vergiye göre hesaplar.","Sertifikaları kıyaslarken brüt getiri yerine net getiriye bakılmalıdır."]),
+    EGD("h11","Fiyat–getiri ilişkisi ve vade",4,[
+      "Sabit getirili bir kâğıdın fiyatı ile piyasa getirisi ters yönde hareket eder. Piyasa getirileri yükselirse eldeki kâğıdın fiyatı düşer, getiriler düşerse fiyat yükselir.",
+      "Vade uzadıkça bu duyarlılık artar. Aynı getiri artışı, uzun vadeli kâğıdın fiyatını kısa vadeliye göre daha fazla düşürür.",
+      "Bu yüzden vadeyi beklemeden satmak zorunda kalabilecek yatırımcı, uzun vadeli kâğıtta daha fazla fiyat riski taşır."],
+      ["Getiri artarsa fiyat düşer","Vade uzadıkça duyarlılık artar","Vadeden önce satış fiyat riski taşır"],
+      ["Aynı artış, farklı etki","Yıllık getiri %40’tan %50’ye çıkıyor. 1 yıl ve 6 ay vadeli iskontolu kâğıtların (nominal 100) fiyat değişimi karşılaştırılıyor (varsayımsal).","1 yıllıkta fiyat 100 ÷ 1,40 = 71,43’ten 100 ÷ 1,50 = 66,67’ye düşer, yaklaşık %6,7 kayıp. 6 aylıkta 100 ÷ 1,20 = 83,33’ten 100 ÷ 1,25 = 80,00’e iner, yaklaşık %4,0 kayıp.","Aynı getiri artışında uzun vade daha fazla fiyat kaybettirir."]),
+    EGD("h12","Altın ve kıymetli maden işlemleri",4,[
+      "Altının uluslararası fiyatı ons üzerinden dolarla belirlenir. Bir troy ons yaklaşık 31,1035 gramdır. Gram altın TL fiyatı yaklaşık: ons fiyatı × USD/TRY ÷ 31,1035 ile bulunur.",
+      "Bu yüzden gram altının TL fiyatı iki şeye bağlıdır: ons altının dolar fiyatı ve dolar/TL kuru. İkisi aynı yönde hareket ederse etki katlanır.",
+      "Bankalardaki altın alış-satış fiyatları arasında da makas bulunur; fiziki altında ayrıca işçilik ve ayar farkı olabilir. Uygulamadaki Fiziki Altın sekmesinde bu fiyatlar izlenebilir."],
+      ["Gram altın = ons × kur ÷ 31,1035","Ons ve kur birlikte etki eder","Altında da alış-satış makası vardır"],
+      ["Gram altın neden daha çok arttı?","Ons altın 2.500 $, USD/TRY 40 iken gram fiyat hesaplanıyor. Sonra ons %2, kur %3 artıyor (varsayımsal).","Başlangıç gram fiyat = 2.500 × 40 ÷ 31,1035 ≈ 3.215 TL. Artışlardan sonra 1,02 × 1,03 = 1,0506 olur; gram fiyat yaklaşık %5,06 artar. Tek başına ons artışı %2’de kalırdı.","Altının TL getirisi, hem ons hem kur hareketinin birleşimidir."]),
+  ]},
+  { ad:"Risk ve ilkeler", ozet:"Piyasa riski, karşı taraf riski, katılım ilkeleri ve ürün seçimi", dersler:[
+    EGD("h13","Piyasa riski: kur, getiri ve likidite",4,[
+      "Piyasa riski, kur, getiri oranları ve fiyatlardaki hareketlerden doğan kayıp ihtimalidir. Kur riski dövizli yükümlülük ve varlıkların, getiri riski ise sabit getirili kâğıtların değerini etkiler.",
+      "Likidite riski ise bir varlığı gerektiğinde makul fiyattan nakde çevirememe ihtimalidir. Vadeli ürünleri erken kapatmak maliyetli olabilir.",
+      "Riski yönetmek için önce nereden geldiği bilinmeli: borç para birimi dağılımı, vade yapısı ve nakit ihtiyacı tablo hâline getirilmelidir."],
+      ["Kur, getiri ve likidite ayrı risk kaynaklarıdır","Borç para birimi dağılımı önemlidir","Önce riskin kaynağını görmek gerekir"],
+      ["Borcun dövizli kısmı","Bir şirketin toplam borcu 10.000.000 TL eşdeğeri ve %40’ı döviz cinsinden. Kur %20 artıyor (varsayımsal).","Dövizli borç 4.000.000 TL’den 4.800.000 TL’ye çıkar. Toplam borç 800.000 TL artar, yani %8. TL borçlar aynı kalır. Dövizli payı büyük olan şirkette aynı kur artışı daha çok yük getirir.","Borcun para birimi dağılımı, kur riskinin ana belirleyicisidir."]),
+    EGD("h14","Karşı taraf ve limit",4,[
+      "Karşı taraf riski, işlemin diğer tarafının yükümlülüğünü yerine getirememe ihtimalidir. Forward veya swap gibi vadeli ürünlerde işlem sonuna kadar bu risk sürer.",
+      "Bu yüzden bankalar müşterilere hazine işlemi limiti tanır. Vadeli işlemde olası kayıp, kurun hareketine bağlı olduğundan limit, sözleşme tutarının belirli bir yüzdesi kadar kullanılmış sayılır. Gerekirse ek teminat istenir.",
+      "Limit ve teminat şartları işlem öncesinde öğrenilmelidir; kur ters yönde hareket ederse teminat tamamlama talebi gelebilir."],
+      ["Vadeli işlemde karşı taraf riski vardır","Banka limit ve teminat uygular","Ek teminat talebi olabilir"],
+      ["Limit nasıl kullanılır?","Bir şirket 1.000.000 $’lık 6 aylık forward yapmak istiyor. Banka bu tür işlemler için nominalin %8’ini limitten düşüyor (varsayımsal).","Kullanılan limit 1.000.000 × %8 = 80.000 $’dır. Şirketin limiti 150.000 $ ise 70.000 $ kalır; başka işlem yapılırsa aynı mantıkla düşülür. Kur şirket aleyhine sert hareket ederse banka teminat talep edebilir.","Hazine işlemi yapmadan önce limit ve teminat kuralları öğrenilmelidir."]),
+    EGD("h15","Hazine işlemleri ve katılım ilkeleri",5,[
+      "Katılım bankalarında hazine ürünleri, faizsiz finans ilkelerine uygunluk açısından danışma kurulunca değerlendirilir. Peşin veya kısa valörlü döviz alım satımı genellikle uygun görülür; vadeli ve türev yapılar ise banka ve kurul görüşüne göre farklılaşabilir.",
+      "Bu yüzden ürünün adı aynı olsa bile hukuki yapısı farklı olabilir. Örneğin vadeli döviz için bazı bankalar karşılıklı bağlayıcı vaat (vaad) sözleşmesi kullanır; ödeme ve tasfiye şartları ürün sözleşmesinde yazılıdır.",
+      "Müşteri olarak ürünün adına değil yapısına bakılmalı: danışma kurulu kararı, sözleşme türü, ödeme esasları ve erken kapama şartları sorulmalıdır."],
+      ["Uygunluk kurul kararına bağlıdır","Aynı isimli ürün farklı yapıda olabilir","Yapı, kurul kararı ve şartlar sorulmalıdır"],
+      ["Aynı isim, farklı yapı","Bir müşteri iki katılım bankasından ‘vadeli döviz’ teklifi aldı. İki teklifin sözleşme dili ve kapanış şartları farklı.","Her iki bankadan da şu soruların yanıtı yazılı alınır: sözleşme türü nedir, danışma kurulu bu yapıyı onayladı mı, ödeme ve tasfiye nasıl yapılır, erken kapatma durumunda ne olur, maliyet kalemleri nelerdir. Yanıtlar kıyaslanarak karar verilir.","Ürün adı yetmez; hukuki yapı ve kurul onayı kontrol edilmelidir."]),
+    EGD("h16","Hazine ürünü seçerken kontrol listesi",4,[
+      "Hazine ürünü seçerken önce amaç netleştirilir: korunma mı, getiri arayışı mı? Korunma için kullanılan ürün riski azaltır; getiri amaçlı kullanılan ürün riski artırabilir.",
+      "Sonra tutar, vade, maliyet (makas, komisyon, swap puanı), karşı taraf ve limit, uygunluk ve çıkış koşulları gözden geçirilir. Gerekirse riskin tamamı değil bir kısmı korunur.",
+      "Kısmi korunma, hem kur hareketinin etkisini hem de ürün maliyetini dengeler. Kararlar yazılı bir politikaya bağlanırsa duygusal kararlar azalır."],
+      ["Önce amaç: korunma mı, getiri mi?","Maliyet, vade, limit ve uygunluk kontrol edilir","Kısmi korunma bir denge seçeneğidir"],
+      ["Yarısını korumak","Bir ihracatçı 6 ay sonra 500.000 € tahsil edecek; kur 45 (varsayımsal). Kurun ±%10 oynayabileceğini düşünüyor.","Korunmasız durumda TL karşılığı 500.000 × 45 = 22.500.000 TL olup ±%10 etkisi ±2.250.000 TL’dir. Yarısı forward ile sabitlenirse etki ±1.125.000 TL’ye iner; kalan yarı fırsat ve risk olarak açık kalır.","Kısmi korunma, riski yarıya indirirken esnekliği korur."]),
+  ]},
+  ],
+  sorular:[
+    EGQ("Bankanın hazine birimi aşağıdakilerden hangisini yapar?",["Müşteri hesabı açar","Likidite, pozisyon ve fiyatlamayı yönetir","Kredi notu verir","Vergi toplar"],1,"Hazine birimi likidite, döviz pozisyonu ve fonlamayı yönetir, müşterilere fiyat verir."),
+    EGQ("Şubede dolar satış kuru hangisini ifade eder?",["Bankanın dövizi satın aldığı fiyat","Bankanın dövizi sattığı, müşterinin aldığı fiyat","Merkez Bankası kuru","İki kurun ortalaması"],1,"Satış kuru, bankanın dövizi sattığı yani müşterinin döviz aldığı fiyattır."),
+    EGQ("Dolar alış 40,10 satış 40,40 ise makas yaklaşık yüzde kaçtır?",["%0,25","%0,75","%1,5","%3"],1,"0,30 ÷ 40,10 ≈ %0,75."),
+    EGQ("10.000 $’ı alıp hemen geri satmak, 40,10 / 40,40 kurlarında kaç TL kayıp yaratır?",["300 TL","3.000 TL","30.000 TL","Kayıp olmaz"],1,"404.000 − 401.000 = 3.000 TL."),
+    EGQ("EUR/USD 1,08 ve USD/TRY 40 iken çapraz EUR/TRY kuru nedir?",["37,04","41,08","43,20","48,00"],2,"1,08 × 40 = 43,20."),
+    EGQ("Standart spot döviz işleminde valör genellikle kaç iş günüdür?",["Aynı gün","2 iş günü","30 gün","90 gün"],1,"Spot işlemde standart valör genellikle T+2’dir."),
+    EGQ("Döviz alacağı 1.000.000 €, borcu 800.000 € olan şirketin net pozisyonu nedir?",["1.800.000 € uzun","200.000 € uzun","200.000 € kısa","Pozisyon yoktur"],1,"1.000.000 − 800.000 = 200.000 € net uzun pozisyon."),
+    EGQ("Net uzun döviz pozisyonu olan taraf için en olumsuz hareket hangisidir?",["Dövizin değer kazanması","Dövizin değer kaybetmesi","Kurun sabit kalması","Yok"],1,"Uzun pozisyon, dövizin değer kaybetmesinden zarar eder."),
+    EGQ("Forward işlemin temel özelliği nedir?",["Kuru bugünden sabitler","Kurun yönünü bilir","Hiç maliyeti yoktur","Her zaman kazandırır"],0,"Forward kur ve tarihi bugünden sabitler; kâr garantisi vermez."),
+    EGQ("Forward kuru neye dayanır?",["Gelecekteki kur tahminine","Spot kur ve iki para birimi arasındaki getiri farkına","Rastgele seçime","Sadece TCMB kuruna"],1,"Forward kuru spot kurdan ve getiri farkından hesaplanır; tahmin değildir."),
+    EGQ("Döviz swap hangi iki işlemin birleşimidir?",["İki ayrı hesap açılışı","Spot ve vadeli, zıt yönlü iki işlem","Sadece iki spot işlem","Kredi ve mevduat"],1,"Swap, spot ile vadeli işlemin zıt yönlerde birleşimidir."),
+    EGQ("Swap puanı neyi gösterir?",["İki para biriminin kullanım maliyeti farkını","Banka kâr marjını","Vergi oranını","Komisyonu"],0,"Spot ile vadeli kur farkı, para birimlerinin kullanım maliyeti farkını yansıtır."),
+    EGQ("Opsiyon alıcısının maksimum kaybı nedir?",["Sınırsızdır","Ödediği primdir","Sözleşme tutarının tamamı","Sıfırdır"],1,"Alıcı yalnızca primi kaybedebilir; hakkını kullanmak zorunda değildir."),
+    EGQ("Opsiyonda ‘call’ nedir?",["Satma hakkı","Alma hakkı","Faiz ödemesi","Teminat"],1,"Call, belirli fiyattan alma hakkıdır; put satma hakkıdır."),
+    EGQ("İskontolu bono nasıl işler?",["Her ay kupon öder","Nominalin altında satılır, vadede nominal ödenir","Vade yoktur","Hisse senedidir"],1,"İskontolu senet nominalin altında satılır ve vadede nominal değer ödenir."),
+    EGQ("Hazine’nin kira sertifikası ihracını hangi şirket yapar?",["BIST","Hazine Müsteşarlığı Varlık Kiralama A.Ş.","TMSF","TCMB"],1,"Hazine kira sertifikalarını Varlık Kiralama A.Ş. aracılığıyla ihraç eder."),
+    EGQ("Piyasa getirileri yükselirse eldeki sabit getirili kâğıdın fiyatı ne olur?",["Artar","Düşer","Değişmez","Sıfırlanır"],1,"Getiri ve fiyat ters yönde hareket eder."),
+    EGQ("Aynı getiri artışında hangi kâğıt daha çok fiyat kaybeder?",["Kısa vadeli","Uzun vadeli","İkisi aynı","Vadesiz"],1,"Vade uzadıkça fiyatın getiriye duyarlılığı artar."),
+    EGQ("Gram altın fiyatı yaklaşık nasıl hesaplanır?",["Ons × kur ÷ 31,1035","Ons ÷ kur","Kur × 31,1035","Ons + kur"],0,"Gram altın ≈ ons fiyatı × USD/TRY ÷ 31,1035."),
+    EGQ("Katılım bankalarında hazine ürünlerinin uygunluğuna kim karar verir?",["Müşteri","Danışma kurulu","Vergi dairesi","Borsa"],1,"Ürünlerin faizsiz ilkelere uygunluğu danışma kurulunca değerlendirilir."),
+  ],
+},
 ];
 const EGITIM_MODULLERI: EgitimModul[] = EGITIM_HAM.map(m => ({ ...m, dersler: m.uniteler.flatMap(u => u.dersler) }));
 
@@ -2858,7 +3122,7 @@ function Egitim({kimlik, nav}:{kimlik:any; nav:(e:string)=>void}){
       <div style={{padding:"0 14px 26px"}}>
         <EgitimGeri onClick={()=>setGor({t:"liste"})} etiket="Eğitim"/>
         <p style={{margin:"0 2px 4px",fontSize:19,fontWeight:700,color:C.label}}>Liderlik tablosu</p>
-        <p style={{margin:"0 2px 12px",fontSize:12,lineHeight:1.5,color:C.sub}}>Sıralama, dört modülün en yüksek sınav puanlarının toplamına göre yapılır (en çok {EGITIM_MODULLERI.length*100}). Yalnızca takma ad ve puan görünür.</p>
+        <p style={{margin:"0 2px 12px",fontSize:12,lineHeight:1.5,color:C.sub}}>Sıralama, altı modülün en yüksek sınav puanlarının toplamına göre yapılır (en çok {EGITIM_MODULLERI.length*100}). Yalnızca takma ad ve puan görünür.</p>
         {!uid ? (
           <div style={kart}>
             <p style={{margin:"0 0 10px",fontSize:13,lineHeight:1.5,color:C.label}}>Liderlik tablosunu görmek için giriş yapmalısın.</p>
@@ -38172,7 +38436,7 @@ function App(){
               {key:"musteriPortfoyum", label:"Müşteri Portföyüm", desc:"Bankacılar için müşteri, görüşme ve takip defteri. Bugün kimi arayacağını gör; üyelik gerekir, kayıtlar hesabına bağlı saklanır", uyelik:true},
             ]},
             {baslik:"ÖĞREN", items:[
-              {key:"egitim", label:"Eğitim", desc:"4 modül, 100 ders; örnek senaryolar, modül sınavı, puan ve liderlik tablosu"},
+              {key:"egitim", label:"Eğitim", desc:"6 modül, 132 ders; örnek senaryolar, modül sınavı, puan ve liderlik tablosu"},
               {key:"ekonomiSozluk", label:"Ekonomi Sözlüğü", desc:"196 ekonomi ve finans terimi — enflasyondan rezervlere, sade tanımlarla"},
               {key:"sozluk", label:"Katılım Bankacılığı Sözlüğü", desc:"Terim ve tanımları hızlıca ara"},
               {key:"katilimBlog", label:"Katılım Blog", desc:"Kâr payı, murabaha, TLREF ve daha fazlası — anlaşılır rehberler", harici:true},
