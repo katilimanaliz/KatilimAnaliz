@@ -229,7 +229,9 @@ async function kpProDurumGetir(uid:string): Promise<KpProDurum>{
   try{
     const app=await kpFirebaseWebApp();
     const {getFirestore,doc,getDoc}=await import("firebase/firestore");
-    const snap=await getDoc(doc(getFirestore(app),"pro",uid));
+    // ⚠️ Zaman aşımı ŞART: web oturumu kurulamazsa Firestore okuması hata vermeden ASILI kalabiliyor → Pro durumu hiç belirlenmez ("ücretsiz" görünür).
+    // Asılırsa RevenueCat sonucuna düşülür (gerçek satın alma kaynağı).
+    const snap=await kpZamanAsimi(getDoc(doc(getFirestore(app),"pro",uid)), 5000, "pro-belgesi");
     kpTaniYaz("fs", snap.exists() ? ("belge var, aktif=" + String((snap.data() as any)?.aktif)) : "belge yok");
     if(!snap.exists()) return { aktif:revenueCatAktif, bitisTarihi:null, kaynak:revenueCatAktif?"revenuecat":null };
     const d=snap.data() as any;
@@ -398,37 +400,46 @@ function kpZamanAsimi<T>(p: Promise<T>, ms: number, ad: string): Promise<T> {
     p.then((v) => { clearTimeout(t); coz(v); }, (e) => { clearTimeout(t); red(e); });
   });
 }
+// Mobil WebView'da Firebase Auth'un varsayılan IndexedDB kalıcılığı ASILI kalabiliyor (signInWithCustomToken hiç dönmüyor → Firestore da bekliyor).
+// Web oturumu zaten HER AÇILIŞTA native oturumdan yeniden kurulduğu için kalıcılığa gerek yok: mobilde yalnızca BELLEKTE tutulur.
+async function kpWebAuth(app: any): Promise<any> {
+  const m: any = await import("firebase/auth");
+  if (IS_NATIVE) {
+    try { return m.initializeAuth(app, { persistence: m.inMemoryPersistence }); } catch (_) { /* zaten başlatılmış: mevcut örnek */ }
+  }
+  return m.getAuth(app);
+}
 async function kpWebOturumKopruIc(uid: string): Promise<void> {
   try {
     kpKopruDurum = "app";
     const app = await kpFirebaseWebApp();
-    const { getAuth, signInWithCustomToken } = await import("firebase/auth");
-    const auth: any = getAuth(app);
+    const { signInWithCustomToken } = await import("firebase/auth");
+    const auth: any = await kpWebAuth(app);
     kpKopruDurum = "auth-hazir-bekleniyor";
-    try { if (auth.authStateReady) await kpZamanAsimi(auth.authStateReady(), 4000, "authStateReady"); } catch (_) { /* eski SDK / takildi: atla */ }
+    try { if (auth.authStateReady) await kpZamanAsimi(auth.authStateReady(), 2000, "authStateReady"); } catch (_) { /* eski SDK / takildi: atla */ }
     if (auth.currentUser && auth.currentUser.uid === uid) { kpKopruDurum = "zaten-acik"; return; }
     kpKopruDurum = "token-aliniyor";
     const mod = await import("@capacitor-firebase/authentication");
-    const { token } = await kpZamanAsimi<{ token?: string }>(mod.FirebaseAuthentication.getIdToken({ forceRefresh: false }), 6000, "getIdToken");
+    const { token } = await kpZamanAsimi<{ token?: string }>(mod.FirebaseAuthentication.getIdToken({ forceRefresh: false }), 4000, "getIdToken");
     if (!token) { kpKopruDurum = "token-yok"; return; }
     kpKopruDurum = "sunucu-bekleniyor";
     const r = await kpZamanAsimi(fetch(`${API_BASE}/api/bildirim?islem=firebase-oturum`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken: token }),
-    }), 8000, "sunucu");
+    }), 5000, "sunucu");
     const j = await r.json().catch(() => null);
     if (!r.ok || !j || !j.customToken) { kpKopruDurum = "sunucu-" + r.status; console.error("Web oturum köprüsü: sunucu token vermedi", r.status, j); return; }
     kpKopruDurum = "giris-yapiliyor";
-    await kpZamanAsimi(signInWithCustomToken(auth, j.customToken), 8000, "signInWithCustomToken");
+    await kpZamanAsimi(signInWithCustomToken(auth, j.customToken), 5000, "signInWithCustomToken");
     kpKopruDurum = "tamam";
   } catch (e: any) { kpKopruDurum = "hata:" + String((e && (e.code || e.message)) || e).slice(0, 60); console.error("Web oturum köprüsü başarısız:", e); }
 }
 async function kpWebOturumKopru(uid: string): Promise<void> {
-  try { await kpZamanAsimi(kpWebOturumKopruIc(uid), 12000, "kopru"); } catch (e: any) { if (kpKopruDurum !== "tamam") kpKopruDurum = "zaman-asimi@" + kpKopruDurum; console.error("Web oturum köprüsü zaman aşımı:", e); }
+  try { await kpZamanAsimi(kpWebOturumKopruIc(uid), 8000, "kopru"); } catch (e: any) { if (kpKopruDurum !== "tamam") kpKopruDurum = "zaman-asimi@" + kpKopruDurum; console.error("Web oturum köprüsü zaman aşımı:", e); }
 }
 async function kpWebOturumKapatIc(): Promise<void> {
   const app = await kpFirebaseWebApp();
-  const { getAuth, signOut } = await import("firebase/auth");
-  const auth = getAuth(app);
+  const { signOut } = await import("firebase/auth");
+  const auth = await kpWebAuth(app);
   if (auth.currentUser) await signOut(auth);
 }
 async function kpWebOturumKapat(): Promise<void> {
