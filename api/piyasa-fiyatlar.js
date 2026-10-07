@@ -674,6 +674,58 @@ const ALTINAPI_GARANTI = [
   "GUMUSTRY","XPTUSD","PLATIN","XPDUSD","PALADYUM","USDTRY","EURTRY",
 ];
 
+// ═══════════════════════════════════════════════════════════════════════════
+// FİZİKİ ALTIN GEÇMİŞİ (2026-10-07) — "Fiziki Altın" sekmesindeki tarih seçici
+// ═══════════════════════════════════════════════════════════════════════════
+// AltinAPI/Truncgil geçmiş veri vermiyor (history uçları 404, doğrulandı); bu yüzden
+// her TAZE altinapi çekiminde bugünün alış/satışı Redis HASH'ine yazılır:
+//   piyasa:altingecmis:v1  →  alan "YYYY-MM-DD" (TR tarihi)  =  { SEMBOL:{b:alış,a:satış}, ts }
+// Aynı gün içindeki her yazım günü EZER → kayıt o günün SON görülen değeridir (gün sonu).
+// Kayıt YALNIZ bu tarihten itibaren birikir; öncesi için veri YOKTUR (uydurulmaz).
+// HASH seçildi: tek alan yazılır/okunur (28 günlük tek-anahtar JSON gibi her dakika
+// tüm geçmişi okuyup yazmaz). Yazım hatası fiyat akışını ASLA etkilemez.
+const KV_ALTIN_GECMIS = "piyasa:altingecmis:v1";
+const ALTIN_GECMIS_SEMBOLLER = [
+  "ALTIN","ONS","XAGUSD","GUMUSTRY","AYAR22","AYAR14",
+  "CEYREK_YENI","CEYREK_ESKI","YARIM_YENI","YARIM_ESKI",
+  "TEK_YENI","TEK_ESKI","ATA_YENI","ATA_ESKI",
+];
+async function altinGecmisYaz(h) {
+  try {
+    const kayit = {};
+    for (const s of ALTIN_GECMIS_SEMBOLLER) {
+      const b = alis(h, s), a = satis(h, s);
+      if (a != null) kayit[s] = { b, a };
+    }
+    if (Object.keys(kayit).length === 0) return;
+    await redis.hset(KV_ALTIN_GECMIS, { [bugunTRISO()]: { ...kayit, ts: Date.now() } });
+  } catch {}
+}
+
+// GET /api/piyasa-fiyatlar?tip=altin-gecmis&tarih=YYYY-MM-DD
+// → { tarih, bulunan, onceki, kayit, oncekiKayit } ; o günde kayıt yoksa ÖNCEKİ en yakın kayıt
+// (5 güne kadar, hafta sonu/tatil için); hiç yoksa kayit:null. Ayrıca ilkKayit: birikimin başladığı gün.
+async function altinGecmisHandler(req, res) {
+  res.setHeader("Cache-Control", "s-maxage=300");
+  if (req.method === "OPTIONS") return res.status(200).end();
+  const tarih = String(req.query.tarih || "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(tarih)) return res.status(400).json({ error: "tarih=YYYY-MM-DD gerekli" });
+  try {
+    const tum = (await redis.hgetall(KV_ALTIN_GECMIS)) || {};
+    const gunler = Object.keys(tum).filter((g) => /^\d{4}-\d{2}-\d{2}$/.test(g)).sort();
+    const ilkKayit = gunler.length ? gunler[0] : null;
+    let idx = -1;
+    for (let i = gunler.length - 1; i >= 0; i--) { if (gunler[i] <= tarih) { idx = i; break; } }
+    const gunFark = (a, b) => Math.round((Date.parse(a + "T00:00:00Z") - Date.parse(b + "T00:00:00Z")) / 86400000);
+    if (idx < 0 || gunFark(tarih, gunler[idx]) > 5) return res.status(200).json({ tarih, kayit: null, ilkKayit });
+    const bulunan = gunler[idx];
+    const onceki = idx > 0 ? gunler[idx - 1] : null;
+    return res.status(200).json({ tarih, bulunan, onceki, kayit: tum[bulunan], oncekiKayit: onceki ? tum[onceki] : null, ilkKayit });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+}
+
 async function altinApiTaze() {
   const harita = await altinApiPaylasimli();
   const sonuc = {};
@@ -684,6 +736,7 @@ async function altinApiTaze() {
   for (const sembol of ALTINAPI_GARANTI) {
     if (!(sembol in sonuc)) sonuc[sembol] = null;
   }
+  await altinGecmisYaz(harita);   // 2026-10-07: gün sonu alış/satış geçmişi (hata fırlatmaz)
   return sonuc;
 }
 
@@ -1028,6 +1081,7 @@ export default async function handler(req, res) {
 
   const tip = req.query.tip;
   if (tip === "banka-kurlari") return BANKA_KURLARI.handler(req, res);   // 2026-10-04: kur makası toplayıcısı
+  if (tip === "altin-gecmis") return altinGecmisHandler(req, res);   // 2026-10-07: fiziki altın geçmiş tarih seçici
   const conf = YAPILANDIRMA[tip];
   if (!conf) {
     return res.status(400).json({
