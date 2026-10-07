@@ -689,12 +689,21 @@ const ALTIN_GECMIS_SEMBOLLER = [
   "ALTIN","ONS","XAGUSD","GUMUSTRY","AYAR22","AYAR14",
   "CEYREK_YENI","CEYREK_ESKI","YARIM_YENI","YARIM_ESKI",
   "TEK_YENI","TEK_ESKI","ATA_YENI","ATA_ESKI",
+  // 2026-10-07: Döviz sekmesi tarih seçicisinde gerçek ALIŞ/SATIŞ için (Yahoo geçmişinde alış yok). Kayıt başladığı günden itibaren dolar.
+  "USDTRY","EURTRY","GBPTRY","CHFTRY","CADTRY","AUDTRY","JPYTRY","CNYTRY","SARTRY","AEDTRY","RUBTRY",
 ];
+const ALTIN_GECMIS_DOVIZ = new Set(["USDTRY","EURTRY","GBPTRY","CHFTRY","CADTRY","AUDTRY","JPYTRY","CNYTRY","SARTRY","AEDTRY","RUBTRY"]);
 async function altinGecmisYaz(h) {
   try {
     const kayit = {};
     for (const s of ALTIN_GECMIS_SEMBOLLER) {
-      const b = alis(h, s), a = satis(h, s);
+      let b = alis(h, s);
+      const a = satis(h, s);
+      // Döviz makas akıl kontrolü (gecmis.js ile aynı: normal makas %0,2–3; %5 üstü bozuk alış) → alış null, satış kalır
+      if (a != null && b != null && ALTIN_GECMIS_DOVIZ.has(s)) {
+        const makas = ((a - b) / b) * 100;
+        if (!isFinite(makas) || makas < 0 || makas > 5) b = null;
+      }
       if (a != null) kayit[s] = { b, a };
     }
     if (Object.keys(kayit).length === 0) return;
