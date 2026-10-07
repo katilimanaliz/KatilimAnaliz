@@ -224,7 +224,8 @@ async function kpRevenueCatAktifMi(): Promise<boolean>{
 // İKİSİNDEN HERHANGİ BİRİNDE aktifse Pro sayılıyor — Firestore'daki elle
 // işaretleme yöntemi bilinçli olarak KALDIRILMADI, beta testi kolaylaştırıyor.
 async function kpProDurumGetir(uid:string): Promise<KpProDurum>{
-  const revenueCatAktif = await kpRevenueCatAktifMi();
+  // RevenueCat asılırsa Profil sonsuza dek 'belirleniyor' kalmasın (6 sn sonra pasif say; Firestore kaydı yine değerlendirilir)
+  const revenueCatAktif = await kpZamanAsimi(kpRevenueCatAktifMi(), 6000, "revenuecat").catch(()=>false);
   kpTaniYaz("rc", revenueCatAktif ? "aktif" : "yok/pasif"); kpTaniYaz("fs", "okunuyor"); kpTaniYaz("uid", uid.slice(0, 6));
   try{
     const app=await kpFirebaseWebApp();
@@ -568,7 +569,8 @@ function useKpKimlik(){
   const [kimlikYukleniyor,setKimlikYukleniyor]=useState(true);
   const [kimlikHata,setKimlikHata]=useState<string|null>(null);
   const [pro,setPro]=useState<KpProDurum>(KP_PRO_VARSAYILAN);
-  const [proYukleniyor,setProYukleniyor]=useState(false);
+  const [proYukleniyorIc,setProYukleniyor]=useState(false);
+  const [proHazirUid,setProHazirUid]=useState<string|null>(null);   // Pro durumu HANGİ uid için belirlendi (ilk render'da yanlış 'Ücretsiz' görünmesin)
 
   useEffect(()=>{
     let iptal=false;
@@ -628,7 +630,7 @@ function useKpKimlik(){
   const [proYenileSayaci,setProYenileSayaci]=useState(0);
   useEffect(()=>{
     let iptal=false;
-    if(!kullanici?.uid){ setPro(KP_PRO_VARSAYILAN); return; }
+    if(!kullanici?.uid){ setPro(KP_PRO_VARSAYILAN); setProHazirUid(null); return; }
     setProYukleniyor(true);
     // RevenueCat'in kendi kullanıcı kimliğini bizim uid'imizle eşleştiriyoruz
     // (Purchases.logIn) — bu olmadan RevenueCat rastgele/cihaz-bazlı anonim
@@ -638,15 +640,16 @@ function useKpKimlik(){
         const yapilandirildi = await kpRevenueCatYapilandir();
         if(yapilandirildi){
           const { Purchases } = await import("@revenuecat/purchases-capacitor");
-          await Purchases.logIn({ appUserID: kullanici.uid });
+          await kpZamanAsimi(Purchases.logIn({ appUserID: kullanici.uid }), 6000, "rc-login");
         }
       }catch(e){ console.error("RevenueCat logIn basarisiz:", e); }
       const d = await kpProDurumGetir(kullanici.uid);
-      if(!iptal){ setPro(d); setProYukleniyor(false); }
+      if(!iptal){ setPro(d); setProHazirUid(kullanici.uid); setProYukleniyor(false); }
     })();
     return ()=>{ iptal=true; };
   },[kullanici?.uid, proYenileSayaci]);
   const proYenile=()=>setProYenileSayaci(n=>n+1);
+  const proYukleniyor = proYukleniyorIc || (!!kullanici?.uid && proHazirUid!==kullanici.uid);
 
   const _islemSarmala=async(islem:()=>Promise<void>,baglam:"eposta"|"diger"="eposta")=>{
     setKimlikHata(null);
@@ -37715,7 +37718,12 @@ function App(){
                 gibi diğer bölümler kullanıcı isteğiyle bilinçli olarak
                 dışarıda bırakıldı). Zorunlu değil (misafir kullanım
                 devam ediyor), ama girişi teşvik ediyoruz. */}
-            {kimlik.kullanici ? (
+            {kimlik.kimlikYukleniyor && !kimlik.kullanici ? (
+            <div aria-busy="true" style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,padding:"22px 18px",marginBottom:12,minHeight:150,display:"flex",alignItems:"center",gap:14}}>
+              <div style={{width:54,height:54,borderRadius:27,background:WA(0.08)}}/>
+              <div style={{flex:1}}><div style={{height:14,width:"55%",borderRadius:7,background:WA(0.08),marginBottom:8}}/><div style={{height:11,width:"75%",borderRadius:6,background:WA(0.06)}}/></div>
+            </div>
+            ) : kimlik.kullanici ? (
             <div style={{position:"relative",background:(TEMA==="acik"?"linear-gradient(135deg,#E8F0FA 0%,#F6FAFD 70%)":"linear-gradient(135deg,#16243A 0%,#0F1923 70%)"),border:"1px solid rgba(91,155,216,0.25)",borderRadius:20,padding:"18px 18px 16px",marginBottom:12}}>
               {/* ⚠️ 2026-09-21 (kullanıcı isteği: "kutu içinde sağda
                   ayarlar düğmesi olsun ordan isim soyisim bilgileri, şifre
@@ -37747,7 +37755,9 @@ function App(){
                   useKpKimlik hook'u). Pro iken altın rozet, değilken eski
                   gri "Ücretsiz" etiketi aynen kalıyor. */}
               <div style={{display:"flex",alignItems:"center",gap:8,marginTop:14,paddingTop:12,borderTop:`1px solid ${WA(0.08)}`}}>
-                {kimlik.pro.aktif ? (
+                {kimlik.proYukleniyor ? (
+                  <span aria-busy="true" style={{display:"inline-block",width:56,height:22,borderRadius:20,background:WA(0.08)}}/>
+                ) : kimlik.pro.aktif ? (
                   <span style={{padding:"3px 10px",borderRadius:20,background:"linear-gradient(90deg,#D8A94E,#F0CB7A)",fontSize:11,fontWeight:700,color:"#06120E"}}>{TR("⭐ Pro")}</span>
                 ) : (
                   <span style={{padding:"3px 10px",borderRadius:20,background:WA(0.1),fontSize:11,fontWeight:700,color:C.label}}>{CV("Ücretsiz")}</span>
