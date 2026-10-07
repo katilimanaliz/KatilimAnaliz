@@ -380,36 +380,70 @@ async function kpAyarSenkronBaslat(uid: string): Promise<boolean> {
 // Web SDK'nın oturumu olmadığı için istekler request.auth=null gidiyor → Müşteri Portföyüm / pro/{uid} / portfoy / egitim "permission-denied".
 // ÇÖZÜM: native kullanıcının ID token'ı sunucuda doğrulanır (bildirim.js ?islem=firebase-oturum), aynı uid için custom token döner,
 // web SDK bununla signInWithCustomToken yapar. Mevcut oturumlar da düzelir (yeniden giriş gerekmez). Hata olursa uygulama eskisi gibi çalışır.
-async function kpWebOturumKopru(uid: string): Promise<void> {
+// ZAMAN AŞIMI: köprü ne olursa olsun uygulamanın kimlik yüklemesini en fazla ~12 sn bekletir (takılırsa giriş sonsuza kadar "yükleniyor" kalmasın).
+// kpKopruDurum: hangi aşamada kalındığını gösterir (Müşteri Portföyüm hata ekranında "Teknik ayrıntı"da görünür).
+let kpKopruDurum = "baslamadi";
+function kpZamanAsimi<T>(p: Promise<T>, ms: number, ad: string): Promise<T> {
+  return new Promise<T>((coz, red) => {
+    const t = setTimeout(() => red(new Error("zaman-asimi:" + ad)), ms);
+    p.then((v) => { clearTimeout(t); coz(v); }, (e) => { clearTimeout(t); red(e); });
+  });
+}
+async function kpWebOturumKopruIc(uid: string): Promise<void> {
   try {
+    kpKopruDurum = "app";
     const app = await kpFirebaseWebApp();
     const { getAuth, signInWithCustomToken } = await import("firebase/auth");
     const auth: any = getAuth(app);
-    try { if (auth.authStateReady) await auth.authStateReady(); } catch (_) { /* eski SDK: atla */ }
-    if (auth.currentUser && auth.currentUser.uid === uid) return;
+    kpKopruDurum = "auth-hazir-bekleniyor";
+    try { if (auth.authStateReady) await kpZamanAsimi(auth.authStateReady(), 4000, "authStateReady"); } catch (_) { /* eski SDK / takildi: atla */ }
+    if (auth.currentUser && auth.currentUser.uid === uid) { kpKopruDurum = "zaten-acik"; return; }
+    kpKopruDurum = "token-aliniyor";
     const mod = await import("@capacitor-firebase/authentication");
-    const { token } = await mod.FirebaseAuthentication.getIdToken({ forceRefresh: false });
-    if (!token) return;
-    const r = await fetch(`${API_BASE}/api/bildirim?islem=firebase-oturum`, {
+    const { token } = await kpZamanAsimi<{ token?: string }>(mod.FirebaseAuthentication.getIdToken({ forceRefresh: false }), 6000, "getIdToken");
+    if (!token) { kpKopruDurum = "token-yok"; return; }
+    kpKopruDurum = "sunucu-bekleniyor";
+    const r = await kpZamanAsimi(fetch(`${API_BASE}/api/bildirim?islem=firebase-oturum`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken: token }),
-    });
+    }), 8000, "sunucu");
     const j = await r.json().catch(() => null);
-    if (!r.ok || !j || !j.customToken) { console.error("Web oturum köprüsü: sunucu token vermedi", r.status); return; }
-    await signInWithCustomToken(auth, j.customToken);
-  } catch (e) { console.error("Web oturum köprüsü başarısız:", e); }
+    if (!r.ok || !j || !j.customToken) { kpKopruDurum = "sunucu-" + r.status; console.error("Web oturum köprüsü: sunucu token vermedi", r.status, j); return; }
+    kpKopruDurum = "giris-yapiliyor";
+    await kpZamanAsimi(signInWithCustomToken(auth, j.customToken), 8000, "signInWithCustomToken");
+    kpKopruDurum = "tamam";
+  } catch (e: any) { kpKopruDurum = "hata:" + String((e && (e.code || e.message)) || e).slice(0, 60); console.error("Web oturum köprüsü başarısız:", e); }
+}
+async function kpWebOturumKopru(uid: string): Promise<void> {
+  try { await kpZamanAsimi(kpWebOturumKopruIc(uid), 12000, "kopru"); } catch (e: any) { if (kpKopruDurum !== "tamam") kpKopruDurum = "zaman-asimi@" + kpKopruDurum; console.error("Web oturum köprüsü zaman aşımı:", e); }
+}
+async function kpWebOturumKapatIc(): Promise<void> {
+  const app = await kpFirebaseWebApp();
+  const { getAuth, signOut } = await import("firebase/auth");
+  const auth = getAuth(app);
+  if (auth.currentUser) await signOut(auth);
 }
 async function kpWebOturumKapat(): Promise<void> {
-  try {
-    const app = await kpFirebaseWebApp();
-    const { getAuth, signOut } = await import("firebase/auth");
-    const auth = getAuth(app);
-    if (auth.currentUser) await signOut(auth);
-  } catch (e) { console.error("Web oturumu kapatılamadı:", e); }
+  try { await kpZamanAsimi(kpWebOturumKapatIc(), 5000, "signOut"); } catch (e) { console.error("Web oturumu kapatılamadı:", e); }
 }
 
-async function kpFirebaseWebApp(){
-  const { initializeApp, getApps } = await import("firebase/app");
-  return getApps().length ? getApps()[0] : initializeApp(FIREBASE_WEB_CONFIG);
+// Tek seferlik (eşzamanlı çağrılarda ikinci bir başlatma/yarış olmasın). Firestore, mobil WebView'da WebChannel kopunca uzun-yoklamaya (long polling)
+// OTOMATİK düşer (experimentalAutoDetectLongPolling) — aksi halde istekler hata vermeden ASILI kalabilir. Normal ağda davranış aynıdır.
+let kpWebAppSoz: Promise<any> | null = null;
+function kpFirebaseWebApp(): Promise<any> {
+  if (!kpWebAppSoz) {
+    kpWebAppSoz = (async () => {
+      const { initializeApp, getApps } = await import("firebase/app");
+      if (getApps().length) return getApps()[0];
+      const app = initializeApp(FIREBASE_WEB_CONFIG);
+      try {
+        const { initializeFirestore } = await import("firebase/firestore");
+        initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
+      } catch (_) { /* zaten başlatılmışsa varsayılan ayarla devam */ }
+      return app;
+    })();
+    kpWebAppSoz.catch(() => { kpWebAppSoz = null; });
+  }
+  return kpWebAppSoz;
 }
 
 // ── HESAP SİLİNİRKEN KULLANICI VERİSİ (2026-10-04) ─────────────────────────
@@ -524,14 +558,22 @@ function useKpKimlik(){
         if(gercekIsNative){
           const mod=await import("@capacitor-firebase/authentication");
           const FA=mod.FirebaseAuthentication;
-          const {user}=await FA.getCurrentUser();
-          if(user) await kpWebOturumKopru(user.uid); else await kpWebOturumKapat();   // web SDK oturumu hazır olmadan kullanici set EDİLMEZ (Firestore okumaları sıraya girsin)
-          if(!iptal) setKullanici(user?{uid:user.uid,email:user.email,ad:user.displayName,saglayici:user.providerId||"bilinmiyor",dogrulandi:!!user.emailVerified,olusturmaTarihi:(user as any).metadata?.creationTime||null}:null);
-          await FA.addListener("authStateChange",async(event:any)=>{
-            const u=event?.user;
-            if(u) await kpWebOturumKopru(u.uid); else await kpWebOturumKapat();
-            if(!iptal) setKullanici(u?{uid:u.uid,email:u.email,ad:u.displayName,saglayici:u.providerId||"bilinmiyor",dogrulandi:!!u.emailVerified,olusturmaTarihi:u.metadata?.creationTime||null}:null);
-          });
+          // ⚠️ 2026-10-07: DİNLEYİCİ ÖNCE kurulur (eskiden ilk kontrol + köprü beklemesinden SONRA kuruluyordu: native oturum geç geri yüklenirse olay kaçıyor,
+          // kullanıcı misafir kalıyor → Pro da "ücretsiz" görünüyordu). Olaylar üst üste binerse yalnızca EN SON olay uygulanır (sira).
+          let sonSira=0;
+          const kullaniciAyarla=(u:any)=>setKullanici(u?{uid:u.uid,email:u.email,ad:u.displayName,saglayici:u.providerId||"bilinmiyor",dogrulandi:!!u.emailVerified,olusturmaTarihi:u.metadata?.creationTime||null}:null);
+          const uygula=async(u:any)=>{
+            const sira=++sonSira;
+            if(!u){ if(!iptal) kullaniciAyarla(null); kpWebOturumKapat(); return; }   // misafir: beklemeden
+            await kpWebOturumKopru(u.uid);   // web SDK oturumu hazır olmadan kullanici set EDİLMEZ (Firestore okumaları sıraya girsin)
+            if(iptal||sira!==sonSira) return;
+            kullaniciAyarla(u);
+          };
+          await FA.addListener("authStateChange",(event:any)=>{ uygula(event?.user||null); });
+          let {user}=await FA.getCurrentUser();
+          // Native oturum geri yüklemesi uygulama açılışında birkaç yüz ms gecikebilir: boşsa kısa süre tekrar sor (olay gelirse zaten dinleyici yakalar)
+          for(let i=0;i<2&&!user&&!iptal;i++){ await new Promise(r=>setTimeout(r,350)); user=(await FA.getCurrentUser()).user; }
+          await uygula(user||null);
         } else {
           const app=await kpFirebaseWebApp();
           const {getAuth,onAuthStateChanged}=await import("firebase/auth");
@@ -3290,7 +3332,8 @@ function bmNormalle(d: any): any {
 }
 async function bmYukle(uidKullanici: string): Promise<any> {
   const { db, m } = await bmFs();
-  const [ust, sn] = await Promise.all([m.getDoc(m.doc(db, BM_KOK, uidKullanici)), m.getDocs(m.collection(db, BM_KOK, uidKullanici, "kayitlar"))]);
+  // Asılı kalan istek sonsuz "yükleniyor" yerine hata ekranı + ayrıntı versin (köprü durumu dahil)
+  const [ust, sn] = await kpZamanAsimi(Promise.all([m.getDoc(m.doc(db, BM_KOK, uidKullanici)), m.getDocs(m.collection(db, BM_KOK, uidKullanici, "kayitlar"))]), 20000, "firestore");
   const musteriler = sn.docs.map((d: any) => bmNormalle({ ...d.data(), id: d.id }));
   const veri = ust.exists() ? ust.data() : null;
   return { musteriler, onay: veri && veri.onay ? veri.onay : null };
@@ -4468,7 +4511,7 @@ function BmHesapli({ kimlik, nav, cik, uid }: any) {
     }).catch((e: any) => {
       console.error("Müşteri Portföyüm yüklenemedi:", e);
       if (iptal) return;
-      if (!ilkYuklendi.current) { setHataKod(String((e && (e.code || e.message)) || "bilinmiyor")); setFaz("hata"); }
+      if (!ilkYuklendi.current) { setHataKod(String((e && (e.code || e.message)) || "bilinmiyor") + " · köprü: " + kpKopruDurum); setFaz("hata"); }
       else showToast("Yenilenemedi. Bağlantını kontrol et.");
     });
     return () => { iptal = true; };
