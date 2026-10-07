@@ -2235,7 +2235,7 @@ const TEFAS_DIGER_GECMIS_MAKS_NOKTA = 400; // ~1.5 yıllık işlem günü — s�
 // alan null bırakılır (uydurma yok — mevcut "diğer fon" felsefesiyle aynı).
 function getiriHesaplaNoktalar(noktalar) {
   if (!Array.isArray(noktalar) || noktalar.length < 2) {
-    return { gunluk: null, haftalik: null, aylik: null, uc_aylik: null, ytd: null, yillik: null };
+    return { gunluk: null, haftalik: null, aylik: null, uc_aylik: null, altiAylik: null, ytd: null, yillik: null };
   }
   const son = noktalar[noktalar.length - 1];
   const sonTarih = new Date(son.t);
@@ -2256,6 +2256,7 @@ function getiriHesaplaNoktalar(noktalar) {
     haftalik: yuzde(enYakinBul(gunOncesi(7))),
     aylik: yuzde(enYakinBul(gunOncesi(30))),
     uc_aylik: yuzde(enYakinBul(gunOncesi(90))),
+    altiAylik: yuzde(enYakinBul(gunOncesi(180))),
     ytd: sonTarih > ytdBaslangic ? yuzde(enYakinBul(ytdBaslangic)) : null,
     yillik: yuzde(enYakinBul(gunOncesi(365))),
   };
