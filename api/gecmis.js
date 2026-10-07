@@ -537,6 +537,25 @@ async function yahooUzunCek(sembol, aralik) {
   return json?.chart?.result?.[0] || null;
 }
 
+// UZUN MODDA ÇAPRAZ KUR (2026-10-07): normal mod, "XXXTRY=X" Yahoo'da yoksa USD üzerinden hesaplıyordu (caprazKurHesapla); uzun mod
+// bunu yapmadığı için CAD/AUD/JPY/CNY gibi paritelerde geçmiş tarih seçilince boş dönüyordu. Aynı formül: XXX/TRY = (USD/TRY) / (USD/XXX),
+// tarihe göre hizalı, eksik günde son bilinen USD/XXX taşınır. Doğrudan seri doluysa BUNA HİÇ GİRİLMEZ (mevcut davranış aynen kalır).
+async function uzunCaprazKur(xxxKodu, aralik) {
+  const [usdTry, usdXxx] = await Promise.all([yahooUzunCek("USDTRY=X", aralik), yahooUzunCek(`${xxxKodu}=X`, aralik)]);
+  if (!usdTry || !usdXxx) return [];
+  const xxxMap = new Map(noktalarCikar(usdXxx).map((n) => [n.tarih, n.fiyat]));
+  const xxxTarihleri = [...xxxMap.keys()].sort();
+  let sonXxx = null, xi = 0;
+  const noktalar = [];
+  for (const n of noktalarCikar(usdTry)) {
+    while (xi < xxxTarihleri.length && xxxTarihleri[xi] <= n.tarih) { sonXxx = xxxMap.get(xxxTarihleri[xi]); xi++; }
+    if (sonXxx == null || sonXxx === 0) continue;
+    const fiyat = Math.round((n.fiyat / sonXxx) * 10000) / 10000;
+    if (fiyat > 0) noktalar.push({ tarih: n.tarih, fiyat });
+  }
+  return noktalar;
+}
+
 async function uzunVeriHesapla(sembol, aralik) {
   const GRAM_ONS = 31.1034768;
   if (sembol === "GRAM_ALTIN" || sembol === "GRAM_GUMUS") {
@@ -557,8 +576,17 @@ async function uzunVeriHesapla(sembol, aralik) {
     return { noktalar, guncelFiyat: noktalar.length ? noktalar[noktalar.length - 1].fiyat : null, aralik };
   }
   const result = await yahooUzunCek(sembol, aralik);
+  const noktalar = result ? noktalarCikar(result) : [];
+  if (noktalar.length === 0) {
+    const xxx = dovizKoduCikar(sembol);
+    if (xxx && xxx !== "USD") {
+      try {
+        const capraz = await uzunCaprazKur(xxx, aralik);
+        if (capraz.length) return { noktalar: capraz, guncelFiyat: capraz[capraz.length - 1].fiyat, aralik, kaynak: "capraz" };
+      } catch { /* boş sonuç aşağıda */ }
+    }
+  }
   if (!result) return { noktalar: [], guncelFiyat: null, aralik };
-  const noktalar = noktalarCikar(result);
   const meta = result.meta || {};
   return { noktalar, guncelFiyat: meta.regularMarketPrice ?? (noktalar.length ? noktalar[noktalar.length - 1].fiyat : null), aralik };
 }
@@ -579,7 +607,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "uzun parametresi 1y | 5y | 10y olmalı" });
     }
     res.setHeader("Cache-Control", "s-maxage=3600, stale-while-revalidate=21600");
-    const uzunAnahtar = `gecmis:uzun:v1:${sembol}:${uzun}`;
+    const uzunAnahtar = `gecmis:uzun:v2:${sembol}:${uzun}`;   // v1→v2 (2026-10-07): çapraz kur eklendi; boş cevaplar eski önbellekte kalmasın
     try {
       const { veri, cached } = await kilitliGetir(redis, uzunAnahtar, UZUN_TTL_SANIYE, () => uzunVeriHesapla(sembol, uzun), { debug: debug === "1" });
       return res.status(200).json({ ...veri, cached });
