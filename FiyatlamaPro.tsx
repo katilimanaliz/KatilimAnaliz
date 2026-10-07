@@ -11904,12 +11904,66 @@ function FonTahminAgGorseli({ kalemler, hisseDegisimMap, tahmin }: {
 
 // ─── KATILIM FONU ARAÇLARI ───────────────────────────────────────────────────
 
+// ─── KATILMA HESABI BANKA SEÇİCİ (2026-10-07) ───────────────────────────────
+// Katılma Hesabı Getiri Hesaplama'da banka seçilince o bankanın 1 aylık vade için dağıttığı gösterge oranı (kar-payi.json "bankalar[]",
+// Kâr Payı Oran Karşılaştırma > Katılma Hesabı ile AYNI veri, yeni istek/backend yok) oran alanına dolar ve vade 32 gün seçilir.
+// Para birimi (TL/USD/EUR) değişirse seçili bankanın o para birimi oranı yeniden doldurulur; bankanın o para biriminde oranı yoksa seçim temizlenir.
+function KatilimBankaSecici({alan,seciliAd,onSec}:{alan:"tl"|"usd"|"eur";seciliAd:string;onSec:(ad:string,oran:number|null,guncelleme:string|null)=>void}){
+  const [veri,setVeri]=useState<any>(null);
+  useEffect(()=>{
+    fetch(`${API_BASE}/kar-payi.json`,{cache:"no-store"})
+      .then(r=>r.ok?r.json():null)
+      .then(d=>setVeri(d))
+      .catch(()=>{});
+  },[]);
+  const bankalar=useMemo(()=>{
+    const liste=(veri?.bankalar||[]).filter((b:any)=>typeof b[alan]==="number"&&b[alan]>0);
+    return [...liste].sort((a:any,b:any)=>b[alan]-a[alan]);
+  },[veri,alan]);
+  // Para birimi değişince seçili bankanın yeni para birimindeki oranını uygula
+  useEffect(()=>{
+    if(!seciliAd||!veri) return;
+    const b=(veri.bankalar||[]).find((x:any)=>x.ad===seciliAd);
+    const v=b&&typeof b[alan]==="number"&&b[alan]>0?b[alan]:null;
+    onSec(v!=null?seciliAd:"",v,veri.guncelleme||null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[alan]);
+  if(!bankalar.length) return null; // veri yoksa sessizce hiç görünmez
+  return(
+    <div style={{marginBottom:13}}>
+      <label style={{display:"block",fontSize:12,fontWeight:600,color:C.sub,marginBottom:4}}>Banka Seç (isteğe bağlı)</label>
+      <select value={seciliAd} onChange={e=>{
+          const ad=e.target.value;
+          if(!ad){ onSec("",null,null); return; }
+          const b=bankalar.find((x:any)=>x.ad===ad);
+          if(b) onSec(ad,b[alan],veri?.guncelleme||null);
+        }}
+        style={{padding:"11px 13px",borderRadius:10,border:`1.5px solid ${C.border}`,background:C.card,fontSize:14,fontWeight:600,color:C.label,outline:"none",width:"100%",boxSizing:"border-box"}}>
+        <option value="">Manuel gir</option>
+        {bankalar.map((b:any)=>(
+          <option key={b.ad} value={b.ad}>{b.ad} %{fmtN(b[alan],2)}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 function VadeliKatilim({s,onGecmis}){
   const [tutar,setTutar]=useState("");
   const [gun,setGun]=useState("");
   const [oran,setOran]=useState("");
   const [doviz,setDoviz]=useState("TL");
   const [kaydedildi,setKaydedildi]=useState(false);
+  // Banka seçimi: seçilince vade 32 gün, oran bankanın 1 aylık gösterge oranı olur. Oran elle değiştirilirse açıklama kaybolur.
+  const [banka,setBanka]=useState("");
+  const [bankaOran,setBankaOran]=useState("");
+  const [bankaTarih,setBankaTarih]=useState<string|null>(null);
+  const bankaSec=(ad:string,o:number|null,tarih:string|null)=>{
+    if(!ad||o==null){ setBanka(""); setBankaOran(""); setBankaTarih(null); return; }
+    setBanka(ad);
+    const str=fmtN(o,2);
+    setBankaOran(str); setOran(str); setGun("32"); setBankaTarih(tarih);
+  };
   // DÜZELTME (2026-07-13): sonuçlar sabit fmtTL (₺) ile basılıyordu — USD/EUR
   // sekmesinde de TL sembolü görünüyordu (kullanıcı raporu). Tutar zaten
   // seçilen para biriminde hesaplandığı için sadece sembol yanlıştı; artık
@@ -11937,8 +11991,14 @@ function VadeliKatilim({s,onGecmis}){
       <Card>
         <Seg options={[{v:"TL",l:"TL Katılım"},{v:"USD",l:"USD Katılım"},{v:"EUR",l:"EUR Katılım"}]} value={doviz} onChange={setDoviz}/>
         <Field label="Katılım Tutarı" value={tutar} onChange={setTutar} suffix={doviz==="TL"?"₺":doviz==="USD"?"$":"€"}/>
+        <KatilimBankaSecici alan={doviz==="USD"?"usd":doviz==="EUR"?"eur":"tl"} seciliAd={banka} onSec={bankaSec}/>
         <Field label="Vade (Gün)" value={gun} onChange={setGun} suffix="Gün" hint="Örn: 32 gün, 91 gün, 182 gün, 365 gün"/>
         <Field label="Kâr Payı Oranı (Yıllık)" value={oran} onChange={setOran} suffix="%"/>
+        {banka&&oran===bankaOran&&(
+          <p style={{margin:"-6px 2px 4px",fontSize:11,color:C.sub,lineHeight:1.5}}>
+            {banka} için 1 aylık vadede dağıtılan gösterge oranıdır{bankaTarih?` (${new Date(bankaTarih).toLocaleDateString("tr-TR",{day:"numeric",month:"long",year:"numeric"})} itibarıyla)`:""}. Kesin oran değildir; bu hafta dağıtılan oranlar ileriye yönelik bir taahhüt niteliği taşımaz.
+          </p>
+        )}
       </Card>
       {r&&(()=>{
         const raporSatirlari=[
