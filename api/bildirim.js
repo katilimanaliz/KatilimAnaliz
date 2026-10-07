@@ -3009,6 +3009,32 @@ document.getElementById('git').onclick=function(){
 };
 </script></body></html>`;
 
+// ═══════════════════════════════════════════════════════════════════════
+// FIREBASE OTURUM KÖPRÜSÜ (2026-10-06)
+// ═══════════════════════════════════════════════════════════════════════
+// SORUN: Mobil uygulamada giriş native eklentiyle yapılıyor, Firestore ise web SDK ile okunuyor; web SDK'nın oturumu olmadığı için
+// Firestore kuralları (request.auth) reddediyordu (permission-denied: Müşteri Portföyüm, pro/{uid}, portfoy, egitim).
+// ÇÖZÜM: POST ?islem=firebase-oturum  { idToken }  → ID token Firebase Admin ile DOĞRULANIR; doğrulanan uid için custom token döner.
+// Güvenlik: uid istemciden ASLA alınmaz, yalnızca doğrulanmış token'dan okunur; token imzası/süresi/iptal durumu kontrol edilir
+// (checkRevoked=true); hız sınırı genel IP sınırına tabidir. Custom token 1 saat geçerlidir ve yalnızca bu uid için oturum açar.
+async function firebaseOturum(req, res) {
+  res.setHeader("Cache-Control", "no-store");
+  const idToken = typeof req.body?.idToken === "string" ? req.body.idToken : "";
+  if (!idToken || idToken.length > 4096) {
+    res.status(400).json({ hata: "idToken gerekli" });
+    return;
+  }
+  let dec;
+  try {
+    dec = await admin.auth().verifyIdToken(idToken, true);
+  } catch (e) {
+    res.status(401).json({ hata: "Geçersiz kimlik" });
+    return;
+  }
+  const customToken = await admin.auth().createCustomToken(dec.uid);
+  res.status(200).json({ customToken });
+}
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -3103,6 +3129,8 @@ export default async function handler(req, res) {
       await haberBildirimAyarla(req, res);
     } else if (islem === "haber-bildirim-gonder") {
       await haberBildirimGonder(req, res);
+    } else if (islem === "firebase-oturum") {
+      await firebaseOturum(req, res);
     } else if (islem === "revenuecat-webhook") {
       await revenueCatWebhook(req, res);
     } else if (islem === "istatistik") {
