@@ -29618,21 +29618,47 @@ function dovizGecmisSeri(sembol: string, aralik: string): Promise<PortfoyNokta[]
   }
   return DOVIZ_GECMIS_ONBELLEK[k];
 }
+// Yahoo günlük kapanışından seçilen günün değeri (+ bir önceki işlem gününe göre değişim). Veri yoksa null.
+async function dovizSeriGetir(sembol: string, tarih: string): Promise<{fiyat:number,gun:string,degisim:number|null}|null> {
+  const seri = await dovizGecmisSeri(sembol, portfoyUzunAralik(tarih));
+  let idx = -1;
+  for (let i = seri.length - 1; i >= 0; i--) { if (seri[i].tarih <= tarih) { idx = i; break; } }
+  const g = idx >= 0 ? seri[idx] : null;
+  // Seçilen günden 10+ gün önceki nokta "o günün kuru" sayılmaz (veri boşluğu)
+  if (!g || (Date.parse(tarih + "T00:00:00Z") - Date.parse(g.tarih + "T00:00:00Z")) > 10 * 86400000) return null;
+  const onceki = idx > 0 ? seri[idx - 1].fiyat : null;
+  return { fiyat: g.fiyat, gun: g.tarih, degisim: (onceki && onceki > 0) ? ((g.fiyat - onceki) / onceki * 100) : null };
+}
+// Sunucunun günlük alış/satış kaydı (Fiziki Altın geçmişiyle aynı uç). Kayıt başladığı günden öncesi için null döner → Yahoo kapanışına düşülür.
+const DOVIZ_KAYIT_ONBELLEK: Record<string, Promise<any>> = {};
+function dovizGunKaydi(tarih: string): Promise<any> {
+  if (!DOVIZ_KAYIT_ONBELLEK[tarih]) {
+    DOVIZ_KAYIT_ONBELLEK[tarih] = fetch(`${API_BASE}/api/piyasa-fiyatlar?tip=altin-gecmis&tarih=${tarih}`)
+      .then(r => (r.ok ? r.json() : null)).catch(() => null);
+    DOVIZ_KAYIT_ONBELLEK[tarih].then(x => { if (!x) delete DOVIZ_KAYIT_ONBELLEK[tarih]; });
+  }
+  return DOVIZ_KAYIT_ONBELLEK[tarih];
+}
 function DovizGecmisSatiri({ad,sembol,dec,sira,tarih}:{ad:string,sembol:string,dec:number,sira:number,tarih:string}){
-  const [sonuc,setSonuc]=useState<{fiyat:number|null,gun:string|null,degisim:number|null}|null>(null);
+  const [sonuc,setSonuc]=useState<{alis:number|null,fiyat:number|null,gun:string|null,degisim:number|null}|null>(null);
   useEffect(()=>{
     let iptal=false;
     setSonuc(null);
-    dovizGecmisSeri(sembol, portfoyUzunAralik(tarih)).then(seri=>{
+    const kod=/^([A-Z]{3})TRY=X$/.exec(sembol)?.[1]||null;   // sadece XXX/TRY için sunucu kaydı aranır
+    Promise.all([
+      dovizSeriGetir(sembol, tarih),
+      kod ? dovizGunKaydi(tarih) : Promise.resolve(null),
+    ]).then(([yh,kayit])=>{
       if(iptal) return;
-      let idx=-1;
-      for(let i=seri.length-1;i>=0;i--){ if(seri[i].tarih<=tarih){ idx=i; break; } }
-      const g=idx>=0?seri[idx]:null;
-      // Seçilen günden 10+ gün önceki nokta "o günün kuru" sayılmaz (veri boşluğu) → "—"
-      const eskiMi=g!=null && (Date.parse(tarih+"T00:00:00Z")-Date.parse(g.tarih+"T00:00:00Z"))>10*86400000;
-      if(!g||eskiMi){ setSonuc({fiyat:null,gun:null,degisim:null}); return; }
-      const onceki=idx>0?seri[idx-1].fiyat:null;
-      setSonuc({fiyat:g.fiyat,gun:g.tarih,degisim:(onceki&&onceki>0)?((g.fiyat-onceki)/onceki*100):null});
+      // 1) Sunucunun o güne ait gerçek alış/satış kaydı varsa onu kullan
+      const k=kod?kayit?.kayit?.[kod+"TRY"]:null;
+      if(k && k.a!=null){
+        const ok=kayit?.oncekiKayit?.[kod+"TRY"];
+        setSonuc({alis:k.b??null,fiyat:k.a,gun:kayit.bulunan||tarih,degisim:(ok&&ok.a>0)?((k.a-ok.a)/ok.a*100):null});
+        return;
+      }
+      // 2) Kayıt yoksa Yahoo günlük kapanışı (alış yok)
+      setSonuc(yh?{alis:null,...yh}:{alis:null,fiyat:null,gun:null,degisim:null});
     });
     return ()=>{iptal=true;};
   },[sembol,tarih]);
@@ -29647,7 +29673,9 @@ function DovizGecmisSatiri({ad,sembol,dec,sira,tarih}:{ad:string,sembol:string,d
       <span style={{flex:1,fontSize:13,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),minWidth:0}}>
         {ad}{gunEtiket&&<span style={{display:"block",fontSize:10,fontWeight:600,color:WA(0.45)}}>{gunEtiket} kapanışı</span>}
       </span>
-      <span style={{width:70,textAlign:"right",fontSize:13,fontWeight:700,color:WA(0.35),fontFamily:"monospace",flexShrink:0}}>—</span>
+      <span style={{width:70,textAlign:"right",fontSize:13,fontWeight:700,color:sonuc?.alis!=null?C.soft:WA(0.35),fontFamily:"monospace",flexShrink:0}}>
+        {sonuc==null?<span className="skeleton" style={{display:"inline-block",width:48,height:11,borderRadius:6,verticalAlign:"middle"}}/>:(sonuc.alis!=null?fmt(sonuc.alis):"—")}
+      </span>
       <span style={{width:74,textAlign:"right",fontSize:13,fontWeight:700,color:C.soft,fontFamily:"monospace",flexShrink:0}}>
         {sonuc==null?<span className="skeleton" style={{display:"inline-block",width:52,height:12,borderRadius:6,verticalAlign:"middle"}}/>:(sonuc.fiyat!=null?fmt(sonuc.fiyat):"—")}
       </span>
