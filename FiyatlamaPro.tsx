@@ -30468,23 +30468,19 @@ function AltinUrunleriTablo(){
       {altinAlarmSecili&&<AltinAlarmModal urun={altinAlarmSecili} onClose={()=>setAltinAlarmSecili(null)}/>}
       <div style={{display:"flex",alignItems:"center",gap:8,margin:"2px 0 10px",flexWrap:"wrap"}}>
         <span style={{fontSize:12,fontWeight:700,color:WA(0.62)}}>Tarih</span>
-        <input type="date" value={gTarih} max={bugunIsoA}
-          onChange={e=>setGTarih(e.target.value)}
+        <input type="date" value={gTarih||bugunIsoA} max={bugunIsoA}
+          onChange={e=>setGTarih(e.target.value===bugunIsoA?"":e.target.value)}
           style={{flex:"0 1 auto",padding:"7px 10px",borderRadius:10,border:`1px solid ${WA(0.15)}`,background:WA(0.05),color:(TEMA==="acik"?C.label:"#fff"),fontSize:13,fontWeight:600,colorScheme:(TEMA==="acik"?"light":"dark")}}/>
         {gTarih!==""&&(
           <button onClick={()=>setGTarih("")} style={{padding:"7px 12px",borderRadius:10,border:"none",background:"#3B82F6",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>Güncel</button>
         )}
-        <span style={{flexBasis:"100%",fontSize:10.5,color:WA(0.45)}}>
-          {!gecmisMod
-            ? "Boş bırakırsan güncel fiyatlar gelir. Geçmiş bir gün seçince o günün son alış/satışı gösterilir."
-            : gecmisYuk
-              ? "Yükleniyor…"
-              : gecmis?.kayit
-                ? `${gecmis.bulunan&&gecmis.bulunan!==gTarih?`${gecmis.bulunan.split("-").reverse().join(".")} kaydı gösteriliyor (seçilen günde kayıt yok). `:""}Gün sonu alış/satış kaydıdır; ürün bazında bazı satırlar boş olabilir.`
-                : gecmis?.hata
-                  ? "Geçmiş veri şu an alınamadı. Biraz sonra tekrar dene."
-                  : `Bu tarih için kayıt yok. Altın geçmişi ${gecmis?.ilkKayit?gecmis.ilkKayit.split("-").reverse().join(".")+" tarihinden itibaren":"yeni birikmeye başladı, yakında"} tutuluyor.`}
-        </span>
+        {gecmisMod&&!gecmisYuk&&!gecmis?.kayit&&(
+          <span style={{flexBasis:"100%",fontSize:10.5,color:WA(0.45)}}>
+            {gecmis?.hata
+              ? "Geçmiş veri şu an alınamadı."
+              : `Bu tarih için kayıt yok${gecmis?.ilkKayit?` (kayıtlar ${gecmis.ilkKayit.split("-").reverse().join(".")} tarihinden başlıyor)`:""}.`}
+          </span>
+        )}
       </div>
       <div style={{display:"flex",alignItems:"center",gap:8,padding:"0 14px 6px"}}>
         <span style={{flex:1,minWidth:0,fontSize:10,fontWeight:700,color:WA(0.4),textTransform:"uppercase",letterSpacing:0.4}}>Birim</span>
@@ -37760,17 +37756,12 @@ function App(){
                 {piyasaTabloFiltre==="doviz"&&(
                   <div style={{display:"flex",alignItems:"center",gap:8,margin:"2px 0 10px",flexWrap:"wrap"}}>
                     <span style={{fontSize:12,fontWeight:700,color:WA(0.62)}}>Tarih</span>
-                    <input type="date" value={piyasaGecmisTarih} min={enEskiIso} max={bugunIso}
-                      onChange={e=>setPiyasaGecmisTarih(e.target.value)}
+                    <input type="date" value={piyasaGecmisTarih||bugunIso} min={enEskiIso} max={bugunIso}
+                      onChange={e=>setPiyasaGecmisTarih(e.target.value===bugunIso?"":e.target.value)}
                       style={{flex:"0 1 auto",padding:"7px 10px",borderRadius:10,border:`1px solid ${WA(0.15)}`,background:WA(0.05),color:(TEMA==="acik"?C.label:"#fff"),fontSize:13,fontWeight:600,colorScheme:(TEMA==="acik"?"light":"dark")}}/>
                     {piyasaGecmisTarih!==""&&(
                       <button onClick={()=>setPiyasaGecmisTarih("")} style={{padding:"7px 12px",borderRadius:10,border:"none",background:"#3B82F6",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>Güncel</button>
                     )}
-                    <span style={{flexBasis:"100%",fontSize:10.5,color:WA(0.45)}}>
-                      {gecmisTarihGecerli
-                        ? "Seçilen günün kapanış kuru gösterilir; geçmişte alış/satış ayrımı yoktur. Piyasa kapalıysa önceki işlem günü gelir."
-                        : "Boş bırakırsan güncel kurlar gelir. Geçmiş bir gün seçince o günün kuru gösterilir."}
-                    </span>
                   </div>
                 )}
                 <div style={{display:"flex",alignItems:"center",gap:8,padding:"0 4px 6px",borderBottom:`1px solid ${WA(0.1)}`}}>
