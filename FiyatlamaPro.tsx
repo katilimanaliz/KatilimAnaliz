@@ -29413,6 +29413,20 @@ function PiyasaOzetiDuzenleModal({secili,onToggle,onClose}:{secili:string[],onTo
   );
 }
 
+// Makro gösterge satırlarında "▲ önceki %x" metni (bir önceki dönem değeri). Küçük grafik yerine kullanılır.
+function piyasaOncekiMetin(g:any):string|null{
+  const s=g?.seri; if(!Array.isArray(s)||s.length<2) return null;
+  const son=s[s.length-1]?.deger, onc=s[s.length-2]?.deger;
+  if(typeof son!=="number"||typeof onc!=="number"||isNaN(son)||isNaN(onc)) return null;
+  const yon=son>onc?"▲":son<onc?"▼":"=";
+  const m = g.seriBirim==="milyon$"
+    ? `${onc<0?"-":""}$${Math.abs(onc/1000).toFixed(2).replace(".",",")} Milyar`
+    : (g.seriBirim==="endeks"||!String(g.deger||"").startsWith("%"))
+      ? onc.toFixed(2).replace(".",",")
+      : `%${onc.toFixed(2).replace(".",",")}`;
+  return `${yon} önceki ${m}`;
+}
+
 // ─── PİYASALAR TABLOSU: kategori verisi ────────────────────────────────────
 const PIYASA_TABLO_KATEGORILER = [
   // "Tümü" kaldırıldı (2026-08-08): karışık liste olduğu için alış/satış
@@ -37369,10 +37383,10 @@ function App(){
                 const aktif=piyasaTabloFiltre===k.id;
                 return (
                   <div key={k.id} onClick={()=>setPiyasaTabloFiltre(k.id)} style={{
-                    flexShrink:0,padding:"7px 16px",borderRadius:20,cursor:"pointer",whiteSpace:"nowrap",
+                    flexShrink:0,padding:"12px 16px",borderRadius:22,cursor:"pointer",whiteSpace:"nowrap",
                     background:aktif?"#3B82F6":WA(0.07),
                     border:aktif?"1px solid #3B82F6":`1px solid ${WA(0.1)}`,
-                    fontSize:12,fontWeight:700,color:aktif?"#fff":WA(0.6),
+                    fontSize:13,fontWeight:700,color:aktif?"#fff":WA(0.6),
                   }}>{CV(k.label)}</div>
                 );
               })}
@@ -37381,10 +37395,10 @@ function App(){
             {/* Fiyat Alarmlarım kısayolu — hangi filtre seçili olursa olsun görünür */}
             <div className="press-card" onClick={()=>nav("fiyatAlarmlarim")} style={{
               display:"flex",alignItems:"center",gap:10,cursor:"pointer",marginBottom:10,
-              background:WA(0.04),border:`1px solid ${WA(0.08)}`,
-              borderRadius:12,padding:"11px 13px",
+              background:C.orangeLight,border:`1px solid ${C.orange}55`,
+              borderRadius:12,padding:"14px 14px",
             }}>
-              <span style={{fontSize:17,flexShrink:0}}>🔔</span>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={C.orange} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg>
               <span style={{flex:1,fontSize:13,fontWeight:700,color:C.soft}}>Fiyat Alarmlarım</span>
               <span style={{color:WA(0.3),fontSize:18,flexShrink:0}}>›</span>
             </div>
@@ -37456,7 +37470,10 @@ function App(){
                           {g.tarih&&<p style={{margin:"1px 0 0",fontSize:10,color:(TEMA==="acik"?"#4A6178":"rgba(255,255,255,0.55)")}}>{g.tarih}{g.canli?" · canlı":""}</p>}
                         </div>
                         <div style={{display:"flex",alignItems:"center",gap:6}}>
-                          <span style={{fontSize:13,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace"}}>{g.deger}</span>
+                          <div style={{textAlign:"right"}}>
+                            <div style={{fontSize:13,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace"}}>{g.deger}</div>
+                            {(()=>{const om=piyasaOncekiMetin(g); return om?<div style={{fontSize:10,color:WA(0.5),marginTop:2,whiteSpace:"nowrap"}}>{om}</div>:null;})()}
+                          </div>
                           {tiklanabilir&&<span style={{color:WA(0.3),fontSize:16}}>›</span>}
                         </div>
                       </div>
@@ -37723,20 +37740,27 @@ function App(){
                 {id:"risk", label:"MB Rezervleri", veri:RISK},
               ] as const;
               const aktifSekme = ALT_SEKMELER.find(s=>s.id===piyasaGostergeAltSekme) || ALT_SEKMELER[2];
+              // Makro satırlarda küçük grafik YOK (az noktalı aylık/haftalık seri anlamsız çizgi verir);
+              // yerine bir önceki dönemin değeri yazılır. Grafik/tablo satıra dokununca açılır.
+              const oncekiMetin=piyasaOncekiMetin;
+              const kartBg=(TEMA==="acik"?"#E9EEF4":"#16222E");
+              const kartKenar=`1px solid ${WA(0.08)}`;
+              const metinRenk=(TEMA==="acik"?C.label:"#fff");
+              const monoStil:any={fontFamily:"monospace",fontWeight:700,color:metinRenk};
 
               return(
                 <div>
                   {/* Alt kategori sekmeleri — bankanın kendi makro veri panelindeki
                       6 kategoriyle aynı isimlendirme (Küresel Piyasalar hariç). */}
-                  <div className="piyasa-scroll" style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:2,marginTop:6,marginBottom:10,WebkitOverflowScrolling:"touch"}}>
+                  <div className="piyasa-scroll" style={{display:"flex",gap:18,overflowX:"auto",marginTop:6,marginBottom:12,borderBottom:`1px solid ${WA(0.1)}`,WebkitOverflowScrolling:"touch"}}>
                     {ALT_SEKMELER.map(s=>{
                       const aktif=piyasaGostergeAltSekme===s.id;
                       return(
                         <div key={s.id} onClick={()=>setPiyasaGostergeAltSekme(s.id)} style={{
-                          flexShrink:0,padding:"8px 13px",borderRadius:999,cursor:"pointer",whiteSpace:"nowrap",
-                          fontSize:11.5,fontWeight:700,
-                          background:aktif?"#3B82F6":WA(0.06),
-                          color:aktif?"#fff":(TEMA==="acik"?"#4A6178":"rgba(255,255,255,0.6)"),
+                          flexShrink:0,padding:"12px 2px",cursor:"pointer",whiteSpace:"nowrap",
+                          fontSize:13,fontWeight:aktif?700:600,
+                          borderBottom:aktif?"2px solid #3B82F6":"2px solid transparent",marginBottom:-1,
+                          color:aktif?(TEMA==="acik"?C.label:"#fff"):(TEMA==="acik"?"#4A6178":"rgba(255,255,255,0.6)"),
                         }}>{s.label}</div>
                       );
                     })}
@@ -37747,6 +37771,100 @@ function App(){
                       TCMB'nin katılım bankaları için ayrı yayınladığı kâr oranı serisi (konvansiyonel faiz değil). Üstteki kalın oran <b style={{color:(TEMA==="acik"?C.label:"#fff")}}>bileşiktir</b> (EVDS ham veri); altındaki <b>yıllık ≈</b> ve <b>aylık ≈</b> satırları haftalık bileşiklemeye dayalı hesaplanmış basit karşılıklardır.
                     </p>
                   )}
+
+                  {/* ── PARA POLİTİKASI: FAİZ KORİDORU (alt bant · politika faizi · üst bant) ── */}
+                  {aktifSekme.id==="para"&&(()=>{
+                    const pn=(ad0:string)=>{const r:any=PARA.find((x:any)=>String(x.ad).startsWith(ad0)); const v=parseFloat(String(r?.deger||"").replace("%","").replace(",",".")); return isNaN(v)?null:v;};
+                    const alt=pn("TCMB Alt Bant"), pol=pn("TCMB Politika"), ust=pn("TCMB Üst Bant");
+                    if(alt==null||pol==null||ust==null) return null;
+                    const lo=alt-1.5, hi=ust+1.5;
+                    const yz=(v:number)=>`${(((v-lo)/(hi-lo))*100).toFixed(1)}%`;
+                    const fmt=(v:number)=>`%${v.toFixed(2).replace(".",",")}`;
+                    return(
+                      <div style={{background:kartBg,border:kartKenar,borderRadius:14,padding:"16px",marginBottom:12}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
+                          <span style={{fontSize:12,color:WA(0.6)}}>TCMB Faiz Koridoru</span>
+                          <span style={{fontSize:11,color:WA(0.5)}}>Haziran 2026 · PPK</span>
+                        </div>
+                        <div style={{display:"flex",alignItems:"baseline",gap:8,marginTop:6}}>
+                          <span style={{...monoStil,fontSize:30}}>{fmt(pol)}</span>
+                          <span style={{fontSize:12,color:WA(0.6)}}>1 hafta repo</span>
+                        </div>
+                        <div style={{position:"relative",height:34,marginTop:12}}>
+                          <div style={{position:"absolute",left:0,right:0,top:15,height:4,borderRadius:2,background:WA(0.12)}}/>
+                          <div style={{position:"absolute",left:yz(alt),width:`${(((ust-alt)/(hi-lo))*100).toFixed(1)}%`,top:13,height:8,borderRadius:4,background:C.blueLight,border:`1px solid ${C.blue}`,boxSizing:"border-box"}}/>
+                          <div style={{position:"absolute",left:yz(pol),top:7,width:4,height:20,borderRadius:2,background:metinRenk,marginLeft:-2}}/>
+                        </div>
+                        <div style={{position:"relative",height:34}}>
+                          <div style={{position:"absolute",left:yz(alt),transform:"translateX(-50%)",textAlign:"center",whiteSpace:"nowrap"}}><div style={{...monoStil,fontSize:12}}>{fmt(alt)}</div><div style={{fontSize:10,color:WA(0.55)}}>Alt bant</div></div>
+                          <div style={{position:"absolute",left:yz(ust),transform:"translateX(-50%)",textAlign:"center",whiteSpace:"nowrap"}}><div style={{...monoStil,fontSize:12}}>{fmt(ust)}</div><div style={{fontSize:10,color:WA(0.55)}}>Üst bant</div></div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* ── ENFLASYON: TÜFE özet kutuları + 12 ay sonrası beklenti çubukları ── */}
+                  {aktifSekme.id==="enflasyon"&&(()=>{
+                    const bp=gY("BEKLENTI_PIYASA_12AY")?.deger, bh=gY("BEKLENTI_HANE_12AY")?.deger;
+                    const bpN=bp!=null?parseFloat(bp):null, bhN=bh!=null?parseFloat(bh):null;
+                    const mx=Math.max(bpN||0,bhN||0)||1;
+                    const fmtB=(v:number|null)=>v!=null&&!isNaN(v)?`%${v.toFixed(2).replace(".",",")}`:"—";
+                    return(
+                      <>
+                        <div style={{display:"flex",gap:10,marginBottom:10}}>
+                          {[{k:"TÜFE Yıllık",v:tufY},{k:"TÜFE Aylık",v:tufA}].map(x=>(
+                            <div key={x.k} style={{flex:1,minWidth:0,background:kartBg,border:kartKenar,borderRadius:14,padding:"14px"}}>
+                              <div style={{fontSize:12,color:WA(0.6)}}>{x.k}</div>
+                              <div style={{...monoStil,fontSize:24,marginTop:4}}>{fmtPct(x.v)}</div>
+                              <div style={{fontSize:11,color:WA(0.5),marginTop:2}}>{x.v?.tarih||"—"}</div>
+                            </div>
+                          ))}
+                        </div>
+                        {(bpN!=null||bhN!=null)&&(
+                          <div style={{background:kartBg,border:kartKenar,borderRadius:14,padding:"14px",marginBottom:12}}>
+                            <div style={{fontSize:12,color:WA(0.6),marginBottom:10}}>12 ay sonrası enflasyon beklentisi</div>
+                            {[{ad:"Piyasa katılımcıları",v:bpN,renk:C.blue},{ad:"Hanehalkı",v:bhN,renk:C.orange}].map(x=>(
+                              <div key={x.ad} style={{marginBottom:10}}>
+                                <div style={{display:"flex",justifyContent:"space-between",fontSize:13,color:metinRenk}}><span>{x.ad}</span><span style={{...monoStil,fontSize:13}}>{fmtB(x.v)}</span></div>
+                                <div style={{height:10,borderRadius:5,background:WA(0.1),marginTop:5,overflow:"hidden"}}>
+                                  <div style={{width:`${x.v!=null?Math.max(4,(x.v/mx)*100):0}%`,height:"100%",borderRadius:5,background:x.renk}}/>
+                                </div>
+                              </div>
+                            ))}
+                            <div style={{fontSize:11,color:WA(0.5)}}>Beklenti, gerçekleşen enflasyon değildir.</div>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+
+                  {/* ── MB REZERVLERİ: brüt toplam + döviz/altın dağılım çubuğu ── */}
+                  {aktifSekme.id==="risk"&&(()=>{
+                    const t=rezervToplam?.deger, d=rezervDoviz?.deger, a=rezervAltin?.deger;
+                    if(t==null) return null;
+                    const topla=(typeof d==="number"?d:0)+(typeof a==="number"?a:0);
+                    return(
+                      <div style={{background:kartBg,border:kartKenar,borderRadius:14,padding:"16px",marginBottom:12}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
+                          <span style={{fontSize:12,color:WA(0.6)}}>TCMB Brüt Rezerv</span>
+                          <span style={{fontSize:11,color:WA(0.5)}}>{rezervEtiket(rezervToplam)}</span>
+                        </div>
+                        <div style={{...monoStil,fontSize:28,marginTop:6}}>{fmtRezerv(rezervToplam)}</div>
+                        {topla>0&&typeof d==="number"&&typeof a==="number"&&(
+                          <>
+                            <div style={{display:"flex",height:14,borderRadius:7,overflow:"hidden",gap:2,marginTop:12}}>
+                              <div style={{flex:Math.max(d,0.0001),background:C.blue}}/>
+                              <div style={{flex:Math.max(a,0.0001),background:C.orange}}/>
+                            </div>
+                            <div style={{display:"flex",gap:16,marginTop:10,fontSize:11,color:WA(0.6),flexWrap:"wrap"}}>
+                              <span><i style={{display:"inline-block",width:8,height:8,borderRadius:2,marginRight:6,background:C.blue}}/>Döviz {fmtRezerv(rezervDoviz)}</span>
+                              <span><i style={{display:"inline-block",width:8,height:8,borderRadius:2,marginRight:6,background:C.orange}}/>Altın {fmtRezerv(rezervAltin)}</span>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   <div style={{marginTop:2}}>
                     {aktifSekme.id==="karpayi" ? (
@@ -37773,9 +37891,11 @@ function App(){
                             <p style={{margin:"2px 0 0",fontSize:9.5,color:(TEMA==="acik"?"#4A6178":"rgba(255,255,255,0.55)")}}>{g.tarih}{g.canli?" · canlı":""}</p>
                           </div>
                           <div style={{textAlign:"right",flexShrink:0,whiteSpace:"nowrap"}}>
-                            <p style={{margin:0,fontSize:14.5,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace"}}>{g.bilesik!=null?`%${g.bilesik}`:"—"}</p>
-                            {g.basit!=null&&<p style={{margin:"2px 0 0",fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#3D5771":"rgba(255,255,255,0.72)"),fontFamily:"monospace"}}>yıllık ≈ %{g.basit}</p>}
-                            {g.basitAylik!=null&&<p style={{margin:"1px 0 0",fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#3D5771":"rgba(255,255,255,0.72)"),fontFamily:"monospace"}}>aylık ≈ %{g.basitAylik}</p>}
+                            <p style={{margin:0,fontSize:18,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace"}}>{g.bilesik!=null?`%${g.bilesik}`:"—"}</p>
+                            <div style={{display:"flex",gap:6,marginTop:6,justifyContent:"flex-end"}}>
+                              {g.basit!=null&&<span style={{padding:"4px 8px",borderRadius:8,background:WA(0.07),fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#3D5771":"rgba(255,255,255,0.72)"),fontFamily:"monospace"}}>yıllık ≈ %{g.basit}</span>}
+                              {g.basitAylik!=null&&<span style={{padding:"4px 8px",borderRadius:8,background:WA(0.07),fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#3D5771":"rgba(255,255,255,0.72)"),fontFamily:"monospace"}}>aylık ≈ %{g.basitAylik}</span>}
+                            </div>
                           </div>
                         </div>
                         );
@@ -37797,7 +37917,10 @@ function App(){
                             {g.tarih&&<p style={{margin:"1px 0 0",fontSize:10,color:(TEMA==="acik"?"#4A6178":"rgba(255,255,255,0.55)")}}>{g.tarih}{g.canli?" · canlı":""}</p>}
                           </div>
                           <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
-                            <span style={{fontSize:13,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace",whiteSpace:"nowrap"}}>{g.deger}</span>
+                            <div style={{textAlign:"right"}}>
+                              <div style={{fontSize:13,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"monospace",whiteSpace:"nowrap"}}>{g.deger}</div>
+                              {(()=>{const om=oncekiMetin(g); return om?<div style={{fontSize:10,color:WA(0.5),marginTop:2,whiteSpace:"nowrap"}}>{om}</div>:null;})()}
+                            </div>
                             {tiklanabilir&&<span style={{color:WA(0.3),fontSize:16}}>›</span>}
                           </div>
                         </div>
