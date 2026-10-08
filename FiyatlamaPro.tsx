@@ -2644,6 +2644,78 @@ function egitimDevamHedefi(v: EgitimIlerleme): {m:EgitimModul; d:EgitimDers; ilk
   return null;
 }
 // Pro ekranına gidip dönünce kullanıcı kaldığı modüle dönsün (modül seviyesi tek kullanımlık kayıt; render'da yalnız okunur, mount efektinde silinir).
+// ── EĞİTİM SERTİFİKASI (2026-10-08) — modül sınavını en az EGITIM_GECME_NOTU ile geçene "katılım sertifikası" (A4 PDF; paylaş/kaydet) ──
+// Resmî/akredite belge DEĞİLDİR; belgede bu açıkça yazar. Ad, kullanıcının girdiği metindir (yalnız cihazda saklanır, sunucuya gitmez).
+const EGITIM_SERT_AD_KEY = "kp_egitim_sert_ad";
+function egitimSertAdGecerli(ad: string): boolean { return /^[A-Za-zÇĞİÖŞÜçğıöşüÂâÎîÛû .'’-]{3,40}$/.test((ad || "").trim()); }
+function egitimBelgeNo(uid: string | null, m: EgitimModul, p: {puan:number; tarih:string}): string {
+  let h = 2166136261; const t = `${uid || "misafir"}|${m.id}|${p.tarih}|${p.puan}`;
+  for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+  const gun = (p.tarih || "").slice(0, 10).replace(/-/g, "");
+  return `KP-${m.id.slice(0, 3).toUpperCase()}-${gun || "00000000"}-${h.toString(16).toUpperCase().padStart(8, "0")}`;
+}
+function egitimSertTarih(iso: string): string {
+  try { const d = new Date(iso); if (isNaN(d.getTime())) return ""; return d.toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" }); } catch { return ""; }
+}
+function egitimSertHtml(ad: string, m: EgitimModul, p: {puan:number; tarih:string}, belgeNo: string): string {
+  // Yatay A4 (1123×794 px). Marka renkleri: lacivert + yeşil; ortada marka amblemi (K+ logosu) mühür olarak.
+  // Ad, iOS'ta el yazısı (Snell Roundhand), diğerlerinde italik serif.
+  const lv = "#1B2A5C", yesil = "#1B9E7A", koyu = "#0F1B3D", gri = "#5B6B85";
+  const kose = (tr: string) => `<g transform="${tr}"><polygon points="0,0 250,0 0,250" fill="${lv}"/><polygon points="268,0 292,0 0,292 0,268" fill="${yesil}"/><polygon points="304,0 310,0 0,310 0,304" fill="${lv}" opacity="0.35"/></g>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1123" height="794" viewBox="0 0 1123 794" style="position:absolute;top:0;left:0">
+${kose("translate(0 0)")}${kose("translate(1123 794) scale(-1 -1)")}
+<rect x="30" y="30" width="1063" height="734" fill="none" stroke="${lv}" stroke-width="1" opacity="0.22"/>
+</svg>`;
+  return `<div style="width:1123px;height:794px;box-sizing:border-box;background:#FFFEFB;font-family:Arial,Helvetica,sans-serif;color:${koyu};position:relative;overflow:hidden">
+${svg}
+<div style="position:absolute;top:70px;left:0;right:0;text-align:center;font-size:24px;font-weight:700;letter-spacing:8px;color:${lv}">KATILIM <span style="color:${yesil}">PLUS</span></div>
+<div style="position:absolute;top:114px;left:0;right:0;text-align:center;font-size:52px;font-weight:700;letter-spacing:4px;line-height:1.1;color:${koyu}">KATILIM SERTİFİKASI</div>
+<div style="position:absolute;top:186px;left:521px;width:80px;height:4px;background:${yesil}"></div>
+<div style="position:absolute;top:222px;left:0;right:0;text-align:center;font-size:19px;color:${gri}">Bu belge</div>
+<div style="position:absolute;top:248px;left:150px;right:150px;text-align:center;font-family:'Snell Roundhand','Apple Chancery','Lucida Calligraphy',Georgia,'Times New Roman',serif;font-style:italic;font-size:64px;line-height:1.2;color:${lv};white-space:nowrap;overflow:hidden">${escapeHtml((ad || "").trim())}</div>
+<div style="position:absolute;top:334px;left:300px;right:300px;height:1px;background:${lv};opacity:0.35"></div>
+<div style="position:absolute;top:356px;left:140px;right:140px;text-align:center;font-size:20px;color:${koyu}">Katılım Plus Eğitim bölümündeki</div>
+<div style="position:absolute;top:386px;left:120px;right:120px;text-align:center;font-size:46px;font-weight:700;line-height:1.2;color:${lv}">${escapeHtml(m.ad)}</div>
+<div style="position:absolute;top:452px;left:140px;right:140px;text-align:center;font-size:20px;line-height:1.55;color:${koyu}">modülünü başarılı bir şekilde tamamladığınız için bu belgeyi almaya hak kazandınız.<br/>Başarılarınızın devamını dileriz.</div>
+<div style="position:absolute;top:566px;left:561px;margin-left:-56px;width:112px;height:112px;box-sizing:border-box;border-radius:56px;border:3px solid ${lv};background:#fff;box-shadow:0 0 0 5px #FFFEFB,0 0 0 6px ${yesil}"><img src="${KATILIM_LOGO_B64}" alt="" style="position:absolute;top:25px;left:16px;height:56px;width:auto"/></div>
+<div style="position:absolute;top:596px;left:150px;width:260px;text-align:center"><div style="font-size:16px;color:${koyu};font-weight:700">${escapeHtml(egitimSertTarih(p.tarih))}</div><div style="margin-top:4px;font-size:12px;letter-spacing:1px;color:${gri}">Tarih</div></div>
+<div style="position:absolute;top:596px;right:150px;width:260px;text-align:center"><div style="font-size:16px;color:${koyu};font-weight:700">${escapeHtml(belgeNo)}</div><div style="margin-top:4px;font-size:12px;letter-spacing:1px;color:${gri}">Belge No</div></div>
+<div style="position:absolute;bottom:52px;left:250px;right:250px;text-align:center;font-size:10.5px;line-height:1.5;color:${gri}">Bu belge, Katılım Plus uygulamasındaki eğitim içeriğini ve modül sınavını tamamlayanlara verilen bir katılım belgesidir. Resmî bir yeterlilik, lisans veya akredite sertifika değildir; yatırım, hukuk ya da vergi tavsiyesi içermez.</div>
+</div>`;
+}
+// A4 PDF üretir; native'de Paylaş menüsüne, web'de indirmeye gönderir. Dönüş: "ok" | "iptal" | "hata"
+async function egitimSertPaylas(ad: string, m: EgitimModul, p: {puan:number; tarih:string}, belgeNo: string): Promise<"ok"|"iptal"|"hata"> {
+  let div: HTMLDivElement | null = null;
+  try {
+    div = document.createElement("div");
+    div.style.cssText = "position:fixed;left:-10000px;top:0;width:1123px;height:794px;z-index:-1";
+    div.innerHTML = egitimSertHtml(ad, m, p, belgeNo);
+    document.body.appendChild(div);
+    const { default: html2canvas } = await import("html2canvas");
+    const { jsPDF } = await import("jspdf");
+    const canvas = await html2canvas(div, { scale: 2, backgroundColor: "#FFFEFB", logging: false });
+    document.body.removeChild(div); div = null;
+    const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4", compress: true });
+    pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, 297, 210);
+    const dosyaAdi = `katilimplus-sertifika-${m.id}-${Date.now()}.pdf`;
+    if (IS_NATIVE) {
+      const base64 = pdf.output("datauristring").split(",")[1];
+      const { Filesystem, Directory } = await import("@capacitor/filesystem");
+      const { Share } = await import("@capacitor/share");
+      const yazilan = await Filesystem.writeFile({ path: dosyaAdi, data: base64, directory: Directory.Cache });
+      await Share.share({ title: `Katılım Plus sertifikası — ${m.ad}`, files: [yazilan.uri] });
+    } else {
+      pdf.save(dosyaAdi);
+    }
+    try { olayGonder("egitim_sertifika", { modul: m.id, puan: p.puan }); } catch {}
+    return "ok";
+  } catch (e: any) {
+    if (div && div.parentNode) div.parentNode.removeChild(div);
+    if (e?.name === "AbortError" || /cancel/i.test(String(e?.message || ""))) return "iptal";
+    console.error("Sertifika oluşturulamadı:", e);
+    return "hata";
+  }
+}
 let egitimSonGorunum: any = null;
 
 function EgitimHalka({oran, boyut=64, kalinlik=6, renk, children}:{oran:number; boyut?:number; kalinlik?:number; renk:string; children?:any}){
@@ -2791,6 +2863,8 @@ function Egitim({kimlik, nav}:{kimlik:any; nav:(e:string)=>void}){
   const [acikSec,setAcikSec] = useState<Record<string,boolean>>({});
   const [takmaAdGiris,setTakmaAdGiris] = useState("");
   const [liderHata,setLiderHata] = useState("");
+  const [sertAd,setSertAd] = useState<string>(()=>{ try{ return localStorage.getItem(EGITIM_SERT_AD_KEY) || String(kimlik?.kullanici?.ad || ""); }catch{ return String(kimlik?.kullanici?.ad || ""); } });
+  const [sertDurum,setSertDurum] = useState<""|"hazirlaniyor"|"hata">("");
   const [liderlik,setLiderlik] = useState<{uid:string;takmaAd:string;toplam:number}[]|null|undefined>(undefined);
   const ustRef = useRef<HTMLDivElement>(null);
 
@@ -3010,6 +3084,7 @@ function Egitim({kimlik, nav}:{kimlik:any; nav:(e:string)=>void}){
           </p>
           {uyari && <p style={{margin:"0 0 8px",fontSize:12,color:C.red}}>{uyari}</p>}
           <button className="eg-btn" onClick={()=>sinavaBasla(m)} style={{width:"100%",padding:"12px 14px",borderRadius:12,border:"none",background:C.blue,color:"#fff",fontSize:14,fontWeight:700,fontFamily:"inherit",cursor:"pointer"}}>{p?"Sınavı tekrar çöz":"Sınava başla"}</button>
+          {p && p.puan>=EGITIM_GECME_NOTU && <button className="eg-btn" onClick={()=>setGor({t:"sertifika",m:m.id})} style={{width:"100%",marginTop:8,padding:"12px 14px",borderRadius:12,border:"none",background:"#D8A94E",color:"#3B2A05",fontSize:14,fontWeight:700,fontFamily:"inherit",cursor:"pointer"}}>🎓 Sertifikanı al</button>}
         </div>
       </div>
     );
@@ -3090,6 +3165,7 @@ function Egitim({kimlik, nav}:{kimlik:any; nav:(e:string)=>void}){
           <p style={{margin:"4px 0 0",fontSize:13,color:C.sub}}>{m.ad} · {gor.dogru} / {gor.toplam} doğru</p>
           {gecti && <p className="eg-pop" style={{margin:"8px 0 0",display:"inline-block",fontSize:12,fontWeight:700,padding:"3px 10px",borderRadius:10,background:C.greenLight,color:C.green}}>🏅 {m.kisa} rozeti</p>}
           {gor.yeniEnIyi && <p style={{margin:"8px 0 0",fontSize:12,fontWeight:700,color:C.green}}>Yeni en iyi puanın</p>}
+          {gecti && <button className="eg-btn" onClick={()=>setGor({t:"sertifika",m:m.id})} style={{display:"block",width:"100%",marginTop:12,padding:"11px 12px",borderRadius:12,border:"none",background:"#D8A94E",color:"#3B2A05",fontSize:14,fontWeight:700,fontFamily:"inherit",cursor:"pointer"}}>🎓 Sertifikanı al</button>}
           <p style={{margin:"8px 0 0",fontSize:12,color:C.sub}}>Toplam puanın: {toplamPuan} / {EGITIM_MODULLERI.length*100}</p>
         </div>
         {uid && !ilerleme.listede && toplamPuan>0 && katilKarti()}
@@ -3113,6 +3189,55 @@ function Egitim({kimlik, nav}:{kimlik:any; nav:(e:string)=>void}){
         <button onClick={()=>setGor({t:"modul",m:m.id})} style={{width:"100%",marginTop:8,padding:"10px 12px",borderRadius:12,border:"none",background:"transparent",color:C.sub,fontSize:13,fontFamily:"inherit",cursor:"pointer"}}>Modüle dön</button>
       </div>
     );
+  }
+
+  // ── SERTİFİKA ──
+  if(gor.t==="sertifika"){
+    const m = modulBul(gor.m);
+    const p = ilerleme.puanlar[m.id];
+    if(!p || p.puan<EGITIM_GECME_NOTU){
+      icerik = (
+        <div style={{padding:"0 14px 26px"}}>
+          <EgitimGeri onClick={()=>setGor({t:"modul",m:m.id})} etiket={m.kisa}/>
+          <div style={{...kart,textAlign:"center"}}>
+            <p style={{margin:0,fontSize:14,lineHeight:1.5,color:C.sub}}>Sertifika için {m.ad} modül sınavını en az {EGITIM_GECME_NOTU} puanla geçmelisin.</p>
+          </div>
+        </div>
+      );
+    } else {
+      const gecerli = egitimSertAdGecerli(sertAd);
+      const belgeNo = egitimBelgeNo(uid, m, p);
+      const genis = Math.min(typeof window!=="undefined" ? window.innerWidth : 390, 520) - 28;
+      const olcek = Math.max(0.2, Math.min(0.5, genis/1123));
+      const paylas = async()=>{
+        if(!gecerli || sertDurum==="hazirlaniyor") return;
+        try{ localStorage.setItem(EGITIM_SERT_AD_KEY, sertAd.trim()); }catch{}
+        setSertDurum("hazirlaniyor");
+        const r = await egitimSertPaylas(sertAd, m, p, belgeNo);
+        setSertDurum(r==="hata" ? "hata" : "");
+      };
+      icerik = (
+        <div style={{padding:"0 14px 26px"}}>
+          <EgitimGeri onClick={()=>setGor({t:"modul",m:m.id})} etiket={m.kisa}/>
+          <div style={kart}>
+            <p style={{margin:"0 0 6px",fontSize:14,fontWeight:700,color:C.label}}>🎓 Katılım sertifikan</p>
+            <p style={{margin:"0 0 10px",fontSize:12,lineHeight:1.5,color:C.sub}}>{m.ad} modül sınavını {p.puan} puanla geçtin. Sertifikada görünecek adı yaz. Yatay A4 PDF olarak kaydedilir.</p>
+            <input value={sertAd} onChange={e=>setSertAd(e.target.value.slice(0,40))} placeholder="Ad Soyad" autoComplete="name" maxLength={40}
+              style={{width:"100%",boxSizing:"border-box",padding:"11px 12px",borderRadius:10,border:`1px solid ${sertAd && !gecerli ? C.red : C.border}`,background:"transparent",color:C.label,fontSize:15,fontFamily:"inherit",outline:"none"}}/>
+            {sertAd && !gecerli && <p style={{margin:"6px 0 0",fontSize:11.5,color:C.red}}>3–40 karakter; yalnızca harf, boşluk ve . ' - kullan.</p>}
+          </div>
+          <div style={{width:1123*olcek,height:794*olcek,margin:"12px auto",overflow:"hidden",borderRadius:6,boxShadow:"0 2px 14px rgba(0,0,0,0.28)"}}>
+            <div style={{width:1123,height:794,transform:`scale(${olcek})`,transformOrigin:"top left"}} dangerouslySetInnerHTML={{__html: egitimSertHtml(gecerli ? sertAd : "Ad Soyad", m, p, belgeNo)}}/>
+          </div>
+          {sertDurum==="hata" && <p style={{margin:"0 0 8px",fontSize:12,color:C.red}}>Sertifika oluşturulamadı. Bağlantını kontrol edip tekrar dene.</p>}
+          <button className="eg-btn" disabled={!gecerli || sertDurum==="hazirlaniyor"} onClick={paylas}
+            style={{width:"100%",padding:"13px 14px",borderRadius:12,border:"none",background:C.blue,color:"#fff",fontSize:14,fontWeight:700,fontFamily:"inherit",cursor:gecerli?"pointer":"default",opacity:gecerli?1:0.45}}>
+            {sertDurum==="hazirlaniyor" ? "Hazırlanıyor…" : (IS_NATIVE ? "PDF olarak paylaş / kaydet" : "PDF olarak indir")}
+          </button>
+          <p style={{margin:"10px 2px 0",fontSize:11,lineHeight:1.5,color:C.sub2}}>Bu belge katılım belgesidir; resmî bir yeterlilik veya akredite sertifika değildir. Girdiğin ad yalnızca bu cihazda saklanır.</p>
+        </div>
+      );
+    }
   }
 
   // ── LİDERLİK ──
