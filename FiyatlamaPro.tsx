@@ -250,6 +250,23 @@ async function kpProDurumGetir(uid:string): Promise<KpProDurum>{
   }catch(e){
     console.error("Pro durumu okunamadı:", e);
     kpTaniYaz("fs", "hata:" + String((e as any)?.code || (e as any)?.message || e));
+    // 2026-10-08: Firestore'a doğrudan ulaşılamıyorsa (ağ/eklenti engeli → zaman aşımı) web'de sunucu üzerinden dene (kimlik: Firebase ID token'ı).
+    if (!IS_NATIVE) {
+      try {
+        const t = await kpIdTokenAl();
+        if (t) {
+          const c = new AbortController(); const z = setTimeout(() => c.abort(), 8000);
+          const r = await fetch(`${API_BASE}/api/bildirim?islem=pro-durum`, { method: "POST", headers: { "Content-Type": "application/json", "x-firebase-idtoken": t }, body: "{}", signal: c.signal });
+          clearTimeout(z);
+          if (r.ok) {
+            const j: any = await r.json();
+            kpTaniYaz("fs", "sunucu:aktif=" + String(j?.aktif));
+            return { aktif: !!j?.aktif || revenueCatAktif, bitisTarihi: j?.bitisTarihi || null, kaynak: j?.aktif ? (j?.kaynak || null) : (revenueCatAktif ? "revenuecat" : null) };
+          }
+          kpTaniYaz("fs", "sunucu-http:" + r.status);
+        } else kpTaniYaz("fs", "sunucu:token-yok");
+      } catch (e2) { kpTaniYaz("fs", "sunucu-hata:" + String((e2 as any)?.name || e2)); }
+    }
     return { aktif:revenueCatAktif, bitisTarihi:null, kaynak:revenueCatAktif?"revenuecat":null };
   }
 }
