@@ -2026,6 +2026,28 @@ async function alarmKimlikUid(req, govdeUid) {
   return process.env.ALARM_UID_ZORUNLU === "1" ? null : aday;
 }
 
+// ── PRO DURUMU (web yedek yolu, 2026-10-08) ──
+// Masaüstü tarayıcı Pro'yu doğrudan Firestore'dan okur; bazı ağ/eklenti ortamlarında o bağlantı ASILIP kalıyor ve Pro kullanıcı "Ücretsiz" görünüyordu.
+// Bu uç, Firebase ID token'ı (x-firebase-idtoken) ile kimliği DOĞRULAYIP YALNIZ kendi pro/{uid} belgesinin özetini döndürür (token yoksa 401).
+async function proDurumGetir(req, res) {
+  const h = req.headers["x-firebase-idtoken"];
+  if (typeof h !== "string" || !h || h.length > 4096) { res.status(401).json({ hata: "Kimlik gerekli" }); return; }
+  let uid;
+  try { uid = (await admin.auth().verifyIdToken(h, true)).uid; }
+  catch (_) { res.status(401).json({ hata: "Geçersiz oturum" }); return; }
+  try {
+    const snap = await admin.firestore().collection("pro").doc(uid).get();
+    if (!snap.exists) { res.status(200).json({ aktif: false, bitisTarihi: null, kaynak: null }); return; }
+    const d = snap.data() || {};
+    const bitisTarihi = typeof d.bitisTarihi === "string" ? d.bitisTarihi : null;
+    const dolmus = bitisTarihi ? new Date(bitisTarihi).getTime() < Date.now() : false;
+    res.status(200).json({ aktif: !!d.aktif && !dolmus, bitisTarihi, kaynak: typeof d.kaynak === "string" ? d.kaynak : null });
+  } catch (e) {
+    console.error("pro-durum hatasi:", e.message);
+    res.status(500).json({ hata: "Pro durumu okunamadı" });
+  }
+}
+
 async function alarmHesabaBagla(req, res) {
   let { token, uid } = req.body || {};
   uid = await alarmKimlikUid(req, uid);
@@ -3153,6 +3175,8 @@ export default async function handler(req, res) {
       await haberBildirimAyarla(req, res);
     } else if (islem === "haber-bildirim-gonder") {
       await haberBildirimGonder(req, res);
+    } else if (islem === "pro-durum") {
+      await proDurumGetir(req, res);
     } else if (islem === "firebase-oturum") {
       await firebaseOturum(req, res);
     } else if (islem === "revenuecat-webhook") {
