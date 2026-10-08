@@ -36832,7 +36832,8 @@ function App(){
           background:aktif?vurguBg:"transparent", color:aktif?vurguYazi:yazi, cursor:"pointer",
         });
         return (
-        <div style={{position:"fixed",top:SERIT_YUKSEKLIK,left:0,bottom:0,width:SIDEBAR_W,zIndex:80,
+        <div ref={(el:any)=>{ if(el && !el.__kpWheel){ el.__kpWheel=true; el.addEventListener("wheel",(e:any)=>{ if(!e.target.closest || !e.target.closest("[data-kp-sidescroll]")) e.preventDefault(); },{passive:false}); } }}
+          style={{position:"fixed",top:SERIT_YUKSEKLIK,left:0,bottom:0,width:SIDEBAR_W,zIndex:80,
           display:"flex",flexDirection:"column",boxSizing:"border-box",fontFamily:FONT_STACK_MASAUSTU,
           background:acik?"#FFFFFF":"linear-gradient(180deg,#101C29 0%,#0C1622 100%)",
           borderRight:`1px solid ${WA(0.07)}`,boxShadow:"4px 0 24px rgba(0,0,0,0.25)",padding:"14px 14px 12px"}}>
@@ -36871,7 +36872,7 @@ function App(){
             )}
           </div>
           {/* Kaydırılan orta bölüm: ana gezinme + gruplar */}
-          <div style={{flex:1,minHeight:0,overflowY:"auto",margin:"0 -8px",padding:"0 8px"}}>
+          <div data-kp-sidescroll="1" style={{flex:1,minHeight:0,overflowY:"auto",overscrollBehavior:"contain",margin:"0 -8px",padding:"0 8px"}}>
             <div style={{display:"flex",flexDirection:"column",gap:2}}>
               {ALT_BAR_SEKMELERI.map(t=>{
                 const aktif=TAB_OF_SCREEN[screen]===t.tab;
@@ -38740,6 +38741,9 @@ function App(){
                 <span style={{flex:1}}/>
                 <button onClick={()=>kimlik.cikisYap()} style={{padding:"5px 11px",borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",color:C.red,fontSize:11.5,fontWeight:700,cursor:"pointer",flexShrink:0}}>{CV("Çıkış Yap")}</button>
               </div>
+              {!IS_NATIVE && !kimlik.proYukleniyor && !kimlik.pro.aktif && (
+                <p style={{margin:"8px 0 0",fontSize:10.5,color:WA(0.45),wordBreak:"break-all"}}>{"Pro tanı → RevenueCat: "+(kpTani.rc||"-")+" · Firestore: "+(kpTani.fs||"-")+" · uid: "+(kpTani.uid||"-")}</p>
+              )}
             </div>
             ) : (
             /* ⚠️ 2026-09-21 (kullanıcı isteği: "şu şekilde hesap oluştur
