@@ -36662,6 +36662,8 @@ function App(){
           box-shadow: 0 0 0 3px rgba(91,155,216,0.25);
           caret-color: #5B9BD8;
         }
+        /* 2026-10-08: ana menü arama kutusunda içteki girdiye ayrıca mavi çerçeve/halka çıkmasın (kutunun kendisi odak durumunu gösterir) */
+        input.kp-menu-arama:focus { border-color: transparent !important; box-shadow: none !important; }
         /* ── BASILI TUTUNCA METİN SEÇİLMESİNİ ENGELLE (2026-08-10) ────────
            Kartları sürüklerken iOS parmak basılı tutulduğu anda metin seçimi
            ve büyüteci devreye sokuyordu; mavi seçim alanı sürüklemenin üstüne
@@ -39213,8 +39215,8 @@ function App(){
                   })
                 :[];
               return(
-                <div style={{marginBottom:genisEkran?0:10,position:"relative",...(genisEkran?{flex:1,minWidth:0,maxWidth:560}:{})}}>
-                  <div style={{display:"flex",alignItems:"center",background:WA(0.07),borderRadius:12,border:menuAramaOdakli?`1.5px solid ${C.blue}`:`1px solid ${WA(0.12)}`,padding:"0 12px",boxShadow:(menuAramaOdakli&&!genisEkran)?`0 0 0 3px ${C.blueLight}`:"none",transition:"border-color 0.15s, box-shadow 0.15s"}}>
+                <div style={{marginBottom:genisEkran?0:10,position:"relative",...(genisEkran?{flex:1,minWidth:0}:{})}}>
+                  <div style={{display:"flex",alignItems:"center",background:WA(0.07),borderRadius:12,border:(menuAramaOdakli&&!genisEkran)?`1.5px solid ${C.blue}`:`1px solid ${WA(0.12)}`,padding:"0 12px",boxShadow:(menuAramaOdakli&&!genisEkran)?`0 0 0 3px ${C.blueLight}`:"none",transition:"border-color 0.15s, box-shadow 0.15s"}}>
                     <span style={{fontSize:14,color:WA(0.4),marginRight:8}}>🔍</span>
                     {/* ── OTOMATİK DOLDURMA KAPALI (2026-08-01) ────────────────
                         Android'de (Gboard/Samsung klavye) bu alan bir "isim"
@@ -39235,6 +39237,7 @@ function App(){
                       autoCapitalize="off"
                       spellCheck={false}
                       data-form-type="other"
+                      className="kp-menu-arama"
                       aria-label={CV("Menülerde ara…")}
                       value={menuAramaQ}
                       onChange={e=>setMenuAramaQ(e.target.value)}
