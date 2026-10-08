@@ -35933,7 +35933,6 @@ function App(){
   // Masaüstü sağ alt App Store QR kartı (Fonoloji tarzı); kapatınca bir daha çıkmaz
   const [qrPopupKapali,setQrPopupKapali]=useState<boolean>(false);
   // Masaüstü yan menü (2026-10-08): arama metni + grupların açık/kapalı tercihi (cihazda saklanır)
-  const [sideAramaQ,setSideAramaQ]=useState("");
   const [sideGrupAcik,setSideGrupAcik]=useState<Record<string,boolean>>(()=>{ try{ return JSON.parse(localStorage.getItem("kp_side_gruplar")||"{}")||{}; }catch{ return {}; } });
   // DÜZELTME (2026-07-16): Eskiden bu tercih localStorage'a kalıcı
   // yazılıyordu — kullanıcı bir kere kapatınca sayfa yenilense bile bir
@@ -36830,11 +36829,6 @@ function App(){
         const vurguYazi = acik?"#1D4ED8":"#7DB0FF";
         const kutuBg = acik?"#F3F6FA":"rgba(255,255,255,0.05)";
         const kutuKenar = acik?"#DCE4EE":"rgba(255,255,255,0.09)";
-        const q = sideAramaQ.trim().toUpperCase();
-        const sonuclar = q.length>1 ? MENU_ARAMA_LIST.filter((m:any)=>
-          m.label.toUpperCase().includes(q) || CV(m.label).toUpperCase().includes(q) || m.grup.toUpperCase().includes(q) ||
-          (m.alt && m.alt.some((k:string)=>k.toUpperCase().includes(q)))).slice(0,8) : [];
-        const git = (key:string)=>{ nav(key); setSideAramaQ(""); };
         const kul:any = kimlik?.kullanici || null;
         const adGoster = (kul && (kul.ad || (kul.email ? String(kul.email).split("@")[0] : ""))) || "";
         const proAktif = !!(kimlik && kimlik.pro && kimlik.pro.aktif);
@@ -36861,32 +36855,6 @@ function App(){
               <span style={{fontSize:18,fontWeight:700,letterSpacing:"-0.01em",color:acik?"#16222E":"#EAF1FA"}}>Katılım <span style={{background:"linear-gradient(90deg,#1B9E7A,#2CCB9A)",WebkitBackgroundClip:"text",backgroundClip:"text",color:"transparent"}}>Plus</span></span>
               <span style={{fontSize:11,fontWeight:600,color:soluk,marginTop:1,whiteSpace:"nowrap"}}>{CV("Katılım Finansının Akıllı Asistanı")}</span>
             </div>
-          </div>
-          {/* Arama */}
-          <div style={{position:"relative",marginBottom:12}}>
-            <div style={{display:"flex",alignItems:"center",gap:8,height:40,borderRadius:10,background:kutuBg,border:`1px solid ${kutuKenar}`,padding:"0 12px",color:soluk}}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}><path d="M11 4a7 7 0 100 14 7 7 0 000-14zM21 21l-5-5"/></svg>
-              <input type="search" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} data-form-type="other"
-                aria-label={CV("Menülerde ara…")} placeholder={CV("Menülerde ara…")} value={sideAramaQ}
-                onChange={e=>setSideAramaQ(e.target.value)}
-                onKeyDown={e=>{ if(e.key==="Enter" && sonuclar[0]) git(sonuclar[0].key); if(e.key==="Escape") setSideAramaQ(""); }}
-                style={{flex:1,minWidth:0,background:"transparent",border:"none",outline:"none",color:yazi,fontSize:13.5,fontFamily:"inherit",WebkitAppearance:"none"} as any}/>
-              {sideAramaQ && <span onClick={()=>setSideAramaQ("")} style={{fontSize:15,color:cokSoluk,cursor:"pointer",padding:"0 2px"}}>✕</span>}
-            </div>
-            {q.length>1 && (
-              <div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:60,marginTop:4,borderRadius:12,overflow:"hidden",background:acik?"#FFFFFF":"#1A2633",border:`1px solid ${kutuKenar}`,boxShadow:"0 10px 30px rgba(0,0,0,0.3)"}}>
-                {sonuclar.length===0 && <div style={{padding:"14px",textAlign:"center",fontSize:12.5,color:cokSoluk}}>{CV("Sonuç bulunamadı")}</div>}
-                {sonuclar.map((m:any,i:number)=>(
-                  <div key={m.key} className="kp-side-item" onClick={()=>git(m.key)} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderBottom:i<sonuclar.length-1?`1px solid ${kutuKenar}`:"none"}}>
-                    <span style={{width:20,display:"flex",justifyContent:"center",flexShrink:0}}><Icon k={m.key} size={16}/></span>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:12.5,fontWeight:600,color:yazi,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{CV(m.label)}</div>
-                      <div style={{fontSize:10.5,color:cokSoluk,marginTop:1}}>{CV(m.grup)}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
           {/* Kaydırılan orta bölüm: ana gezinme + gruplar */}
           <div data-kp-sidescroll="1" style={{flex:1,minHeight:0,overflowY:"auto",overscrollBehavior:"contain",margin:"0 -8px",padding:"0 8px"}}>
@@ -39245,8 +39213,8 @@ function App(){
                   })
                 :[];
               return(
-                <div style={{marginBottom:genisEkran?0:10,position:"relative",...(genisEkran?{flex:1,minWidth:0}:{})}}>
-                  <div style={{display:"flex",alignItems:"center",background:WA(0.07),borderRadius:12,border:menuAramaOdakli?`1.5px solid ${C.blue}`:`1px solid ${WA(0.12)}`,padding:"0 12px",boxShadow:menuAramaOdakli?`0 0 0 3px ${C.blueLight}`:"none",transition:"border-color 0.15s, box-shadow 0.15s"}}>
+                <div style={{marginBottom:genisEkran?0:10,position:"relative",...(genisEkran?{flex:1,minWidth:0,maxWidth:560}:{})}}>
+                  <div style={{display:"flex",alignItems:"center",background:WA(0.07),borderRadius:12,border:menuAramaOdakli?`1.5px solid ${C.blue}`:`1px solid ${WA(0.12)}`,padding:"0 12px",boxShadow:(menuAramaOdakli&&!genisEkran)?`0 0 0 3px ${C.blueLight}`:"none",transition:"border-color 0.15s, box-shadow 0.15s"}}>
                     <span style={{fontSize:14,color:WA(0.4),marginRight:8}}>🔍</span>
                     {/* ── OTOMATİK DOLDURMA KAPALI (2026-08-01) ────────────────
                         Android'de (Gboard/Samsung klavye) bu alan bir "isim"
