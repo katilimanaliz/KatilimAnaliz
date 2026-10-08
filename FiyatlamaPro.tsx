@@ -26205,6 +26205,31 @@ const TAB_OF_SCREEN:any = {
   profil:"profil",
 };
 
+// Masaüstü yan menü grupları (2026-10-08): ESKİ menüyle AYNI ekran anahtarları; yalnızca açılıp kapanma eklendi.
+const SIDEBAR_GRUPLARI: {baslik:string; varsayilanAcik:boolean; ogeler:{key:string;label:string}[]}[] = [
+  {baslik:"PİYASA & TAKİP", varsayilanAcik:true, ogeler:[
+    {key:"getiriKarsilastirma",label:"Getiri Karşılaştırma"},
+    {key:"haftalikOzet",label:"Haftalık Piyasa Özeti"},
+    {key:"finansalTakvim",label:"Finansal Takvim"},
+    {key:"fiyatAlarmlarim",label:"Fiyat Alarmlarım"},
+    {key:"piyasaHaberleri",label:"Piyasa Haberleri"},
+  ]},
+  {baslik:"PORTFÖY", varsayilanAcik:true, ogeler:[
+    {key:"portfoyum",label:"Portföyüm"},
+    {key:"musteriPortfoyum",label:"Müşteri Portföyüm"},
+  ]},
+  {baslik:"BİLGİ", varsayilanAcik:false, ogeler:[
+    {key:"egitim",label:"Eğitim"},
+    {key:"kiraSertifikasi",label:"Kira Sertifikası İhraçları"},
+    {key:"katilimBankalari",label:"Katılım Bankaları"},
+    {key:"icazetBelgeleri",label:"İcazet Belgeleri"},
+    {key:"kfkNedir",label:"Katılım Finans Kefalet (KFK) Nedir?"},
+    {key:"katilimSektoru",label:"Katılım Bankacılığı Sektörü"},
+    {key:"ekonomiSozluk",label:"Ekonomi Sözlüğü"},
+    {key:"zekatHesabi",label:"Zekât Hesaplayıcı"},
+    {key:"sozluk",label:"Finans Sözlüğü"},
+  ]},
+];
 const ALT_BAR_SEKMELERI = [
   {tab:"home",      key:"home",        tip:"home",      label:"Ana Sayfa"},
   {tab:"hesapla",   key:"hesaplaMenu", tip:"hesapla",   label:"Hesapla"},
@@ -35890,6 +35915,9 @@ function App(){
   });
   // Masaüstü sağ alt App Store QR kartı (Fonoloji tarzı); kapatınca bir daha çıkmaz
   const [qrPopupKapali,setQrPopupKapali]=useState<boolean>(false);
+  // Masaüstü yan menü (2026-10-08): arama metni + grupların açık/kapalı tercihi (cihazda saklanır)
+  const [sideAramaQ,setSideAramaQ]=useState("");
+  const [sideGrupAcik,setSideGrupAcik]=useState<Record<string,boolean>>(()=>{ try{ return JSON.parse(localStorage.getItem("kp_side_gruplar")||"{}")||{}; }catch{ return {}; } });
   // DÜZELTME (2026-07-16): Eskiden bu tercih localStorage'a kalıcı
   // yazılıyordu — kullanıcı bir kere kapatınca sayfa yenilense bile bir
   // daha hiç görünmüyordu. Artık sadece o oturumda (React state) gizleniyor;
@@ -36772,135 +36800,132 @@ function App(){
         </div>
       )}
       {/* ── MASAÜSTÜ YAN MENÜ (sadece geniş ekran web) ── */}
-      {genisEkran&&(
+      {/* 2026-10-08 YENİ TASARIM (kullanıcı: "masaüstü sol taraf tasarımı değiştirelim", seçilen öneri A): marka + arama + ana gezinme
+          (sol çizgili aktif satır) + açılıp kapanan gruplar (Piyasa & Takip / Portföy / Bilgi; aktif sayfanın grubu hep açık, tercih
+          localStorage'da) + sabit alt blok (hesap kartı, Ayarlar). Tüm ekran anahtarları (SIDEBAR_GRUPLARI) ESKİSİYLE AYNI.
+          Yazı tipi artık açıkça verilir (menü kök sarmalayıcının dışında olduğu için tarayıcının serif varsayılanına düşüyordu). */}
+      {genisEkran&&(()=>{
+        const acik = TEMA==="acik";
+        const yazi = acik?"#1B2C3D":"#E4EDF8";
+        const soluk = acik?"#4A6178":"rgba(255,255,255,0.62)";
+        const cokSoluk = acik?"#6B7F94":"rgba(255,255,255,0.48)";
+        const vurguBg = acik?"#DCE8FD":"rgba(59,130,246,0.16)";
+        const vurguYazi = acik?"#1D4ED8":"#7DB0FF";
+        const kutuBg = acik?"#F3F6FA":"rgba(255,255,255,0.05)";
+        const kutuKenar = acik?"#DCE4EE":"rgba(255,255,255,0.09)";
+        const q = sideAramaQ.trim().toUpperCase();
+        const sonuclar = q.length>1 ? MENU_ARAMA_LIST.filter((m:any)=>
+          m.label.toUpperCase().includes(q) || CV(m.label).toUpperCase().includes(q) || m.grup.toUpperCase().includes(q) ||
+          (m.alt && m.alt.some((k:string)=>k.toUpperCase().includes(q)))).slice(0,8) : [];
+        const git = (key:string)=>{ nav(key); setSideAramaQ(""); };
+        const kul:any = kimlik?.kullanici || null;
+        const adGoster = (kul && (kul.ad || (kul.email ? String(kul.email).split("@")[0] : ""))) || "";
+        const proAktif = !!(kimlik && kimlik.pro && kimlik.pro.aktif);
+        const grupAcikMi = (g:any) => g.ogeler.some((o:any)=>o.key===screen) || (sideGrupAcik[g.baslik] ?? g.varsayilanAcik);
+        const grupDegistir = (g:any) => {
+          const yeni = { ...sideGrupAcik, [g.baslik]: !grupAcikMi(g) };
+          setSideGrupAcik(yeni);
+          try{ localStorage.setItem("kp_side_gruplar", JSON.stringify(yeni)); }catch{}
+        };
+        const satir = (aktif:boolean, yuksek:number) => ({
+          position:"relative" as const, display:"flex", alignItems:"center", gap:12, height:yuksek, padding:"0 12px", borderRadius:10, boxSizing:"border-box" as const,
+          background:aktif?vurguBg:"transparent", color:aktif?vurguYazi:yazi, cursor:"pointer",
+        });
+        return (
         <div style={{position:"fixed",top:SERIT_YUKSEKLIK,left:0,bottom:0,width:SIDEBAR_W,zIndex:80,
-          display:"flex",flexDirection:"column",boxSizing:"border-box",overflowY:"auto",
-          // ⚠️ 2026-09-15 (kullanıcı kararı: "sol menü rengi eski haline
-          // getirelim"): bir önceki turda TEK RENK (her iki temada koyu)
-          // yapılmıştı, kullanıcı denedi ve TEMA'ya göre değişen ESKİ
-          // davranışa dönülmesini istedi. Gruplama (Piyasa & Takip / Portföy
-          // / Bilgi) KALDI — yalnızca renk geri alındı.
-          background:TEMA==="acik"?"linear-gradient(180deg,#FFFFFF 0%,#EDF1F6 100%)":"linear-gradient(180deg,#101C29 0%,#0C1622 100%)",
-          borderRight:`1px solid ${WA(0.07)}`,
-          /* 2026-09-14: üst dolgu 22→10 — kullanıcı "soldaki header en üstten
-             başlasın" dedi; marka artık şeridin hemen altında. */
-          boxShadow:"4px 0 24px rgba(0,0,0,0.35)",padding:"10px 14px 16px"}}>
+          display:"flex",flexDirection:"column",boxSizing:"border-box",fontFamily:FONT_STACK_MASAUSTU,
+          background:acik?"#FFFFFF":"linear-gradient(180deg,#101C29 0%,#0C1622 100%)",
+          borderRight:`1px solid ${WA(0.07)}`,boxShadow:"4px 0 24px rgba(0,0,0,0.25)",padding:"14px 14px 12px"}}>
           {/* Marka */}
-          {/* ⚠️ 2026-09-21 (kullanıcı isteği: "marka ve altındaki sloganı
-              biraz büyütelim"): logo 42→48px, "Katılım Plus" 16→18px,
-              slogan 10→11px — oranlar korunarak bir kademe büyütüldü. */}
-          <div onClick={()=>nav("home")} style={{display:"flex",alignItems:"center",gap:11,padding:"2px 8px 18px",cursor:"pointer",borderBottom:`1px solid ${WA(0.07)}`,marginBottom:14}}>
-            {/* ⚠️ 2026-09-21 (kullanıcı isteği: "diğerlerinde de aynısı
-                varsa öyle yapalım"): mobil ana sayfadakiyle AYNI düzeltme —
-                beyaz zemin/gölge kaldırıldı, logo kendi boyutu (32→38px)
-                büyütüldü. */}
-            {/* ⚠️ 2026-09-21 (kullanıcı isteği: "Koyu modda k harfi koyu
-                olmayacak, yine aynı beyaz zemin aynı olacak öyle mi
-                yaptın"): "kutu yok" + "koyu modda görünür olsun" isteği
-                birlikte ancak logonun KENDİSİNİ koyu modda yeniden
-                renklendirerek (KATILIM_LOGO_KOYU_B64 — K harfi beyaza
-                çevrildi, teal bar/swoosh AYNI kaldı, PIL ile üretildi)
-                sağlanabiliyor — bir arka plan kutusu DEĞİL. Açık modda
-                orijinal (lacivert K) logo, koyu modda bu yeniden
-                renklendirilmiş logo kullanılıyor; ikisinde de zemin YOK. */}
-            <div style={{width:48,height:48,borderRadius:24,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-              <img src={TEMA==="koyu"?KATILIM_LOGO_KOYU_B64:KATILIM_LOGO_B64} alt="" style={{height:38,width:"auto",display:"block"}}/>
-            </div>
+          <div onClick={()=>nav("home")} style={{display:"flex",alignItems:"center",gap:11,padding:"0 6px 14px",cursor:"pointer"}}>
+            <img src={TEMA==="koyu"?KATILIM_LOGO_KOYU_B64:KATILIM_LOGO_B64} alt="" style={{height:38,width:"auto",display:"block",flexShrink:0}}/>
             <div style={{display:"flex",flexDirection:"column",minWidth:0}}>
-              <span style={{fontSize:18,fontWeight:700,letterSpacing:"-0.01em",color:(TEMA==="acik"?"#16222E":"#EAF1FA")}}>Katılım <span style={{background:"linear-gradient(90deg,#1B9E7A,#2CCB9A)",WebkitBackgroundClip:"text",backgroundClip:"text",color:"transparent"}}>Plus</span></span>
-              <span style={{fontSize:11,fontWeight:600,color:(TEMA==="acik"?"#274762":"rgba(255,255,255,0.72)"),marginTop:1,whiteSpace:"nowrap"}}>{CV("Katılım Finansının Akıllı Asistanı")}</span>
+              <span style={{fontSize:18,fontWeight:700,letterSpacing:"-0.01em",color:acik?"#16222E":"#EAF1FA"}}>Katılım <span style={{background:"linear-gradient(90deg,#1B9E7A,#2CCB9A)",WebkitBackgroundClip:"text",backgroundClip:"text",color:"transparent"}}>Plus</span></span>
+              <span style={{fontSize:11,fontWeight:600,color:soluk,marginTop:1,whiteSpace:"nowrap"}}>{CV("Katılım Finansının Akıllı Asistanı")}</span>
             </div>
           </div>
-          {/* Ana gezinme (alt bar sekmelerinin masaüstü karşılığı) */}
-          <div style={{display:"flex",flexDirection:"column",gap:3}}>
-            {ALT_BAR_SEKMELERI.map(t=>{
-              const aktif=TAB_OF_SCREEN[screen]===t.tab;
-              return(
-                <div key={t.tab} className="kp-side-item" onClick={()=>nav(t.key)} style={{
-                  display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:12,boxSizing:"border-box",
-                  background:aktif?"linear-gradient(90deg,rgba(91,155,216,0.18),rgba(91,155,216,0.05))":"transparent",
-                  borderLeft:aktif?"3px solid #5B9BD8":"3px solid transparent",
-                }}>
-                  <AltBarIcon tip={t.tip} aktif={aktif}/>
-                  <span style={{
-                    fontSize:14.5,
-                    fontWeight:aktif?800:600,
-                    letterSpacing:"0.005em",
-                    // 2026-07-30: Önceden pasif öğeler koyu temada
-                    // rgba(255,255,255,0.85), açık temada aynı #16222E ile
-                    // yazılıyordu ve gradyan arka planda siliniyordu. Artık
-                    // iki temada da tam opak renk + daha kalın punto.
-                    color:aktif
-                      ? (TEMA==="acik"?"#0F3B66":"#FFFFFF")
-                      : (TEMA==="acik"?"#1B2C3D":"#E4EDF8"),
-                  }}>{CV(t.label)}</span>
+          {/* Arama */}
+          <div style={{position:"relative",marginBottom:12}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,height:40,borderRadius:10,background:kutuBg,border:`1px solid ${kutuKenar}`,padding:"0 12px",color:soluk}}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}><path d="M11 4a7 7 0 100 14 7 7 0 000-14zM21 21l-5-5"/></svg>
+              <input type="search" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} data-form-type="other"
+                aria-label={CV("Menülerde ara…")} placeholder={CV("Menülerde ara…")} value={sideAramaQ}
+                onChange={e=>setSideAramaQ(e.target.value)}
+                onKeyDown={e=>{ if(e.key==="Enter" && sonuclar[0]) git(sonuclar[0].key); if(e.key==="Escape") setSideAramaQ(""); }}
+                style={{flex:1,minWidth:0,background:"transparent",border:"none",outline:"none",color:yazi,fontSize:13.5,fontFamily:"inherit",WebkitAppearance:"none"} as any}/>
+              {sideAramaQ && <span onClick={()=>setSideAramaQ("")} style={{fontSize:15,color:cokSoluk,cursor:"pointer",padding:"0 2px"}}>✕</span>}
+            </div>
+            {q.length>1 && (
+              <div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:60,marginTop:4,borderRadius:12,overflow:"hidden",background:acik?"#FFFFFF":"#1A2633",border:`1px solid ${kutuKenar}`,boxShadow:"0 10px 30px rgba(0,0,0,0.3)"}}>
+                {sonuclar.length===0 && <div style={{padding:"14px",textAlign:"center",fontSize:12.5,color:cokSoluk}}>{CV("Sonuç bulunamadı")}</div>}
+                {sonuclar.map((m:any,i:number)=>(
+                  <div key={m.key} className="kp-side-item" onClick={()=>git(m.key)} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderBottom:i<sonuclar.length-1?`1px solid ${kutuKenar}`:"none"}}>
+                    <span style={{width:20,display:"flex",justifyContent:"center",flexShrink:0}}><Icon k={m.key} size={16}/></span>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12.5,fontWeight:600,color:yazi,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{CV(m.label)}</div>
+                      <div style={{fontSize:10.5,color:cokSoluk,marginTop:1}}>{CV(m.grup)}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          {/* Kaydırılan orta bölüm: ana gezinme + gruplar */}
+          <div style={{flex:1,minHeight:0,overflowY:"auto",margin:"0 -8px",padding:"0 8px"}}>
+            <div style={{display:"flex",flexDirection:"column",gap:2}}>
+              {ALT_BAR_SEKMELERI.map(t=>{
+                const aktif=TAB_OF_SCREEN[screen]===t.tab;
+                return(
+                  <div key={t.tab} className="kp-side-item" onClick={()=>nav(t.key)} style={satir(aktif,44)}>
+                    {aktif && <span style={{position:"absolute",left:-8,top:9,bottom:9,width:3,borderRadius:2,background:"#3B82F6"}}/>}
+                    <AltBarIcon tip={t.tip} aktif={aktif}/>
+                    <span style={{fontSize:14.5,fontWeight:aktif?700:500}}>{CV(t.label)}</span>
+                  </div>
+                );
+              })}
+            </div>
+            {SIDEBAR_GRUPLARI.map((g:any)=>{
+              const acikMi = grupAcikMi(g);
+              return (
+                <div key={g.baslik} style={{marginTop:10}}>
+                  <div className="kp-side-item" onClick={()=>grupDegistir(g)} role="button" aria-expanded={acikMi}
+                    style={{display:"flex",alignItems:"center",gap:8,height:34,padding:"0 12px",borderRadius:9,fontSize:11.5,fontWeight:700,letterSpacing:0.8,color:cokSoluk}}>
+                    <span>{CV(g.baslik)}</span>
+                    <span style={{marginLeft:"auto",fontSize:11,fontWeight:600,letterSpacing:0}}>{g.ogeler.length}</span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{transform:acikMi?"rotate(90deg)":"none",transition:"transform 0.15s ease",flexShrink:0}}><path d="M9 6l6 6-6 6"/></svg>
+                  </div>
+                  {acikMi && g.ogeler.map((m:any)=>{
+                    const aktif=screen===m.key;
+                    return (
+                      <div key={m.key} className="kp-side-item" onClick={()=>nav(m.key)} style={{...satir(aktif,36),gap:11,padding:"0 12px 0 14px",borderRadius:9}}>
+                        <span style={{width:20,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon k={m.key} size={16}/></span>
+                        <span style={{fontSize:13.5,fontWeight:aktif?700:500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{CV(m.label)}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               );
             })}
           </div>
-          {/* Hızlı erişim */}
-          <div style={{marginTop:18,paddingTop:14,borderTop:`1px solid ${WA(0.07)}`}}>
-            {/* 2026-07-30: Başlık 9,5 → 11 punto, harf aralığı 1 → 0,8
-                (büyüyünce 1 fazla dağıtıyordu) ve renk iki temada da
-                belirgin hale getirildi. */}
-            {/* GRUPLAMA (2026-09-15, kullanici istegi: "sol menude gruplama
-                olsun"): onceden 13 madde TEK duz liste halindeydi. Uc gruba
-                bolundu -- hepsi AYNI mevcut ekran anahtarlarini kullaniyor,
-                hicbiri degismedi/kaldirilmadi. */}
-            {[
-              {baslik:"PİYASA & TAKİP", ogeler:[
-                {key:"getiriKarsilastirma",label:"Getiri Karşılaştırma"},
-                {key:"haftalikOzet",label:"Haftalık Piyasa Özeti"},
-                {key:"finansalTakvim",label:"Finansal Takvim"},
-                {key:"fiyatAlarmlarim",label:"Fiyat Alarmlarım"},
-                {key:"piyasaHaberleri",label:"Piyasa Haberleri"},
-              ]},
-              {baslik:"PORTFÖY", ogeler:[
-                {key:"portfoyum",label:"Portföyüm"},
-                {key:"musteriPortfoyum",label:"Müşteri Portföyüm"},
-              ]},
-              {baslik:"BİLGİ", ogeler:[
-                {key:"egitim",label:"Eğitim"},
-                {key:"kiraSertifikasi",label:"Kira Sertifikası İhraçları"},
-                {key:"katilimBankalari",label:"Katılım Bankaları"},
-                {key:"icazetBelgeleri",label:"İcazet Belgeleri"},
-                {key:"kfkNedir",label:"Katılım Finans Kefalet (KFK) Nedir?"},
-                {key:"katilimSektoru",label:"Katılım Bankacılığı Sektörü"},
-                {key:"ekonomiSozluk",label:"Ekonomi Sözlüğü"},
-                {key:"zekatHesabi",label:"Zekât Hesaplayıcı"},
-                {key:"sozluk",label:"Finans Sözlüğü"},
-              ]},
-            ].map((grup,gi)=>(
-              <div key={grup.baslik} style={{marginTop:gi===0?0:10}}>
-                <div style={{fontSize:11,fontWeight:700,letterSpacing:0.8,color:TEMA==="acik"?"#274762":"rgba(255,255,255,0.62)",padding:"0 12px 9px"}}>{CV(grup.baslik)}</div>
-                {grup.ogeler.map(m=>(
-                  <div key={m.key} className="kp-side-item" onClick={()=>nav(m.key)} style={{
-                    display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderRadius:10,
-                    background:screen===m.key?"rgba(91,155,216,0.14)":"transparent",
-                  }}>
-                    <span style={{width:20,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon k={m.key} size={16}/></span>
-                    <span style={{
-                      fontSize:13.5,
-                      fontWeight:screen===m.key?800:600,
-                      color:screen===m.key
-                        ? (TEMA==="acik"?"#0F3B66":"#FFFFFF")
-                        : (TEMA==="acik"?"#1B2C3D":"#E4EDF8"),
-                    }}>{CV(m.label)}</span>
-                  </div>
-                ))}
+          {/* Sabit alt blok: hesap kartı + ayarlar + telif */}
+          <div style={{paddingTop:10,display:"flex",flexDirection:"column",gap:6,borderTop:`1px solid ${WA(0.07)}`,marginTop:8}}>
+            <div className="kp-side-item" onClick={()=>nav("profil")} style={{display:"flex",alignItems:"center",gap:10,padding:10,borderRadius:12,background:kutuBg,border:`1px solid ${kutuKenar}`}}>
+              <span style={{flexShrink:0,width:34,height:34,borderRadius:17,background:vurguBg,color:vurguYazi,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:14}}>{(adGoster||"M").charAt(0).toLocaleUpperCase("tr-TR")}</span>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13.5,fontWeight:600,color:yazi,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{adGoster || CV("Misafir")}</div>
+                <div style={{fontSize:11.5,color:soluk,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{kul ? (kul.email || "") : CV("Giriş yap veya kayıt ol")}</div>
               </div>
-            ))}
-          </div>
-          {/* Alt kısım: ayarlar + telif */}
-          <div style={{marginTop:"auto",paddingTop:12,borderTop:`1px solid ${WA(0.07)}`}}>
-            <div className="kp-side-item" onClick={()=>nav("ayarlar")} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:10,background:screen==="ayarlar"?"rgba(91,155,216,0.14)":"transparent"}}>
-              <span style={{width:20,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon k="ayarlar" size={16}/></span>
-              <span style={{fontSize:13.5,fontWeight:screen==="ayarlar"?800:600,color:screen==="ayarlar"?(TEMA==="acik"?"#0F3B66":"#FFFFFF"):(TEMA==="acik"?"#1B2C3D":"#E4EDF8")}}>{CV("Ayarlar")}</span>
+              {proAktif && <span style={{flexShrink:0,fontSize:11,fontWeight:700,borderRadius:6,padding:"2px 7px",background:acik?"#FFF6E0":"#1E1D19",color:acik?"#8A5A00":"#E2B04A",border:`1px solid ${acik?"#E7C77A":"#3A3322"}`}}>PRO</span>}
             </div>
-            <div style={{fontSize:10,color:TEMA==="acik"?"#5A7189":"rgba(255,255,255,0.45)",padding:"10px 12px 0",lineHeight:1.5}}>© {new Date().getFullYear()} Katılım Plus</div>
+            <div className="kp-side-item" onClick={()=>nav("ayarlar")} style={satir(screen==="ayarlar",38)}>
+              <span style={{width:20,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon k="ayarlar" size={16}/></span>
+              <span style={{fontSize:13.5,fontWeight:screen==="ayarlar"?700:500}}>{CV("Ayarlar")}</span>
+            </div>
+            <div style={{fontSize:10,color:cokSoluk,padding:"2px 12px 0",lineHeight:1.5}}>© {new Date().getFullYear()} Katılım Plus</div>
           </div>
         </div>
-      )}
+        );
+      })()}
       {/* ── MASAÜSTÜ APP STORE QR KARTI (sağ alt, Fonoloji tarzı) ── */}
       {genisEkran&&!qrPopupKapali&&(
         <div className="empty-anim" style={{position:"fixed",right:22,bottom:22,width:344,zIndex:90,boxSizing:"border-box",
