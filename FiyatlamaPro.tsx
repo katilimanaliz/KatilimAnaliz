@@ -7708,17 +7708,17 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
         {genisEkran ? (
           <>
             <span onClick={()=>setSirala((ss:string)=>ss==="gunluk"?"gunlukD":"gunluk")}
-              style={{width:56,textAlign:"right",flexShrink:0,fontSize:9,fontWeight:700,cursor:"pointer",
+              style={{width:84,textAlign:"right",flexShrink:0,fontSize:9,fontWeight:700,cursor:"pointer",
                 color:sirala?.replace("D","")==="gunluk"?FC.green:FC.sub,letterSpacing:0.5}}>
               GÜNLÜK{sirala==="gunluk"?"↓":sirala==="gunlukD"?"↑":""}
             </span>
             <span onClick={()=>setSirala((ss:string)=>ss==="aylik"?"aylikD":"aylik")}
-              style={{width:56,textAlign:"right",flexShrink:0,fontSize:9,fontWeight:700,cursor:"pointer",
+              style={{width:84,textAlign:"right",flexShrink:0,fontSize:9,fontWeight:700,cursor:"pointer",
                 color:sirala?.replace("D","")==="aylik"?FC.green:FC.sub,letterSpacing:0.5}}>
               1 AY{sirala==="aylik"?"↓":sirala==="aylikD"?"↑":""}
             </span>
             <span onClick={()=>setSirala((ss:string)=>ss==="yillik"?"yillikD":"yillik")}
-              style={{width:56,textAlign:"right",flexShrink:0,fontSize:9,fontWeight:700,cursor:"pointer",
+              style={{width:84,textAlign:"right",flexShrink:0,fontSize:9,fontWeight:700,cursor:"pointer",
                 color:sirala?.replace("D","")==="yillik"?FC.green:FC.sub,letterSpacing:0.5}}>
               1 YIL{sirala==="yillik"?"↓":sirala==="yillikD"?"↑":""}
             </span>
@@ -7820,13 +7820,13 @@ function FonGetiriIzleme({ settings, initialKod, onInitialTuketildi, genisEkran:
                     </span>
                     {genisEkran ? (
                       <>
-                        <span style={{width:56,textAlign:"right",flexShrink:0,fontSize:11,fontWeight:700,color:pctCol(fon.gunluk)}}>
+                        <span style={{width:84,textAlign:"right",flexShrink:0,fontSize:11,fontWeight:700,color:pctCol(fon.gunluk)}}>
                           {fon.gunluk==null?"—":(fon.gunluk>0?"+":"")+fon.gunluk.toFixed(4)+"%"}
                         </span>
-                        <span style={{width:56,textAlign:"right",flexShrink:0,fontSize:11,fontWeight:700,color:pctCol(fon.aylik)}}>
+                        <span style={{width:84,textAlign:"right",flexShrink:0,fontSize:11,fontWeight:700,color:pctCol(fon.aylik)}}>
                           {fon.aylik==null?"—":(fon.aylik>0?"+":"")+fon.aylik.toFixed(4)+"%"}
                         </span>
-                        <span style={{width:56,textAlign:"right",flexShrink:0,fontSize:11,fontWeight:700,color:pctCol(fon.yillik)}}>
+                        <span style={{width:84,textAlign:"right",flexShrink:0,fontSize:11,fontWeight:700,color:pctCol(fon.yillik)}}>
                           {fon.yillik==null?"—":(fon.yillik>0?"+":"")+fon.yillik.toFixed(4)+"%"}
                         </span>
                       </>
@@ -10651,7 +10651,7 @@ function AnaSayfaBist100Karti({ nav }: { nav: (sc: string) => void }) {
   const EndeksBlok = ({ etiket, veri }: { etiket: string; veri: EndeksVeri | null }) => {
     const yukseliyor = (veri?.degisim ?? 0) >= 0;
     return (
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ flex: etiket.length > 10 ? "1.5 1 0" : "1 1 0", minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
           <span style={{ width: 6, height: 6, borderRadius: 3, background: C.green, boxShadow: `0 0 6px ${C.green}`, flexShrink: 0 }} />
           {/* ⚠️ 2026-09-21 (kullanıcı isteği: "gecikmeli yerine 15 dk
@@ -10695,7 +10695,7 @@ function AnaSayfaBist100Karti({ nav }: { nav: (sc: string) => void }) {
       <span style={{ position: "absolute", top: 14, right: 14, color: WA(0.3), fontSize: 16 }}>›</span>
       <div style={{ display: "flex" }}>
         <EndeksBlok etiket={CV("BİST 100 · 15 dk gecikmeli")} veri={bist100}/>
-        <div style={{ width: 1, background: WA(0.08), margin: "2px 28px 2px 12px" }}/>
+        <div style={{ width: 1, background: WA(0.08), margin: "2px 16px 2px 10px" }}/>
         <EndeksBlok etiket="BİST 30" veri={bist30}/>
       </div>
       <div style={{ borderTop: `1px solid ${WA(0.08)}`, marginTop: 12, paddingTop: 8, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}>
@@ -29693,7 +29693,7 @@ function PiyasaOzetiKart({ad,sembol,paraOnek,dec,onTikla,duz}:{ad:string,sembol:
           bu kademelendirme satırdan satıra farklı punto üretiyordu; orada
           SABİT 11px/700 kullanılıyor. */}
       <p style={{margin:0,
-        fontSize:duz?10.5:(ad.length>=12?7.8:ad.length>=10?8.3:ad.length>=8?9.2:10),
+        fontSize:duz?(ad.length>=10?9.4:10.5):(ad.length>=12?7.8:ad.length>=10?8.3:ad.length>=8?9.2:10),
         fontWeight:700,
         color:duz?(TEMA==="acik"?C.label:"#fff"):WA(0.45),
         letterSpacing:duz?0.2:(ad.length>=10?-0.1:0.2),
