@@ -9204,6 +9204,7 @@ const EN_SOZLUK: Record<string, string> = {
   "Tatil": "Holiday",
   "Hedef adını yaz": "Enter a goal name",
   "Hedef tutarını gir, vadeni seç": "Enter your target amount and pick a term",
+  "Hedef ekle": "Add goal",
 };
 
 // ── 2026-10-08: ARAPÇA SÖZLÜĞÜ (Türkçe metin → Arapça; anahtarlar EN_SOZLUK ile aynı küme) ──
@@ -12815,6 +12816,7 @@ const AR_SOZLUK: Record<string, string> = {
   "Tatil": "العطلة",
   "Hedef adını yaz": "اكتب اسم الهدف",
   "Hedef tutarını gir, vadeni seç": "أدخل المبلغ المستهدف واختر المدة",
+  "Hedef ekle": "إضافة هدف",
 };
 // Çeviri (normal harf): İngilizce moddaysa sözlükten çevirir, yoksa aynen bırakır.
 const CV = (s: any): string => { const k = s == null ? "" : String(s); const z = kpSozluk(); return z ? (z[k] ?? k) : k; };
@@ -22049,7 +22051,7 @@ function CekArkasiFinansman({s,onGecmis}){
                 <input type="text" inputMode="decimal" placeholder="Tutar" value={c.tutar?formatWithDots(String(c.tutar)):""}
                   onChange={e=>{const f=formatWithDots(e.target.value.replace(/[^0-9,]/g,""));cekGuncelle(i,"tutar",parseVal(f));}}
                   style={{flex:1,minWidth:0,background:WA(0.06),border:`1.5px solid ${C.border}`,borderRadius:9,color:C.label,fontFamily:"monospace",fontSize:14,fontWeight:600,padding:"9px 10px",outline:"none",WebkitAppearance:"none"}}/>
-                <input type="date" value={c.vade}
+                <TrTakvim value={c.vade}
                   onChange={e=>cekGuncelle(i,"vade",e.target.value)}
                   style={{flexShrink:0,width:132,background:WA(0.06),border:`1.5px solid ${C.border}`,borderRadius:9,color:C.label,fontFamily:"monospace",fontSize:13,fontWeight:600,padding:"9px 8px",outline:"none",WebkitAppearance:"none",colorScheme:TEMA==="acik"?"light":"dark"} as any}/>
                 <button onClick={()=>cekSil(i)} style={{flexShrink:0,width:26,height:26,borderRadius:13,border:"none",background:"rgba(248,113,113,0.14)",color:C.red,fontSize:13,fontWeight:700,cursor:"pointer"}}>✕</button>
@@ -25426,8 +25428,8 @@ function VadeTakibi(){
 
             {/* Vade */}
             <p style={{margin:"0 0 5px",fontSize:12,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{TR(form.tip==="not"?"Tarih *":"Vade Tarihi *")}</p>
-            <input value={form.vade} onChange={e=>setForm(p=>({...p,vade:e.target.value}))}
-              type="date" lang="tr" style={{...INP,marginBottom:12,colorScheme:(TEMA==="acik"?"light":"dark")} as any}/>
+            <TrTakvim value={form.vade} onChange={e=>setForm(p=>({...p,vade:e.target.value}))}
+              style={{...INP,marginBottom:12,colorScheme:(TEMA==="acik"?"light":"dark")} as any}/>
 
             {/* Uyarı günü */}
             <p style={{margin:"0 0 6px",fontSize:12,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{TR("Kaç gün önce uyarı?")}</p>
@@ -28986,7 +28988,7 @@ function EkTarihAlani({ etiket, deger, onDeger, ipucu }: { etiket: string; deger
   return (
     <div style={{ marginBottom: 13 }}>
       <label style={ekEtiketStil}>{etiket}</label>
-      <input type="date" className="ek-tarih" value={deger} onChange={(e) => onDeger(e.target.value)} style={{ ...ekKutuStil, minHeight: 46, textAlign: "left" }} />
+      <TrTakvim className="ek-tarih" value={deger} onChange={(e) => onDeger(e.target.value)} style={{ ...ekKutuStil, minHeight: 46, textAlign: "left" }} />
       {ipucu && <p style={{ margin: "3px 0 0 2px", fontSize: 11, color: C.sub, lineHeight: 1.45 }}>{ipucu}</p>}
     </div>
   );
@@ -29845,6 +29847,114 @@ function TlYpKarari({ s }: { s?: any }) {
 }
 
 
+// ── TÜRKÇE TAKVİM SEÇİCİ (2026-10-09) ───────────────────────────────────────
+// iOS/Android'in yerel <input type="date"> penceresi telefonun/uygulamanın diline göre açılıyor ve lang="tr" ile bile Türkçeleşmiyordu
+// (İngilizce ay/gün adları). Bu bileşen aynı arayüzle (value, onChange(e) → e.target.value, min, max, style, className) çalışır; takvimi kendimiz çizeriz.
+// Değer HER ZAMAN "YYYY-AA-GG" biçimindedir. Ay/gün adları uygulama diline (TR/EN/AR) uyar.
+// KURAL: Modül seviyesinde tanımlı (içinde state var) — başka bileşenin gövdesine taşınmamalı.
+const TARIH_AYLAR: Record<string, string[]> = {
+  tr: ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"],
+  en: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
+  ar: ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"],
+};
+const TARIH_GUNLER: Record<string, string[]> = {
+  tr: ["Pt", "Sa", "Ça", "Pe", "Cu", "Ct", "Pa"],
+  en: ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"],
+  ar: ["إث", "ثل", "أر", "خم", "جم", "سب", "أح"],
+};
+const TARIH_METIN: Record<string, { sec: string; bugun: string; kapat: string }> = {
+  tr: { sec: "Tarih seç", bugun: "Bugün", kapat: "Kapat" },
+  en: { sec: "Select date", bugun: "Today", kapat: "Close" },
+  ar: { sec: "اختر التاريخ", bugun: "اليوم", kapat: "إغلاق" },
+};
+function tarihIso(y: number, m: number, d: number): string {
+  return `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+function tarihBugunIso(): string { const d = new Date(); return tarihIso(d.getFullYear(), d.getMonth(), d.getDate()); }
+function tarihCoz(iso: string): { y: number; m: number; d: number } | null {
+  const k = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ""));
+  if (!k) return null;
+  const y = +k[1], m = +k[2] - 1, d = +k[3];
+  const t = new Date(y, m, d);
+  return t.getFullYear() === y && t.getMonth() === m && t.getDate() === d ? { y, m, d } : null;
+}
+function tarihYaz(iso: string): string {
+  const c = tarihCoz(iso); if (!c) return "";
+  const ay = (TARIH_AYLAR[DIL] || TARIH_AYLAR.tr)[c.m];
+  return `${c.d} ${ay} ${c.y}`;
+}
+
+function TrTakvim({ value, onChange, min, max, style, className, placeholder }: {
+  value?: string; onChange?: (e: any) => void; min?: string; max?: string; style?: any; className?: string; placeholder?: string;
+}) {
+  const [acik, setAcik] = useState(false);
+  const baslangic = tarihCoz(value || "") || tarihCoz(tarihBugunIso())!;
+  const [yil, setYil] = useState(baslangic.y);
+  const [ay, setAy] = useState(baslangic.m);
+  const dl = TARIH_METIN[DIL] ? DIL : "tr";
+  const metin = TARIH_METIN[dl];
+  const ac = () => { const c = tarihCoz(value || "") || tarihCoz(tarihBugunIso())!; setYil(c.y); setAy(c.m); setAcik(true); };
+  const git = (dy: number, da: number) => {
+    let a = ay + da, y = yil + dy;
+    while (a < 0) { a += 12; y--; }
+    while (a > 11) { a -= 12; y++; }
+    setAy(a); setYil(Math.max(1900, Math.min(2100, y)));
+  };
+  const sec = (iso: string) => { setAcik(false); if (onChange) onChange({ target: { value: iso } }); };
+  const izinli = (iso: string) => (!min || iso >= min) && (!max || iso <= max);
+  const bugun = tarihBugunIso();
+  const koyu = TEMA !== "acik";
+  const kartRenk = koyu ? "#16222E" : "#FFFFFF";
+  const yaziRenk = koyu ? "#FFFFFF" : "#1A2430";
+  const sonuk = koyu ? "rgba(255,255,255,0.45)" : "rgba(26,36,48,0.45)";
+  const bosluk = (new Date(yil, ay, 1).getDay() + 6) % 7; // Pazartesi başlangıçlı
+  const gunSayisi = new Date(yil, ay + 1, 0).getDate();
+  const hucreler: (number | null)[] = [];
+  for (let i = 0; i < bosluk; i++) hucreler.push(null);
+  for (let d = 1; d <= gunSayisi; d++) hucreler.push(d);
+  const okStil: any = { width: 40, height: 40, borderRadius: 10, border: "none", background: koyu ? "rgba(255,255,255,0.08)" : "rgba(26,36,48,0.07)", color: yaziRenk, fontSize: 18, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" };
+  return (
+    <>
+      <button type="button" className={className} onClick={ac}
+        style={{ textAlign: "left", cursor: "pointer", fontFamily: "inherit", display: "block", ...(style || {}) }}>
+        {value && tarihCoz(value) ? tarihYaz(value) : (placeholder || metin.sec)}
+      </button>
+      {acik && (
+        <div onClick={() => setAcik(false)} style={{ position: "fixed", inset: 0, zIndex: 100000, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div onClick={(e: any) => e.stopPropagation()} role="dialog" aria-label={metin.sec}
+            style={{ width: "100%", maxWidth: 380, background: kartRenk, color: yaziRenk, borderRadius: "18px 18px 0 0", padding: "14px 14px calc(16px + env(safe-area-inset-bottom, 0px))", boxSizing: "border-box" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
+              <button type="button" aria-label="-1 yıl" onClick={() => git(-1, 0)} style={okStil}>«</button>
+              <button type="button" aria-label="-1 ay" onClick={() => git(0, -1)} style={okStil}>‹</button>
+              <div style={{ flex: 1, textAlign: "center", fontSize: 16, fontWeight: 800 }}>{`${TARIH_AYLAR[dl][ay]} ${yil}`}</div>
+              <button type="button" aria-label="+1 ay" onClick={() => git(0, 1)} style={okStil}>›</button>
+              <button type="button" aria-label="+1 yıl" onClick={() => git(1, 0)} style={okStil}>»</button>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, textAlign: "center" }}>
+              {TARIH_GUNLER[dl].map(g => <div key={g} style={{ fontSize: 12, fontWeight: 700, color: sonuk, padding: "4px 0" }}>{g}</div>)}
+              {hucreler.map((d, i) => {
+                if (d == null) return <div key={`b${i}`} />;
+                const iso = tarihIso(yil, ay, d);
+                const secili = iso === value, ok = izinli(iso), buGun = iso === bugun;
+                return (
+                  <button key={iso} type="button" disabled={!ok} onClick={() => sec(iso)}
+                    style={{ height: 40, borderRadius: 10, border: buGun && !secili ? "1px solid #16A34A" : "1px solid transparent", background: secili ? "#16A34A" : "transparent", color: secili ? "#fff" : (ok ? yaziRenk : sonuk), opacity: ok ? 1 : 0.4, fontSize: 15, fontWeight: secili ? 800 : 600, cursor: ok ? "pointer" : "default", fontFamily: "inherit", padding: 0 }}>{d}</button>
+                );
+              })}
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <button type="button" disabled={!izinli(bugun)} onClick={() => sec(bugun)}
+                style={{ flex: 1, padding: "12px 10px", borderRadius: 11, border: "1px solid rgba(22,163,74,0.5)", background: "transparent", color: "#16A34A", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", opacity: izinli(bugun) ? 1 : 0.4 }}>{metin.bugun}</button>
+              <button type="button" onClick={() => setAcik(false)}
+                style={{ flex: 1, padding: "12px 10px", borderRadius: 11, border: `1px solid ${koyu ? "rgba(255,255,255,0.2)" : "rgba(26,36,48,0.2)"}`, background: "transparent", color: yaziRenk, fontSize: 15, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>{metin.kapat}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 // ── BİRİKİM HESAPLAYICI (2026-10-09) ────────────────────────────────────────
 // Hedef bazlı birikim planı: hedef tutar + vade + mevcut birikim + yıllık oran → aylık gereken tutar.
 // Veri yalnızca cihazda ve hesap senkronunda (kp_birikim_v1); sunucuya ayrıca bir şey gönderilmez.
@@ -30031,7 +30141,10 @@ function BirikimHesaplayici() {
   const [yatirAcik, setYatirAcik] = useState(false);
   const [yatirTutar, setYatirTutar] = useState(0);
   const [hatNot, setHatNot] = useState("");
-  const [adAcik, setAdAcik] = useState<boolean>(() => { const s0 = birikimOku(); const h0 = s0.hedefler.find(x => x.id === s0.secili) || s0.hedefler[0]; return !h0.ad && !h0.ozel; });
+  // adMod: null = kapalı, "duzenle" = seçili hedefin adını seç, "ekle" = yeni hedef için ad seç
+  const [adMod, setAdMod] = useState<null | "duzenle" | "ekle">(() => { const s0 = birikimOku(); const h0 = s0.hedefler.find(x => x.id === s0.secili) || s0.hedefler[0]; return !h0.ad && !h0.ozel ? "duzenle" : null; });
+  const [yeniOzel, setYeniOzel] = useState(false);
+  const [yeniAd, setYeniAd] = useState("");
   const gGuncelle = (yama: Partial<BirikimHedef>) => guncelle(o => ({ ...o, hedefler: o.hedefler.map(x => x.id === g.id ? { ...x, ...yama } : x) }));
 
   const para = (n: number) => `${new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 0 }).format(Math.round(n))} ₺`;
@@ -30064,13 +30177,16 @@ function BirikimHesaplayici() {
   );
   const duzBtn: any = { width: 46, height: 46, flexShrink: 0, borderRadius: 11, border: `1px solid ${WA(0.14)}`, background: TEMA === "acik" ? "#fff" : WA(0.05), color: yazi, fontSize: 22, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" };
 
-  const hedefEkle = () => guncelle(o => {
-    if (o.hedefler.length >= 12) return o;
-    const id = `h${Date.now().toString(36)}`;
-    return { ...o, hedefler: [...o.hedefler, birikimBosHedef(id)], secili: id };
-  });
-  const hedefEkleAc = () => { hedefEkle(); setAdAcik(true); };
-  const hedefSil = () => { birikimBildirimPlanla({ id: g.id, ad: g.ad, hatGun: 0 }, 0).catch(() => {}); hedefSilDevam(); setAdAcik(false); };
+  const hedefEkle = (ad: string, ozel: boolean) => {
+    guncelle(o => {
+      if (o.hedefler.length >= 12) return o;
+      const id = `h${Date.now().toString(36)}`;
+      return { ...o, hedefler: [...o.hedefler, { ...birikimBosHedef(id), ad: ad.slice(0, 40), ozel }], secili: id };
+    });
+    setAdMod(null); setYeniOzel(false); setYeniAd("");
+  };
+  const hedefEkleAc = () => { setYeniOzel(false); setYeniAd(""); setAdMod(m => m === "ekle" ? null : "ekle"); };
+  const hedefSil = () => { birikimBildirimPlanla({ id: g.id, ad: g.ad, hatGun: 0 }, 0).catch(() => {}); hedefSilDevam(); setAdMod(null); };
   const hedefSilDevam = () => guncelle(o => {
     if (o.hedefler.length <= 1) return o;
     const kalan = o.hedefler.filter(x => x.id !== g.id);
@@ -30112,39 +30228,49 @@ function BirikimHesaplayici() {
       {/* HEDEF SEKMELERİ */}
       <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
         {v.hedefler.map(x => (
-          <button key={x.id} aria-pressed={x.id === g.id} aria-expanded={x.id === g.id ? adAcik : undefined}
-            onClick={() => { if (x.id === g.id) setAdAcik(a => !a); else { guncelle(o => ({ ...o, secili: x.id })); setAdAcik(!x.ad && !x.ozel); } }}
+          <button key={x.id} aria-pressed={x.id === g.id} aria-expanded={x.id === g.id ? adMod === "duzenle" : undefined}
+            onClick={() => { if (x.id === g.id) setAdMod(m => m === "duzenle" ? null : "duzenle"); else { guncelle(o => ({ ...o, secili: x.id })); setAdMod(!x.ad && !x.ozel ? "duzenle" : null); } }}
             style={{ flexShrink: 0, padding: "9px 15px", borderRadius: 99, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${x.id === g.id ? "#16A34A" : WA(0.14)}`, background: x.id === g.id ? "#16A34A" : "transparent", color: x.id === g.id ? "#fff" : yazi }}>
-            {x.ad || "Yeni hedef"}{x.id === g.id ? (adAcik ? " ▴" : " ▾") : ""}
+            {x.ad || "Yeni hedef"}{x.id === g.id ? (adMod === "duzenle" ? " ▴" : " ▾") : ""}
           </button>
         ))}
         {v.hedefler.length < 12 && (
-          <button onClick={hedefEkleAc} style={{ flexShrink: 0, padding: "9px 15px", borderRadius: 99, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px dashed ${WA(0.3)}`, background: "transparent", color: WA(0.6) }}>+ Hedef ekle</button>
+          <button aria-expanded={adMod === "ekle"} onClick={hedefEkleAc} style={{ flexShrink: 0, padding: "9px 15px", borderRadius: 99, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px dashed ${WA(0.3)}`, background: "transparent", color: WA(0.6) }}>+ Hedef ekle{adMod === "ekle" ? " ▴" : ""}</button>
         )}
       </div>
 
-      {adAcik && (
-      <div style={{ marginTop: 10, background: kartBg, border: `1px solid ${kartCizgi}`, borderRadius: 14, padding: "12px 14px 14px" }}>
-          <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 600, color: baslik }}>Hedef adı</p>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {BIRIKIM_ADLARI.map(ad => {
-              const sec = !g.ozel && g.ad === ad;
-              return (
-                <button key={ad} aria-pressed={sec} onClick={() => { gGuncelle({ ad, ozel: false }); setAdAcik(false); }}
-                  style={{ padding: "9px 14px", borderRadius: 99, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${sec ? "#16A34A" : WA(0.14)}`, background: sec ? "rgba(22,163,74,0.14)" : "transparent", color: yazi }}>{ad}</button>
-              );
-            })}
-            <button aria-pressed={g.ozel} onClick={() => gGuncelle({ ozel: true, ad: g.ozel ? g.ad : "" })}
-              style={{ padding: "9px 14px", borderRadius: 99, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px ${g.ozel ? "solid" : "dashed"} ${g.ozel ? "#16A34A" : WA(0.3)}`, background: g.ozel ? "rgba(22,163,74,0.14)" : "transparent", color: yazi }}>Diğer</button>
-          </div>
-          {g.ozel && (
-            <input value={g.ad} maxLength={40} placeholder="Hedef adını yaz" onChange={(e: any) => gGuncelle({ ad: e.target.value })} onKeyDown={(e: any) => { if (e.key === "Enter") setAdAcik(false); }} type="text" autoComplete="off"
-              style={{ marginTop: 10, width: "100%", boxSizing: "border-box", padding: "11px 12px", borderRadius: 10, border: `1px solid ${WA(0.14)}`, background: TEMA === "acik" ? "#fff" : WA(0.04), color: yazi, fontSize: 16, fontWeight: 700, outline: "none", fontFamily: "inherit" }} />
+      {adMod && (
+        <div style={{ marginTop: 10, background: kartBg, border: `1px solid ${kartCizgi}`, borderRadius: 14, padding: "6px 14px 8px", maxHeight: 360, overflowY: "auto" }}>
+          <p style={{ margin: "8px 0 2px", fontSize: 13, fontWeight: 600, color: baslik }}>{adMod === "ekle" ? "Hedef ekle" : "Hedef adı"}</p>
+          {BIRIKIM_ADLARI.map((ad, k) => {
+            const sec = adMod === "duzenle" && !g.ozel && g.ad === ad;
+            return (
+              <button key={ad} onClick={() => { if (adMod === "ekle") hedefEkle(ad, false); else { gGuncelle({ ad, ozel: false }); setAdMod(null); } }}
+                style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", padding: "13px 2px", border: "none", borderTop: k ? `1px solid ${WA(0.08)}` : "none", background: "transparent", color: yazi, fontSize: 16, fontWeight: sec ? 800 : 600, cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
+                <span>{ad}</span>{sec && <span style={{ color: "#16A34A", fontSize: 18 }}>✓</span>}
+              </button>
+            );
+          })}
+          <button onClick={() => { if (adMod === "ekle") setYeniOzel(true); else gGuncelle({ ozel: true, ad: g.ozel ? g.ad : "" }); }}
+            style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", padding: "13px 2px", border: "none", borderTop: `1px solid ${WA(0.08)}`, background: "transparent", color: yazi, fontSize: 16, fontWeight: (adMod === "duzenle" && g.ozel) || (adMod === "ekle" && yeniOzel) ? 800 : 600, cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
+            <span>Diğer</span>{((adMod === "duzenle" && g.ozel) || (adMod === "ekle" && yeniOzel)) && <span style={{ color: "#16A34A", fontSize: 18 }}>✓</span>}
+          </button>
+          {adMod === "duzenle" && g.ozel && (
+            <input value={g.ad} maxLength={40} placeholder="Hedef adını yaz" onChange={(e: any) => gGuncelle({ ad: e.target.value })} onKeyDown={(e: any) => { if (e.key === "Enter") setAdMod(null); }} type="text" autoComplete="off"
+              style={{ margin: "4px 0 8px", width: "100%", boxSizing: "border-box", padding: "11px 12px", borderRadius: 10, border: `1px solid ${WA(0.14)}`, background: TEMA === "acik" ? "#fff" : WA(0.04), color: yazi, fontSize: 16, fontWeight: 700, outline: "none", fontFamily: "inherit" }} />
           )}
-          {v.hedefler.length > 1 && (
-            <button onClick={hedefSil} style={{ marginTop: 10, padding: "9px 14px", borderRadius: 10, border: "1px solid rgba(220,80,80,0.4)", background: "transparent", color: "#DC5050", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Hedefi sil</button>
+          {adMod === "ekle" && yeniOzel && (
+            <div style={{ display: "flex", gap: 8, margin: "4px 0 8px" }}>
+              <input value={yeniAd} maxLength={40} placeholder="Hedef adını yaz" onChange={(e: any) => setYeniAd(e.target.value)} onKeyDown={(e: any) => { if (e.key === "Enter" && yeniAd.trim()) hedefEkle(yeniAd.trim(), true); }} type="text" autoComplete="off"
+                style={{ flex: 1, minWidth: 0, padding: "11px 12px", borderRadius: 10, border: `1px solid ${WA(0.14)}`, background: TEMA === "acik" ? "#fff" : WA(0.04), color: yazi, fontSize: 16, fontWeight: 700, outline: "none", fontFamily: "inherit" }} />
+              <button disabled={!yeniAd.trim()} onClick={() => hedefEkle(yeniAd.trim(), true)}
+                style={{ flexShrink: 0, padding: "0 16px", borderRadius: 10, border: "none", background: "#16A34A", color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", opacity: yeniAd.trim() ? 1 : 0.45 }}>Ekle</button>
+            </div>
           )}
-      </div>
+          {adMod === "duzenle" && v.hedefler.length > 1 && (
+            <button onClick={hedefSil} style={{ display: "block", width: "100%", padding: "13px 2px", border: "none", borderTop: `1px solid ${WA(0.08)}`, background: "transparent", color: "#DC5050", fontSize: 16, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>Hedefi sil</button>
+          )}
+        </div>
       )}
 
       {/* SONUÇ */}
@@ -30640,8 +30766,8 @@ function ZekatHesabi() {
             WebkitAppearance:"none" native kapsülü kaldırıp bizim stilimizin
             görünmesini sağlıyor. */}
         <div style={{ marginTop: 10, borderRadius: 10, overflow: "hidden", border: `1px solid ${WA(0.14)}` }}>
-          <input
-            type="date"
+          <TrTakvim
+           
             value={v.zekatTarihi || ""}
             onChange={e => guncelle({ zekatTarihi: e.target.value || null, hatirlatmaKurulu: false })}
             style={{
@@ -32895,10 +33021,10 @@ function AkreditifKomisyon(){
           <span style={{fontSize:15,fontWeight:700,color:C.blue}}>{fmtDoviz(r.maxTutar)}</span>
         </div>}
         <label style={{display:"block",fontSize:12,fontWeight:600,color:C.sub,marginBottom:4}}>Akreditif Açılış Tarihi</label>
-        <input type="date" value={acilisTarih} onChange={e=>setAcilisTarih(e.target.value)}
+        <TrTakvim value={acilisTarih} onChange={e=>setAcilisTarih(e.target.value)}
           style={{width:"100%",boxSizing:"border-box",padding:"11px 13px",fontSize:15,fontWeight:600,background:WA(0.06),border:`1.5px solid ${C.border}`,borderRadius:10,color:C.label,outline:"none",marginBottom:13}}/>
         <label style={{display:"block",fontSize:12,fontWeight:600,color:C.sub,marginBottom:4}}>Son Yükleme Tarihi</label>
-        <input type="date" value={sonYuklemeTarih} onChange={e=>setSonYuklemeTarih(e.target.value)}
+        <TrTakvim value={sonYuklemeTarih} onChange={e=>setSonYuklemeTarih(e.target.value)}
           style={{width:"100%",boxSizing:"border-box",padding:"11px 13px",fontSize:15,fontWeight:600,background:WA(0.06),border:`1.5px solid ${C.border}`,borderRadius:10,color:C.label,outline:"none",marginBottom:13}}/>
         <Field label="İbraz Süresi (Son yükleme + gün)" value={ibrazGun} onChange={setIbrazGun} suffix="Gün" hint="Standart: 21 gün"/>
         {r?.toplamVade&&<div style={{background:"rgba(91,155,216,0.10)",borderRadius:10,padding:"10px 12px",marginBottom:14}}>
@@ -38617,7 +38743,7 @@ function AltinUrunleriTablo(){
     <div>
       {altinAlarmSecili&&<AltinAlarmModal urun={altinAlarmSecili} onClose={()=>setAltinAlarmSecili(null)}/>}
       <div style={{display:"flex",alignItems:"center",gap:8,margin:"2px 0 10px",flexWrap:"wrap"}}>
-        <input type="date" value={gTarih||bugunIsoA} max={bugunIsoA}
+        <TrTakvim value={gTarih||bugunIsoA} max={bugunIsoA}
           onChange={e=>setGTarih(e.target.value===bugunIsoA?"":e.target.value)}
           style={{flex:1,minWidth:0,boxSizing:"border-box",minHeight:44,padding:"0 14px",borderRadius:12,border:`1px solid ${gTarih!==""?"#3B82F6":WA(0.15)}`,background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),color:(TEMA==="acik"?C.label:"#fff"),fontSize:15,fontWeight:600,fontFamily:"monospace",colorScheme:(TEMA==="acik"?"light":"dark")}}/>
         {gTarih!==""&&(
@@ -41102,7 +41228,7 @@ function PortfoyDuzenleModal({kalem, onKapat, onKaydet}:{
         </div>
         <div style={{marginBottom:14}}>
           <span style={etiketStil}>ALIŞ TARİHİ</span>
-          <input type="date" value={tarihInput} onChange={e=>{setTarihInput(e.target.value);setHata(null);}}
+          <TrTakvim value={tarihInput} onChange={e=>{setTarihInput(e.target.value);setHata(null);}}
                  style={alanStil}/>
         </div>
 
@@ -41714,7 +41840,7 @@ function PortfoyEkleModal({onKapat, onEklendi, settings, duzenlenecekKalem}:{onK
                 yazamıyor, değer HER ZAMAN YYYY-AA-GG formatında geliyor. */}
             <div style={{marginBottom:13}}>
               <label style={{display:"block",fontSize:12,fontWeight:600,color:C.sub,marginBottom:4}}>Açılış Tarihi</label>
-              <input type="date" value={katilimAcilisInput} onChange={e=>setKatilimAcilisInput(e.target.value)}
+              <TrTakvim value={katilimAcilisInput} onChange={e=>setKatilimAcilisInput(e.target.value)}
                      max={new Date().toISOString().slice(0,10)}
                      style={{width:"100%",boxSizing:"border-box",padding:"11px 13px",
                        fontSize:15,fontWeight:600,fontFamily:"monospace",background:WA(0.06),
@@ -41772,7 +41898,7 @@ function PortfoyEkleModal({onKapat, onEklendi, settings, duzenlenecekKalem}:{onK
                 gerekçeyle (bkz. yukarıdaki "DÜZELTME (2026-08-13)" notu). */}
             <div style={{marginBottom:13}}>
               <label style={{display:"block",fontSize:12,fontWeight:600,color:C.sub,marginBottom:4}}>Alım Tarihi</label>
-              <input type="date" value={sukukAcilisInput} onChange={e=>setSukukAcilisInput(e.target.value)}
+              <TrTakvim value={sukukAcilisInput} onChange={e=>setSukukAcilisInput(e.target.value)}
                      max={new Date().toISOString().slice(0,10)}
                      style={{width:"100%",boxSizing:"border-box",padding:"11px 13px",
                        fontSize:15,fontWeight:600,fontFamily:"monospace",background:WA(0.06),
@@ -41930,7 +42056,7 @@ function PortfoyEkleModal({onKapat, onEklendi, settings, duzenlenecekKalem}:{onK
             )}
 
             <span style={{fontSize:11.5,fontWeight:700,color:C.sub,display:"block",marginBottom:5}}>ALIŞ TARİHİ</span>
-            <input type="date" value={alisTarihInput} onChange={e=>setAlisTarihInput(e.target.value)} max={new Date().toISOString().slice(0,10)} style={{width:"100%",boxSizing:"border-box",background:WA(0.04),border:`1px solid ${WA(0.08)}`,borderRadius:10,padding:"10px 12px",color:C.text,fontSize:14,fontFamily:"inherit",marginBottom:6}}/>
+            <TrTakvim value={alisTarihInput} onChange={e=>setAlisTarihInput(e.target.value)} max={new Date().toISOString().slice(0,10)} style={{width:"100%",boxSizing:"border-box",background:WA(0.04),border:`1px solid ${WA(0.08)}`,borderRadius:10,padding:"10px 12px",color:C.text,fontSize:14,fontFamily:"inherit",marginBottom:6}}/>
             {tarihOtomatikDestekli && alisTarihInput && alisTarihInput!==new Date().toISOString().slice(0,10) && (
               <button disabled={alisAraniyor} onClick={otomatikAlisAra} style={{width:"100%",background:"none",border:`1px solid ${C.blue}`,color:C.blue,borderRadius:10,padding:"9px 0",fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginBottom:12}}>
                 {alisAraniyor?"⟳ Fiyat aranıyor…":`${portfoyTarihGoster(alisTarihInput)} fiyatını otomatik bul`}
@@ -43495,7 +43621,10 @@ function App(){
   // Masaüstü sağ alt App Store QR kartı (Fonoloji tarzı); kapatınca bir daha çıkmaz
   const [qrPopupKapali,setQrPopupKapali]=useState<boolean>(false);
   // Masaüstü yan menü (2026-10-08): arama metni + grupların açık/kapalı tercihi (cihazda saklanır)
-  const [sideGrupAcik,setSideGrupAcik]=useState<Record<string,boolean>>(()=>{ try{ return JSON.parse(localStorage.getItem("kp_side_gruplar")||"{}")||{}; }catch{ return {}; } });
+  // 2026-10-09: Yan menü grupları artık açılıp kapanan liste DEĞİL; grup adının üzerine gelince (veya tıklayınca) SAĞA doğru liste (flyout) açılır.
+  // Kullanıcı "Bilgi" gibi kapalı bir grubun içeriğini mouse ile aşağı kaydırması gerektiğini anlamıyordu.
+  const [yanGrup,setYanGrup]=useState<{baslik:string;top:number}|null>(null);
+  const yanGrupZamanlayici=useRef<any>(null);
   // DÜZELTME (2026-07-16): Eskiden bu tercih localStorage'a kalıcı
   // yazılıyordu — kullanıcı bir kere kapatınca sayfa yenilense bile bir
   // daha hiç görünmüyordu. Artık sadece o oturumda (React state) gizleniyor;
@@ -44396,17 +44525,25 @@ function App(){
         const kul:any = kimlik?.kullanici || null;
         const adGoster = (kul && (kul.ad || (kul.email ? String(kul.email).split("@")[0] : ""))) || "";
         const proAktif = !!(kimlik && kimlik.pro && kimlik.pro.aktif);
-        const grupAcikMi = (g:any) => g.ogeler.some((o:any)=>o.key===screen) || (sideGrupAcik[g.baslik] ?? g.varsayilanAcik);
-        const grupDegistir = (g:any) => {
-          const yeni = { ...sideGrupAcik, [g.baslik]: !grupAcikMi(g) };
-          setSideGrupAcik(yeni);
-          try{ localStorage.setItem("kp_side_gruplar", JSON.stringify(yeni)); }catch{}
+        const flyAc = (g:any, el:any) => {
+          if(yanGrupZamanlayici.current){ clearTimeout(yanGrupZamanlayici.current); yanGrupZamanlayici.current=null; }
+          const r = el.getBoundingClientRect();
+          const yukseklik = g.ogeler.length*38+22;
+          const top = Math.max(SERIT_YUKSEKLIK+8, Math.min(r.top-8, window.innerHeight-yukseklik-12));
+          setYanGrup({baslik:g.baslik, top});
         };
+        const flyKapatPlan = () => {
+          if(yanGrupZamanlayici.current) clearTimeout(yanGrupZamanlayici.current);
+          yanGrupZamanlayici.current = setTimeout(()=>{ setYanGrup(null); yanGrupZamanlayici.current=null; }, 220);
+        };
+        const flyIptal = () => { if(yanGrupZamanlayici.current){ clearTimeout(yanGrupZamanlayici.current); yanGrupZamanlayici.current=null; } };
+        const acikGrup:any = yanGrup ? SIDEBAR_GRUPLARI.find((x:any)=>x.baslik===yanGrup.baslik) : null;
         const satir = (aktif:boolean, yuksek:number) => ({
           position:"relative" as const, display:"flex", alignItems:"center", gap:12, height:yuksek, padding:"0 12px", borderRadius:10, boxSizing:"border-box" as const,
           background:aktif?vurguBg:"transparent", color:aktif?vurguYazi:yazi, cursor:"pointer",
         });
         return (
+        <>
         <div ref={(el:any)=>{ if(el && !el.__kpWheel){ el.__kpWheel=true; el.addEventListener("wheel",(e:any)=>{ if(!e.target.closest || !e.target.closest("[data-kp-sidescroll]")) e.preventDefault(); },{passive:false}); } }}
           style={{position:"fixed",top:SERIT_YUKSEKLIK,left:0,bottom:0,width:SIDEBAR_W,zIndex:80,
           display:"flex",flexDirection:"column",boxSizing:"border-box",fontFamily:FONT_STACK_MASAUSTU,
@@ -44434,28 +44571,22 @@ function App(){
                 );
               })}
             </div>
-            {SIDEBAR_GRUPLARI.map((g:any)=>{
-              const acikMi = grupAcikMi(g);
-              return (
-                <div key={g.baslik} style={{marginTop:10}}>
-                  <div className="kp-side-item" onClick={()=>grupDegistir(g)} role="button" aria-expanded={acikMi}
-                    style={{display:"flex",alignItems:"center",gap:8,height:34,padding:"0 12px",borderRadius:9,fontSize:11.5,fontWeight:700,letterSpacing:0.8,color:cokSoluk}}>
-                    <span>{CV(g.baslik)}</span>
-                    <span style={{marginLeft:"auto",fontSize:11,fontWeight:600,letterSpacing:0}}>{g.ogeler.length}</span>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{transform:acikMi?"rotate(90deg)":"none",transition:"transform 0.15s ease",flexShrink:0}}><path d="M9 6l6 6-6 6"/></svg>
+            <div style={{marginTop:10,display:"flex",flexDirection:"column",gap:2}}>
+              {SIDEBAR_GRUPLARI.map((g:any)=>{
+                const acikMi = !!yanGrup && yanGrup.baslik===g.baslik;
+                const grupAktif = g.ogeler.some((o:any)=>o.key===screen);
+                return (
+                  <div key={g.baslik} className="kp-side-item" role="button" aria-haspopup="menu" aria-expanded={acikMi}
+                    onMouseEnter={(e:any)=>flyAc(g,e.currentTarget)} onMouseLeave={flyKapatPlan}
+                    onClick={(e:any)=>{ if(acikMi) setYanGrup(null); else flyAc(g,e.currentTarget); }}
+                    style={{...satir(acikMi,40),gap:10,background:acikMi?vurguBg:"transparent",color:grupAktif||acikMi?vurguYazi:yazi}}>
+                    <span style={{fontSize:13.5,fontWeight:700,letterSpacing:0.2}}>{CV(g.baslik)}</span>
+                    <span style={{marginLeft:"auto",fontSize:11.5,fontWeight:600,color:cokSoluk}}>{g.ogeler.length}</span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}><path d="M9 6l6 6-6 6"/></svg>
                   </div>
-                  {acikMi && g.ogeler.map((m:any)=>{
-                    const aktif=screen===m.key;
-                    return (
-                      <div key={m.key} className="kp-side-item" onClick={()=>nav(m.key)} style={{...satir(aktif,36),gap:11,padding:"0 12px 0 14px",borderRadius:9}}>
-                        <span style={{width:20,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon k={m.key} size={16}/></span>
-                        <span style={{fontSize:13.5,fontWeight:aktif?700:500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{CV(m.label)}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
           {/* Sabit alt blok: hesap kartı + ayarlar + telif */}
           <div style={{paddingTop:10,display:"flex",flexDirection:"column",gap:6,borderTop:`1px solid ${WA(0.07)}`,marginTop:8}}>
@@ -44474,6 +44605,24 @@ function App(){
             <div style={{fontSize:10,color:cokSoluk,padding:"2px 12px 0",lineHeight:1.5}}>© {new Date().getFullYear()} Katılım Plus</div>
           </div>
         </div>
+        {acikGrup && yanGrup && (
+          <div role="menu" onMouseEnter={flyIptal} onMouseLeave={flyKapatPlan}
+            style={{position:"fixed",left:SIDEBAR_W-2,top:yanGrup.top,zIndex:85,minWidth:244,maxWidth:320,boxSizing:"border-box",padding:"8px",fontFamily:FONT_STACK_MASAUSTU,
+              background:acik?"#FFFFFF":"#142233",border:`1px solid ${acik?"#DCE4EE":"rgba(255,255,255,0.12)"}`,borderRadius:14,
+              boxShadow:"0 14px 38px rgba(0,0,0,0.38), 0 3px 10px rgba(0,0,0,0.22)"}}>
+            <div style={{fontSize:11,fontWeight:700,letterSpacing:0.8,color:cokSoluk,padding:"4px 12px 6px"}}>{CV(acikGrup.baslik)}</div>
+            {acikGrup.ogeler.map((m:any)=>{
+              const aktif=screen===m.key;
+              return (
+                <div key={m.key} role="menuitem" className="kp-side-item" onClick={()=>{ setYanGrup(null); nav(m.key); }} style={{...satir(aktif,38),gap:11,padding:"0 12px",borderRadius:9}}>
+                  <span style={{width:20,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon k={m.key} size={16}/></span>
+                  <span style={{fontSize:13.5,fontWeight:aktif?700:500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{CV(m.label)}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        </>
         );
       })()}
       {/* ── MASAÜSTÜ APP STORE QR KARTI (sağ alt, Fonoloji tarzı) ── */}
@@ -46062,7 +46211,7 @@ function App(){
                   return(
                   <>
                     <div style={{display:"flex",alignItems:"center",gap:8,margin:"2px 0 12px"}}>
-                      <input type="date" value={piyasaGecmisTarih||bugunIso} min={enEskiIso} max={bugunIso}
+                      <TrTakvim value={piyasaGecmisTarih||bugunIso} min={enEskiIso} max={bugunIso}
                         onChange={e=>setPiyasaGecmisTarih(e.target.value===bugunIso?"":e.target.value)}
                         style={{flex:1,minWidth:0,boxSizing:"border-box",minHeight:44,padding:"0 14px",borderRadius:12,border:`1px solid ${piyasaGecmisTarih!==""?"#3B82F6":WA(0.15)}`,background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),color:(TEMA==="acik"?C.label:"#fff"),fontSize:15,fontWeight:600,fontFamily:"monospace",colorScheme:(TEMA==="acik"?"light":"dark")}}/>
                       {piyasaGecmisTarih!==""&&(
