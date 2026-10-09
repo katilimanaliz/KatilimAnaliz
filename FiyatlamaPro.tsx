@@ -286,7 +286,7 @@ async function kpProDurumGetir(uid:string): Promise<KpProDurum>{
 // Buluta okunamazsa (izin/ağ hatası) HİÇBİR ŞEY yazılmaz (bulut verisinin yanlışlıkla ezilmesi önlenir).
 const KP_AYAR_ANAHTARLARI = [
   "katilimAnaliz_favoriler_v1", "vk_gecmis", "vk_settings", "kp_tema", "kp_dil", "kp_piyasa_ozeti_secim",
-  "kp_portfoy_para", "kp_portfoy_gizli", "kp_zekat", "kp_birikim_v1", "katilimAnaliz_vadeTakibi_v1", "gk_ekstra",
+  "kp_portfoy_para", "kp_portfoy_gizli", "kp_zekat", "kp_birikim_v1", "kp_takvim_bildirim_v1", "katilimAnaliz_vadeTakibi_v1", "gk_ekstra",
   "katilimAnaliz_kullaniciAdi_v1", "hv_piyasa",
 ];
 const KP_AYAR_META_ANAHTAR = "kp_ayar_meta_v1";
@@ -9205,6 +9205,12 @@ const EN_SOZLUK: Record<string, string> = {
   "Hedef adını yaz": "Enter a goal name",
   "Hedef tutarını gir, vadeni seç": "Enter your target amount and pick a term",
   "Hedef ekle": "Add goal",
+  "Takvim bildirimleri": "Calendar notifications",
+  "Seçtiğin kategorilerde tarih yaklaşınca haber ver": "Get notified when a date approaches in the categories you choose",
+  "Ne zaman haber verelim?": "When should we notify you?",
+  "Aynı gün": "Same day",
+  "3 gün önce": "3 days before",
+  "Bildirimler yalnızca iPhone ve Android uygulamasında çalışır.": "Notifications only work in the iPhone and Android app.",
 };
 
 // ── 2026-10-08: ARAPÇA SÖZLÜĞÜ (Türkçe metin → Arapça; anahtarlar EN_SOZLUK ile aynı küme) ──
@@ -12817,6 +12823,12 @@ const AR_SOZLUK: Record<string, string> = {
   "Hedef adını yaz": "اكتب اسم الهدف",
   "Hedef tutarını gir, vadeni seç": "أدخل المبلغ المستهدف واختر المدة",
   "Hedef ekle": "إضافة هدف",
+  "Takvim bildirimleri": "إشعارات التقويم",
+  "Seçtiğin kategorilerde tarih yaklaşınca haber ver": "احصل على إشعار عند اقتراب التاريخ في الفئات التي تختارها",
+  "Ne zaman haber verelim?": "متى نُعلمك؟",
+  "Aynı gün": "في اليوم نفسه",
+  "3 gün önce": "قبل 3 أيام",
+  "Bildirimler yalnızca iPhone ve Android uygulamasında çalışır.": "الإشعارات تعمل فقط في تطبيق آيفون وأندرويد.",
 };
 // Çeviri (normal harf): İngilizce moddaysa sözlükten çevirir, yoksa aynen bırakır.
 const CV = (s: any): string => { const k = s == null ? "" : String(s); const z = kpSozluk(); return z ? (z[k] ?? k) : k; };
@@ -32386,7 +32398,79 @@ function KatilimBankalari(){
   );
 }
 
+// ── FİNANSAL TAKVİM BİLDİRİMLERİ (2026-10-09) ───────────────────────────────
+// Kategori (PPK, FED, ZK, TL Payı, Kredi Büyüme) bazında YEREL bildirim: telefon kendi zamanlar (sunucu yok; bkz. bmLN notu).
+// Ayar: {kat:{ppk:true,...}, once:0|1|3} — "once" = olaydan kaç gün önce; 0 → aynı gün 09:00, diğerleri 10:00.
+// Uygulama her açıldığında ve ayar değiştikçe önümüzdeki 75 gün için yeniden planlanır (iOS en fazla 64 bekleyen bildirim tutar; en çok 40 kullanılır).
+const TAKVIM_BILDIRIM_LS = "kp_takvim_bildirim_v1";
+const TAKVIM_BILDIRIM_TABAN = 940000;
+const TAKVIM_BILDIRIM_MAKS = 40;
+const TAKVIM_KATEGORILER: { tip: string; ad: string; icon: string }[] = [
+  { tip: "ppk", ad: "PPK Toplantısı", icon: "🏛️" },
+  { tip: "fed", ad: "FED (FOMC) Faiz Kararı", icon: "🇺🇸" },
+  { tip: "zk", ad: "ZK Hesaplama", icon: "📊" },
+  { tip: "tlpayi", ad: "TL Payı Rasyo Hesaplama", icon: "📈" },
+  { tip: "kredi", ad: "Kredi Büyüme Hesaplama", icon: "💳" },
+];
+type TakvimBildirimAyar = { kat: Record<string, boolean>; once: number };
+function takvimBildirimOku(): TakvimBildirimAyar {
+  const v: TakvimBildirimAyar = { kat: {}, once: 1 };
+  try {
+    const d = JSON.parse(localStorage.getItem(TAKVIM_BILDIRIM_LS) || "null");
+    if (!d) return v;
+    for (const k of TAKVIM_KATEGORILER) if (d.kat && d.kat[k.tip]) v.kat[k.tip] = true;
+    v.once = [0, 1, 3].includes(Number(d.once)) ? Number(d.once) : 1;
+  } catch {}
+  return v;
+}
+function takvimBildirimYaz(a: TakvimBildirimAyar) { try { localStorage.setItem(TAKVIM_BILDIRIM_LS, JSON.stringify(a)); } catch {} }
+async function takvimBildirimPlanla(ayar: TakvimBildirimAyar): Promise<number> {
+  if (!IS_NATIVE) return 0;
+  const LN = await bmLN();
+  try { await LN.cancel({ notifications: Array.from({ length: TAKVIM_BILDIRIM_MAKS }, (_x, i) => ({ id: TAKVIM_BILDIRIM_TABAN + i })) }); } catch {}
+  const acik = TAKVIM_KATEGORILER.filter(k => ayar.kat[k.tip]).map(k => k.tip);
+  if (!acik.length) return 0;
+  const simdi = new Date(), sinir = new Date(simdi.getTime() + 75 * 86400000);
+  const AYLAR = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
+  const GUNLER = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
+  const evs = katilimFinansalTakvimEvents().filter((e: any) => acik.includes(e.tip)).sort((a: any, b: any) => a.tarih - b.tarih);
+  const plan: any[] = [];
+  for (const e of evs) {
+    const gun = new Date(e.tarih.getFullYear(), e.tarih.getMonth(), e.tarih.getDate());
+    const at = new Date(gun); at.setDate(at.getDate() - ayar.once); at.setHours(ayar.once === 0 ? 9 : 10, 0, 0, 0);
+    if (at.getTime() <= simdi.getTime() + 30000 || at.getTime() > sinir.getTime()) continue;
+    const onek = ayar.once === 0 ? "Bugün" : ayar.once === 1 ? "Yarın" : `${ayar.once} gün sonra`;
+    const ipucu = e.tip === "ppk" ? " Karar saat 14:00'te açıklanır." : e.tip === "fed" ? " Karar Türkiye saatiyle gece açıklanır." : "";
+    plan.push({
+      id: TAKVIM_BILDIRIM_TABAN + plan.length, title: `${onek}: ${e.label}`,
+      body: `${gun.getDate()} ${AYLAR[gun.getMonth()]} ${gun.getFullYear()} ${GUNLER[gun.getDay()]}.${ipucu}`.slice(0, 180),
+      schedule: { at, allowWhileIdle: true }, extra: { tip: "takvim" },
+    });
+    if (plan.length >= TAKVIM_BILDIRIM_MAKS) break;
+  }
+  if (plan.length) await LN.schedule({ notifications: plan });
+  return plan.length;
+}
+
 function FinansalTakvim(){
+  const [ayar,setAyar]=useState<TakvimBildirimAyar>(()=>takvimBildirimOku());
+  const [bildirimNot,setBildirimNot]=useState("");
+  const kategoriDegis=async(tip:string)=>{
+    setBildirimNot("");
+    const acilacak=!ayar.kat[tip];
+    if(acilacak){
+      if(!IS_NATIVE){ setBildirimNot("Bildirimler yalnızca iPhone ve Android uygulamasında çalışır."); return; }
+      try{
+        const izin=await bmBildirimIzin(true);
+        if(izin!=="granted"){ setBildirimNot("Bildirim izni verilmedi. Telefon ayarlarından açabilirsin."); return; }
+      }catch{ setBildirimNot("Bildirim izni verilmedi. Telefon ayarlarından açabilirsin."); return; }
+    }
+    const yeni={...ayar,kat:{...ayar.kat,[tip]:acilacak}};
+    setAyar(yeni); takvimBildirimYaz(yeni); takvimBildirimPlanla(yeni).catch(()=>{});
+  };
+  const zamanDegis=(once:number)=>{
+    const yeni={...ayar,once}; setAyar(yeni); takvimBildirimYaz(yeni); takvimBildirimPlanla(yeni).catch(()=>{});
+  };
   const [filtre,setFiltre]=useState("tumu");
   const bugun=new Date(); bugun.setHours(0,0,0,0);
 
@@ -32424,6 +32508,35 @@ function FinansalTakvim(){
         <span style={{fontSize:18}}>⚠️</span>
         <p style={{margin:0,fontSize:13,color:"#92400E",fontWeight:700}}>Önümüzdeki 7 günde {yaklasan} önemli tarih var</p>
       </div>}
+      <div style={{background:C.card,borderRadius:14,padding:"14px 14px 12px",marginBottom:16,border:`1px solid ${C.border}`}}>
+        <p style={{margin:0,fontSize:15,fontWeight:700,color:C.label}}>Takvim bildirimleri</p>
+        <p style={{margin:"3px 0 8px",fontSize:12.5,color:C.sub,lineHeight:1.45}}>Seçtiğin kategorilerde tarih yaklaşınca haber ver</p>
+        {TAKVIM_KATEGORILER.map((k,i)=>{
+          const acik=!!ayar.kat[k.tip];
+          const sonraki=tumEvents.find(e=>e.tip===k.tip);
+          return(
+            <div key={k.tip} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderTop:i?`1px solid ${C.border}`:"none"}}>
+              <span style={{fontSize:20,width:26,textAlign:"center",flexShrink:0}}>{k.icon}</span>
+              <div style={{flex:1,minWidth:0}}>
+                <p style={{margin:0,fontSize:14,fontWeight:600,color:C.label}}>{k.ad}</p>
+                {sonraki&&<p style={{margin:"1px 0 0",fontSize:12,color:C.sub}}>{formatTarih(sonraki.tarih)}</p>}
+              </div>
+              <button role="switch" aria-checked={acik} aria-label={k.ad} onClick={()=>kategoriDegis(k.tip)}
+                style={{flexShrink:0,width:48,height:28,borderRadius:99,border:"none",background:acik?C.green:WA(0.2),position:"relative",cursor:"pointer",padding:0}}>
+                <span style={{position:"absolute",top:3,left:acik?23:3,width:22,height:22,borderRadius:"50%",background:"#fff",transition:"left .2s"}}/>
+              </button>
+            </div>
+          );
+        })}
+        <p style={{margin:"10px 0 6px",fontSize:12.5,fontWeight:600,color:C.sub}}>Ne zaman haber verelim?</p>
+        <div style={{display:"flex",gap:8}}>
+          {[{v:0,l:"Aynı gün"},{v:1,l:"1 gün önce"},{v:3,l:"3 gün önce"}].map(o=>(
+            <button key={o.v} aria-pressed={ayar.once===o.v} onClick={()=>zamanDegis(o.v)}
+              style={{flex:1,padding:"10px 6px",borderRadius:10,fontSize:13.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit",border:`1px solid ${ayar.once===o.v?C.green:C.border}`,background:ayar.once===o.v?C.greenLight:"transparent",color:ayar.once===o.v?C.green:C.label}}>{o.l}</button>
+          ))}
+        </div>
+        {bildirimNot&&<p style={{margin:"10px 0 0",fontSize:12.5,color:C.orange,lineHeight:1.45}}>{bildirimNot}</p>}
+      </div>
       <div style={{display:"flex",gap:8,marginBottom:18,overflowX:"auto",paddingBottom:4,WebkitOverflowScrolling:"touch"}}>
         {FILTRELER.map(f=>(
           <button key={f.v} onClick={()=>setFiltre(f.v)} style={{
@@ -43625,6 +43738,8 @@ function App(){
   // Kullanıcı "Bilgi" gibi kapalı bir grubun içeriğini mouse ile aşağı kaydırması gerektiğini anlamıyordu.
   const [yanGrup,setYanGrup]=useState<{baslik:string;top:number}|null>(null);
   const yanGrupZamanlayici=useRef<any>(null);
+  // Finansal Takvim bildirimleri açıksa, uygulama her açıldığında önümüzdeki 75 günü yeniden planla (yalnızca iOS/Android uygulaması).
+  useEffect(()=>{ if(!IS_NATIVE) return; try{ const a=takvimBildirimOku(); if(Object.values(a.kat).some(Boolean)) takvimBildirimPlanla(a).catch(()=>{}); }catch{} },[]);
   // DÜZELTME (2026-07-16): Eskiden bu tercih localStorage'a kalıcı
   // yazılıyordu — kullanıcı bir kere kapatınca sayfa yenilense bile bir
   // daha hiç görünmüyordu. Artık sadece o oturumda (React state) gizleniyor;
@@ -44816,9 +44931,8 @@ function App(){
               const digerBugunEtk = [...bugunEtk.filter(e=>!KISA_AD[e.label]), ...vadeEtk];
 
               const parcalar:string[]=[];
-              if(hesaplamaGunleri.length>0){
-                parcalar.push(`🔴 Bugün ${hesaplamaGunleri.join(" ve ")} Hesaplama günü`);
-              }
+              // 2026-10-09: "Bugün ZK/TL Payı/Kredi Büyüme Hesaplama günü" cümlesi banttan KALDIRILDI (kullanıcı isteği);
+              // bu tarihler artık Finansal Takvim'deki bildirim ayarlarından istenen kategori için bildirim olarak alınır.
               parcalar.push(...digerBugunEtk.map((e:any)=>{
                 // PPK için saat + açıklama içeren bilgilendirici mesaj — TCMB Para
                 // Politikası Kurulu kararları Türkiye saatiyle 14:00'da açıklanır
@@ -45020,7 +45134,7 @@ function App(){
                     display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:7,
                     ...sf.stil,
                   }}>
-                    {renk&&<div style={{position:"absolute",top:0,left:12,right:12,height:3,borderRadius:"0 0 3px 3px",background:`linear-gradient(90deg,transparent,${renk},transparent)`}}/>}
+                    {/* 2026-10-09: ana sayfa kartlarının üst renk çizgisi kaldırıldı (anlam taşımıyordu) */}
                     <div style={{height:44,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                       <Icon k={item.key} size={32} color={C.blue} style={{filter:"drop-shadow(0 0 6px rgba(91,155,216,0.5))"}}/>
                     </div>
@@ -45081,7 +45195,7 @@ function App(){
                         borderRadius:22,padding:"14px 8px",cursor:"pointer",minHeight:98,position:"relative",overflow:"hidden",
                         display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:7,
                       }}>
-                      {renk&&<div style={{position:"absolute",top:0,left:12,right:12,height:3,borderRadius:"0 0 3px 3px",background:`linear-gradient(90deg,transparent,${renk},transparent)`}}/>}
+                      {/* 2026-10-09: ana sayfa kartlarının üst renk çizgisi kaldırıldı (anlam taşımıyordu) */}
                       <div style={{height:46,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                         <Icon k={c.key} size={33} color={C.blue} style={{filter:"drop-shadow(0 0 6px rgba(91,155,216,0.5))"}}/>
                       </div>
