@@ -12920,19 +12920,47 @@ const TR = (s: any): string => { const k = s == null ? "" : String(s); const z =
 })();
 
 
-// TLREFK: EVDS'de gerçek/doğrulanmış bir kodu yok. Borsa İstanbul'un resmi
-// sitesinden alınan 7 günlük gerçek TLREFK verisiyle bizim hesapladığımız
-// TLREF karşılaştırıldı: TLREFK, TLREF'in tutarlı şekilde ~0,096 puan altında
-// seyrediyor (standart sapma sadece 0,015 puan — çok sıkı bir ilişki).
-// Backend'e/EVDS'e hiç gitmeden, TLREF verisi geldiği an burada anında
-// hesaplanır — ayrı bir sorgu veya deploy'a bağlı değildir.
+// TLREFK: EVDS'de kodu yok. 2026-10-09'a kadar TLREF − 0,096 olarak TAHMİN ediliyordu.
+// Artık Borsa İstanbul'un resmi verisi sunucudan (/api/piyasa-fiyatlar?tip=tlrefk) alınıyor;
+// bu veri henüz gelmediyse (ya da sunucu Borsa İstanbul'a ulaşamazsa) eski tahmin AYNEN devreye girer,
+// yani ekran hiçbir zaman boş kalmaz.
+// Tahminin dayanağı: 7 günlük gerçek TLREFK ile TLREF karşılaştırıldı, fark ~0,096 puan (sapma 0,015).
 const TLREF_TLREFK_FARKI = 0.096;
+let TLREFK_GERCEK: {tarih:string, deger:number}[] | null = null; // YYYY-MM-DD, eskiden yeniye
+let TLREFK_GERCEK_ZAMAN = 0;
+async function tlrefkGercekYukle(): Promise<boolean> {
+  try {
+    if (TLREFK_GERCEK && Date.now() - TLREFK_GERCEK_ZAMAN < 30*60*1000) return false;
+    const r = await fetch(`${API_BASE}/api/piyasa-fiyatlar?tip=tlrefk`, { cache: "no-store" });
+    if (!r.ok) return false;
+    const d = await r.json();
+    const seri = Array.isArray(d?.seri) ? d.seri.filter((n:any) => n && typeof n.tarih === "string" && Number.isFinite(n.deger)) : [];
+    if (seri.length === 0) return false;
+    TLREFK_GERCEK = seri; TLREFK_GERCEK_ZAMAN = Date.now();
+    return true;
+  } catch { return false; }
+}
+// EVDS serisinin tarih biçimine (GG-AA-YYYY, GG.AA.YYYY, YYYY-AA-GG…) uyar; bilinmiyorsa GG.AA.YYYY
+function tlrefkTarihBicim(iso: string, evdsMakro: any): string {
+  const [y, m, g] = iso.split("-");
+  const ornek: string = String(evdsMakro?.["TP.BISTTLREF.KAPANIS"]?.tarih || evdsMakro?.["TP.BISTTLREF.KAPANIS_SERI"]?.[0]?.tarih || "");
+  if (/^\d{4}-\d{2}-\d{2}/.test(ornek)) return iso;
+  if (/^\d{2}-\d{2}-\d{4}/.test(ornek)) return `${g}-${m}-${y}`;
+  if (/^\d{2}\/\d{2}\/\d{4}/.test(ornek)) return `${g}/${m}/${y}`;
+  return `${g}.${m}.${y}`;
+}
+function tlrefkKaynakEtiket(): string { return TLREFK_GERCEK ? "Borsa İstanbul" : "TLREF-0,096"; }
 function tlrefkTahmini(evdsMakro: any): {deger:number, tarih:string} | null {
+  if (TLREFK_GERCEK && TLREFK_GERCEK.length) {
+    const son = TLREFK_GERCEK[TLREFK_GERCEK.length - 1];
+    return { deger: son.deger, tarih: tlrefkTarihBicim(son.tarih, evdsMakro) };
+  }
   const tlref = evdsMakro?.["TP.BISTTLREF.KAPANIS"];
   if (tlref?.deger == null) return null;
   return { deger: tlref.deger - TLREF_TLREFK_FARKI, tarih: tlref.tarih };
 }
 function tlrefkSeriTahmini(evdsMakro: any): {deger:number, tarih:string}[] {
+  if (TLREFK_GERCEK && TLREFK_GERCEK.length) return TLREFK_GERCEK.map(n => ({ tarih: tlrefkTarihBicim(n.tarih, evdsMakro), deger: n.deger }));
   const seri = evdsMakro?.["TP.BISTTLREF.KAPANIS_SERI"];
   if (!Array.isArray(seri)) return [];
   return seri.map((n:any) => ({ tarih: n.tarih, deger: n.deger - TLREF_TLREFK_FARKI }));
@@ -33670,7 +33698,7 @@ function FinansalGostergeler({onKurTikla}:any){
       (()=>{const tlrefk=tlrefkTahmini(evdsMakro); return {
         ad:"TLREFK (Katılım Bankacılığı)",
         deger:tlrefk?.deger!=null?`%${tlrefk.deger.toFixed(2).replace(".",",")}`:"—",
-        tarih:tlrefk?.tarih?`${tlrefk.tarih} · TLREF-0,096`:"BIST",
+        tarih:tlrefk?.tarih?`${tlrefk.tarih} · ${tlrefkKaynakEtiket()}`:"BIST",
         canli:tlrefk!=null,
         seri:tlrefkSeriTahmini(evdsMakro),seriAd:"TLREFK",
       };})(),
@@ -43748,6 +43776,9 @@ function App(){
   // Kullanıcı "Bilgi" gibi kapalı bir grubun içeriğini mouse ile aşağı kaydırması gerektiğini anlamıyordu.
   const [yanGrup,setYanGrup]=useState<{baslik:string;top:number}|null>(null);
   const yanGrupZamanlayici=useRef<any>(null);
+  // TLREFK gerçek verisi (Borsa İstanbul): yüklenince ekranlar yeniden çizilsin diye sayaç.
+  const [,setTlrefkSurum]=useState(0);
+  useEffect(()=>{ let canli=true; const yukle=()=>{ tlrefkGercekYukle().then(y=>{ if(y&&canli) setTlrefkSurum(v=>v+1); }); }; yukle(); const t=setInterval(yukle,60*60*1000); return ()=>{ canli=false; clearInterval(t); }; },[]);
   // Finansal Takvim bildirimleri açıksa, uygulama her açıldığında önümüzdeki 75 günü yeniden planla (yalnızca iOS/Android uygulaması).
   useEffect(()=>{ if(!IS_NATIVE) return; try{ const a=takvimBildirimOku(); if(Object.values(a.kat).some(Boolean)) takvimBildirimPlanla(a).catch(()=>{}); }catch{} },[]);
   // DÜZELTME (2026-07-16): Eskiden bu tercih localStorage'a kalıcı
@@ -45260,7 +45291,7 @@ function App(){
                     (()=>{const tlrefk=tlrefkTahmini(evdsMakro); return {
                       ad:"TLREFK (Katılım)",
                       deger:tlrefk?.deger!=null?`%${tlrefk.deger.toFixed(2).replace(".",",")}`:"—",
-                      tarih:tlrefk?.tarih?`${tlrefk.tarih} · TLREF-0,096`:"",
+                      tarih:tlrefk?.tarih?`${tlrefk.tarih} · ${tlrefkKaynakEtiket()}`:"",
                       ikon:Scale, renk:"#8B5CF6",
                       seri:tlrefkSeriTahmini(evdsMakro), seriAd:"TLREFK (Katılım)",
                     };})(),
@@ -45915,7 +45946,7 @@ function App(){
                  seri:evdsMakro?.["TP.BISTTLREF.KAPANIS_SERI"], seriAd:"TLREF (Yıllıklandırılmış)"},
                 {ad:"TLREFK (Katılım Bankacılığı)",
                  deger:tlrefk?.deger!=null?`%${tlrefk.deger.toFixed(2).replace(".",",")}`:"—",
-                 tarih:tlrefk?.tarih?`${tlrefk.tarih} · TLREF-0,096`:"BIST",
+                 tarih:tlrefk?.tarih?`${tlrefk.tarih} · ${tlrefkKaynakEtiket()}`:"BIST",
                  canli:tlrefk!=null,
                  seri:tlrefkSeriTahmini(evdsMakro), seriAd:"TLREFK"},
                 {ad:"SOFR (ABD Referans)", deger:evdsMakro?.["FRED_SOFR"]?.deger!=null?`%${evdsMakro["FRED_SOFR"].deger.toFixed(2).replace(".",",")}`:"—", tarih:evdsMakro?.["FRED_SOFR"]?.tarih||"FRED", canli:evdsMakro?.["FRED_SOFR"]!=null,
