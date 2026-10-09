@@ -33441,7 +33441,17 @@ function GostergeTabloModal({ad,seri,birim,proAktif,onClose,onProGerekli,karPayi
   const getY=(v:number)=>cizimAltY-((v-minVE)/aralik)*(cizimAltY-cizimUstY);
   // X ekseninde en fazla 5 tarih etiketi (baş, son ve arada eşit aralıklarla) — 24 noktanın hepsi sığmaz.
   const xEtiketIdx = gosterilecekSeri.length<=1 ? [0] : (()=>{ const n=Math.min(5,gosterilecekSeri.length); const idx=new Set<number>(); for(let k=0;k<n;k++) idx.add(Math.round(k*(gosterilecekSeri.length-1)/(n-1))); return [...idx]; })();
-  const kisaTarih=(t:string)=> t.split("-").slice(0,2).join("-"); // "DD-MM-YYYY" -> "DD-MM"
+  // Uzun serilerde (>60 nokta, birkaç yıl) GG-AA yıl belirsizliği yaratıyordu → AA-YYYY. Kısa serilerde GG-AA.
+  const uzunSeri = gosterilecekSeri.length > 60;
+  const kisaTarih=(t:string)=>{ const p=t.split(/[-.\/]/); if(p.length<3) return t; return uzunSeri ? (p[0].length===4 ? `${p[1]}-${p[0]}` : `${p[1]}-${p[2]}`) : (p[0].length===4 ? `${p[2]}-${p[1]}` : `${p[0]}-${p[1]}`); }; // "DD-MM-YYYY"
+  // Dokunma/fare: çizim alanında en yakın veri noktasını seç (yüzlerce noktada tek tek daire tıklanamaz)
+  const grafikDokun=(e:any)=>{
+    const el=e.currentTarget as SVGSVGElement; const r=el.getBoundingClientRect();
+    if(!r.width||gosterilecekSeri.length===0) return;
+    const x=(e.clientX-r.left)*(GW/r.width);
+    const oran=Math.min(1,Math.max(0,(x-cizimSolX)/cizimGenislik));
+    setTooltip(Math.round(oran*(gosterilecekSeri.length-1)));
+  };
 
   return(
     <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.7)",zIndex:600,display:"flex",alignItems:"flex-end",...(ekranZoomTersi()!==1?{zoom:ekranZoomTersi()}:{})}} onClick={onClose}>
@@ -33464,7 +33474,8 @@ function GostergeTabloModal({ad,seri,birim,proAktif,onClose,onProGerekli,karPayi
               </div>
             )}
             <div ref={grafikRef} style={{padding:"16px 20px 4px"}}>
-              <svg viewBox={`0 0 ${GW} ${GH}`} style={{width:"100%",height:GH,display:"block",overflow:"visible"}}>
+              <svg viewBox={`0 0 ${GW} ${GH}`} style={{width:"100%",height:GH,display:"block",overflow:"visible",touchAction:"pan-y"}}
+                   onPointerDown={uzunSeri?grafikDokun:undefined} onPointerMove={uzunSeri?((e:any)=>{ if(e.pointerType==="mouse"||e.buttons) grafikDokun(e); }):undefined}>
                 {/* Y ekseni — 3 kademeli (üst/orta/alt) yatay kılavuz çizgi + oran etiketi, solda */}
                 {[maxVE,(maxVE+minVE)/2,minVE].map((v,gi)=>{
                   const y=getY(v);
@@ -33479,10 +33490,11 @@ function GostergeTabloModal({ad,seri,birim,proAktif,onClose,onProGerekli,karPayi
                 {gosterilecekSeri.length>0 && (
                   <polyline
                     points={gosterilecekSeri.map((s,i)=>`${getX(i)},${getY(s.deger)}`).join(" ")}
-                    fill="none" stroke={C.blue} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round"
+                    fill="none" stroke={C.blue} strokeWidth={uzunSeri?1.5:2} strokeLinejoin="round" strokeLinecap="round"
                   />
                 )}
-                {gosterilecekSeri.map((s,i)=>(
+                {/* ≤60 nokta: her nokta daire (tıklanır). >60 nokta: yalnız çizgi; seçili nokta + dikey kılavuz, son nokta vurgulu. */}
+                {!uzunSeri && gosterilecekSeri.map((s,i)=>(
                   <circle key={i}
                     cx={getX(i)} cy={getY(s.deger)}
                     r={tooltip===i?5:3}
@@ -33493,16 +33505,25 @@ function GostergeTabloModal({ad,seri,birim,proAktif,onClose,onProGerekli,karPayi
                     style={{cursor:"pointer"}}
                   />
                 ))}
+                {uzunSeri && tooltip!=null && gosterilecekSeri[tooltip] && (
+                  <g>
+                    <line x1={getX(tooltip)} y1={cizimUstY} x2={getX(tooltip)} y2={cizimAltY} stroke={WA(0.25)} strokeWidth={1} strokeDasharray="3 3"/>
+                    <circle cx={getX(tooltip)} cy={getY(gosterilecekSeri[tooltip].deger)} r={5} fill={C.blue} stroke={C.card} strokeWidth={2}/>
+                  </g>
+                )}
+                {uzunSeri && tooltip==null && (
+                  <circle cx={getX(gosterilecekSeri.length-1)} cy={getY(gosterilecekSeri[gosterilecekSeri.length-1].deger)} r={4} fill={C.blue} stroke={C.card} strokeWidth={2}/>
+                )}
                 {/* X ekseni — altta birkaç tarih etiketi (GG-AA) */}
                 {xEtiketIdx.map(i=>(
                   <text key={i} x={getX(i)} y={GH-2} fontSize={9} textAnchor="middle" fill={C.sub}>{kisaTarih(gosterilecekSeri[i].tarih)}</text>
                 ))}
               </svg>
-              {tooltip!=null&&seri[tooltip]&&(
+              {tooltip!=null&&gosterilecekSeri[tooltip]&&(
                 <div style={{marginTop:8,textAlign:"center",background:WA(0.06),borderRadius:10,padding:"6px 10px"}}>
-                  <span style={{fontSize:11.5,color:C.sub}}>{seri[tooltip].tarih}</span>
-                  <span style={{fontSize:13.5,fontWeight:700,color:isYuzde?(seri[tooltip].deger>=0?C.green:C.red):C.blue,marginLeft:8}}>
-                    {fmtDeger(seri[tooltip].deger)}
+                  <span style={{fontSize:11.5,color:C.sub}}>{gosterilecekSeri[tooltip].tarih}</span>
+                  <span style={{fontSize:13.5,fontWeight:700,color:isYuzde?(gosterilecekSeri[tooltip].deger>=0?C.green:C.red):C.blue,marginLeft:8}}>
+                    {fmtDeger(gosterilecekSeri[tooltip].deger)}
                   </span>
                 </div>
               )}
