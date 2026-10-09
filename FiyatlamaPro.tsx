@@ -32140,16 +32140,33 @@ const ICAZET_BANKALARI:IcazetBanka[] = [
       ["POS Hizmetleri", ICZ_KT+"pos-iczet-belgesi-2910.pdf"],
       ["Stok Finansmanı", ICZ_KT+"stok-finansmani-iczet-belgesi-4067.pdf"]
     ] },
-  { ad:"Albaraka Türk", renk:"#2E6DA8", alanAdi:"albaraka.com.tr", sonKontrol:"03.10.2026",
+  { ad:"Albaraka Türk", renk:"#2E6DA8", alanAdi:"albaraka.com.tr", sonKontrol:"09.10.2026",
     sayfa:"https://www.albaraka.com.tr/tr/hakkimizda/katilim-bankaciligi/icazet-belgeleri",
-    ek:"Albaraka bu sayfada onlarca belge yayımlıyor (emekli maaş promosyonu, kredi kartı, araç ve konut finansmanı, hac-umre, kira sertifikası, teminat mektubu vb.). Sayfa listeyi \"Daha fazla görüntüle\" ile sonradan yüklediği için buradaki liste henüz eksik; tamamını görmek için bankanın icazet sayfasına git.",
+    // 2026-10-09: bankanın sayfası ilk 4 belgeyi gösterip kalanını "Daha fazla görüntüle" ile yüklüyor; tam liste (22 belge) o isteğin
+    // yanıtından (plugins/GetLandingPageReports) alındı. Albaraka yeni belge eklerse bu liste güncellenmeli.
     urunler:[
       ["Özel Fon Havuzu Katılma Hesabı", ICZ_AB+"2025-ekim--ozel-fon-havuzu-katilma-hesabi.pdf"],
       ["Özel Cari Hesap", ICZ_AB+"2025-ekim--ozel-cari-hesap.pdf"],
       ["Müşteri Geri Satım Taahhütlü Fon (M-GTF)", ICZ_AB+"mgft-icazet.pdf"],
       ["Fiziki Altın Dönüşümlü Kur Korumalı Katılma Hesabı", ICZ_AB+"fiziki-altin-donusumlu-kur-korumali-katilma-hesabi.pdf"],
-      ["Yuvam Hesabı", ICZ_AB+"yuvam-hesap-icazet-belgesi.pdf"],
-      ["Albaraka Portföy Katılım Serbest (Döviz) Fon", ICZ_AB+"al5---icazet-belgesi-(2).pdf"]
+      ["Emekli Maaş Promosyonu", ICZ_AB+"emekli-maas-promosyonu-turkce.pdf"],
+      ["Yuvam Kur Korumalı Katılma Hesabı", ICZ_AB+"yuvam-kur-korumali-katilma-hesabi.pdf"],
+      ["Kâr-Zarar Ortaklığı", ICZ_AB+"kar-zarar-ortakligi-icazet-belgesi.pdf"],
+      ["Kur Korumalı TL Hesabı", ICZ_AB+"kur-korumali-hesap.pdf"],
+      ["Albaraka Portföy Katılım Serbest (Döviz) Fon", ICZ_AB+"al5---icazet-belgesi-(2).pdf"],
+      ["RBV - Albaraka Portföy Kısa Vadeli Kira Sertifikaları Katılım (TL) Fonu", ICZ_AB+"rbv-icazet-belgesi.pdf"],
+      ["Teminat Mektubu - Avâl - Akreditif", ICZ_AB+"teminat-mektubu-aval-akreditif-icazet-belgesi.pdf"],
+      ["Kredi Kartı", ICZ_AB+"2023-temmuz-kredi-karti-icazet-belgesi.pdf"],
+      ["Araç Finansmanı", ICZ_AB+"arac-finansmaani-icazet-belgesi.pdf"],
+      ["Konut Finansmanı", ICZ_AB+"konut-finansmani-icazet-belgesi.pdf"],
+      ["Hac ve Umre İbadetleri", ICZ_AB+"hac-ve-umre-ibadetleri-icazet-belgesi.pdf"],
+      ["Kira Sertifikası", ICZ_AB+"kira-sertifikasi.pdf"],
+      ["Yatırım Vekâleti Sözleşmesine Dayalı Katılma Hesabı", ICZ_AB+"yatirim-vekaleti-sozlesmesine-dayali-katilma-hesabi.pdf"],
+      ["Yönetim Sözleşmesine Dayalı Kira Sertifikası İhraç Yapısı (Opsiyon 1)", ICZ_AB+"yonetim-sozlesmesine-dayali-kira-sertifikasi-ihraci-icazet-belgesi-opsiyon1.pdf"],
+      ["Altın Katılma Hesabı", ICZ_AB+"altin-katilma-hesabi.pdf"],
+      ["Ortaklık (Mudârebe) Sözleşmesine Dayalı Katılma Hesabı", ICZ_AB+"ortaklik-(mudarebe)-sozlesmesine-dayali-katilma-hesabi.pdf"],
+      ["Satım-Kiralama Yöntemleriyle Nakdi Finansman", ICZ_AB+"satim-kiralama-yontemleriyle-nakdi-finansman.pdf"],
+      ["Albaraka Portföy Kısa Vadeli Katılım Serbest (TL) Fon (PVK)", ICZ_AB+"albaraka-portfoy-kisa-vadeli-katilim-serbest-(tl)-fon-(pvk).pdf"]
     ] },
   { ad:"Emlak Katılım", renk:"#C97B4A", alanAdi:"emlakkatilim.com.tr", sonKontrol:"03.10.2026",
     sayfa:"https://www.emlakkatilim.com.tr/tr/hakkimizda/faizsiz-bankacilik",
