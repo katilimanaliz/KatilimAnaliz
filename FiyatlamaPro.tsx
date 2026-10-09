@@ -30031,6 +30031,7 @@ function BirikimHesaplayici() {
   const [yatirAcik, setYatirAcik] = useState(false);
   const [yatirTutar, setYatirTutar] = useState(0);
   const [hatNot, setHatNot] = useState("");
+  const [adAcik, setAdAcik] = useState<boolean>(() => { const s0 = birikimOku(); const h0 = s0.hedefler.find(x => x.id === s0.secili) || s0.hedefler[0]; return !h0.ad && !h0.ozel; });
   const gGuncelle = (yama: Partial<BirikimHedef>) => guncelle(o => ({ ...o, hedefler: o.hedefler.map(x => x.id === g.id ? { ...x, ...yama } : x) }));
 
   const para = (n: number) => `${new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 0 }).format(Math.round(n))} ₺`;
@@ -30068,7 +30069,8 @@ function BirikimHesaplayici() {
     const id = `h${Date.now().toString(36)}`;
     return { ...o, hedefler: [...o.hedefler, birikimBosHedef(id)], secili: id };
   });
-  const hedefSil = () => { birikimBildirimPlanla({ id: g.id, ad: g.ad, hatGun: 0 }, 0).catch(() => {}); hedefSilDevam(); };
+  const hedefEkleAc = () => { hedefEkle(); setAdAcik(true); };
+  const hedefSil = () => { birikimBildirimPlanla({ id: g.id, ad: g.ad, hatGun: 0 }, 0).catch(() => {}); hedefSilDevam(); setAdAcik(false); };
   const hedefSilDevam = () => guncelle(o => {
     if (o.hedefler.length <= 1) return o;
     const kalan = o.hedefler.filter(x => x.id !== g.id);
@@ -30110,23 +30112,25 @@ function BirikimHesaplayici() {
       {/* HEDEF SEKMELERİ */}
       <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
         {v.hedefler.map(x => (
-          <button key={x.id} aria-pressed={x.id === g.id} onClick={() => guncelle(o => ({ ...o, secili: x.id }))}
+          <button key={x.id} aria-pressed={x.id === g.id} aria-expanded={x.id === g.id ? adAcik : undefined}
+            onClick={() => { if (x.id === g.id) setAdAcik(a => !a); else { guncelle(o => ({ ...o, secili: x.id })); setAdAcik(!x.ad && !x.ozel); } }}
             style={{ flexShrink: 0, padding: "9px 15px", borderRadius: 99, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${x.id === g.id ? "#16A34A" : WA(0.14)}`, background: x.id === g.id ? "#16A34A" : "transparent", color: x.id === g.id ? "#fff" : yazi }}>
-            {x.ad || "Yeni hedef"}
+            {x.ad || "Yeni hedef"}{x.id === g.id ? (adAcik ? " ▴" : " ▾") : ""}
           </button>
         ))}
         {v.hedefler.length < 12 && (
-          <button onClick={hedefEkle} style={{ flexShrink: 0, padding: "9px 15px", borderRadius: 99, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px dashed ${WA(0.3)}`, background: "transparent", color: WA(0.6) }}>+ Hedef ekle</button>
+          <button onClick={hedefEkleAc} style={{ flexShrink: 0, padding: "9px 15px", borderRadius: 99, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px dashed ${WA(0.3)}`, background: "transparent", color: WA(0.6) }}>+ Hedef ekle</button>
         )}
       </div>
 
-      <div style={{ marginTop: 12 }}>
+      {adAcik && (
+      <div style={{ marginTop: 10, background: kartBg, border: `1px solid ${kartCizgi}`, borderRadius: 14, padding: "12px 14px 14px" }}>
           <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 600, color: baslik }}>Hedef adı</p>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {BIRIKIM_ADLARI.map(ad => {
               const sec = !g.ozel && g.ad === ad;
               return (
-                <button key={ad} aria-pressed={sec} onClick={() => gGuncelle({ ad, ozel: false })}
+                <button key={ad} aria-pressed={sec} onClick={() => { gGuncelle({ ad, ozel: false }); setAdAcik(false); }}
                   style={{ padding: "9px 14px", borderRadius: 99, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${sec ? "#16A34A" : WA(0.14)}`, background: sec ? "rgba(22,163,74,0.14)" : "transparent", color: yazi }}>{ad}</button>
               );
             })}
@@ -30134,13 +30138,14 @@ function BirikimHesaplayici() {
               style={{ padding: "9px 14px", borderRadius: 99, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px ${g.ozel ? "solid" : "dashed"} ${g.ozel ? "#16A34A" : WA(0.3)}`, background: g.ozel ? "rgba(22,163,74,0.14)" : "transparent", color: yazi }}>Diğer</button>
           </div>
           {g.ozel && (
-            <input value={g.ad} maxLength={40} placeholder="Hedef adını yaz" onChange={(e: any) => gGuncelle({ ad: e.target.value })} type="text" autoComplete="off"
+            <input value={g.ad} maxLength={40} placeholder="Hedef adını yaz" onChange={(e: any) => gGuncelle({ ad: e.target.value })} onKeyDown={(e: any) => { if (e.key === "Enter") setAdAcik(false); }} type="text" autoComplete="off"
               style={{ marginTop: 10, width: "100%", boxSizing: "border-box", padding: "11px 12px", borderRadius: 10, border: `1px solid ${WA(0.14)}`, background: TEMA === "acik" ? "#fff" : WA(0.04), color: yazi, fontSize: 16, fontWeight: 700, outline: "none", fontFamily: "inherit" }} />
           )}
           {v.hedefler.length > 1 && (
             <button onClick={hedefSil} style={{ marginTop: 10, padding: "9px 14px", borderRadius: 10, border: "1px solid rgba(220,80,80,0.4)", background: "transparent", color: "#DC5050", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Hedefi sil</button>
           )}
       </div>
+      )}
 
       {/* SONUÇ */}
       <div style={{ background: kartBg, border: `1px solid ${kartCizgi}`, borderRadius: 16, padding: "16px 16px 12px", marginTop: 10 }}>
