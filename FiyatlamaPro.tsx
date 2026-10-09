@@ -12928,17 +12928,40 @@ const TR = (s: any): string => { const k = s == null ? "" : String(s); const z =
 const TLREF_TLREFK_FARKI = 0.096;
 let TLREFK_GERCEK: {tarih:string, deger:number}[] | null = null; // YYYY-MM-DD, eskiden yeniye
 let TLREFK_GERCEK_ZAMAN = 0;
-async function tlrefkGercekYukle(): Promise<boolean> {
+async function borsaReferansYukle(tip: "tlrefk"|"tlref"): Promise<boolean> {
   try {
-    if (TLREFK_GERCEK && Date.now() - TLREFK_GERCEK_ZAMAN < 30*60*1000) return false;
-    const r = await fetch(`${API_BASE}/api/piyasa-fiyatlar?tip=tlrefk`, { cache: "no-store" });
+    const mevcut = tip === "tlref" ? TLREF_GERCEK : TLREFK_GERCEK;
+    const zaman = tip === "tlref" ? TLREF_GERCEK_ZAMAN : TLREFK_GERCEK_ZAMAN;
+    if (mevcut && Date.now() - zaman < 30*60*1000) return false;
+    const r = await fetch(`${API_BASE}/api/piyasa-fiyatlar?tip=${tip}`, { cache: "no-store" });
     if (!r.ok) return false;
     const d = await r.json();
     const seri = Array.isArray(d?.seri) ? d.seri.filter((n:any) => n && typeof n.tarih === "string" && Number.isFinite(n.deger)) : [];
     if (seri.length === 0) return false;
-    TLREFK_GERCEK = seri; TLREFK_GERCEK_ZAMAN = Date.now();
+    if (tip === "tlref") { TLREF_GERCEK = seri; TLREF_GERCEK_ZAMAN = Date.now(); }
+    else { TLREFK_GERCEK = seri; TLREFK_GERCEK_ZAMAN = Date.now(); }
     return true;
   } catch { return false; }
+}
+async function tlrefkGercekYukle(): Promise<boolean> {
+  const sonuc = await Promise.all([borsaReferansYukle("tlrefk"), borsaReferansYukle("tlref")]);
+  return sonuc.some(Boolean);
+}
+// TLREF (gecelik referans faiz): EVDS'den türetilen değer yerine Borsa İstanbul'un resmi verisi; gelmediyse EVDS değeri aynen kalır.
+let TLREF_GERCEK: {tarih:string, deger:number}[] | null = null;
+let TLREF_GERCEK_ZAMAN = 0;
+let TLREF_MAKRO_ONBELLEK: {m:any, g:any, sonuc:any} | null = null;
+function tlrefMakro(evdsMakro: any): any {
+  if (!TLREF_GERCEK || TLREF_GERCEK.length === 0 || !evdsMakro) return evdsMakro;
+  if (TLREF_MAKRO_ONBELLEK && TLREF_MAKRO_ONBELLEK.m === evdsMakro && TLREF_MAKRO_ONBELLEK.g === TLREF_GERCEK) return TLREF_MAKRO_ONBELLEK.sonuc;
+  const son = TLREF_GERCEK[TLREF_GERCEK.length - 1];
+  const sonuc = {
+    ...evdsMakro,
+    "TP.BISTTLREF.KAPANIS": { ...(evdsMakro["TP.BISTTLREF.KAPANIS"] || {}), deger: son.deger, tarih: tlrefkTarihBicim(son.tarih, evdsMakro) },
+    "TP.BISTTLREF.KAPANIS_SERI": TLREF_GERCEK.map(n => ({ tarih: tlrefkTarihBicim(n.tarih, evdsMakro), deger: n.deger })),
+  };
+  TLREF_MAKRO_ONBELLEK = { m: evdsMakro, g: TLREF_GERCEK, sonuc };
+  return sonuc;
 }
 // EVDS serisinin tarih biçimine (GG-AA-YYYY, GG.AA.YYYY, YYYY-AA-GG…) uyar; bilinmiyorsa GG.AA.YYYY
 function tlrefkTarihBicim(iso: string, evdsMakro: any): string {
@@ -33712,10 +33735,10 @@ function FinansalGostergeler({onKurTikla}:any){
       // TLREFK kodu (TP.BISTTLREFK.KAPANIS) analoji ile denendi, ?debug=1 ile
       // doğrulanana kadar "—" gösterebilir.
       {ad:"TLREF (Gecelik Referans Faiz)",
-       deger:evdsMakro?.["TP.BISTTLREF.KAPANIS"]?.deger!=null?`%${evdsMakro["TP.BISTTLREF.KAPANIS"].deger.toFixed(2).replace(".",",")}`:"—",
-       tarih:evdsMakro?.["TP.BISTTLREF.KAPANIS"]?.tarih||"BIST",
-       canli:evdsMakro?.["TP.BISTTLREF.KAPANIS"]!=null,
-       seri:evdsMakro?.["TP.BISTTLREF.KAPANIS_SERI"],seriAd:"TLREF (Yıllıklandırılmış)"},
+       deger:tlrefMakro(evdsMakro)?.["TP.BISTTLREF.KAPANIS"]?.deger!=null?`%${tlrefMakro(evdsMakro)["TP.BISTTLREF.KAPANIS"].deger.toFixed(2).replace(".",",")}`:"—",
+       tarih:tlrefMakro(evdsMakro)?.["TP.BISTTLREF.KAPANIS"]?.tarih||"BIST",
+       canli:tlrefMakro(evdsMakro)?.["TP.BISTTLREF.KAPANIS"]!=null,
+       seri:tlrefMakro(evdsMakro)?.["TP.BISTTLREF.KAPANIS_SERI"],seriAd:"TLREF (Yıllıklandırılmış)"},
       (()=>{const tlrefk=tlrefkTahmini(evdsMakro); return {
         ad:"TLREFK (Katılım Bankacılığı)",
         deger:tlrefk?.deger!=null?`%${tlrefk.deger.toFixed(2).replace(".",",")}`:"—",
@@ -45308,7 +45331,7 @@ function App(){
                     {ad:"TCMB Politika Faizi", deger:"%37,00", tarih:"Haziran 2026 · PPK", ikon:Landmark, renk:C.blue},
                     {ad:"TÜFE (Yıllık)", deger:evdsMakro?.["TUFE_YILLIK"]?.deger!=null?`%${evdsMakro["TUFE_YILLIK"].deger.toFixed(2).replace(".",",")}`:"—", tarih:evdsMakro?.["TUFE_YILLIK"]?.tarih?`${evdsMakro["TUFE_YILLIK"].tarih} · canlı`:"", ikon:TrendingUp, renk:C.red, seri:evdsMakro?.["TUFE_YILLIK_SERI"], seriAd:"TÜFE Yıllık Değişim"},
                     {ad:"TÜFE (Aylık)", deger:evdsMakro?.["TUFE_AYLIK"]?.deger!=null?`%${evdsMakro["TUFE_AYLIK"].deger.toFixed(2).replace(".",",")}`:"—", tarih:evdsMakro?.["TUFE_AYLIK"]?.tarih?`${evdsMakro["TUFE_AYLIK"].tarih} · canlı`:"", ikon:Activity, renk:C.red, seri:evdsMakro?.["TUFE_AYLIK_SERI"], seriAd:"TÜFE Aylık Değişim"},
-                    {ad:"TLREF (Gecelik Referans)", deger:evdsMakro?.["TP.BISTTLREF.KAPANIS"]?.deger!=null?`%${evdsMakro["TP.BISTTLREF.KAPANIS"].deger.toFixed(2).replace(".",",")}`:"—", tarih:evdsMakro?.["TP.BISTTLREF.KAPANIS"]?.tarih?`${evdsMakro["TP.BISTTLREF.KAPANIS"].tarih} · canlı`:"", ikon:Percent, renk:"#8B5CF6", seri:evdsMakro?.["TP.BISTTLREF.KAPANIS_SERI"], seriAd:"TLREF (Yıllıklandırılmış)"},
+                    {ad:"TLREF (Gecelik Referans)", deger:tlrefMakro(evdsMakro)?.["TP.BISTTLREF.KAPANIS"]?.deger!=null?`%${tlrefMakro(evdsMakro)["TP.BISTTLREF.KAPANIS"].deger.toFixed(2).replace(".",",")}`:"—", tarih:tlrefMakro(evdsMakro)?.["TP.BISTTLREF.KAPANIS"]?.tarih?`${evdsMakro["TP.BISTTLREF.KAPANIS"].tarih} · canlı`:"", ikon:Percent, renk:"#8B5CF6", seri:tlrefMakro(evdsMakro)?.["TP.BISTTLREF.KAPANIS_SERI"], seriAd:"TLREF (Yıllıklandırılmış)"},
                     (()=>{const tlrefk=tlrefkTahmini(evdsMakro); return {
                       ad:"TLREFK (Katılım)",
                       deger:tlrefk?.deger!=null?`%${tlrefk.deger.toFixed(2).replace(".",",")}`:"—",
@@ -45961,10 +45984,10 @@ function App(){
                  seri:(evdsMakro?.["TP.APIFON4_SERI"]||[]).map((n:any)=>({tarih:n.tarih, deger:n.deger*0.86})),
                  seriAd:"ZK Nema Oranı (AOFM × %86)"},
                 {ad:"TLREF (Gecelik Referans Faiz)",
-                 deger:evdsMakro?.["TP.BISTTLREF.KAPANIS"]?.deger!=null?`%${evdsMakro["TP.BISTTLREF.KAPANIS"].deger.toFixed(2).replace(".",",")}`:"—",
-                 tarih:evdsMakro?.["TP.BISTTLREF.KAPANIS"]?.tarih||"BIST",
-                 canli:evdsMakro?.["TP.BISTTLREF.KAPANIS"]!=null,
-                 seri:evdsMakro?.["TP.BISTTLREF.KAPANIS_SERI"], seriAd:"TLREF (Yıllıklandırılmış)"},
+                 deger:tlrefMakro(evdsMakro)?.["TP.BISTTLREF.KAPANIS"]?.deger!=null?`%${tlrefMakro(evdsMakro)["TP.BISTTLREF.KAPANIS"].deger.toFixed(2).replace(".",",")}`:"—",
+                 tarih:tlrefMakro(evdsMakro)?.["TP.BISTTLREF.KAPANIS"]?.tarih||"BIST",
+                 canli:tlrefMakro(evdsMakro)?.["TP.BISTTLREF.KAPANIS"]!=null,
+                 seri:tlrefMakro(evdsMakro)?.["TP.BISTTLREF.KAPANIS_SERI"], seriAd:"TLREF (Yıllıklandırılmış)"},
                 {ad:"TLREFK (Katılım Bankacılığı)",
                  deger:tlrefk?.deger!=null?`%${tlrefk.deger.toFixed(2).replace(".",",")}`:"—",
                  tarih:tlrefk?.tarih?`${tlrefk.tarih} · ${tlrefkKaynakEtiket()}`:"BIST",
