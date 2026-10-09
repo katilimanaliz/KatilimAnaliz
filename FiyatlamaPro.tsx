@@ -286,7 +286,7 @@ async function kpProDurumGetir(uid:string): Promise<KpProDurum>{
 // Buluta okunamazsa (izin/ağ hatası) HİÇBİR ŞEY yazılmaz (bulut verisinin yanlışlıkla ezilmesi önlenir).
 const KP_AYAR_ANAHTARLARI = [
   "katilimAnaliz_favoriler_v1", "vk_gecmis", "vk_settings", "kp_tema", "kp_dil", "kp_piyasa_ozeti_secim",
-  "kp_portfoy_para", "kp_portfoy_gizli", "kp_zekat", "katilimAnaliz_vadeTakibi_v1", "gk_ekstra",
+  "kp_portfoy_para", "kp_portfoy_gizli", "kp_zekat", "kp_birikim_v1", "katilimAnaliz_vadeTakibi_v1", "gk_ekstra",
   "katilimAnaliz_kullaniciAdi_v1", "hv_piyasa",
 ];
 const KP_AYAR_META_ANAHTAR = "kp_ayar_meta_v1";
@@ -5429,6 +5429,7 @@ const ICON_MAP: Record<string, any> = {
   katilimSektoru: Building2,
   ekonomiSozluk: ScrollText,   // sözlük/terim listesi; BookOpen katılım sözlüğünde kullanılıyor
   kfkNedir: ShieldCheck,
+  birikimHesaplayici: Target,    // 2026-10-09: Birikim Hesaplayıcı (Target zaten import edilmiş)
   zekatHesabi: Gift,             // zekât = vermek; Gift zaten import edilmiş, yeni import riski alınmadı
   erkenKapamaKarari: Zap,        // zaten import; erken kapama modalında da ⚡ kullanılıyor
   vadeFarkiKarari: CalendarClock, // zaten import
@@ -9143,6 +9144,61 @@ const EN_SOZLUK: Record<string, string> = {
   "🗓 Vade Tarihi": "🗓 Maturity Date",
   "🚫 2.000.001 ₺ ve üzeri araçlar için bireysel amaçlı taşıt finansmanı kullandırımı yapılmamaktadır.": "🚫 Individual-purpose vehicle financing is not provided for vehicles of 2.000.001 ₺ and above.",
   "🟡 Manuel — 24 Haz 19:41": "🟡 Manual — 24 Jun 19:41",
+  "Birikim Hesaplayıcı": "Savings Calculator",
+  "Hedefin için aylık gereken birikimi hesapla": "Calculate the monthly savings your goal needs",
+  "PLANLA": "PLAN",
+  "Hedefini yaz, vadeni seç. Aylık ne kadar biriktirmen gerektiğini hesaplayalım.": "Enter your goal and pick a term. We'll work out how much to save each month.",
+  "Aylık biriktirmen gereken": "Monthly amount to save",
+  "TL / ay": "TL / month",
+  "Hedef tarihi": "Target date",
+  "Toplam yatıracağın": "Total you will put in",
+  "Tahmini kâr payı getirisi": "Estimated profit-share return",
+  "Hedefin vade sonundaki tutarı": "Your goal amount at maturity",
+  "Mevcut birikimin hedefe yetiyor": "Your current savings already cover the goal",
+  "Hedef tutar (bugünkü fiyatla)": "Target amount (at today's prices)",
+  "Mevcut birikimin": "Your current savings",
+  "Birikimini nasıl değerlendireceksin?": "How will you put your savings to work?",
+  "Oranları varsayılana döndür": "Reset rates to default",
+  "Enflasyonu hesaba kat": "Account for inflation",
+  "Hedef, vade sonunda bugünkü alım gücünü korusun": "Keep the goal's purchasing power at maturity",
+  "Yıllık enflasyon varsayımı": "Assumed annual inflation",
+  "Birikim yolu": "Savings path",
+  "Aynı hedef, farklı yollar": "Same goal, different routes",
+  "örnek oranlar": "sample rates",
+  "Bu ekran bir projeksiyondur. Oranlar örnektir; gerçek getiri değişebilir ve garanti edilmez. Yatırım tavsiyesi değildir.": "This screen is a projection. Rates are samples; actual returns may vary and are not guaranteed. Not investment advice.",
+  "Umre": "Umrah",
+  "Ev peşinatı": "Home down payment",
+  "Araç": "Car",
+  "Acil durum fonu": "Emergency fund",
+  "Yeni hedef": "New goal",
+  "+ Hedef ekle": "+ Add goal",
+  "Hedefi sil": "Delete goal",
+  "Hedef adı": "Goal name",
+  "Katılım hesabı": "Participation account",
+  "Karma sepet": "Mixed basket",
+  "Getirisiz": "No return",
+  "vadeli, yıllık": "term, annual",
+  "örnek varsayım": "sample assumption",
+  "hesap + fon + altın": "account + fund + gold",
+  "yastık altı": "cash at home",
+  "6 ay": "6 months",
+  "1 yıl": "1 year",
+  "2 yıl": "2 years",
+  "3 yıl": "3 years",
+  "5 yıl": "5 years",
+  "10 yıl": "10 years",
+  "Yatırım takibi": "Deposit tracking",
+  "Bu ay yatırdığın": "Deposited this month",
+  "Bu ayki payın tamam": "This month's share is done",
+  "Bu ay yatırdım": "I saved this month",
+  "Yatırım tutarı": "Deposit amount",
+  "Yatırımların": "Your deposits",
+  "Aylık hatırlatma": "Monthly reminder",
+  "Her ay seçtiğin günde bildirim al": "Get a notification on your chosen day each month",
+  "Saat 10:00": "At 10:00",
+  "Vade doldu, yeni bir süre seç": "Term ended, pick a new one",
+  "Hatırlatma yalnızca iPhone ve Android uygulamasında çalışır.": "Reminders only work in the iPhone and Android app.",
+  "Bildirim izni verilmedi. Telefon ayarlarından açabilirsin.": "Notification permission was not granted. You can enable it in your phone settings.",
 };
 
 // ── 2026-10-08: ARAPÇA SÖZLÜĞÜ (Türkçe metin → Arapça; anahtarlar EN_SOZLUK ile aynı küme) ──
@@ -12694,6 +12750,61 @@ const AR_SOZLUK: Record<string, string> = {
   "🗓 Vade Tarihi": "🗓 تاريخ الاستحقاق",
   "🚫 2.000.001 ₺ ve üzeri araçlar için bireysel amaçlı taşıt finansmanı kullandırımı yapılmamaktadır.": "🚫 لا يُقدَّم تمويل المركبات للأغراض الفردية للمركبات بقيمة 2.000.001 ₺ فأكثر.",
   "🟡 Manuel — 24 Haz 19:41": "🟡 يدوي — 24 يونيو 19:41",
+  "Birikim Hesaplayıcı": "حاسبة الادخار",
+  "Hedefin için aylık gereken birikimi hesapla": "احسب الادخار الشهري اللازم لهدفك",
+  "PLANLA": "خطّط",
+  "Hedefini yaz, vadeni seç. Aylık ne kadar biriktirmen gerektiğini hesaplayalım.": "اكتب هدفك واختر المدة. سنحسب لك المبلغ الشهري المطلوب ادخاره.",
+  "Aylık biriktirmen gereken": "المبلغ الشهري المطلوب ادخاره",
+  "TL / ay": "ليرة / شهر",
+  "Hedef tarihi": "تاريخ الهدف",
+  "Toplam yatıracağın": "إجمالي ما ستدفعه",
+  "Tahmini kâr payı getirisi": "العائد التقديري من حصة الربح",
+  "Hedefin vade sonundaki tutarı": "مبلغ هدفك عند الاستحقاق",
+  "Mevcut birikimin hedefe yetiyor": "مدخراتك الحالية تكفي الهدف",
+  "Hedef tutar (bugünkü fiyatla)": "المبلغ المستهدف (بأسعار اليوم)",
+  "Mevcut birikimin": "مدخراتك الحالية",
+  "Birikimini nasıl değerlendireceksin?": "كيف ستستثمر مدخراتك؟",
+  "Oranları varsayılana döndür": "إعادة المعدلات إلى الافتراضي",
+  "Enflasyonu hesaba kat": "احسب التضخم",
+  "Hedef, vade sonunda bugünkü alım gücünü korusun": "ليحافظ الهدف على القوة الشرائية الحالية عند الاستحقاق",
+  "Yıllık enflasyon varsayımı": "افتراض التضخم السنوي",
+  "Birikim yolu": "مسار الادخار",
+  "Aynı hedef, farklı yollar": "الهدف نفسه بطرق مختلفة",
+  "örnek oranlar": "معدلات نموذجية",
+  "Bu ekran bir projeksiyondur. Oranlar örnektir; gerçek getiri değişebilir ve garanti edilmez. Yatırım tavsiyesi değildir.": "هذه الشاشة توقّع تقديري. المعدلات نموذجية؛ قد يختلف العائد الفعلي ولا يُضمن. ليست نصيحة استثمارية.",
+  "Umre": "العمرة",
+  "Ev peşinatı": "الدفعة الأولى للمنزل",
+  "Araç": "سيارة",
+  "Acil durum fonu": "صندوق الطوارئ",
+  "Yeni hedef": "هدف جديد",
+  "+ Hedef ekle": "+ إضافة هدف",
+  "Hedefi sil": "حذف الهدف",
+  "Hedef adı": "اسم الهدف",
+  "Katılım hesabı": "حساب المشاركة",
+  "Karma sepet": "سلة مختلطة",
+  "Getirisiz": "بدون عائد",
+  "vadeli, yıllık": "لأجل، سنوي",
+  "örnek varsayım": "افتراض نموذجي",
+  "hesap + fon + altın": "حساب + صندوق + ذهب",
+  "yastık altı": "نقد في المنزل",
+  "6 ay": "6 أشهر",
+  "1 yıl": "سنة",
+  "2 yıl": "سنتان",
+  "3 yıl": "3 سنوات",
+  "5 yıl": "5 سنوات",
+  "10 yıl": "10 سنوات",
+  "Yatırım takibi": "متابعة الإيداعات",
+  "Bu ay yatırdığın": "ما أودعته هذا الشهر",
+  "Bu ayki payın tamam": "اكتمل نصيب هذا الشهر",
+  "Bu ay yatırdım": "ادخرت هذا الشهر",
+  "Yatırım tutarı": "مبلغ الإيداع",
+  "Yatırımların": "إيداعاتك",
+  "Aylık hatırlatma": "تذكير شهري",
+  "Her ay seçtiğin günde bildirim al": "احصل على إشعار في اليوم الذي تختاره كل شهر",
+  "Saat 10:00": "الساعة 10:00",
+  "Vade doldu, yeni bir süre seç": "انتهت المدة، اختر مدة جديدة",
+  "Hatırlatma yalnızca iPhone ve Android uygulamasında çalışır.": "التذكير يعمل فقط في تطبيق آيفون وأندرويد.",
+  "Bildirim izni verilmedi. Telefon ayarlarından açabilirsin.": "لم يتم منح إذن الإشعارات. يمكنك تفعيله من إعدادات الهاتف.",
 };
 // Çeviri (normal harf): İngilizce moddaysa sözlükten çevirir, yoksa aynen bırakır.
 const CV = (s: any): string => { const k = s == null ? "" : String(s); const z = kpSozluk(); return z ? (z[k] ?? k) : k; };
@@ -29724,6 +29835,450 @@ function TlYpKarari({ s }: { s?: any }) {
 }
 
 
+// ── BİRİKİM HESAPLAYICI (2026-10-09) ────────────────────────────────────────
+// Hedef bazlı birikim planı: hedef tutar + vade + mevcut birikim + yıllık oran → aylık gereken tutar.
+// Veri yalnızca cihazda ve hesap senkronunda (kp_birikim_v1); sunucuya ayrıca bir şey gönderilmez.
+// Oranlar sabit örnek değerlerdir (kullanıcı değiştirebilir); gerçek getiri garanti edilmez.
+// KURAL: Girdi (input) içeren alt bileşenler MODÜL SEVİYESİNDE tanımlanır (odak kaybı hatası — bkz. ZekatBaslik notu).
+const BIRIKIM_LS_KEY = "kp_birikim_v1";
+type BirikimYatirim = { t: string; tutar: number };
+type BirikimHedef = { id: string; ad: string; hedef: number; mevcut: number; bitis: string; oran: number; enf: boolean; yatirimlar: BirikimYatirim[]; hatGun: number };
+type BirikimVeri = { hedefler: BirikimHedef[]; secili: string; oranlar: number[]; enfYuzde: number };
+const BIRIKIM_YOLLARI = [
+  { ad: "Katılım hesabı", not: "vadeli, yıllık", y: 38 },
+  { ad: "Altın", not: "örnek varsayım", y: 32 },
+  { ad: "Karma sepet", not: "hesap + fon + altın", y: 35 },
+  { ad: "Getirisiz", not: "yastık altı", y: 0 },
+];
+const BIRIKIM_ENF_VARSAYILAN = 30;
+const BIRIKIM_VADE_SECENEKLERI = [6, 12, 24, 36, 60, 120];
+// Tarih yardımcıları — hedef BİTİŞ TARİHİ sabit tutulur; kalan vade her gün bu tarihe göre yeniden hesaplanır (zaman geçtikçe aylık tutar doğru kalır).
+function birikimBugun(): string { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+function birikimAyEkle(n: number): string {
+  const d = new Date(); const gun = d.getDate(); d.setDate(1); d.setMonth(d.getMonth() + n);
+  const son = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(); d.setDate(Math.min(gun, son));
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function birikimKalanAy(bitis: string): number {
+  const b = Date.parse(bitis + "T00:00:00"), s = Date.parse(birikimBugun() + "T00:00:00");
+  if (!Number.isFinite(b)) return 12;
+  return Math.min(240, Math.max(1, Math.round((b - s) / (30.4375 * 86400000))));
+}
+function birikimVarsayilan(): BirikimVeri {
+  const h = (id: string, ad: string, hedef: number, mevcut: number, vade: number, oran: number): BirikimHedef => ({ id, ad, hedef, mevcut, bitis: birikimAyEkle(vade), oran, enf: false, yatirimlar: [], hatGun: 0 });
+  return {
+    hedefler: [
+      h("umre", "Umre", 150000, 20000, 18, 0),
+      h("ev", "Ev peşinatı", 1200000, 150000, 48, 1),
+      h("arac", "Araç", 800000, 50000, 30, 2),
+      h("acil", "Acil durum fonu", 240000, 30000, 12, 0),
+    ],
+    secili: "umre",
+    oranlar: BIRIKIM_YOLLARI.map(o => o.y),
+    enfYuzde: BIRIKIM_ENF_VARSAYILAN,
+  };
+}
+function birikimSayi(x: any, min: number, max: number, yedek: number): number {
+  const n = Number(x);
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : yedek;
+}
+function birikimOku(): BirikimVeri {
+  const v = birikimVarsayilan();
+  try {
+    const d = JSON.parse(localStorage.getItem(BIRIKIM_LS_KEY) || "null");
+    if (!d || !Array.isArray(d.hedefler) || d.hedefler.length === 0) return v;
+    const hedefler: BirikimHedef[] = d.hedefler.slice(0, 12).map((x: any, i: number) => ({
+      id: String(x?.id || `h${i}`), ad: String(x?.ad ?? "").slice(0, 40),
+      hedef: birikimSayi(x?.hedef, 0, 1e12, 0), mevcut: birikimSayi(x?.mevcut, 0, 1e12, 0),
+      bitis: /^\d{4}-\d{2}-\d{2}$/.test(String(x?.bitis)) ? String(x.bitis) : birikimAyEkle(Math.round(birikimSayi(x?.vade, 1, 240, 12))),
+      oran: Math.round(birikimSayi(x?.oran, 0, BIRIKIM_YOLLARI.length - 1, 0)),
+      enf: !!x?.enf,
+      yatirimlar: (Array.isArray(x?.yatirimlar) ? x.yatirimlar : []).slice(0, 60)
+        .map((y: any) => ({ t: /^\d{4}-\d{2}-\d{2}$/.test(String(y?.t)) ? String(y.t) : birikimBugun(), tutar: birikimSayi(y?.tutar, 0, 1e12, 0) }))
+        .filter((y: BirikimYatirim) => y.tutar > 0),
+      hatGun: Math.round(birikimSayi(x?.hatGun, 0, 28, 0)),
+    }));
+    const oranlar = BIRIKIM_YOLLARI.map((o, i) => birikimSayi(Array.isArray(d.oranlar) ? d.oranlar[i] : null, 0, 200, o.y));
+    return {
+      hedefler, oranlar,
+      secili: hedefler.some(x => x.id === d.secili) ? String(d.secili) : hedefler[0].id,
+      enfYuzde: birikimSayi(d.enfYuzde, 0, 200, BIRIKIM_ENF_VARSAYILAN),
+    };
+  } catch { return v; }
+}
+function birikimYaz(v: BirikimVeri) {
+  try { localStorage.setItem(BIRIKIM_LS_KEY, JSON.stringify(v)); } catch {}
+}
+function birikimHesap(hedef: number, mevcut: number, ay: number, yil: number) {
+  const r = Math.pow(1 + yil / 100, 1 / 12) - 1;
+  const f = Math.pow(1 + r, ay);
+  const pmt = r === 0 ? Math.max(0, (hedef - mevcut) / ay) : Math.max(0, (hedef - mevcut * f) * r / (f - 1));
+  return { pmt, r };
+}
+function birikimYol(mevcut: number, pmt: number, r: number, ay: number): number[] {
+  const a = [mevcut]; let b = mevcut;
+  for (let m = 1; m <= ay; m++) { b = b * (1 + r) + pmt; a.push(b); }
+  return a;
+}
+
+// ── Aylık hatırlatma: YEREL bildirim (telefon kendi zamanlar; sunucu yok). Her ayın seçilen günü 10:00. Yalnızca iOS/Android uygulamasında çalışır.
+const BIRIKIM_BILDIRIM_TABAN = 930000;
+function birikimBildirimId(id: string): number {
+  let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return BIRIKIM_BILDIRIM_TABAN + (h % 50000);
+}
+async function birikimBildirimPlanla(g: { id: string; ad: string; hatGun: number }, pmt: number): Promise<void> {
+  if (!IS_NATIVE) return;
+  const LN = await bmLN();
+  const id = birikimBildirimId(g.id);
+  try { await LN.cancel({ notifications: [{ id }] }); } catch {}
+  if (!g.hatGun) return;
+  const tutar = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 0 }).format(Math.round(pmt));
+  await LN.schedule({ notifications: [{
+    id, title: "Birikim zamanı",
+    body: `${g.ad || "Hedefin"} için bu ay yaklaşık ${tutar} ₺ biriktirme zamanı.`.slice(0, 180),
+    schedule: { on: { day: g.hatGun, hour: 10, minute: 0 }, allowWhileIdle: true },
+    extra: { tip: "birikim" },
+  }] });
+}
+
+function BirikimSayiAlani({ etiket, deger, degis }: { etiket: string; deger: number; degis: (n: number) => void }) {
+  return (
+    <div style={{ marginTop: 14 }}>
+      <p style={{ margin: "0 0 6px", fontSize: 13, fontWeight: 600, color: TEMA === "acik" ? "#1A2430" : "#A8C2DC" }}>{etiket}</p>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <input
+          value={zekatTLGoster(String(deger || ""))}
+          onChange={(e: any) => degis(Number(String(e.target.value).replace(/\D/g, "").slice(0, 12)) || 0)}
+          type="text" inputMode="numeric" autoComplete="off" placeholder="0"
+          style={{ flex: 1, minWidth: 0, padding: "11px 12px", borderRadius: 10, border: `1px solid ${WA(0.14)}`, background: TEMA === "acik" ? "#fff" : WA(0.04), color: TEMA === "acik" ? C.label : "#fff", fontSize: 16, fontWeight: 700, outline: "none", fontFamily: "inherit" }}
+        />
+        <span style={{ fontSize: 14, color: WA(0.5), width: 22 }}>₺</span>
+      </div>
+    </div>
+  );
+}
+
+// Yüzde kutusu: yazarken "3." gibi ara değerler bozulmasın diye kendi metnini tutar.
+function BirikimOranKutusu({ deger, max, degis, etiket }: { deger: number; max: number; degis: (n: number) => void; etiket: string }) {
+  const [metin, setMetin] = useState(String(deger));
+  useEffect(() => {
+    if (parseFloat(metin.replace(",", ".")) !== deger && !(metin === "" && deger === 0)) setMetin(String(deger));
+  }, [deger]);
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+      <input
+        value={metin} aria-label={etiket} type="text" inputMode="decimal" autoComplete="off"
+        onChange={(e: any) => {
+          const m = String(e.target.value).replace(/[^\d.,]/g, "").slice(0, 6);
+          setMetin(m);
+          degis(Math.min(max, Math.max(0, parseFloat(m.replace(",", ".")) || 0)));
+        }}
+        onClick={(e: any) => e.stopPropagation()}
+        style={{ width: 66, textAlign: "right", padding: "9px 10px", borderRadius: 9, border: `1px solid ${WA(0.14)}`, background: TEMA === "acik" ? "#fff" : WA(0.04), color: TEMA === "acik" ? C.label : "#fff", fontSize: 16, fontWeight: 700, outline: "none", fontFamily: "inherit" }}
+      />
+      <span style={{ fontSize: 16, fontWeight: 700, color: WA(0.5) }}>%</span>
+    </div>
+  );
+}
+
+function BirikimGrafik({ a, H, n }: { a: number[]; H: number; n: number }) {
+  const W = 340, Ht = 170, L = 46, R = 12, T = 14, B = 26, w = W - L - R, h = Ht - T - B;
+  const mx = Math.max(H, a[a.length - 1], 1) * 1.05;
+  const X = (m: number) => L + w * m / Math.max(1, n);
+  const Y = (v: number) => T + h - h * v / mx;
+  const pts = a.map((v, m) => `${X(m).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
+  const alan = `M${X(0).toFixed(1)},${Y(0).toFixed(1)} L${pts.split(" ").join(" L")} L${X(n).toFixed(1)},${Y(0).toFixed(1)} Z`;
+  const et = (v: number) => v >= 1e6 ? `${(v / 1e6).toFixed(1).replace(".", ",")} Mn` : `${Math.round(v / 1000)} B`;
+  const yesil = "#16A34A", altin = "#E0A33C";
+  return (
+    <svg viewBox={`0 0 ${W} ${Ht}`} style={{ width: "100%", height: "auto", display: "block" }} role="img" aria-label="Birikim grafiği">
+      {[0, 0.5, 1].map(k => (
+        <g key={k}>
+          <line x1={L} x2={W - R} y1={Y(H * k)} y2={Y(H * k)} stroke={WA(0.12)} strokeWidth={1} />
+          <text x={L - 6} y={Y(H * k) + 4} textAnchor="end" fontSize={11} fill={WA(0.55)}>{et(H * k)}</text>
+        </g>
+      ))}
+      <line x1={L} x2={W - R} y1={Y(H)} y2={Y(H)} stroke={altin} strokeWidth={1.5} strokeDasharray="5 4" />
+      <path d={alan} fill={yesil} opacity={0.14} />
+      <polyline points={pts} fill="none" stroke={yesil} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={X(n)} cy={Y(a[n])} r={4.5} fill={yesil} />
+      <text x={L} y={Ht - 8} fontSize={11} fill={WA(0.55)}>Bugün</text>
+      <text x={W - R} y={Ht - 8} textAnchor="end" fontSize={11} fill={WA(0.55)}>{`${n}. ay`}</text>
+      <text x={W - R} y={Y(H) - 5} textAnchor="end" fontSize={11} fontWeight={700} fill={altin}>Hedef</text>
+    </svg>
+  );
+}
+
+function BirikimHesaplayici() {
+  const [v, setV] = useState<BirikimVeri>(() => birikimOku());
+  const guncelle = useCallback((f: (o: BirikimVeri) => BirikimVeri) => {
+    setV(o => { const y = f(o); birikimYaz(y); return y; });
+  }, []);
+  const g = v.hedefler.find(x => x.id === v.secili) || v.hedefler[0];
+  const [yatirAcik, setYatirAcik] = useState(false);
+  const [yatirTutar, setYatirTutar] = useState(0);
+  const [hatNot, setHatNot] = useState("");
+  const gGuncelle = (yama: Partial<BirikimHedef>) => guncelle(o => ({ ...o, hedefler: o.hedefler.map(x => x.id === g.id ? { ...x, ...yama } : x) }));
+
+  const para = (n: number) => `${new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 0 }).format(Math.round(n))} ₺`;
+  const yazi = TEMA === "acik" ? C.label : "#fff";
+  const kartBg = TEMA === "acik" ? "#E9EEF4" : WA(0.05);
+  const kartCizgi = WA(0.08);
+  const baslik = TEMA === "acik" ? "#1A2430" : "#A8C2DC";
+
+  const ay = birikimKalanAy(g.bitis);
+  const vadeDoldu = Date.parse(g.bitis + "T00:00:00") < Date.parse(birikimBugun() + "T00:00:00");
+  const hedefN = g.enf ? g.hedef * Math.pow(1 + v.enfYuzde / 100, ay / 12) : g.hedef;
+  const yol = BIRIKIM_YOLLARI[g.oran];
+  const oranY = v.oranlar[g.oran];
+  const c = birikimHesap(hedefN, g.mevcut, ay, oranY);
+  const seri = birikimYol(g.mevcut, c.pmt, c.r, ay);
+  const toplamYatan = c.pmt * ay;
+  const getiri = seri[ay] - g.mevcut - toplamYatan;
+  const bitis = new Date(g.bitis + "T00:00:00").toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" });
+  const buAy = birikimBugun().slice(0, 7);
+  const buAyToplam = g.yatirimlar.filter(y => y.t.slice(0, 7) === buAy).reduce((s, y) => s + y.tutar, 0);
+  const payTamam = c.pmt > 0 && buAyToplam >= c.pmt;
+  const yuzde = hedefN > 0 ? Math.min(100, g.mevcut / hedefN * 100) : 0;
+  const yil = Math.floor(ay / 12), kalanAy = ay % 12;
+  const vadeAlt = `${yil ? `${yil} yıl` : ""}${yil && kalanAy ? " " : ""}${kalanAy ? `${kalanAy} ay` : ""}`;
+
+  const satir = (e: string, d: string) => (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "5px 0", fontSize: 14 }}>
+      <span style={{ color: WA(0.55) }}>{e}</span><span style={{ fontWeight: 700, color: yazi, textAlign: "right" }}>{d}</span>
+    </div>
+  );
+  const duzBtn: any = { width: 46, height: 46, flexShrink: 0, borderRadius: 11, border: `1px solid ${WA(0.14)}`, background: TEMA === "acik" ? "#fff" : WA(0.05), color: yazi, fontSize: 22, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" };
+
+  const hedefEkle = () => guncelle(o => {
+    if (o.hedefler.length >= 12) return o;
+    const id = `h${Date.now().toString(36)}`;
+    return { ...o, hedefler: [...o.hedefler, { id, ad: "Yeni hedef", hedef: 100000, mevcut: 0, bitis: birikimAyEkle(12), oran: 0, enf: false, yatirimlar: [], hatGun: 0 }], secili: id };
+  });
+  const hedefSil = () => { birikimBildirimPlanla({ id: g.id, ad: g.ad, hatGun: 0 }, 0).catch(() => {}); hedefSilDevam(); };
+  const hedefSilDevam = () => guncelle(o => {
+    if (o.hedefler.length <= 1) return o;
+    const kalan = o.hedefler.filter(x => x.id !== g.id);
+    return { ...o, hedefler: kalan, secili: kalan[0].id };
+  });
+
+  const yatirimKaydet = () => {
+    const tutar = Math.round(yatirTutar);
+    if (tutar <= 0) return;
+    gGuncelle({ yatirimlar: [{ t: birikimBugun(), tutar }, ...g.yatirimlar].slice(0, 60), mevcut: g.mevcut + tutar });
+    setYatirAcik(false);
+  };
+  const yatirimSil = (i: number) => {
+    const y = g.yatirimlar[i]; if (!y) return;
+    gGuncelle({ yatirimlar: g.yatirimlar.filter((_, k) => k !== i), mevcut: Math.max(0, g.mevcut - y.tutar) });
+  };
+  const hatirlatmaDegis = async (gun: number) => {
+    setHatNot("");
+    if (gun > 0 && !g.hatGun) {
+      if (!IS_NATIVE) { setHatNot("Hatırlatma yalnızca iPhone ve Android uygulamasında çalışır."); return; }
+      try {
+        const izin = await bmBildirimIzin(true);
+        if (izin !== "granted") { setHatNot("Bildirim izni verilmedi. Telefon ayarlarından açabilirsin."); return; }
+      } catch { setHatNot("Bildirim izni verilmedi. Telefon ayarlarından açabilirsin."); return; }
+    }
+    gGuncelle({ hatGun: gun });
+  };
+  // Hatırlatma açıkken ad / tutar değişince yerel bildirimi güncel metinle yeniden planla.
+  useEffect(() => {
+    if (!IS_NATIVE) return;
+    const z = setTimeout(() => { birikimBildirimPlanla({ id: g.id, ad: g.ad, hatGun: g.hatGun }, c.pmt).catch(() => {}); }, 700);
+    return () => clearTimeout(z);
+  }, [g.id, g.ad, g.hatGun, Math.round(c.pmt)]);
+
+  return (
+    <div style={{ background: C.bg, padding: "12px 14px 92px", minHeight: "100%" }}>
+      <p style={{ margin: "2px 2px 12px", fontSize: 14, color: WA(0.6), lineHeight: 1.5 }}>Hedefini yaz, vadeni seç. Aylık ne kadar biriktirmen gerektiğini hesaplayalım.</p>
+
+      {/* HEDEF SEKMELERİ */}
+      <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+        {v.hedefler.map(x => (
+          <button key={x.id} aria-pressed={x.id === g.id} onClick={() => guncelle(o => ({ ...o, secili: x.id }))}
+            style={{ flexShrink: 0, padding: "9px 15px", borderRadius: 99, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${x.id === g.id ? "#16A34A" : WA(0.14)}`, background: x.id === g.id ? "#16A34A" : "transparent", color: x.id === g.id ? "#fff" : yazi }}>
+            {x.ad || "Hedef"}
+          </button>
+        ))}
+        {v.hedefler.length < 12 && (
+          <button onClick={hedefEkle} style={{ flexShrink: 0, padding: "9px 15px", borderRadius: 99, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px dashed ${WA(0.3)}`, background: "transparent", color: WA(0.6) }}>+ Hedef ekle</button>
+        )}
+      </div>
+
+      {/* SONUÇ */}
+      <div style={{ background: kartBg, border: `1px solid ${kartCizgi}`, borderRadius: 16, padding: "16px 16px 12px", marginTop: 10 }}>
+        <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: WA(0.55), letterSpacing: 0.4 }}>Aylık biriktirmen gereken</p>
+        <p style={{ margin: "6px 0 0", fontSize: 32, fontWeight: 800, color: yazi, letterSpacing: -0.5 }}>
+          {new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 0 }).format(Math.round(c.pmt))} <span style={{ fontSize: 15, fontWeight: 600, color: WA(0.5) }}>TL / ay</span>
+        </p>
+        <div style={{ height: 10, borderRadius: 99, background: WA(0.1), overflow: "hidden", margin: "12px 0 6px" }}>
+          <div style={{ height: "100%", width: `${yuzde}%`, background: "#16A34A", borderRadius: 99, transition: "width .3s ease" }} />
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: WA(0.55), marginBottom: 8 }}>
+          <span>{`${para(g.mevcut)} / ${para(hedefN)}`}</span><b style={{ color: yazi }}>{`%${Math.round(yuzde)}`}</b>
+        </div>
+        {c.pmt === 0 && hedefN > 0 && <p style={{ margin: "0 0 6px", fontSize: 13, color: "#16A34A", fontWeight: 600 }}>Mevcut birikimin hedefe yetiyor</p>}
+        {satir("Hedef tarihi", bitis)}
+        {satir("Toplam yatıracağın", para(toplamYatan + g.mevcut))}
+        {oranY > 0 && satir("Tahmini kâr payı getirisi", `+${para(Math.max(0, getiri))}`)}
+        {g.enf && satir("Hedefin vade sonundaki tutarı", para(hedefN))}
+      </div>
+
+      {/* YATIRIM TAKİBİ */}
+      <div style={{ background: kartBg, border: `1px solid ${kartCizgi}`, borderRadius: 16, padding: "14px 16px", marginTop: 12 }}>
+        <p style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 700, color: yazi }}>Yatırım takibi</p>
+        {satir("Bu ay yatırdığın", para(buAyToplam))}
+        {payTamam && <p style={{ margin: "2px 0 6px", fontSize: 13, color: "#16A34A", fontWeight: 600 }}>Bu ayki payın tamam</p>}
+        {!yatirAcik ? (
+          <button onClick={() => { setYatirTutar(Math.max(0, Math.round(Math.max(0, c.pmt - buAyToplam)))); setYatirAcik(true); }}
+            style={{ marginTop: 8, width: "100%", padding: "12px 14px", borderRadius: 11, border: "none", background: "#16A34A", color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>Bu ay yatırdım</button>
+        ) : (
+          <div style={{ marginTop: 4 }}>
+            <BirikimSayiAlani etiket="Yatırım tutarı" deger={yatirTutar} degis={setYatirTutar} />
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <button onClick={yatirimKaydet} style={{ flex: 1, padding: "12px 14px", borderRadius: 11, border: "none", background: "#16A34A", color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>Kaydet</button>
+              <button onClick={() => setYatirAcik(false)} style={{ flex: 1, padding: "12px 14px", borderRadius: 11, border: `1px solid ${WA(0.2)}`, background: "transparent", color: yazi, fontSize: 15, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Vazgeç</button>
+            </div>
+          </div>
+        )}
+        {g.yatirimlar.length > 0 && (
+          <div style={{ marginTop: 12 }}>
+            <p style={{ margin: "0 0 2px", fontSize: 13, fontWeight: 600, color: baslik }}>Yatırımların</p>
+            {g.yatirimlar.slice(0, 6).map((y, i) => (
+              <div key={`${y.t}-${i}`} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: i ? `1px solid ${WA(0.08)}` : "none" }}>
+                <span style={{ flex: 1, fontSize: 14, color: WA(0.6) }}>{new Date(y.t + "T00:00:00").toLocaleDateString("tr-TR", { day: "numeric", month: "long", year: "numeric" })}</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: yazi }}>{para(y.tutar)}</span>
+                <button onClick={() => yatirimSil(i)} style={{ background: "none", border: "none", color: "#DC5050", fontSize: 14, fontWeight: 600, cursor: "pointer", padding: "4px 2px", fontFamily: "inherit" }}>Sil</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* AYLIK HATIRLATMA */}
+        <div style={{ borderTop: `1px solid ${WA(0.08)}`, marginTop: 14, paddingTop: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+            <div style={{ minWidth: 0 }}>
+              <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: yazi }}>Aylık hatırlatma</p>
+              <p style={{ margin: "2px 0 0", fontSize: 13, color: WA(0.5), lineHeight: 1.4 }}>Her ay seçtiğin günde bildirim al</p>
+            </div>
+            <button role="switch" aria-checked={g.hatGun > 0} aria-label="Aylık hatırlatma" onClick={() => hatirlatmaDegis(g.hatGun > 0 ? 0 : 1)}
+              style={{ flexShrink: 0, width: 48, height: 28, borderRadius: 99, border: "none", background: g.hatGun > 0 ? "#16A34A" : WA(0.2), position: "relative", cursor: "pointer", padding: 0 }}>
+              <span style={{ position: "absolute", top: 3, left: g.hatGun > 0 ? 23 : 3, width: 22, height: 22, borderRadius: "50%", background: "#fff", transition: "left .2s" }} />
+            </button>
+          </div>
+          {g.hatGun > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12 }}>
+              <button aria-label="Bir gün azalt" onClick={() => gGuncelle({ hatGun: Math.max(1, g.hatGun - 1) })} style={duzBtn}>−</button>
+              <div style={{ flex: 1, textAlign: "center" }}>
+                <p style={{ margin: 0, fontSize: 20, fontWeight: 800, color: yazi }}>{`Her ayın ${g.hatGun}. günü`}</p>
+                <p style={{ margin: "1px 0 0", fontSize: 14, color: WA(0.5) }}>Saat 10:00</p>
+              </div>
+              <button aria-label="Bir gün artır" onClick={() => gGuncelle({ hatGun: Math.min(28, g.hatGun + 1) })} style={duzBtn}>+</button>
+            </div>
+          )}
+          {hatNot && <p style={{ margin: "10px 0 0", fontSize: 13, color: "#E0A33C", lineHeight: 1.45 }}>{hatNot}</p>}
+        </div>
+      </div>
+
+      {/* GİRDİLER */}
+      <div style={{ background: kartBg, border: `1px solid ${kartCizgi}`, borderRadius: 16, padding: "4px 16px 16px", marginTop: 12 }}>
+        <div style={{ marginTop: 14 }}>
+          <p style={{ margin: "0 0 6px", fontSize: 13, fontWeight: 600, color: baslik }}>Hedef adı</p>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input value={g.ad} maxLength={40} onChange={(e: any) => gGuncelle({ ad: e.target.value })} type="text" autoComplete="off"
+              style={{ flex: 1, minWidth: 0, padding: "11px 12px", borderRadius: 10, border: `1px solid ${WA(0.14)}`, background: TEMA === "acik" ? "#fff" : WA(0.04), color: yazi, fontSize: 16, fontWeight: 700, outline: "none", fontFamily: "inherit" }} />
+            {v.hedefler.length > 1 && (
+              <button onClick={hedefSil} style={{ flexShrink: 0, padding: "0 14px", borderRadius: 10, border: `1px solid rgba(220,80,80,0.4)`, background: "transparent", color: "#DC5050", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Hedefi sil</button>
+            )}
+          </div>
+        </div>
+        <BirikimSayiAlani etiket="Hedef tutar (bugünkü fiyatla)" deger={g.hedef} degis={n => gGuncelle({ hedef: n })} />
+        <BirikimSayiAlani etiket="Mevcut birikimin" deger={g.mevcut} degis={n => gGuncelle({ mevcut: n })} />
+
+        <p style={{ margin: "16px 0 6px", fontSize: 13, fontWeight: 600, color: baslik }}>Kalan vade</p>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <button aria-label="Bir ay azalt" onClick={() => gGuncelle({ bitis: birikimAyEkle(Math.max(1, ay - 1)) })} style={duzBtn}>−</button>
+          <div style={{ flex: 1, textAlign: "center" }}>
+            <p style={{ margin: 0, fontSize: 20, fontWeight: 800, color: yazi }}>{`${ay} ay`}</p>
+            <p style={{ margin: "1px 0 0", fontSize: 14, color: vadeDoldu ? "#DC5050" : WA(0.5), minHeight: 20 }}>{vadeDoldu ? "Vade doldu, yeni bir süre seç" : vadeAlt}</p>
+          </div>
+          <button aria-label="Bir ay artır" onClick={() => gGuncelle({ bitis: birikimAyEkle(Math.min(240, ay + 1)) })} style={duzBtn}>+</button>
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+          {BIRIKIM_VADE_SECENEKLERI.map(m => (
+            <button key={m} aria-pressed={ay === m} onClick={() => gGuncelle({ bitis: birikimAyEkle(m) })}
+              style={{ flex: "1 1 28%", padding: "10px 6px", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${ay === m ? "#16A34A" : WA(0.14)}`, background: ay === m ? "rgba(22,163,74,0.14)" : "transparent", color: yazi }}>
+              {m < 12 ? `${m} ay` : `${m / 12} yıl`}
+            </button>
+          ))}
+        </div>
+
+        <p style={{ margin: "18px 0 8px", fontSize: 13, fontWeight: 600, color: baslik }}>Birikimini nasıl değerlendireceksin?</p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {BIRIKIM_YOLLARI.map((o, k) => (
+            <div key={o.ad} onClick={() => gGuncelle({ oran: k })}
+              style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderRadius: 11, cursor: "pointer", border: `1px solid ${k === g.oran ? "#16A34A" : WA(0.12)}`, background: k === g.oran ? "rgba(22,163,74,0.12)" : "transparent" }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: yazi }}>{o.ad}</p>
+                <p style={{ margin: "2px 0 0", fontSize: 13, color: WA(0.5) }}>{o.not}</p>
+              </div>
+              <BirikimOranKutusu etiket={`${o.ad} yıllık oran`} deger={v.oranlar[k]} max={200}
+                degis={n => guncelle(old => ({ ...old, oranlar: old.oranlar.map((y, i) => i === k ? n : y), hedefler: old.hedefler.map(x => x.id === g.id ? { ...x, oran: k } : x) }))} />
+            </div>
+          ))}
+        </div>
+        <button onClick={() => guncelle(o => ({ ...o, oranlar: BIRIKIM_YOLLARI.map(y => y.y), enfYuzde: BIRIKIM_ENF_VARSAYILAN }))}
+          style={{ marginTop: 10, background: "none", border: "none", padding: 0, color: "#5B9BD8", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Oranları varsayılana döndür</button>
+
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 18 }}>
+          <div style={{ minWidth: 0 }}>
+            <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: yazi }}>Enflasyonu hesaba kat</p>
+            <p style={{ margin: "2px 0 0", fontSize: 13, color: WA(0.5), lineHeight: 1.4 }}>Hedef, vade sonunda bugünkü alım gücünü korusun</p>
+          </div>
+          <button role="switch" aria-checked={g.enf} aria-label="Enflasyonu hesaba kat" onClick={() => gGuncelle({ enf: !g.enf })}
+            style={{ flexShrink: 0, width: 48, height: 28, borderRadius: 99, border: "none", background: g.enf ? "#16A34A" : WA(0.2), position: "relative", cursor: "pointer", padding: 0 }}>
+            <span style={{ position: "absolute", top: 3, left: g.enf ? 23 : 3, width: 22, height: 22, borderRadius: "50%", background: "#fff", transition: "left .2s" }} />
+          </button>
+        </div>
+        {g.enf && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 12 }}>
+            <p style={{ margin: 0, fontSize: 14, color: WA(0.6) }}>Yıllık enflasyon varsayımı</p>
+            <BirikimOranKutusu etiket="Yıllık enflasyon varsayımı" deger={v.enfYuzde} max={200} degis={n => guncelle(o => ({ ...o, enfYuzde: n }))} />
+          </div>
+        )}
+      </div>
+
+      {/* GRAFİK */}
+      <div style={{ background: kartBg, border: `1px solid ${kartCizgi}`, borderRadius: 16, padding: "14px 16px", marginTop: 12 }}>
+        <p style={{ margin: "0 0 8px", fontSize: 15, fontWeight: 700, color: yazi }}>Birikim yolu</p>
+        <BirikimGrafik a={seri} H={hedefN} n={ay} />
+      </div>
+
+      {/* YOL KARŞILAŞTIRMA */}
+      <div style={{ background: kartBg, border: `1px solid ${kartCizgi}`, borderRadius: 16, padding: "14px 16px 6px", marginTop: 12 }}>
+        <p style={{ margin: "0 0 6px", fontSize: 15, fontWeight: 700, color: yazi }}>Aynı hedef, farklı yollar <span style={{ marginLeft: 6, fontSize: 12, fontWeight: 700, color: "#16A34A", background: "rgba(22,163,74,0.14)", padding: "2px 8px", borderRadius: 99 }}>örnek oranlar</span></p>
+        {BIRIKIM_YOLLARI.map((o, k) => {
+          const cc = birikimHesap(hedefN, g.mevcut, ay, v.oranlar[k]);
+          return (
+            <div key={o.ad} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "10px 0", borderTop: k ? `1px solid ${WA(0.08)}` : "none" }}>
+              <div style={{ minWidth: 0 }}>
+                <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: k === g.oran ? "#16A34A" : yazi }}>{`${o.ad} · %${v.oranlar[k]}`}</p>
+                <p style={{ margin: "2px 0 0", fontSize: 13, color: WA(0.5) }}>{o.not}</p>
+              </div>
+              <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: k === g.oran ? "#16A34A" : yazi, textAlign: "right", whiteSpace: "nowrap" }}>{`${para(cc.pmt)} / ay`}</p>
+            </div>
+          );
+        })}
+      </div>
+
+      <p style={{ margin: "12px 2px 0", fontSize: 13, color: WA(0.5), lineHeight: 1.55 }}>Bu ekran bir projeksiyondur. Oranlar örnektir; gerçek getiri değişebilir ve garanti edilmez. Yatırım tavsiyesi değildir.</p>
+    </div>
+  );
+}
+
 // ── ODAK KAYBI HATASI VE ÇÖZÜMÜ (2026-08-06) ───────────────────────────────
 // İlk sürümde Baslik ve Satir, ZekatHesabi'nin İÇİNDE tanımlıydı. React her
 // render'da yeni bir fonksiyon referansı görüp bunu YENİ BİR BİLEŞEN TÜRÜ
@@ -33151,6 +33706,7 @@ const MENU = {
   katilimSektoru:{title:"Katılım Bankacılığı Sektörü",back:"araclarMenu"},
   ekonomiSozluk:{title:"Ekonomi Sözlüğü",back:"araclarMenu"},
   zekatHesabi:{title:"Zekât Hesaplayıcı",back:"araclarMenu"},
+  birikimHesaplayici:{title:"Birikim Hesaplayıcı",back:"araclarMenu"},
   erkenKapamaKarari:{title:"Erken Kapama Kararı",back:"hesaplaMenu"},
   vadeFarkiKarari:{title:"Vade Farkı Kararı",back:"hesaplaMenu"},
   erkenKapamaKomisyonu:{title:"Erken Kapama Komisyonu Hesaplama",back:"hesaplaMenu"},
@@ -33187,7 +33743,7 @@ const TAB_OF_SCREEN:any = {
   hazineDoviz:"hesapla", hazineForward:"hesapla", hazineSwap:"hesapla",
   hazineBono:"hesapla", hazineSenaryo:"hesapla", hazineKurMakasi:"hesapla",
   piyasaHaberleri:"piyasa", finansalGostergeler:"piyasa",
-  araclarMenu:"araclar", sozluk:"araclar", egitim:"araclar", musteriPortfoyum:"araclar", vadeTakibi:"araclar", katilimBankalari:"araclar", kfkNedir:"araclar", zekatHesabi:"araclar", erkenKapamaKarari:"hesapla", erkenKapamaKomisyonu:"hesapla", vadeFarkiKarari:"hesapla", tlYpKarari:"hesapla", kiraSertifikasi:"araclar", getiriKarsilastirma:"araclar", haftalikOzet:"araclar", portfoyum:"araclar", fonDetay:"araclar",
+  araclarMenu:"araclar", sozluk:"araclar", egitim:"araclar", musteriPortfoyum:"araclar", vadeTakibi:"araclar", katilimBankalari:"araclar", kfkNedir:"araclar", zekatHesabi:"araclar", birikimHesaplayici:"araclar", erkenKapamaKarari:"hesapla", erkenKapamaKomisyonu:"hesapla", vadeFarkiKarari:"hesapla", tlYpKarari:"hesapla", kiraSertifikasi:"araclar", getiriKarsilastirma:"araclar", haftalikOzet:"araclar", portfoyum:"araclar", fonDetay:"araclar",
   asistan:"yapayzeka",
   profil:"profil",
 };
@@ -33204,6 +33760,7 @@ const SIDEBAR_GRUPLARI: {baslik:string; varsayilanAcik:boolean; ogeler:{key:stri
   {baslik:"PORTFÖY", varsayilanAcik:true, ogeler:[
     {key:"portfoyum",label:"Portföyüm"},
     {key:"musteriPortfoyum",label:"Müşteri Portföyüm"},
+    {key:"birikimHesaplayici",label:"Birikim Hesaplayıcı"},
   ]},
   {baslik:"BİLGİ", varsayilanAcik:false, ogeler:[
     {key:"egitim",label:"Eğitim"},
@@ -33289,6 +33846,7 @@ const SCREEN_TO_PATH: Record<string,string> = {
   katilimBankalari: "/katilim-bankalari",
   kfkNedir: "/kfk-nedir",
   zekatHesabi: "/zekat-hesaplayici",
+  birikimHesaplayici: "/birikim-hesaplayici",
   erkenKapamaKarari: "/erken-kapama-karari",
   vadeFarkiKarari: "/vade-farki-karari",
   erkenKapamaKomisyonu: "/erken-kapama-komisyonu",
@@ -33418,6 +33976,7 @@ const MENU_ARAMA_LIST=[
   {key:"egitim",               label:"Eğitim",                                    icon:"🎓", grup:"Araçlar", alt:["eğitim","ders","sınav","quiz","puan","liderlik","öğren","katılım bankacılığı","ekonomi","finansal okuryazarlık","fon","yatırım"]},
   {key:"musteriPortfoyum",      label:"Müşteri Portföyüm",                         icon:"🗂️", grup:"Araçlar", alt:["müşteri","portföy","bankacı","görüşme","takip","hatırlatma","not","crm","aksiyon","telefon","arama"]},
   {key:"ekonomiSozluk",      label:"Ekonomi Sözlüğü",                           icon:"📚", grup:"Araçlar", alt:["ekonomi","terim","sözlük","enflasyon","gsyh","faiz","tanım","kavram","makro"]},
+  {key:"birikimHesaplayici", label:"Birikim Hesaplayıcı", icon:"🎯", grup:"Araçlar", alt:["birikim","hedef","tasarruf","biriktir","aylık","umre","hac","ev","araba","peşinat","acil durum","enflasyon","reel","planla"]},
   {key:"zekatHesabi",        label:"Zekât Hesaplayıcı",                               icon:"🌙", grup:"Araçlar", alt:["zekat","zekât","nisap","nisab","kırkta bir","sadaka","altın nisabı","dini","ibadet","hesapla"]},
   {key:"kiraSertifikasi",    label:"Kira Sertifikası İhraçları",                 icon:"📜", grup:"Araçlar", alt:["kira sertifikası","sukuk","ihraç","vekâlet","murabaha","icare","varlık kiralama","spk"]},
   {key:"hazineDoviz",        label:"Döviz Dönüştürücü",                          icon:"💱", grup:"Hesaplama Araçları", alt:["kur","dolar","euro","dolar kaç tl"]},
@@ -45567,6 +46126,9 @@ function App(){
             {key:"zekatHesabi", label:"Zekât Hesaplayıcı", desc:"Güncel altın fiyatıyla nisap"},
           ];
           const GRUPLAR:any[]=[
+            {baslik:"PLANLA", items:[
+              {key:"birikimHesaplayici", label:"Birikim Hesaplayıcı", desc:"Hedefin için aylık gereken birikimi hesapla"},
+            ]},
             {baslik:"PİYASA VE TAKİP", items:[
               {key:"haftalikOzet", label:"Haftalık Piyasa Özeti", desc:haftalikDesc},
               {key:"kiraSertifikasi", label:"Kira Sertifikası İhraçları", desc:"Türkiye'de sukuk ihraçları — SPK resmî verisiyle tür ve yıl bazında"},
@@ -45955,6 +46517,7 @@ function App(){
         {screen==="katilimSektoru"&&<KatilimSektoru/>}
         {screen==="ekonomiSozluk"&&<EkonomiSozluk/>}
         {screen==="zekatHesabi"&&<ZekatHesabi/>}
+        {screen==="birikimHesaplayici"&&<BirikimHesaplayici/>}
         {screen==="erkenKapamaKarari"&&<ErkenKapamaKarari s={settings}/>}
         {screen==="vadeFarkiKarari"&&<VadeFarkiKarari s={settings}/>}
         {screen==="erkenKapamaKomisyonu"&&<ErkenKapamaKomisyonu s={settings} kimlik={kimlik} nav={nav}/>}
