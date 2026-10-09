@@ -821,31 +821,34 @@ async function kurTaze() {
 //   /bist-tlrefk.php?op=fetchTlrefkData&dataType=tlrefk-history&day=N
 // Yanıt: {status:"success", data:[{clval:"36.6148", date:"2026-10-08", ...}]} (yeniden eskiye).
 // Ayrı bir api/ dosyası AÇILMADI (Vercel Hobby 12 fonksiyon sınırı): ?tip=tlrefk.
-async function tlrefkTaze() {
+async function borsaReferansTaze(dataType, ad) {
   const ctl = new AbortController();
   const zt = setTimeout(() => ctl.abort(), 12000);
   let r;
   try {
-    r = await fetch("https://www.borsaistanbul.com/bist-tlrefk.php?op=fetchTlrefkData&dataType=tlrefk-history&day=1100", {
+    r = await fetch("https://www.borsaistanbul.com/bist-tlrefk.php?op=fetchTlrefkData&dataType=" + dataType + "&day=1100", {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
         "Accept": "application/json, text/plain, */*",
         "Accept-Language": "tr-TR,tr;q=0.9",
-        "Referer": "https://www.borsaistanbul.com/endeksler/tlrefk",
+        "Referer": "https://www.borsaistanbul.com/endeksler/" + (ad === "TLREF" ? "tlref" : "tlrefk"),
       },
       signal: ctl.signal,
     });
   } finally { clearTimeout(zt); }
-  if (!r.ok) throw new Error("Borsa Istanbul TLREFK HTTP " + r.status);
+  if (!r.ok) throw new Error("Borsa Istanbul " + ad + " HTTP " + r.status);
   const j = await r.json();
-  if (!j || j.status !== "success" || !Array.isArray(j.data)) throw new Error("TLREFK yanit sekli beklenmedik");
+  if (!j || j.status !== "success" || !Array.isArray(j.data)) throw new Error(ad + " yanit sekli beklenmedik");
   const seri = j.data
     .map((k) => ({ tarih: String(k.date || ""), deger: Number(k.clval) }))
     .filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k.tarih) && Number.isFinite(k.deger) && k.deger > 0 && k.deger < 500)
     .sort((a, b) => (a.tarih < b.tarih ? -1 : a.tarih > b.tarih ? 1 : 0));
-  if (seri.length === 0) throw new Error("TLREFK serisi bos");
+  if (seri.length === 0) throw new Error(ad + " serisi bos");
   return { seri, son: seri[seri.length - 1], kaynak: "borsaistanbul.com", ts: new Date().toISOString() };
 }
+
+const tlrefkTaze = () => borsaReferansTaze("tlrefk-history", "TLREFK");
+const tlrefTaze  = () => borsaReferansTaze("tlref-history", "TLREF");   // 2026-10-09: TLREF de Borsa İstanbul'dan (EVDS türetmesi yerine)
 
 // ─── Tip → { Redis anahtarı, TTL, taze() fonksiyonu, Cache-Control } ───────
 // Anahtarlar v3'e yükseltildi (günlük değişim eklendi) — aksi halde eski
@@ -869,6 +872,7 @@ const YAPILANDIRMA = {
   altinapi: { anahtar: "altinapi:v7", ttl: 60,   fn: altinApiTaze, cacheControl: "s-maxage=60" },
   // TLREFK günde bir kez (iş günü ~16:00) yayınlanır; 2 saatlik önbellek yeterli.
   tlrefk:   { anahtar: "tlrefk:v1",   ttl: 7200, fn: tlrefkTaze,   cacheControl: "s-maxage=1800" },
+  tlref:    { anahtar: "tlref:v1",    ttl: 7200, fn: tlrefTaze,    cacheControl: "s-maxage=1800" },
 };
 
 // ═══════════════════════════════════════════════════════════════════════
