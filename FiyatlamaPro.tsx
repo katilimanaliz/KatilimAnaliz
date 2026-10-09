@@ -30120,6 +30120,28 @@ function BirikimHesaplayici() {
         )}
       </div>
 
+      <div style={{ marginTop: 12 }}>
+          <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 600, color: baslik }}>Hedef adı</p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {BIRIKIM_ADLARI.map(ad => {
+              const sec = !g.ozel && g.ad === ad;
+              return (
+                <button key={ad} aria-pressed={sec} onClick={() => gGuncelle({ ad, ozel: false })}
+                  style={{ padding: "9px 14px", borderRadius: 99, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${sec ? "#16A34A" : WA(0.14)}`, background: sec ? "rgba(22,163,74,0.14)" : "transparent", color: yazi }}>{ad}</button>
+              );
+            })}
+            <button aria-pressed={g.ozel} onClick={() => gGuncelle({ ozel: true, ad: g.ozel ? g.ad : "" })}
+              style={{ padding: "9px 14px", borderRadius: 99, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px ${g.ozel ? "solid" : "dashed"} ${g.ozel ? "#16A34A" : WA(0.3)}`, background: g.ozel ? "rgba(22,163,74,0.14)" : "transparent", color: yazi }}>Diğer</button>
+          </div>
+          {g.ozel && (
+            <input value={g.ad} maxLength={40} placeholder="Hedef adını yaz" onChange={(e: any) => gGuncelle({ ad: e.target.value })} type="text" autoComplete="off"
+              style={{ marginTop: 10, width: "100%", boxSizing: "border-box", padding: "11px 12px", borderRadius: 10, border: `1px solid ${WA(0.14)}`, background: TEMA === "acik" ? "#fff" : WA(0.04), color: yazi, fontSize: 16, fontWeight: 700, outline: "none", fontFamily: "inherit" }} />
+          )}
+          {v.hedefler.length > 1 && (
+            <button onClick={hedefSil} style={{ marginTop: 10, padding: "9px 14px", borderRadius: 10, border: "1px solid rgba(220,80,80,0.4)", background: "transparent", color: "#DC5050", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Hedefi sil</button>
+          )}
+      </div>
+
       {/* SONUÇ */}
       <div style={{ background: kartBg, border: `1px solid ${kartCizgi}`, borderRadius: 16, padding: "16px 16px 12px", marginTop: 10 }}>
         <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: WA(0.55), letterSpacing: 0.4 }}>Aylık biriktirmen gereken</p>
@@ -30198,27 +30220,6 @@ function BirikimHesaplayici() {
 
       {/* GİRDİLER */}
       <div style={{ background: kartBg, border: `1px solid ${kartCizgi}`, borderRadius: 16, padding: "4px 16px 16px", marginTop: 12 }}>
-        <div style={{ marginTop: 14 }}>
-          <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 600, color: baslik }}>Hedef adı</p>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {BIRIKIM_ADLARI.map(ad => {
-              const sec = !g.ozel && g.ad === ad;
-              return (
-                <button key={ad} aria-pressed={sec} onClick={() => gGuncelle({ ad, ozel: false })}
-                  style={{ padding: "9px 14px", borderRadius: 99, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${sec ? "#16A34A" : WA(0.14)}`, background: sec ? "rgba(22,163,74,0.14)" : "transparent", color: yazi }}>{ad}</button>
-              );
-            })}
-            <button aria-pressed={g.ozel} onClick={() => gGuncelle({ ozel: true, ad: g.ozel ? g.ad : "" })}
-              style={{ padding: "9px 14px", borderRadius: 99, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px ${g.ozel ? "solid" : "dashed"} ${g.ozel ? "#16A34A" : WA(0.3)}`, background: g.ozel ? "rgba(22,163,74,0.14)" : "transparent", color: yazi }}>Diğer</button>
-          </div>
-          {g.ozel && (
-            <input value={g.ad} maxLength={40} placeholder="Hedef adını yaz" onChange={(e: any) => gGuncelle({ ad: e.target.value })} type="text" autoComplete="off"
-              style={{ marginTop: 10, width: "100%", boxSizing: "border-box", padding: "11px 12px", borderRadius: 10, border: `1px solid ${WA(0.14)}`, background: TEMA === "acik" ? "#fff" : WA(0.04), color: yazi, fontSize: 16, fontWeight: 700, outline: "none", fontFamily: "inherit" }} />
-          )}
-          {v.hedefler.length > 1 && (
-            <button onClick={hedefSil} style={{ marginTop: 10, padding: "9px 14px", borderRadius: 10, border: "1px solid rgba(220,80,80,0.4)", background: "transparent", color: "#DC5050", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Hedefi sil</button>
-          )}
-        </div>
         <BirikimSayiAlani etiket="Hedef tutar (bugünkü fiyatla)" deger={g.hedef} degis={n => gGuncelle({ hedef: n })} />
         <BirikimSayiAlani etiket="Mevcut birikimin" deger={g.mevcut} degis={n => gGuncelle({ mevcut: n })} />
 
