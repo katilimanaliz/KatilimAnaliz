@@ -16574,6 +16574,7 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri,
   // Diğer filtreler (siraBy, endeksFiltre) de kalıcı değil; bu da onlarla
   // TUTARLI — ekran her açıldığında varsayılana döner.
   const [sadeceKatilim, setSadeceKatilim] = useState(false);
+  const [siraMenuAcik, setSiraMenuAcik] = useState(false);   // 2026-10-10: siralama cipleri tek 'Sirala' menusune indirildi
   const [siraBy, setSiraBy]             = useState<"degisim1g"|"degisim1h"|"degisim1a"|"degisim1y"|"fk"|"pddd"|"roe"|"temetu"|"hacim"|"fiyat"|"ticker">("degisim1g");
   const [siraDir, setSiraDir]           = useState<1|-1>(-1); // Değişim için azalan başlasın
   const [secilen, setSecilen]           = useState<any>(null);
@@ -16865,7 +16866,7 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri,
             }}>
               <HisseAvatar ticker={h.ticker} sirket={h.sirket} boyut={28}/>
               <div>
-                <div style={{fontSize:12,fontWeight:700,color:h.katilimEndeksi?C.green:C.blue,lineHeight:1.25}}>{h.ticker}</div>
+                <div style={{fontSize:12,fontWeight:700,color:C.blue,lineHeight:1.25}}>{h.ticker}{h.katilimEndeksi&&<span style={{display:"inline-block",width:6,height:6,borderRadius:3,background:C.green,marginLeft:5,verticalAlign:"middle"}}/>}</div>
                 <div style={{display:"flex",alignItems:"baseline",gap:6,whiteSpace:"nowrap",marginTop:1}}>
                   <span style={{fontSize:12.5,fontWeight:700,color:C.text,fontVariantNumeric:"tabular-nums"}}>
                     {h.fiyat ? h.fiyat.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}) : "—"}
@@ -16891,7 +16892,7 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri,
             <span style={{width:16,flexShrink:0,fontSize:11,fontWeight:700,color:WA(0.6),textAlign:"center"}}>{i+1}</span>
             <HisseAvatar ticker={h.ticker} sirket={h.sirket} boyut={26}/>
             <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:12.5,fontWeight:700,color:h.katilimEndeksi?C.green:C.blue}}>{h.ticker}</div>
+              <div style={{fontSize:12.5,fontWeight:700,color:C.blue}}>{h.ticker}{h.katilimEndeksi&&<span style={{display:"inline-block",width:6,height:6,borderRadius:3,background:C.green,marginLeft:5,verticalAlign:"middle"}}/>}</div>
               <div style={{fontSize:10.5,color:WA(0.6),overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{h.sirket}</div>
             </div>
             <div style={{textAlign:"right",flexShrink:0}}>
@@ -16961,19 +16962,19 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri,
         <div style={{display:"flex"}}>
           <div style={{flex:1}}>
             <div style={{fontSize:9,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5,marginBottom:3}}>{TR("Hisse")}</div>
-            <div style={{fontSize:14.5,fontWeight:700,fontFamily:"inherit",fontVariantNumeric:"tabular-nums",color:(TEMA==="acik"?C.label:"#fff"),whiteSpace:"nowrap"}}>{hisseIstatistik.toplam}</div>
+            <div style={{fontSize:14.5,fontWeight:700,fontFamily:"inherit",fontVariantNumeric:"tabular-nums",color:(TEMA==="acik"?C.label:"#fff"),whiteSpace:"nowrap"}}>{hisseIstatistik.toplam>0?hisseIstatistik.toplam:"—"}</div>
           </div>
           <div style={{flex:1}}>
             <div style={{fontSize:9,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5,marginBottom:3}}>{TR("Artan")}</div>
             <div style={{fontSize:14.5,fontWeight:700,fontFamily:"inherit",fontVariantNumeric:"tabular-nums",color:C.green,whiteSpace:"nowrap"}}>
-              {hisseIstatistik.artan}
+              {hisseIstatistik.toplam>0?hisseIstatistik.artan:"—"}
               {hisseIstatistik.toplam>0&&<span style={{fontSize:10,fontWeight:700,color:WA(0.6),marginLeft:3}}>%{Math.round(hisseIstatistik.artan/hisseIstatistik.toplam*100)}</span>}
             </div>
           </div>
           <div style={{flex:1}}>
             <div style={{fontSize:9,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),textTransform:"uppercase",letterSpacing:0.5,marginBottom:3}}>{TR("Azalan")}</div>
             <div style={{fontSize:14.5,fontWeight:700,fontFamily:"inherit",fontVariantNumeric:"tabular-nums",color:C.red,whiteSpace:"nowrap"}}>
-              {hisseIstatistik.azalan}
+              {hisseIstatistik.toplam>0?hisseIstatistik.azalan:"—"}
               {hisseIstatistik.toplam>0&&<span style={{fontSize:10,fontWeight:700,color:WA(0.6),marginLeft:3}}>%{Math.round(hisseIstatistik.azalan/hisseIstatistik.toplam*100)}</span>}
             </div>
           </div>
@@ -16998,34 +16999,36 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri,
             </div>
           );
         })()}
-        <div style={{fontSize:10,color:WA(0.6),marginTop:6}}>🔄 Son güncelleme: {sonGuncelleme ? sonGuncelleme.toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"}) : "—"}</div>
+        <div style={{fontSize:10,color:WA(0.6),marginTop:6}}>Son güncelleme: {sonGuncelleme ? sonGuncelleme.toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"}) : "—"}</div>
+        {/* Endeks seçici (2026-10-10): eskiden hero kartın ALTINDA ayrı bir şerit BİST 100'ü ikinci kez gösteriyordu; artık kartın içinde, tek satır filtre */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginTop:12}}>
+          {(["BIST 100","BIST 50","BIST 30"] as const).map(ad=>{
+            const kod = ad==="BIST 100"?"100":ad==="BIST 30"?"30":"50";
+            const aktif = endeksFiltre===kod;
+            return(
+            <div key={ad}
+              onClick={()=>setEndeksFiltre(f=>f===kod?"tumu":kod)}
+              style={{
+                minWidth:0,cursor:"pointer",
+                background:aktif?"rgba(91,155,216,0.18)":WA(0.04),
+                border:`1px solid ${aktif?C.blue:WA(0.1)}`,borderRadius:12,padding:"7px 10px",
+              }}>
+              <div style={{fontSize:10,fontWeight:700,color:C.blue,textTransform:"uppercase",letterSpacing:0.4,whiteSpace:"nowrap"}}>{TR(ad)}</div>
+              <div style={{display:"flex",alignItems:"baseline",gap:6,marginTop:2,whiteSpace:"nowrap"}}>
+                <span style={{fontSize:13,fontWeight:700,fontVariantNumeric:"tabular-nums",color:(TEMA==="acik"?C.label:"#fff")}}>
+                  {endeksVeri[ad] ? endeksVeri[ad].deger.toLocaleString("tr-TR",{maximumFractionDigits:0}) : "—"}
+                </span>
+                {endeksVeri[ad] && (
+                  <span style={{fontSize:10.5,fontWeight:700,color:endeksVeri[ad].degisim>=0?C.green:C.red}}>
+                    {endeksVeri[ad].degisim>=0?"▲":"▼"}{Math.abs(endeksVeri[ad].degisim).toFixed(2)}
+                  </span>
+                )}
+              </div>
+            </div>
+          );})}
+        </div>
       </div>
 
-      {/* Endeks Şeridi */}
-      <div className="piyasa-scroll" style={{display:"flex",gap:8,overflowX:"auto",marginBottom:6,paddingBottom:2}}>
-        {(["BIST 100","BIST 50","BIST 30"] as const).map(ad=>{
-          const kod = ad==="BIST 100"?"100":ad==="BIST 30"?"30":"50";
-          const aktif = endeksFiltre===kod;
-          return(
-          <div key={ad}
-            onClick={()=>setEndeksFiltre(f=>f===kod?"tumu":kod)}
-            style={{
-              flex:"0 0 108px",minWidth:0,cursor:"pointer",
-              background:aktif?"rgba(91,155,216,0.16)":C.card,
-              border:`1px solid ${aktif?C.blue:C.border}`,borderRadius:14,padding:"10px 12px",
-            }}>
-            <div style={{fontSize:10,fontWeight:700,color:C.blue,textTransform:"uppercase",letterSpacing:0.4}}>{TR(ad)}</div>
-            <div style={{fontSize:15,fontWeight:700,fontFamily:"inherit",fontVariantNumeric:"tabular-nums",margin:"4px 0 3px",color:(TEMA==="acik"?C.label:"#fff")}}>
-              {endeksVeri[ad] ? endeksVeri[ad].deger.toLocaleString("tr-TR",{maximumFractionDigits:0}) : "—"}
-            </div>
-            {endeksVeri[ad] && (
-              <div style={{fontSize:11,fontWeight:700,color:endeksVeri[ad].degisim>=0?C.green:C.red}}>
-                {endeksVeri[ad].degisim>=0?"▲":"▼"} %{Math.abs(endeksVeri[ad].degisim).toFixed(2)}
-              </div>
-            )}
-          </div>
-        );})}
-      </div>
       {endeksFiltre!=="tumu" && (
         <div style={{fontSize:10,color:WA(0.6),marginBottom:12,lineHeight:1.4}}>
           {resmiUyelik
@@ -17037,23 +17040,9 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri,
 
       {/* Sektör verisi kaynakta (Midas API) hiç bulunmadığı için filtre kaldırıldı —
           sadece Katılım Endeksi kaldı. */}
-      <div style={{marginBottom:10}}>
-        <button
-          onClick={() => setSadeceKatilim(k => !k)}
-          style={{
-            padding:"7px 13px",borderRadius:18,cursor:"pointer",fontFamily:"inherit",
-            fontSize:11.5,fontWeight:700,whiteSpace:"nowrap",
-            background: sadeceKatilim ? C.green : C.card,
-            border: sadeceKatilim ? "none" : `1.5px solid ${C.green}55`,
-            color: sadeceKatilim ? "#fff" : C.green,
-          }}>
-          {sadeceKatilim ? "✓ Katılım Endeksi" : "Katılım Endeksi"}
-        </button>
-      </div>
-
       {/* Arama */}
       <div style={{display:"flex",alignItems:"center",background:C.card,border:`1.5px solid ${C.border}`,borderRadius:10,padding:"7px 10px",marginBottom:10,gap:8}}>
-        <span style={{color:C.sub2,fontSize:15}}>🔍</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={C.sub2} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
         <input
           style={{flex:1,background:"none",border:"none",outline:"none",color:C.text,fontSize:13,fontFamily:"inherit"}}
           placeholder="Ticker veya şirket adı ara…"
@@ -17079,25 +17068,39 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri,
         ))}
       </div>
 
-      {/* Sıralama butonları — üstteki Tümü/Yükselenler/Düşenler/Hacim segmentiyle
-          aynı görsel dil: tek bir yumuşak kapsül zemin, seçili olan kart üstünde
-          yükselir. Önceden her çip kendi başına C.card+kenarlık taşıyordu; bu da
-          açık temada bazı kutuların beyaz bazılarının gri görünmesine (tutarsız
-          "kart üstünde kart" hissi) yol açıyordu. */}
-      <div style={{display:"flex",gap:2,marginBottom:10,overflowX:"auto",background:WA(0.05),borderRadius:12,padding:3}} className="piyasa-scroll">
-        {([["degisim1g","Gün%"],["degisim1h","Haf%"],["degisim1a","Ay%"],["degisim1y","Yıl%"],["fk","F/K"],["pddd","PD/DD"],["roe","ROE"],["temetu","Tmt%"]] as [typeof siraBy, string][]).map(([col, lbl]) => (
-          <button key={col} onClick={() => siraToggle(col)}
-            style={{
-              padding:"6px 11px",borderRadius:9,border:"none",
-              background: siraBy===col ? C.card : "transparent",
-              color: siraBy===col ? C.blue : C.sub,
-              boxShadow: siraBy===col ? "0 2px 6px rgba(0,0,0,0.12)" : "none",
-              fontSize:11,fontWeight:siraBy===col?700:600,
-              cursor:"pointer",fontFamily:"inherit",flexShrink:0,whiteSpace:"nowrap",
-            }}>
-            {lbl} {siraBy===col ? (siraDir===1?"↑":"↓") : ""}
-          </button>
-        ))}
+      {/* SATIR: Katılım Endeksi süzgeci + Sırala menüsü (2026-10-10) */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:10,position:"relative"}}>
+        <button
+          onClick={() => setSadeceKatilim(k => !k)}
+          style={{
+            padding:"7px 13px",borderRadius:18,cursor:"pointer",fontFamily:"inherit",
+            fontSize:11.5,fontWeight:700,whiteSpace:"nowrap",
+            background: sadeceKatilim ? C.green : C.card,
+            border: sadeceKatilim ? "none" : `1.5px solid ${C.green}55`,
+            color: sadeceKatilim ? "#fff" : C.green,
+          }}>
+          {sadeceKatilim ? "✓ Katılım Endeksi" : "Katılım Endeksi"}
+        </button>
+        <button onClick={() => setSiraMenuAcik(a => !a)}
+          style={{padding:"7px 12px",borderRadius:18,cursor:"pointer",fontFamily:"inherit",fontSize:11.5,fontWeight:700,whiteSpace:"nowrap",
+            background:C.card,border:`1.5px solid ${C.border}`,color:C.label,display:"inline-flex",alignItems:"center",gap:6}}>
+          {TR("Sırala")}: <span style={{color:C.blue}}>{({degisim1g:"Gün%",degisim1h:"Haf%",degisim1a:"Ay%",degisim1y:"Yıl%",fk:"F/K",pddd:"PD/DD",roe:"ROE",temetu:"Tmt%",hacim:"Hacim",fiyat:"Fiyat",ticker:"A–Z"} as Record<string,string>)[siraBy]||"Gün%"} {siraDir===1?"↑":"↓"}</span>
+          <span style={{fontSize:9,color:C.sub}}>▾</span>
+        </button>
+        {siraMenuAcik && (<>
+          <div onClick={() => setSiraMenuAcik(false)} style={{position:"fixed",inset:0,zIndex:30}}/>
+          <div style={{position:"absolute",right:0,top:"calc(100% + 4px)",zIndex:31,background:C.card,border:`1px solid ${C.border}`,borderRadius:14,padding:6,minWidth:170,
+            boxShadow:TEMA==="acik"?"0 8px 24px rgba(22,34,46,0.16)":"0 8px 24px rgba(0,0,0,0.5)"}}>
+            {([["degisim1g","Günlük %"],["degisim1h","Haftalık %"],["degisim1a","Aylık %"],["degisim1y","Yıllık %"],["fk","F/K"],["pddd","PD/DD"],["roe","ROE"],["temetu","Temettü %"]] as [typeof siraBy, string][]).map(([col, lbl]) => (
+              <div key={col} onClick={() => { siraToggle(col); setSiraMenuAcik(false); }}
+                style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 12px",borderRadius:9,cursor:"pointer",fontSize:12.5,
+                  fontWeight:siraBy===col?700:600,color:siraBy===col?C.blue:C.label,background:siraBy===col?WA(0.05):"transparent"}}>
+                <span>{TR(lbl)}</span>
+                {siraBy===col && <span style={{fontSize:11}}>{siraDir===1?"↑":"↓"}</span>}
+              </div>
+            ))}
+          </div>
+        </>)}
       </div>
 
       {/* İçerik */}
@@ -17127,8 +17130,7 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri,
                     : flashMap[h.ticker]==="up" ? "rgba(74,222,128,0.14)"
                     : flashMap[h.ticker]==="down" ? "rgba(248,113,113,0.14)"
                     : C.card,
-                  borderLeft: secilen?.ticker===h.ticker ? `3px solid ${C.blue}` :
-                               h.katilimEndeksi ? `3px solid ${C.green}66` : `3px solid transparent`,
+                  borderLeft: secilen?.ticker===h.ticker ? `3px solid ${C.blue}` : `3px solid transparent`,
                   cursor:"pointer",borderRadius:10,marginBottom:6,
                   border:`1px solid ${C.border}`,
                   transition:"background-color 700ms ease",
@@ -17138,8 +17140,8 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri,
                 {/* Ticker + Şirket adı */}
                 <div style={{minWidth:0}}>
                   <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
-                    <span style={{fontSize:13,fontWeight:700,color:h.katilimEndeksi?C.green:C.blue,flexShrink:0}}>{h.ticker}</span>
-                    {h.katilimEndeksi && <span style={{fontSize:10,color:C.green}}>☪</span>}
+                    <span style={{fontSize:13,fontWeight:700,color:C.blue,flexShrink:0}}>{h.ticker}</span>
+                    {h.katilimEndeksi && <span style={{fontSize:9,fontWeight:700,color:C.green,background:C.green+"1F",border:`1px solid ${C.green}44`,borderRadius:6,padding:"1px 5px",lineHeight:1.3}}>☪ Katılım</span>}
                   </div>
                   <div style={{fontSize:11.5,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                     {(h.sirket&&h.sirket.toUpperCase()!==h.ticker.toUpperCase()) ? h.sirket : "\u00A0"}
