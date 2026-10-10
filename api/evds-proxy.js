@@ -132,7 +132,8 @@ const redis = new Redis({
 // zaman en güncel günlük değer; öncekiler haftalık (piyasa serileri) ya da
 // aylık (politika faizleri) aralıkla seçiliyor (bkz. seyreklestirSeri).
 // Versiyon artırılmazsa eski (ardışık günlük) önbellek 6 saat daha döner.
-const KV_ANLIK_KEY = "evds:anlik:v23";
+// v24 (2026-10-10): PPK_FAIZ_SERI eklendi (EVDS TP.BISPOLFAIZ.TUR, aylik, ~3 yil).
+const KV_ANLIK_KEY = "evds:anlik:v24";
 const KV_TARIHSEL_PREFIX = "evds:tarihsel:v22:";
 
 // Vercel'in varsayılan fonksiyon süresi (Hobby planda genelde 10sn) artık 8 dış
@@ -1845,7 +1846,7 @@ export default async function handler(req,res){
   }
 
   try{
-    const [hafJson,bkrJson,kbkJson,kkpJson,gunJson,enfJson,polJson,rezervJson,rezervHafJson,standbyJson,dtJson,gostJson,hkbkJson,testGsyhCeyrekJson]=await Promise.all([
+    const [hafJson,bkrJson,kbkJson,kkpJson,gunJson,enfJson,polJson,rezervJson,rezervHafJson,standbyJson,dtJson,gostJson,hkbkJson,testGsyhCeyrekJson,polBisJson]=await Promise.all([
       guvenliCek("haftalik", `${BASE}/series=${HAFTALIK.join("-")}&startDate=${onceki(60)}&endDate=${tarihStr(new Date())}&type=json&frequency=3`),
       guvenliCek("aylik_bkr", `${BASE}/series=${AYLIK_BKR.join("-")}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
       guvenliCek("aylik_kbk", `${BASE}/series=${AYLIK_KBK.join("-")}&startDate=${onceki(90)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
@@ -1860,6 +1861,7 @@ export default async function handler(req,res){
       guvenliCek("gosterge", `${BASE}/series=${GOSTERGE.join("-")}&startDate=${onceki(760)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
       guvenliCek("haftalik_kbk", `${BASE}/series=${HAFTALIK_KBK.join("-")}&startDate=${onceki(200)}&endDate=${tarihStr(new Date())}&type=json&frequency=3`),
       guvenliCek("test_gsyh_ceyrek", `${BASE}/series=${TEST_GSYH.join("-")}&startDate=${onceki(2000)}&endDate=${tarihStr(new Date())}&type=json&frequency=6`),
+      guvenliCek("politika_bis", `${BASE}/series=TP.BISPOLFAIZ.TUR&startDate=${onceki(1100)}&endDate=${tarihStr(new Date())}&type=json&frequency=5`),
     ]);
 
     const [sofr,eur3m,us2y,us5y,us10y,fedFonlama,ecbMevduat,sofr3m,sofr6m,fedUst,fedAlt]=await Promise.all([
@@ -1906,6 +1908,7 @@ export default async function handler(req,res){
     sonuclar["FRED_FED_ALT"]=fedAlt.son;
     sonuclar["FRED_FED_ALT_SERI"]=fedAlt.seri;
 
+    sonuclar["PPK_FAIZ_SERI"]=tumDegerler(polBisJson?.items||[], "TP.BISPOLFAIZ.TUR");
     sonuclar["TP.APIFON4_SERI"]=seyreklestirSeri(tumDegerler(polJson?.items||[], "TP.APIFON4"), SERI_ARALIK_PIYASA, SERI_MAKS_NOKTA);
     sonuclar["TP_AB_B6_SERI"]=tumDegerler(rezervJson?.items||[], "TP.AB.B6").slice(-24);
     sonuclar["TP_AB_B1_SERI"]=tumDegerler(rezervJson?.items||[], "TP.AB.B1").slice(-24);
