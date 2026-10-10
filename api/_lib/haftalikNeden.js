@@ -12,7 +12,7 @@
 // (modelden değil) — model yalnızca bir cümle ve (grounding'den) kaynak üretir.
 
 export const NEDEN_SURUM = 2; // v2 (2026-10-03): cümleler "Haberlere göre ..." biçiminde, özet metnine gömülür
-export const NEDEN_MODEL = "gemini-3.5-flash"; // api/asistan-ai.js ile aynı; emekli edilirse iki yerde güncelle
+export const NEDEN_MODEL = "gemini-3.6-flash"; // api/asistan-ai.js ile aynı; emekli edilirse iki yerde güncelle
 export const NEDEN_MAKS_SATIR = 6;
 
 export function trTarih(iso) {
