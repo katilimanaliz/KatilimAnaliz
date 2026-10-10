@@ -17478,7 +17478,7 @@ function YaklasanTakvimBlok({tekKutu,yaklasanTakvim,nav}:any){
               if(!grup){
                 const fark=Math.round((k-bugun.getTime())/86400000);
                 const tam=g.toLocaleDateString("tr-TR",{weekday:"long",day:"numeric",month:"short"});
-                grup={k,baslik:fark===0?"Bugün · "+tam:fark===1?"Yarın · "+tam:tam,olaylar:[]};
+                grup={k,fark,baslik:fark===0?"Bugün · "+tam:fark===1?"Yarın · "+tam:tam,olaylar:[]};
                 gunler.push(grup);
               }
               grup.olaylar.push({e,d});
@@ -17490,7 +17490,7 @@ function YaklasanTakvimBlok({tekKutu,yaklasanTakvim,nav}:any){
                   background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`}}>
                   {gunler.map((g:any,gi:number)=>(
                     <div key={g.k} style={{borderTop:gi===0?"none":`1px solid ${WA(0.08)}`}}>
-                      <div style={{fontSize:11,fontWeight:600,color:WA(0.6),padding:"10px 13px 4px"}}>{g.baslik}</div>
+                      <div style={{fontSize:11,fontWeight:700,color:g.fark<=1?C.red:C.blue,padding:"10px 13px 4px"}}>{g.baslik}</div>
                       {g.olaylar.map((o:any,i:number)=>{
                         const {e,d}=o;
                         const gunIci=d.getHours()===0&&d.getMinutes()===0;
@@ -17503,15 +17503,15 @@ function YaklasanTakvimBlok({tekKutu,yaklasanTakvim,nav}:any){
                             background:yuksek?"rgba(211,47,47,0.10)":"transparent",
                           }}>
                             <span style={{width:8,height:8,borderRadius:"50%",background:e.etkiRenk,flexShrink:0}}/>
-                            <p style={{margin:0,flex:1,minWidth:0,fontSize:12,fontWeight:yuksek?700:500,color:yuksek?C.red:C.soft,lineHeight:1.35}}>{e.baslik}</p>
-                            <span style={{fontSize:11,color:yuksek?C.red:WA(0.6),flexShrink:0,whiteSpace:"nowrap"}}>{gunIci?"Gün içi":d.toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"})}</span>
+                            <p style={{margin:0,flex:1,minWidth:0,fontSize:12,fontWeight:700,color:yuksek?C.red:C.soft,lineHeight:1.35}}>{e.baslik}</p>
+                            <span style={{fontSize:11,fontWeight:600,color:yuksek?C.red:WA(0.6),flexShrink:0,whiteSpace:"nowrap"}}>{gunIci?"Gün içi":d.toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"})}</span>
                           </div>
                         );
                       })}
                     </div>
                   ))}
                 </div>
-                <div style={{display:"flex",flexWrap:"wrap",gap:"4px 12px",margin:"8px 2px 0",fontSize:10,color:WA(0.6)}}>
+                <div style={{display:"flex",flexWrap:"wrap",gap:"4px 12px",margin:"8px 2px 0",fontSize:10,fontWeight:600,color:WA(0.6)}}>
                   {Object.keys(etiketler).map((ad:string)=>(
                     <span key={ad} style={{display:"inline-flex",alignItems:"center",gap:4}}>
                       <span style={{width:7,height:7,borderRadius:"50%",background:etiketler[ad],display:"inline-block"}}/>{ad}
