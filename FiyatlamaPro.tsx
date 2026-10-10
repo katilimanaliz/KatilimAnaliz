@@ -17463,36 +17463,64 @@ function YaklasanTakvimBlok({tekKutu,yaklasanTakvim,nav}:any){
             <span style={{fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{CV("Yaklaşan Takvim · 7 Gün")}</span>
             <span onClick={()=>nav("finansalTakvim")} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
           </div>
-          {/* 2026-09-14 (kullanıcı isteği): takvim kayıtları AYRI AYRI
-              kutular değil, TEK bir kutunun içinde ayraçlı satırlar. */}
-          <div style={{marginBottom:14,...(tekKutu?{borderRadius:16,overflow:"hidden",
-            background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`}:{})}}>
-            {yaklasanTakvim.map((e:any,i:number)=>{
+          {/* 2026-10-10 (kullanıcı isteği): takvim tek kutuda, GÜN BAŞLIKLARI altında
+              gruplu satırlar; önem derecesi yazılı rozet yerine renkli nokta (+ altta
+              açıklama); saati olmayan (00:00) olay "Gün içi"; Yüksek olay kırmızı
+              zeminle vurgulu. TÜM olaylar gösterilir (kesme yok). */}
+          {(()=>{
+            const bugun=new Date(); bugun.setHours(0,0,0,0);
+            const gunler:any[]=[]; const etiketler:any={};
+            yaklasanTakvim.forEach((e:any)=>{
               const d=new Date(e.tarih);
-              const bugun=new Date(); bugun.setHours(0,0,0,0);
-              const gunFark=Math.round((new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime()-bugun.getTime())/86400000);
-              const gunEtiket=gunFark===0?"Bugün":gunFark===1?"Yarın":d.toLocaleDateString("tr-TR",{day:"numeric",month:"short"});
-              return(
-                <div key={i} className="kp-side-item" onClick={()=>nav("finansalTakvim")} style={{
-                  display:"flex",alignItems:"center",gap:10,cursor:"pointer",
-                  ...(tekKutu
-                    ? {borderTop:i===0?"none":`1px solid ${WA(0.07)}`}
-                    : {background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`,borderRadius:12,marginBottom:8}),
-                  padding:"10px 13px",
-                }}>
-                  <div style={{width:44,flexShrink:0,textAlign:"center"}}>
-                    <div style={{fontSize:10,fontWeight:700,color:gunFark<=1?C.red:C.blue}}>{gunEtiket}</div>
-                    <div style={{fontSize:9,color:WA(0.6),marginTop:1}}>{d.toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"})}</div>
-                  </div>
-                  <div style={{width:1,alignSelf:"stretch",background:WA(0.08),flexShrink:0}}/>
-                  <div style={{flex:1,minWidth:0}}>
-                    <p style={{margin:0,fontSize:12,fontWeight:700,color:C.soft,lineHeight:1.35}}>{e.baslik}</p>
-                  </div>
-                  <span style={{fontSize:9,fontWeight:700,color:e.etkiRenk,background:e.etkiRenk+"22",padding:"3px 7px",borderRadius:6,flexShrink:0}}>{e.etkiAdi}</span>
+              const g=new Date(d.getFullYear(),d.getMonth(),d.getDate());
+              const k=g.getTime();
+              let grup=gunler.find((x:any)=>x.k===k);
+              if(!grup){
+                const fark=Math.round((k-bugun.getTime())/86400000);
+                const tam=g.toLocaleDateString("tr-TR",{weekday:"long",day:"numeric",month:"short"});
+                grup={k,baslik:fark===0?"Bugün · "+tam:fark===1?"Yarın · "+tam:tam,olaylar:[]};
+                gunler.push(grup);
+              }
+              grup.olaylar.push({e,d});
+              if(e.etkiAdi) etiketler[e.etkiAdi]=e.etkiRenk;
+            });
+            return (
+              <div style={{marginBottom:14}}>
+                <div style={{borderRadius:16,overflow:"hidden",
+                  background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`}}>
+                  {gunler.map((g:any,gi:number)=>(
+                    <div key={g.k} style={{borderTop:gi===0?"none":`1px solid ${WA(0.08)}`}}>
+                      <div style={{fontSize:11,fontWeight:600,color:WA(0.6),padding:"10px 13px 4px"}}>{g.baslik}</div>
+                      {g.olaylar.map((o:any,i:number)=>{
+                        const {e,d}=o;
+                        const gunIci=d.getHours()===0&&d.getMinutes()===0;
+                        const yuksek=e.etkiAdi==="Yüksek";
+                        return(
+                          <div key={i} className="kp-side-item" onClick={()=>nav("finansalTakvim")} style={{
+                            display:"flex",alignItems:"center",gap:10,cursor:"pointer",
+                            borderTop:i===0?"none":`1px solid ${WA(0.07)}`,
+                            padding:"9px 13px",
+                            background:yuksek?"rgba(211,47,47,0.10)":"transparent",
+                          }}>
+                            <span style={{width:8,height:8,borderRadius:"50%",background:e.etkiRenk,flexShrink:0}}/>
+                            <p style={{margin:0,flex:1,minWidth:0,fontSize:12,fontWeight:yuksek?700:500,color:yuksek?C.red:C.soft,lineHeight:1.35}}>{e.baslik}</p>
+                            <span style={{fontSize:11,color:yuksek?C.red:WA(0.6),flexShrink:0,whiteSpace:"nowrap"}}>{gunIci?"Gün içi":d.toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"})}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
                 </div>
-              );
-            })}
-          </div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:"4px 12px",margin:"8px 2px 0",fontSize:10,color:WA(0.6)}}>
+                  {Object.keys(etiketler).map((ad:string)=>(
+                    <span key={ad} style={{display:"inline-flex",alignItems:"center",gap:4}}>
+                      <span style={{width:7,height:7,borderRadius:"50%",background:etiketler[ad],display:"inline-block"}}/>{ad}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
         </>
       )}
     </>
