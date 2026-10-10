@@ -17452,6 +17452,49 @@ function SonHaberlerBlok({tekKutu,sonHaberler,sonHaberlerHata,sonHaberlerIlkYukl
   );
 }
 
+// ─── TCMB POLİTİKA FAİZİ KARARLARI (2026-10-10) ───────────────────────────
+// 1 hafta vadeli repo ihale faizi — PPK kararından sonraki oran. Tek kaynak:
+// ana sayfa, Piyasa > Göstergeler ve faiz koridoru bu diziden beslenir.
+// ⚠️ HER PPK TOPLANTISINDAN SONRA ELLE YENİ SATIR EKLE (sıradaki: 22-10-2026,
+// ardından 10-12-2026). Son satır = güncel oran ve "son karar" tarihi.
+// Doğrulananlar: Ocak 2026'da %38 → %37 (−100 bp); Mart/Nisan/Haziran/Temmuz/
+// Eylül 2026 toplantılarında sabit. 11-12-2025 satırı Ocak kararındaki
+// "%38'den" ifadesinden çıkarıldı. Daha eski karar geçmişi eklenmedi (doğrulanmadı).
+const TCMB_PPK_KARARLARI:{tarih:string,deger:number}[]=[
+  {tarih:"11-12-2025",deger:38},
+  {tarih:"22-01-2026",deger:37},
+  {tarih:"12-03-2026",deger:37},
+  {tarih:"22-04-2026",deger:37},
+  {tarih:"11-06-2026",deger:37},
+  {tarih:"23-07-2026",deger:37},
+  {tarih:"10-09-2026",deger:37},
+];
+// EVDS'ten gelen (TP.BISPOLFAIZ.TUR, aylık, BIS kaynaklı, gecikmeli) seri ile birleştirir:
+// elle girilen karar tarihleri kendi aralığında esas alınır; EVDS yalnızca bundan ÖNCEKİ
+// tarihleri (uzun geçmiş) ve elle girilen son karardan SONRAKİ noktaları ekler. Böylece
+// PPK sonrası satır eklemeyi unutsak da EVDS yayımlayınca oran kendiliğinden güncellenir.
+function ppkKararlar(evds?:any):{tarih:string,deger:number}[]{
+  const man=TCMB_PPK_KARARLARI;
+  if(!Array.isArray(evds)||evds.length===0) return man;
+  const gun=(t:string)=>{const q=String(t).split("-").map(Number);return new Date(q[2],q[1]-1,q[0]).getTime();};
+  const ilk=gun(man[0].tarih), son=gun(man[man.length-1].tarih);
+  const gecerli=evds.filter((x:any)=>x&&typeof x.deger==="number"&&!isNaN(x.deger)&&/^\d{2}-\d{2}-\d{4}$/.test(String(x.tarih)));
+  return [...gecerli.filter((x:any)=>gun(x.tarih)<ilk),...man,...gecerli.filter((x:any)=>gun(x.tarih)>son)];
+}
+const ppkSonKarar=(evds?:any)=>{const k=ppkKararlar(evds);return k[k.length-1];};
+const ppkOranYazi=(evds?:any)=>`%${ppkSonKarar(evds).deger.toFixed(2).replace(".",",")}`;
+// "05-10-2026" → "5 Eki 2026" (" · kaynak" eki varsa korunur; tarih değilse aynen döner)
+function gostergeTarihEtiket(t:string):string{
+  if(!t) return t;
+  const parca=t.split(" · ");
+  const m=/^(\d{2})-(\d{2})-(\d{4})$/.exec(parca[0]);
+  if(!m) return t;
+  const ay=["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"][parseInt(m[2],10)-1];
+  parca[0]=`${parseInt(m[1],10)} ${ay} ${m[3]}`;
+  return parca.join(" · ");
+}
+const ppkSonEtiket=(evds?:any)=>gostergeTarihEtiket(ppkSonKarar(evds).tarih);
+
 // ─── YAKLAŞAN TAKVİM BLOĞU (ana sayfa) ─────────────────────────────────────
 // tekKutu mantığı SonHaberlerBlok ile aynı (bkz. oradaki not).
 function YaklasanTakvimBlok({tekKutu,yaklasanTakvim,nav}:any){
@@ -33773,9 +33816,9 @@ function FinansalGostergeler({onKurTikla}:any){
       // olarak gösteriliyor (gelecekte bazı hesaplamalarda kullanılacak).
       // Gerçek 1 hafta repo faizi (PPK kararı 2026-23) sabit değer olarak
       // giriliyor, PPK toplantılarında elle güncellenmesi gerekir.
-      {ad:"TCMB Politika Faizi (1 Hafta Repo)",deger:"%37,00",tarih:"Haziran 2026 · PPK"},
-      {ad:"TCMB Üst Bant (Borç Verme)",deger:"%40,00",tarih:"Haziran 2026"},
-      {ad:"TCMB Alt Bant (Borçlanma)",deger:"%35,50",tarih:"Haziran 2026"},
+      {ad:"TCMB Politika Faizi (1 Hafta Repo)",deger:ppkOranYazi(evdsMakro?.["PPK_FAIZ_SERI"]),tarih:`${ppkSonEtiket(evdsMakro?.["PPK_FAIZ_SERI"])} · PPK`,seri:ppkKararlar(evdsMakro?.["PPK_FAIZ_SERI"]),seriAd:"TCMB Politika Faizi"},
+      {ad:"TCMB Üst Bant (Borç Verme)",deger:"%40,00",tarih:ppkSonEtiket()},
+      {ad:"TCMB Alt Bant (Borçlanma)",deger:"%35,50",tarih:ppkSonEtiket()},
       {ad:"TCMB Ağırlıklı Fonlama Oranı",deger:aofm.deger,tarih:aofm.tarih||"AOFM",canli:evdsMakro?.["TP.APIFON4"]!=null,
        seri:evdsMakro?.["TP.APIFON4_SERI"],seriAd:"TCMB Ağırlıklı Fonlama Oranı"},
     ]},
@@ -45394,18 +45437,18 @@ function App(){
                   ...(genisEkran ? {display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))"} : {}),
                 }}>
                   {[
-                    {ad:"TCMB Politika Faizi", deger:"%37,00", tarih:"Haziran 2026 · PPK", ikon:Landmark, renk:C.blue},
-                    {ad:"TÜFE (Yıllık)", deger:evdsMakro?.["TUFE_YILLIK"]?.deger!=null?`%${evdsMakro["TUFE_YILLIK"].deger.toFixed(2).replace(".",",")}`:"—", tarih:evdsMakro?.["TUFE_YILLIK"]?.tarih?`${evdsMakro["TUFE_YILLIK"].tarih} · canlı`:"", ikon:TrendingUp, renk:C.red, seri:evdsMakro?.["TUFE_YILLIK_SERI"], seriAd:"TÜFE Yıllık Değişim"},
-                    {ad:"TÜFE (Aylık)", deger:evdsMakro?.["TUFE_AYLIK"]?.deger!=null?`%${evdsMakro["TUFE_AYLIK"].deger.toFixed(2).replace(".",",")}`:"—", tarih:evdsMakro?.["TUFE_AYLIK"]?.tarih?`${evdsMakro["TUFE_AYLIK"].tarih} · canlı`:"", ikon:Activity, renk:C.red, seri:evdsMakro?.["TUFE_AYLIK_SERI"], seriAd:"TÜFE Aylık Değişim"},
-                    {ad:"TLREF (Gecelik Referans)", deger:tlrefMakro(evdsMakro)?.["TP.BISTTLREF.KAPANIS"]?.deger!=null?`%${tlrefMakro(evdsMakro)["TP.BISTTLREF.KAPANIS"].deger.toFixed(2).replace(".",",")}`:"—", tarih:tlrefMakro(evdsMakro)?.["TP.BISTTLREF.KAPANIS"]?.tarih?`${evdsMakro["TP.BISTTLREF.KAPANIS"].tarih} · canlı`:"", ikon:Percent, renk:"#8B5CF6", seri:tlrefMakro(evdsMakro)?.["TP.BISTTLREF.KAPANIS_SERI"], seriAd:"TLREF (Yıllıklandırılmış)"},
+                    {ad:"TCMB Politika Faizi", grup:"Referans oranlar", deger:ppkOranYazi(evdsMakro?.["PPK_FAIZ_SERI"]), tarih:`${ppkSonEtiket(evdsMakro?.["PPK_FAIZ_SERI"])} · PPK`, ikon:Landmark, renk:C.blue, seri:ppkKararlar(evdsMakro?.["PPK_FAIZ_SERI"]), seriAd:"TCMB Politika Faizi"},
+                    {ad:"TÜFE (Yıllık)", grup:"Enflasyon", deger:evdsMakro?.["TUFE_YILLIK"]?.deger!=null?`%${evdsMakro["TUFE_YILLIK"].deger.toFixed(2).replace(".",",")}`:"—", tarih:evdsMakro?.["TUFE_YILLIK"]?.tarih?`${evdsMakro["TUFE_YILLIK"].tarih} · canlı`:"", ikon:TrendingUp, renk:C.red, seri:evdsMakro?.["TUFE_YILLIK_SERI"], seriAd:"TÜFE Yıllık Değişim"},
+                    {ad:"TÜFE (Aylık)", grup:"Enflasyon", deger:evdsMakro?.["TUFE_AYLIK"]?.deger!=null?`%${evdsMakro["TUFE_AYLIK"].deger.toFixed(2).replace(".",",")}`:"—", tarih:evdsMakro?.["TUFE_AYLIK"]?.tarih?`${evdsMakro["TUFE_AYLIK"].tarih} · canlı`:"", ikon:Activity, renk:C.red, seri:evdsMakro?.["TUFE_AYLIK_SERI"], seriAd:"TÜFE Aylık Değişim"},
+                    {ad:"TLREF (Gecelik Referans)", grup:"Referans oranlar", deger:tlrefMakro(evdsMakro)?.["TP.BISTTLREF.KAPANIS"]?.deger!=null?`%${tlrefMakro(evdsMakro)["TP.BISTTLREF.KAPANIS"].deger.toFixed(2).replace(".",",")}`:"—", tarih:tlrefMakro(evdsMakro)?.["TP.BISTTLREF.KAPANIS"]?.tarih?`${evdsMakro["TP.BISTTLREF.KAPANIS"].tarih} · canlı`:"", ikon:Percent, renk:"#8B5CF6", seri:tlrefMakro(evdsMakro)?.["TP.BISTTLREF.KAPANIS_SERI"], seriAd:"TLREF (Yıllıklandırılmış)"},
                     (()=>{const tlrefk=tlrefkTahmini(evdsMakro); return {
-                      ad:"TLREFK (Katılım)",
+                      ad:"TLREFK (Katılım)", grup:"Referans oranlar",
                       deger:tlrefk?.deger!=null?`%${tlrefk.deger.toFixed(2).replace(".",",")}`:"—",
                       tarih:tlrefk?.tarih?`${tlrefk.tarih} · ${tlrefkKaynakEtiket()}`:"",
                       ikon:Scale, renk:"#8B5CF6",
                       seri:tlrefkSeriTahmini(evdsMakro), seriAd:"TLREFK (Katılım)",
                     };})(),
-                    {ad:"TCMB Brüt Rezerv", deger:evdsMakro?.["REZERV_TOPLAM"]?.deger!=null?`$${(evdsMakro["REZERV_TOPLAM"].deger/1000).toFixed(2).replace(".",",")} Mr`:"—", tarih:evdsMakro?.["REZERV_TOPLAM"]?.tarih?`${evdsMakro["REZERV_TOPLAM"].tarih} · canlı`:"", ikon:Wallet, renk:C.green, seri:evdsMakro?.["REZERV_TOPLAM_SERI"], seriAd:"TCMB Brüt Rezerv (Milyon $)", seriBirim:"milyon$"},
+                    {ad:"TCMB Brüt Rezerv", grup:"Rezerv", deger:evdsMakro?.["REZERV_TOPLAM"]?.deger!=null?`$${(evdsMakro["REZERV_TOPLAM"].deger/1000).toFixed(2).replace(".",",")} Mr`:"—", tarih:evdsMakro?.["REZERV_TOPLAM"]?.tarih?`${evdsMakro["REZERV_TOPLAM"].tarih} · canlı`:"", ikon:Wallet, renk:C.green, seri:evdsMakro?.["REZERV_TOPLAM_SERI"], seriAd:"TCMB Brüt Rezerv (Milyon $)", seriBirim:"milyon$"},
                     // ── EK GÖSTERGELER — YALNIZCA MASAÜSTÜ ────────────────
                     // Hepsi ZATEN çekilen evdsMakro verisinden geliyor; yeni
                     // bir istek/uç eklenmedi. Veri gelmemişse satır "—" gösterir.
@@ -45429,12 +45472,22 @@ function App(){
                     // evdsMakro verisinde mevcut — yeni istek eklenmedi.
                     {ad:"ECB Politika Faizi", deger:evdsMakro?.["FRED_ECB"]?.deger!=null?`%${evdsMakro["FRED_ECB"].deger.toFixed(2).replace(".",",")}`:"—", tarih:evdsMakro?.["FRED_ECB"]?.tarih||"", ikon:Landmark, renk:"#60A5FA", seri:evdsMakro?.["FRED_ECB_SERI"], seriAd:"ECB Politika Faizi"},
                     ] : []),
-                  ].map((g:any,i,arr)=>{
+                  ].sort((a:any,b:any)=>{
+                    // Mobilde konuya göre gruplu liste; masaüstü ızgarası eski sırayla kalır.
+                    if(genisEkran) return 0;
+                    const sira:any={"Referans oranlar":0,"Enflasyon":1,"Rezerv":2};
+                    return (sira[a.grup]??9)-(sira[b.grup]??9);
+                  }).map((g:any,i,arr)=>{
                     const IkonBileseni=g.ikon;
+                    const grupBasi=!genisEkran && g.grup && (i===0 || arr[i-1].grup!==g.grup);
+                    const canliMi=typeof g.tarih==="string" && g.tarih.endsWith(" · canlı");
+                    const tarihYazi=gostergeTarihEtiket(canliMi?g.tarih.slice(0,g.tarih.length-" · canlı".length):g.tarih);
                     const gecmisDestekli = !!g.seriAd; // bu gösterge kavramsal olarak geçmiş veri sunuyor mu
                     const tiklanabilir = g.seri && g.seri.length>0;
                     return (
-                    <div key={i} className={gecmisDestekli?"kp-side-item":undefined} onClick={(e)=>{
+                    <Fragment key={i}>
+                    {grupBasi&&<div style={{fontSize:11,fontWeight:700,color:(TEMA==="acik"?"#4A6178":"rgba(255,255,255,0.55)"),padding:"10px 14px 2px",borderTop:i===0?"none":`1px solid ${WA(0.07)}`}}>{CV(g.grup)}</div>}
+                    <div className={gecmisDestekli?"kp-side-item":undefined} onClick={(e)=>{
                       if(!gecmisDestekli) return; // TCMB Politika Faizi gibi hiç geçmişi olmayanlar — karta düşsün
                       e.stopPropagation();
                       if(tiklanabilir){
@@ -45451,19 +45504,23 @@ function App(){
                            // kutunun kendi kenarlığıyla çakışmasın.
                            borderTop:i<3?"none":`1px solid ${WA(0.07)}`,
                            borderLeft:(i%3)===0?"none":`1px solid ${WA(0.07)}`}
-                        : {borderTop:i===0?"none":`1px solid ${WA(0.07)}`})}}>
+                        : {borderTop:(i===0||grupBasi)?"none":`1px solid ${WA(0.07)}`})}}>
                       <div style={{width:32,height:32,borderRadius:9,background:`${g.renk}26`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                         <IkonBileseni size={16} color={g.renk} strokeWidth={2}/>
                       </div>
                       <div style={{minWidth:0,flex:1}}>
                         <div style={{color:WA(0.85),fontSize:13,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{g.ad}</div>
-                        {g.tarih&&<div style={{color:(TEMA==="acik"?"#4A6178":"rgba(255,255,255,0.55)"),fontSize:10,marginTop:1}}>{g.tarih}</div>}
+                        {tarihYazi&&<div style={{color:(TEMA==="acik"?"#4A6178":"rgba(255,255,255,0.55)"),fontSize:10,marginTop:1}}>{canliMi&&<span style={{display:"inline-block",width:6,height:6,borderRadius:"50%",background:C.green,marginRight:5,verticalAlign:1}}/>}{tarihYazi}</div>}
                       </div>
                       <span style={{fontSize:15,fontWeight:700,fontFamily:"inherit",fontVariantNumeric:"tabular-nums",color:C.label,flexShrink:0}}>{g.deger}</span>
                       {gecmisDestekli&&<span style={{fontSize:12,color:WA(0.6),flexShrink:0,marginLeft:2}}>›</span>}
                     </div>
+                    </Fragment>
                     );
                   })}
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:5,margin:genisEkran?"-18px 2px 26px":"-6px 2px 14px",fontSize:10,fontWeight:600,color:(TEMA==="acik"?"#4A6178":"rgba(255,255,255,0.55)")}}>
+                  <span style={{width:6,height:6,borderRadius:"50%",background:C.green,display:"inline-block"}}/>{CV("Yeşil nokta: güncel veri")}
                 </div>
                 </>
               );
@@ -46039,9 +46096,9 @@ function App(){
               // ── Alt kategori 3: PARA POLİTİKASI VE FİNANSAL KOŞULLAR
               // (TAMAMI MEVCUT — sadece yeniden gruplandı, hiçbir veri değişmedi) ──
               const PARA:any[] = [
-                {ad:"TCMB Politika Faizi (1 Hafta Repo)", deger:"%37,00", tarih:"Haziran 2026 · PPK"},
-                {ad:"TCMB Üst Bant",       deger:"%40,00", tarih:"Haziran 2026"},
-                {ad:"TCMB Alt Bant",       deger:"%35,50", tarih:"Haziran 2026"},
+                {ad:"TCMB Politika Faizi (1 Hafta Repo)", deger:ppkOranYazi(evdsMakro?.["PPK_FAIZ_SERI"]), tarih:`${ppkSonEtiket(evdsMakro?.["PPK_FAIZ_SERI"])} · PPK`, seri:ppkKararlar(evdsMakro?.["PPK_FAIZ_SERI"]), seriAd:"TCMB Politika Faizi"},
+                {ad:"TCMB Üst Bant",       deger:"%40,00", tarih:ppkSonEtiket()},
+                {ad:"TCMB Alt Bant",       deger:"%35,50", tarih:ppkSonEtiket()},
                 {ad:"TCMB Ağırlıklı Fonlama Oranı", deger:fmtPct(aofm), tarih:aofm?.tarih||"AOFM", canli:aofm!=null,
                  seri:evdsMakro?.["TP.APIFON4_SERI"], seriAd:"TCMB Ağırlıklı Fonlama Oranı"},
                 {ad:"ZK Nema Oranı (AOFM × %86)",
@@ -46272,7 +46329,7 @@ function App(){
                       <div style={{background:kartBg,border:kartKenar,borderRadius:14,padding:"16px",marginBottom:12}}>
                         <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
                           <span style={{fontSize:12,color:WA(0.6)}}>TCMB Faiz Koridoru</span>
-                          <span style={{fontSize:11,color:WA(0.6)}}>Haziran 2026 · PPK</span>
+                          <span style={{fontSize:11,color:WA(0.6)}}>{ppkSonEtiket()} · PPK</span>
                         </div>
                         <div style={{display:"flex",alignItems:"baseline",gap:8,marginTop:6}}>
                           <span style={{...monoStil,fontSize:30}}>{fmt(pol)}</span>
