@@ -9211,6 +9211,14 @@ const EN_SOZLUK: Record<string, string> = {
   "Aynı gün": "Same day",
   "3 gün önce": "3 days before",
   "Bildirimler yalnızca iPhone ve Android uygulamasında çalışır.": "Notifications only work in the iPhone and Android app.",
+  "Birikim Hesaplayıcı: hedef bazlı birikim planı, aylık yatırım takibi ve hatırlatma": "Savings Calculator: goal-based savings plan, monthly deposit tracking and reminders",
+  "Finansal Takvim'e bildirim: ZK, PPK, FED, TL Payı ve Kredi Büyüme tarihleri için istediğin kategoriyi aç": "Financial Calendar notifications: turn on alerts for Reserve Requirement, MPC, FED, TL Share and Credit Growth dates",
+  "TLREF ve TLREFK artık doğrudan Borsa İstanbul'un resmi verisinden geliyor": "TLREF and TLREFK now come directly from Borsa Istanbul's official data",
+  "İcazet Belgeleri: Albaraka Türk'ün 22 belgesinin tamamı eklendi": "Sharia Compliance Certificates: all 22 Albaraka Türk certificates added",
+  "Müşteri Portföyüm ve Kur Makası ve Marj ekranları eklendi": "Added My Client Portfolio and FX Spread & Margin screens",
+  "Favoriler ve ayarlar hesabına bağlandı, cihazlar arasında eşitlenir": "Favorites and settings are tied to your account and sync across devices",
+  "Türkçe takvim seçici ve masaüstünde üzerine gelince açılan menü grupları": "Turkish calendar picker and desktop menu groups that open on hover",
+  "Yazı tipi tutarlılığı, daha okunaklı silik yazılar ve gösterge grafiklerinde uzun seri iyileştirmesi": "Consistent fonts, more legible faint text and better long-series indicator charts"
 };
 
 // ── 2026-10-08: ARAPÇA SÖZLÜĞÜ (Türkçe metin → Arapça; anahtarlar EN_SOZLUK ile aynı küme) ──
@@ -12829,6 +12837,14 @@ const AR_SOZLUK: Record<string, string> = {
   "Aynı gün": "في اليوم نفسه",
   "3 gün önce": "قبل 3 أيام",
   "Bildirimler yalnızca iPhone ve Android uygulamasında çalışır.": "الإشعارات تعمل فقط في تطبيق آيفون وأندرويد.",
+  "Birikim Hesaplayıcı: hedef bazlı birikim planı, aylık yatırım takibi ve hatırlatma": "حاسبة الادخار: خطة ادخار حسب الهدف ومتابعة الإيداع الشهري والتذكيرات",
+  "Finansal Takvim'e bildirim: ZK, PPK, FED, TL Payı ve Kredi Büyüme tarihleri için istediğin kategoriyi aç": "إشعارات التقويم المالي: فعّل التنبيهات لمواعيد الاحتياطي الإلزامي ولجنة السياسة النقدية والفيدرالي وحصة الليرة ونمو الائتمان",
+  "TLREF ve TLREFK artık doğrudan Borsa İstanbul'un resmi verisinden geliyor": "أصبح TLREF وTLREFK يأتيان مباشرةً من بيانات بورصة إسطنبول الرسمية",
+  "İcazet Belgeleri: Albaraka Türk'ün 22 belgesinin tamamı eklendi": "شهادات الإجازة: أُضيفت جميع شهادات البركة تورك الـ22",
+  "Müşteri Portföyüm ve Kur Makası ve Marj ekranları eklendi": "أُضيفت شاشتا محفظة عملائي وفارق العملات والهامش",
+  "Favoriler ve ayarlar hesabına bağlandı, cihazlar arasında eşitlenir": "ارتبطت المفضلات والإعدادات بحسابك وتتزامن بين الأجهزة",
+  "Türkçe takvim seçici ve masaüstünde üzerine gelince açılan menü grupları": "منتقي تاريخ بالتركية ومجموعات قوائم سطح المكتب تُفتح عند التمرير",
+  "Yazı tipi tutarlılığı, daha okunaklı silik yazılar ve gösterge grafiklerinde uzun seri iyileştirmesi": "اتساق الخطوط ونصوص باهتة أوضح وتحسين مخططات المؤشرات للسلاسل الطويلة"
 };
 // Çeviri (normal harf): İngilizce moddaysa sözlükten çevirir, yoksa aynen bırakır.
 const CV = (s: any): string => { const k = s == null ? "" : String(s); const z = kpSozluk(); return z ? (z[k] ?? k) : k; };
@@ -16175,119 +16191,101 @@ function fmtByk(n: number): string {
   return n.toLocaleString("tr-TR") + " ₺";
 }
 
-// KAP kaynaklı, ücretsiz BIST logo deposu (jsDelivr CDN) — bulunamazsa şirket
-// adından domain aranıp o domain'in görseli denenir, o da bulunamazsa renkli
-// baş harf rozetine düşülür.
-// ⚠️ 2026-09-15: TradingView'in logo CDN'ini bir ara kaynak olarak denemiştik,
-// ama kullanıcı testinde (DSTKF örneği) işe yaramadığı görüldü — araştırınca
-// nedeni bulundu: TradingView'in CDN'i ŞİRKET ADINDAN türetilmiş bir "slug"
-// kullanıyor (ör. Tesla → "tesla.svg", "TSLA" değil), TICKER İLE DEĞİL. Bu
-// slug'ı ticker'dan güvenilir şekilde türetmenin yolu yok, kaldırıldı.
-//
-// İSİM→DOMAIN (2026-09-15, kullanıcı "başka kaynak bul" dedi): Clearbit'in
-// ÜCRETSİZ, anahtarsız "Autocomplete" API'si (autocomplete.clearbit.com) hâlâ
-// çalışıyor ve ŞİRKET ADINDAN domain buluyor — TICKER TAHMİNİ YOK, gerçek bir
-// isim araması. ⚠️ Kullanıcı "ikinci kaynak da koddan sorgulasak" diye sordu —
-// araştırıldı: ticker-tabanlı logo servisleri (LogoKit, logo.dev,
-// AllInvestView) TAMAMI büyük borsalara (NYSE/NASDAQ/LSE/Euronext/XETRA/TSE/
-// HKEX) odaklı, HİÇBİRİ Borsa İstanbul'u listelemiyor — bu yüzden Clearbit'in
-// İSİM tabanlı araması, BIST için bulduğumuz TEK çalışan orta katman olarak
-// kaldı.
-// ⚠️ DÜRÜSTLÜK: Clearbit'in Türkçe şirket adlarını (ör. "Destek Finans
-// Faktoring A.Ş.") ne kadar doğru eşleştirdiği bu ortamdan TAM DOĞRULANAMADI
-// (test sırasında bir URL önbellekleme kısıtına çarpıldı — İngilizce bir
-// isimle mekanizmanın çalıştığı doğrulandı, Türkçe isimle doğrulanamadı).
-//
-// DOMAIN BULUNDUKTAN SONRA GÖRSEL (2026-09-15, kalite artırma): önce
-// AllInvestView'in ücretsiz "Ticker Logos" CDN'i deneniyor (cdn.tickerlogos.
-// com/{domain}) — yüksek çözünürlüklü gerçek logo, 512px'e kadar. O
-// bulamazsa (kendi kapsamı da BIST'i içermiyor) bu projenin FON logoları
-// için ZATEN kullandığı Google favicon servisine düşülüyor (daha evrensel
-// ama düşük çözünürlüklü site simgesi — gerçek logo değil).
-// RİSKSİZ: hiçbiri bulamazsa baş harfe düşülür. Kullanıcı canlıda test edip
-// sonucu bildirecek.
-const bistLogoUrl = (ticker: string) => `https://cdn.jsdelivr.net/gh/ahmeterenodaci/Istanbul-Stock-Exchange--BIST--including-symbols-and-logos/logos/${ticker}.png`;
+// ═══ HİSSE LOGOLARI (2026-10-10) — TEK KAYNAK, DIŞARIYA SORGU YOK ═════════════════════════════
+// Önceden her hisse için sırayla jsDelivr → Clearbit → tickerlogos → Google favicon denenirdi (liste kayarken
+// yüzlerce dış istek, bazıları hiç bulunamayıp baş harfe düşüyordu). Artık BIST logolarının TAMAMI (kaynak: GitHub
+// "Istanbul-Stock-Exchange--BIST--including-symbols-and-logos", 96px WebP'ye küçültülüp) tek bir dosyada
+// (public/hisse-logolar.json → {TICKER: data-URI}) uygulamayla birlikte dağıtılır; uygulama bu dosyayı oturum
+// başına BİR kez okur, sonrası bellekten. Dosyada olmayan (yeni halka arz vb.) hisseler baş harf rozetine düşer.
 const AVATAR_RENKLER = ["#C0392B","#1E7FE0","#166534","#7C3AED","#B45309","#0F766E","#9D174D","#374151","#1D4ED8","#B91C1C"];
 const avatarRenk = (ticker: string) => AVATAR_RENKLER[ticker.charCodeAt(0) % AVATAR_RENKLER.length];
-// Şirket adı -> domain aramasının sonucu bellek-içi önbellekleniyor; aynı
-// şirket için (liste kayarken tekrar render olduğunda) Clearbit'e tekrar
-// tekrar istek atılmasın.
-const domainOnbellek = new Map<string, string|null>();
-// Bir domain bulunduktan sonra ondan gösterilecek görsel: önce AllInvestView'in
-// ücretsiz, yüksek çözünürlüklü ("512px'e kadar") logo CDN'i denenir — Google
-// favicon servisinden (genelde 16-32px, gerçek logo değil site simgesi) daha
-// kaliteli. O da bulamazsa Google favicon denenir (daha evrensel — herhangi
-// bir web sitesi için çalışır, AllInvestView'in kendi "50+ borsa" listesi
-// Borsa İstanbul'u içermiyor). İkisi de başarısız olursa baş harfe düşülür.
-const domainGorselUrl = (domain: string, deneme: 0|1) =>
-  deneme === 0
-    ? `https://cdn.tickerlogos.com/${encodeURIComponent(domain)}`
-    : `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=128`;
+let hisseLogoHaritasi: Record<string,string> | null = null;
+let hisseLogoSoz: Promise<void> | null = null;
+let hisseLogoSonDeneme = 0;
+const hisseLogoDinleyenler = new Set<() => void>();
+function hisseLogolariYukle(): Promise<void> {
+  if (hisseLogoHaritasi) return Promise.resolve();
+  if (hisseLogoSoz) return hisseLogoSoz;
+  if (Date.now() - hisseLogoSonDeneme < 60000) return Promise.resolve();   // başarısızsa dakikada en fazla 1 deneme
+  hisseLogoSonDeneme = Date.now();
+  hisseLogoSoz = fetch(`${API_BASE}/hisse-logolar.json`)
+    .then(r => r.ok ? r.json() : null)
+    .then(m => { if (m && typeof m === "object") hisseLogoHaritasi = m; })
+    .catch(() => {})
+    .then(() => { hisseLogoSoz = null; hisseLogoDinleyenler.forEach(f => f()); });
+  return hisseLogoSoz;
+}
 
-function HisseAvatar({ticker, sirket, boyut=42}:{ticker:string, sirket?:string, boyut?:number}){
-  // 0: birincil kaynak (jsDelivr) deneniyor · 1: domain bulunup görsel
-  // deneniyor · 2: hepsi başarısız, baş harf rozetine düşüldü.
-  const [asama, setAsama] = useState<0|1|2>(0);
-  const [domain, setDomain] = useState<string|null>(null);
-  const [domainDeneme, setDomainDeneme] = useState<0|1>(0);
-
+function HisseAvatar({ticker, boyut=42}:{ticker:string, sirket?:string, boyut?:number}){
+  const [, yenile] = useState(0);
   useEffect(() => {
-    if (asama !== 1 || !sirket) { if (asama===1 && !sirket) setAsama(2); return; }
-    const onbellekli = domainOnbellek.get(sirket);
-    if (onbellekli !== undefined) {
-      if (onbellekli) setDomain(onbellekli);
-      else setAsama(2);
-      return;
-    }
-    let aktif = true;
-    fetch(`https://autocomplete.clearbit.com/v1/companies/suggest?query=${encodeURIComponent(sirket)}`)
-      .then(r => r.ok ? r.json() : [])
-      .then((sonuclar: any[]) => {
-        if (!aktif) return;
-        const bulunanDomain = sonuclar?.[0]?.domain || null;
-        domainOnbellek.set(sirket, bulunanDomain);
-        if (bulunanDomain) setDomain(bulunanDomain);
-        else setAsama(2);
-      })
-      .catch(() => { if (aktif) setAsama(2); });
-    return () => { aktif = false; };
-  }, [asama, sirket]);
+    if (hisseLogoHaritasi) return;
+    const f = () => yenile(v => v + 1);
+    hisseLogoDinleyenler.add(f);
+    hisseLogolariYukle();
+    return () => { hisseLogoDinleyenler.delete(f); };
+  }, []);
+  const src = hisseLogoHaritasi ? hisseLogoHaritasi[ticker] : undefined;
+  if (src) {
+    return <img src={src} alt="" style={{width:boyut,height:boyut,objectFit:"contain",flexShrink:0}}/>;
+  }
+  // Logo yok (ya da henüz yüklenmedi): yumuşak renkli baş harf rozeti
+  const renk = avatarRenk(ticker);
+  return (
+    <div style={{
+      width:boyut,height:boyut,borderRadius:boyut*0.28,flexShrink:0,
+      background:renk+"22",border:`1px solid ${renk}55`,boxSizing:"border-box",
+      display:"flex",alignItems:"center",justifyContent:"center",
+      color:renk,fontSize:boyut*0.34,fontWeight:700,
+    }}>
+      {ticker.slice(0,2)}
+    </div>
+  );
+}
 
-  // ⚠️ 2026-09-15 (kullanıcı isteği: "kutu içinde değil, sadece amblem
-  // olsun"): logo yüklendiğinde artık ÇERÇEVE/ZEMİN/İÇ BOŞLUK YOK — görsel
-  // kendi şekliyle, çıplak gösteriliyor. Çerçeve ve renkli zemin SADECE baş
-  // harfe düşüldüğünde kullanılıyor — çıplak metin okunaksız kalırdı, o
-  // yüzden orada bir zemin şart.
-  if (asama === 2) {
-    return (
-      <div style={{
-        width:boyut,height:boyut,borderRadius:boyut*0.28,flexShrink:0,
-        background:avatarRenk(ticker),
-        display:"flex",alignItems:"center",justifyContent:"center",
-        color:"#fff",fontSize:boyut*0.34,fontWeight:700,
-      }}>
-        {ticker.slice(0,2)}
+// ABD logoları (2026-10-10): aynı düzen — public/abd-logolar.json → {TICKER: [data-URI, ton]}; yalnız ABD sekmesi açılınca,
+// oturum başına BİR kez okunur. ton: 0 = normal · 1 = açık/beyaz logo (açık temada koyu zemin ister) · 2 = çok koyu logo (koyu temada açık zemin ister).
+// Kaynak: GitHub "nvstly/icons" (ticker bazlı). Dosyada olmayan hisse baş harf rozetine düşer.
+let abdLogoHaritasi: Record<string,[string,number]> | null = null;
+let abdLogoSoz: Promise<void> | null = null;
+let abdLogoSonDeneme = 0;
+const abdLogoDinleyenler = new Set<() => void>();
+function abdLogolariYukle(): Promise<void> {
+  if (abdLogoHaritasi) return Promise.resolve();
+  if (abdLogoSoz) return abdLogoSoz;
+  if (Date.now() - abdLogoSonDeneme < 60000) return Promise.resolve();
+  abdLogoSonDeneme = Date.now();
+  abdLogoSoz = fetch(`${API_BASE}/abd-logolar.json`)
+    .then(r => r.ok ? r.json() : null)
+    .then(m => { if (m && typeof m === "object") abdLogoHaritasi = m; })
+    .catch(() => {})
+    .then(() => { abdLogoSoz = null; abdLogoDinleyenler.forEach(f => f()); });
+  return abdLogoSoz;
+}
+function AbdAvatar({ticker, boyut=34}:{ticker:string, boyut?:number}){
+  const [, yenile] = useState(0);
+  useEffect(() => {
+    if (abdLogoHaritasi) return;
+    const f = () => yenile(v => v + 1);
+    abdLogoDinleyenler.add(f);
+    abdLogolariYukle();
+    return () => { abdLogoDinleyenler.delete(f); };
+  }, []);
+  const k = abdLogoHaritasi ? abdLogoHaritasi[ticker] : undefined;
+  if (k) {
+    const zemin = (TEMA==="acik" && k[1]===1) ? "#1f2933" : (TEMA!=="acik" && k[1]===2) ? "#ffffff" : null;
+    if (zemin) return (
+      <div style={{width:boyut,height:boyut,borderRadius:boyut*0.28,flexShrink:0,background:zemin,boxSizing:"border-box",padding:boyut*0.14,display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <img src={k[0]} alt="" style={{width:"100%",height:"100%",objectFit:"contain"}}/>
       </div>
     );
+    return <img src={k[0]} alt="" style={{width:boyut,height:boyut,objectFit:"contain",flexShrink:0}}/>;
   }
-  if (asama === 1) {
-    if (!domain) return <div style={{width:boyut,height:boyut,flexShrink:0}}/>; // domain aranırken kısa bir boşluk
-    return (
-      <img
-        src={domainGorselUrl(domain, domainDeneme)}
-        onError={()=>{ if (domainDeneme===0) setDomainDeneme(1); else setAsama(2); }}
-        alt=""
-        style={{width:boyut,height:boyut,objectFit:"contain",flexShrink:0}}
-      />
-    );
-  }
+  const renk = avatarRenk(ticker);
   return (
-    <img
-      src={bistLogoUrl(ticker)}
-      onError={()=>setAsama(1)}
-      alt=""
-      style={{width:boyut,height:boyut,objectFit:"contain",flexShrink:0}}
-    />
+    <div style={{width:boyut,height:boyut,borderRadius:boyut*0.28,flexShrink:0,background:renk+"22",border:`1px solid ${renk}55`,boxSizing:"border-box",display:"flex",alignItems:"center",justifyContent:"center",color:renk,fontSize:boyut*0.34,fontWeight:700}}>
+      {ticker.slice(0,2)}
+    </div>
   );
 }
 
@@ -16493,7 +16491,7 @@ function AbdHisseIzleme({ piyasa, onKurAc }: { piyasa: string; onKurAc?: (k: any
         <div style={{ background: WA(0.04), border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden" }}>
           {/* Tablo başlığı: listeyle aynı kutunun içinde, hafif renkli bant + alt çizgi; sütunlar satırlarla aynı grid */}
           <div style={{ display: "grid", gridTemplateColumns: ABD_SUTUN, columnGap: 10, alignItems: "center", padding: "10px 14px", borderBottom: `1px solid ${C.border}`, ...abdBaslikBandi }}>
-            <AbdBaslikHucre metin="Hisse Adı" aktif={kolon === "ticker"} yon={siraYon} onTikla={() => baslikTikla("ticker")} />
+            <div style={{ paddingLeft: 44 }}><AbdBaslikHucre metin="Hisse Adı" aktif={kolon === "ticker"} yon={siraYon} onTikla={() => baslikTikla("ticker")} /></div>
             <AbdBaslikHucre metin="Fiyat" aktif={kolon === "fiyat"} yon={siraYon} sag onTikla={() => baslikTikla("fiyat")} />
             <AbdBaslikHucre metin="Günlük %" aktif={kolon === "degisim1g"} yon={siraYon} sag onTikla={() => baslikTikla("degisim1g")} />
           </div>
@@ -16503,9 +16501,12 @@ function AbdHisseIzleme({ piyasa, onKurAc }: { piyasa: string; onKurAc?: (k: any
             return (
               <div key={h.ticker} onClick={() => onKurAc && onKurAc({ kod: h.ticker, ad: h.ad, sembol: h.yahoo || h.ticker, birim: "$", alarmSembol: "US:" + h.ticker })}
                 style={{ display: "grid", gridTemplateColumns: ABD_SUTUN, columnGap: 10, alignItems: "center", padding: "11px 14px", borderTop: i === 0 ? "none" : `1px solid ${C.border}`, cursor: "pointer" }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: C.label }}>{h.ticker}</div>
-                  <div style={{ fontSize: 11.5, color: C.sub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{h.ad}</div>
+                <div style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 10 }}>
+                  <AbdAvatar ticker={h.ticker} />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.label }}>{h.ticker}</div>
+                    <div style={{ fontSize: 11.5, color: C.sub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{h.ad}</div>
+                  </div>
                 </div>
                 <div style={{ fontFamily:"inherit",fontVariantNumeric:"tabular-nums", fontSize: 14, fontWeight: 600, color: C.label, textAlign: "right", whiteSpace: "nowrap" }}>$ {fmtN(h.fiyat, 2)}</div>
                 <div style={{ textAlign: "right" }}>
@@ -16859,16 +16860,20 @@ function BistHisseTarayici({ initialTicker, onInitialTuketildi, onDisaridanGeri,
         <div className="piyasa-scroll" style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:2}}>
           {top10.map(h=>(
             <div key={h.ticker} onClick={()=>ac(h)} className="press-card" style={{
-              flex:"0 0 auto",minWidth:104,background:C.card,border:`1px solid ${C.border}`,
-              borderRadius:12,padding:"10px 12px",cursor:"pointer",
+              flex:"0 0 auto",display:"flex",alignItems:"center",gap:8,background:C.card,border:`1px solid ${C.border}`,
+              borderRadius:12,padding:"7px 11px 7px 9px",cursor:"pointer",
             }}>
-              <HisseAvatar ticker={h.ticker} sirket={h.sirket} boyut={22}/>
-              <div style={{fontSize:12,fontWeight:700,color:h.katilimEndeksi?C.green:C.blue,marginTop:6}}>{h.ticker}</div>
-              <div style={{fontSize:13,fontWeight:700,color:C.text,marginTop:2,fontVariantNumeric:"tabular-nums"}}>
-                {h.fiyat ? h.fiyat.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}) : "—"}
-              </div>
-              <div style={{fontSize:11,fontWeight:700,color:h.degisim1g>0?C.green:h.degisim1g<0?C.red:C.sub,marginTop:2}}>
-                {h.degisim1g!=null?(h.degisim1g>0?"+":"")+h.degisim1g.toFixed(2)+"%":"—"}
+              <HisseAvatar ticker={h.ticker} sirket={h.sirket} boyut={28}/>
+              <div>
+                <div style={{fontSize:12,fontWeight:700,color:h.katilimEndeksi?C.green:C.blue,lineHeight:1.25}}>{h.ticker}</div>
+                <div style={{display:"flex",alignItems:"baseline",gap:6,whiteSpace:"nowrap",marginTop:1}}>
+                  <span style={{fontSize:12.5,fontWeight:700,color:C.text,fontVariantNumeric:"tabular-nums"}}>
+                    {h.fiyat ? h.fiyat.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}) : "—"}
+                  </span>
+                  <span style={{fontSize:11,fontWeight:700,color:h.degisim1g>0?C.green:h.degisim1g<0?C.red:C.sub,fontVariantNumeric:"tabular-nums"}}>
+                    {h.degisim1g!=null?(h.degisim1g>0?"+":"")+h.degisim1g.toFixed(2)+"%":"—"}
+                  </span>
+                </div>
               </div>
             </div>
           ))}
@@ -37163,6 +37168,7 @@ function HakkindaModal({onClose}){
           {/* Sürüm Notları */}
           <p style={{margin:"0 0 10px",fontSize:13,fontWeight:700,color:C.label}}>📋 Sürüm Notları</p>
           {[
+            {v:"v2.0.0",t:"9 Ekim 2026",notlar:["Birikim Hesaplayıcı: hedef bazlı birikim planı, aylık yatırım takibi ve hatırlatma","Finansal Takvim'e bildirim: ZK, PPK, FED, TL Payı ve Kredi Büyüme tarihleri için istediğin kategoriyi aç","TLREF ve TLREFK artık doğrudan Borsa İstanbul'un resmi verisinden geliyor","İcazet Belgeleri: Albaraka Türk'ün 22 belgesinin tamamı eklendi","Müşteri Portföyüm ve Kur Makası ve Marj ekranları eklendi","Favoriler ve ayarlar hesabına bağlandı, cihazlar arasında eşitlenir","Türkçe takvim seçici ve masaüstünde üzerine gelince açılan menü grupları","Yazı tipi tutarlılığı, daha okunaklı silik yazılar ve gösterge grafiklerinde uzun seri iyileştirmesi"]},
             {v:"v1.4.0",t:"14 Temmuz 2026",notlar:["Yatırım fonları veri hattı: artık TEFAS'taki tüm fonlar taranıyor, hiçbir katılım fonu gözden kaçmıyor","Katılım Hesabı Getiri Hesaplama'da USD/EUR sonuçları doğru para birimi sembolüyle gösteriliyor","\"Çek Teminatlı Finansman Hesaplama\" (önceki adıyla Çek Arkası)","Açık temada masaüstü menü okunabilirliği iyileştirildi","Yapay Zeka Asistanı'nın katılım bankaları bilgisi güncellendi","Masaüstünde uygulamayı tanıtan yeni bir kart eklendi"]},
             {v:"v1.3.0",t:"28 Haziran 2026",notlar:["Esnek ödeme planlarına USD/EUR/komisyon eklendi","Hata & Öneri bildirim sistemi","Vercel Analytics","Geçmiş paylaş aksiyonu","Hakkında ekranı"]},
             {v:"v1.2.0",t:"21 Haziran 2026",notlar:["Ara ödemeli plan bisection algoritması","Canlı altın/gümüş kurları","6 esnek ödeme planı modülü","PDF rapor & Apple Share"]},
@@ -46866,7 +46872,7 @@ function App(){
               </div>
             </a>
 
-            <p style={{margin:"16px 0 0",fontSize:10,color:WA(0.6),textAlign:"center"}}>Katılım Plus · v1.4.0</p>
+            <p style={{margin:"16px 0 0",fontSize:10,color:WA(0.6),textAlign:"center"}}>Katılım Plus · v2.0.0</p>
           </div>
         )}
 
