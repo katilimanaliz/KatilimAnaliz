@@ -13907,15 +13907,19 @@ function KarPayiOraniKarti({ nav }: { nav: (sc: string) => void }) {
   const veriVar = satirlar.some(s => s.en != null);
 
   return (
+    <div style={{ marginBottom: 20 }}>
+    {/* 2026-10-10 (kullanıcı raporu: "başlık kutu içinde ve diğer başlıklarla uyumsuz"):
+        başlık kutunun DIŞINDA, diğer ana sayfa başlıklarıyla (Yaklaşan Takvim,
+        Finansal Göstergeler) aynı biçimde: 13px/600, büyük harfe zorlanmadan (TR() değil CV()),
+        ikonsuz. */}
+    <div onClick={() => nav("karPayiOranlari")} style={{ display: "flex", alignItems: "center", marginBottom: 8, cursor: "pointer" }}>
+      <span style={{ fontSize: 13, fontWeight: 600, color: (TEMA === "acik" ? "#1A2430" : "#A8C2DC") }}>{CV("Finansman Kâr Oranı Karşılaştırma")}</span>
+    </div>
     <div className="press-tile" onClick={() => nav("karPayiOranlari")} style={{
-      position: "relative", cursor: "pointer", marginBottom: 20,
-      borderRadius: 22, padding: "14px 16px",
+      position: "relative", cursor: "pointer",
+      borderRadius: 16, padding: "14px 16px",
       background: (TEMA === "acik" ? "#E9EEF4" : WA(0.05)), border: `1px solid ${WA(0.08)}`,
     }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
-        <Scale size={14} color={C.blue}/>
-        <span style={{ fontSize: 12, fontWeight: 600, color: WA(0.6) }}>{TR("Finansman Kâr Oranı Karşılaştırma")}</span>
-      </div>
       {!veriVar ? (
         <YuklemeDurumu metin="Yükleniyor…" dolgu="6px 0"/>
       ) : (
@@ -13951,6 +13955,7 @@ function KarPayiOraniKarti({ nav }: { nav: (sc: string) => void }) {
         <span style={{ fontSize: 12, fontWeight: 600, color: WA(0.6) }}>{CV("En düşük ilan edilen aylık oran")}</span>
         <span style={{ fontSize: 12, fontWeight: 700, color: C.blue, flexShrink: 0, whiteSpace: "nowrap" }}>{CV("Tümünü Karşılaştır")} ›</span>
       </div>
+    </div>
     </div>
   );
 }
