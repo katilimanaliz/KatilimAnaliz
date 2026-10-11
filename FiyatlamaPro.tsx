@@ -17517,7 +17517,7 @@ function YaklasanTakvimBlok({tekKutu,yaklasanTakvim,nav}:any){
               zeminle vurgulu. TÜM olaylar gösterilir (kesme yok). */}
           {(()=>{
             const bugun=new Date(); bugun.setHours(0,0,0,0);
-            const gunler:any[]=[]; const etiketler:any={};
+            const gunler:any[]=[];
             yaklasanTakvim.forEach((e:any)=>{
               const d=new Date(e.tarih);
               const g=new Date(d.getFullYear(),d.getMonth(),d.getDate());
@@ -17530,7 +17530,6 @@ function YaklasanTakvimBlok({tekKutu,yaklasanTakvim,nav}:any){
                 gunler.push(grup);
               }
               grup.olaylar.push({e,d});
-              if(e.etkiAdi) etiketler[e.etkiAdi]=e.etkiRenk;
             });
             return (
               <div style={{marginBottom:14}}>
@@ -17550,20 +17549,12 @@ function YaklasanTakvimBlok({tekKutu,yaklasanTakvim,nav}:any){
                             padding:"9px 13px",
                             background:yuksek?"rgba(211,47,47,0.10)":"transparent",
                           }}>
-                            <span style={{width:8,height:8,borderRadius:"50%",background:e.etkiRenk,flexShrink:0}}/>
                             <p style={{margin:0,flex:1,minWidth:0,fontSize:12,fontWeight:700,color:yuksek?C.red:C.soft,lineHeight:1.35}}>{e.baslik}</p>
                             <span style={{fontSize:11,fontWeight:600,color:yuksek?C.red:WA(0.6),flexShrink:0,whiteSpace:"nowrap"}}>{gunIci?"Gün içi":d.toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"})}</span>
                           </div>
                         );
                       })}
                     </div>
-                  ))}
-                </div>
-                <div style={{display:"flex",flexWrap:"wrap",gap:"4px 12px",margin:"8px 2px 0",fontSize:10,fontWeight:600,color:WA(0.6)}}>
-                  {Object.keys(etiketler).map((ad:string)=>(
-                    <span key={ad} style={{display:"inline-flex",alignItems:"center",gap:4}}>
-                      <span style={{width:7,height:7,borderRadius:"50%",background:etiketler[ad],display:"inline-block"}}/>{ad}
-                    </span>
                   ))}
                 </div>
               </div>
@@ -45515,7 +45506,7 @@ function App(){
                       </div>
                       <div style={{minWidth:0,flex:1}}>
                         <div style={{color:WA(0.85),fontSize:13,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{g.ad}</div>
-                        {tarihYazi&&<div style={{color:(TEMA==="acik"?"#4A6178":"rgba(255,255,255,0.55)"),fontSize:10,marginTop:1}}>{canliMi&&<span style={{display:"inline-block",width:6,height:6,borderRadius:"50%",background:C.green,marginRight:5,verticalAlign:1}}/>}{tarihYazi}</div>}
+                        {tarihYazi&&<div style={{color:(TEMA==="acik"?"#4A6178":"rgba(255,255,255,0.55)"),fontSize:10,marginTop:1}}>{tarihYazi}</div>}
                       </div>
                       <span style={{fontSize:15,fontWeight:700,fontFamily:"inherit",fontVariantNumeric:"tabular-nums",color:C.label,flexShrink:0}}>{g.deger}</span>
                       {gecmisDestekli&&<span style={{fontSize:12,color:WA(0.6),flexShrink:0,marginLeft:2}}>›</span>}
@@ -45523,9 +45514,6 @@ function App(){
                     </Fragment>
                     );
                   })}
-                </div>
-                <div style={{display:"flex",alignItems:"center",gap:5,margin:genisEkran?"-18px 2px 26px":"-6px 2px 14px",fontSize:10,fontWeight:600,color:(TEMA==="acik"?"#4A6178":"rgba(255,255,255,0.55)")}}>
-                  <span style={{width:6,height:6,borderRadius:"50%",background:C.green,display:"inline-block"}}/>{CV("Yeşil nokta: güncel veri")}
                 </div>
                 </>
               );
