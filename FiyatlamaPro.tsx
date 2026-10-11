@@ -35838,13 +35838,13 @@ function PiyasaHaberleri({kimlik,nav,haberBildirimAcik,haberKategoriler,haberBil
               <p style={{margin:0,fontSize:13,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),letterSpacing:"0.02em"}}>{gun}</p>
             </div>
             {olaylar.map((h,i)=>{
-              const {saat}=formatTarihSaat(h.tarih);
+              const {saat:saat0}=formatTarihSaat(h.tarih); const saat=saat0==="00:00"?"Gün içi":saat0;
               return(
                 <div key={i} style={{
                   display:"flex",gap:10,padding:"10px 12px",marginBottom:6,
                   background:(TEMA==="acik"?"#E9EEF4":"#151823"),borderRadius:10,borderLeft:`3px solid ${h.etkiRenk}`,
                 }}>
-                  <div style={{minWidth:42,textAlign:"center"}}>
+                  <div style={{minWidth:48,textAlign:"center"}}>
                     <p style={{margin:0,fontSize:12,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"inherit",fontVariantNumeric:"tabular-nums"}}>{saat}</p>
                   </div>
                   <div style={{flex:1,minWidth:0}}>
