@@ -17530,8 +17530,8 @@ function AnaSayfaAltinKarti({onAc}:any){
       <div style={{borderRadius:16,overflow:"hidden",background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`}}>
         <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 13px 6px",borderBottom:`1px solid ${WA(0.08)}`}}>
           <span style={{flex:1,minWidth:0,fontSize:11,fontWeight:700,color:WA(0.6)}}>{CV("Ürün")}</span>
-          <span style={{minWidth:82,flexShrink:0,textAlign:"right",fontSize:11,fontWeight:700,color:WA(0.6)}}>{CV("Alış")}</span>
-          <span style={{minWidth:82,flexShrink:0,textAlign:"right",fontSize:11,fontWeight:700,color:WA(0.6)}}>{CV("Satış")}</span>
+          <span style={{minWidth:86,flexShrink:0,textAlign:"right",fontSize:11,fontWeight:700,color:WA(0.6)}}>{CV("Alış")}</span>
+          <span style={{minWidth:86,flexShrink:0,textAlign:"right",fontSize:11,fontWeight:700,color:WA(0.6)}}>{CV("Satış")}</span>
         </div>
         {satirlar.map((x:any,i:number)=>{
           const d=x.d;
@@ -17540,11 +17540,11 @@ function AnaSayfaAltinKarti({onAc}:any){
           return(
             <div key={x.k} className="kp-side-item" onClick={onAc} style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"9px 13px",borderTop:i===0?"none":`1px solid ${WA(0.07)}`}}>
               <div style={{flex:1,minWidth:0}}>
-                <p style={{margin:0,fontSize:12,fontWeight:700,color:C.soft,lineHeight:1.35}}>{x.ad}</p>
-                {dg!=null&&<p style={{margin:"1px 0 0",fontSize:11,fontWeight:600,color:dg>=0?"#22C55E":"#EF4444"}}>{dg>=0?"▲ +":"▼ "}{dg.toFixed(2).replace(".",",")}%</p>}
+                <p style={{margin:0,fontSize:13,fontWeight:700,color:WA(0.85),lineHeight:1.35}}>{x.ad}</p>
+                {dg!=null&&<p style={{margin:"1px 0 0",fontSize:10,fontWeight:700,color:dg>=0?"#22C55E":"#EF4444"}}>{dg>=0?"▲ +":"▼ "}{dg.toFixed(2).replace(".",",")}%</p>}
               </div>
-              <span style={{minWidth:82,flexShrink:0,textAlign:"right",fontSize:12,fontWeight:600,color:WA(0.6),fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{fm(d.bid)}</span>
-              <span style={{minWidth:82,flexShrink:0,textAlign:"right",fontSize:12,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{fm(d.ask)}</span>
+              <span style={{minWidth:86,flexShrink:0,textAlign:"right",fontSize:14,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"inherit",fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{fm(d.bid)}</span>
+              <span style={{minWidth:86,flexShrink:0,textAlign:"right",fontSize:14,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"inherit",fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{fm(d.ask)}</span>
             </div>
           );
         })}
@@ -29653,13 +29653,20 @@ function ErkenKapamaKarari({ s }: { s?: any }) {
 // (Erken Kapama Komisyonu ile aynı desen). Kayıt mount'ta bir kez tüketilir.
 let tkProDonusKaydi: any = null;
 function TeklifKarsilastirma({ s, kimlik, nav }: { s?: any; kimlik?: any; nav?: (ekran: string) => void }) {
-  const bos = () => ({ anapara: "", n: "", toplam: "", kesinti: "" });
+  const bos = () => ({ banka: "", anapara: "", n: "", toplam: "", kesinti: "" });
   const tkKayit = (tkProDonusKaydi && Date.now() - tkProDonusKaydi.ts < 600000) ? tkProDonusKaydi : null;
   useEffect(() => { tkProDonusKaydi = null; }, []);
   const [teklifler, setTeklifler] = useState<any[]>(tkKayit ? tkKayit.teklifler : [bos(), bos()]);
   const [aktif, setAktif] = useState(tkKayit ? tkKayit.aktif : 0);
-  const [kopyalandi, setKopyalandi] = useState(false);
+  const [raporAcik, setRaporAcik] = useState(false);
   const harf = (i: number) => "ABCD"[i];
+  // Banka adı yazıldıysa teklifin adı o olur (sekmede, sonuçta, raporda); aynı ad iki kez girilirse harf eklenir.
+  const adGoster = (i: number) => {
+    const b = String(teklifler[i]?.banka || "").trim();
+    if (!b) return `Teklif ${harf(i)}`;
+    const ayni = teklifler.filter((x: any) => String(x.banka || "").trim().toLowerCase() === b.toLowerCase()).length > 1;
+    return ayni ? `${b} (${harf(i)})` : b;
+  };
   const guncelle = (alan: string, v: string) =>
     setTeklifler(t => t.map((x, i) => (i === aktif ? { ...x, [alan]: v } : x)));
   const ekle = () => {
@@ -29676,12 +29683,12 @@ function TeklifKarsilastirma({ s, kimlik, nav }: { s?: any; kimlik?: any; nav?: 
   const hesap = teklifler.map((t, i) => {
     const P = sayiOku(t.anapara), n = Math.round(sayiOku(t.n)), T = sayiOku(t.toplam), k = sayiOku(t.kesinti);
     const hazir = P > 0 && n >= 1 && T > 0 && k >= 0 && k < P;
-    if (!hazir) return { i, ad: `Teklif ${harf(i)}`, hazir: false, P, n, T, k } as any;
+    if (!hazir) return { i, ad: adGoster(i), hazir: false, P, n, T, k } as any;
     const net = P - k;
     const taksit = T / n;
     const r = kararAylikOranBul(net, taksit, n);
     const yillik = (Math.pow(1 + r, 12) - 1) * 100;
-    return { i, ad: `Teklif ${harf(i)}`, hazir: true, P, n, T, k, net, taksit, aylik: r * 100, yillik, maliyet: T - net };
+    return { i, ad: adGoster(i), hazir: true, P, n, T, k, net, taksit, aylik: r * 100, yillik, maliyet: T - net };
   });
   const dolu = hesap.filter((h: any) => h.hazir).sort((a: any, b: any) => a.aylik - b.aylik);
   const en = dolu[0];
@@ -29694,23 +29701,34 @@ function TeklifKarsilastirma({ s, kimlik, nav }: { s?: any; kimlik?: any; nav?: 
     return `Aylık maliyeti ${en.ad}'den ${new Intl.NumberFormat("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(h.aylik - en.aylik)} puan yüksek`;
   };
 
-  const paylasMetni = () =>
-    "Teklif karşılaştırma (Katılım Plus)\n" +
-    dolu.map((h: any, sira: number) =>
-      `${sira + 1}. ${h.ad}: gerçek maliyet ${ay2(h.aylik)} aylık (yıllık ${ay2(h.yillik)}), aylık taksit ${tl(h.taksit)}, toplam geri ödeme ${tl(h.T)}`
-    ).join("\n") + "\nBilgilendirme amaçlıdır; bankanın sözleşmesi esastır.";
   const proDegil = !!kimlik && !!kimlik.pro && !kimlik.pro.aktif && !kimlik.proYukleniyor;
-  const paylas = async () => {
+  const paylas = () => {
     if (proDegil) {
       tkProDonusKaydi = { ts: Date.now(), teklifler, aktif };
       if (nav) kpProGerekliMi(kimlik.pro, nav);
       return;
     }
-    const metin = paylasMetni();
-    try {
-      if ((navigator as any).share) { await (navigator as any).share({ text: metin }); return; }
-    } catch { return; }
-    try { await navigator.clipboard.writeText(metin); setKopyalandi(true); setTimeout(() => setKopyalandi(false), 2000); } catch {}
+    setRaporAcik(true);
+  };
+  // Ortak "Rapor / Paylaş" penceresi (PDF + iOS paylaşım menüsü) — diğer hesaplayıcılarla aynı.
+  const raporSatirlari = (): { label: string; value: string; big?: boolean }[] => {
+    const r: { label: string; value: string; big?: boolean }[] = [];
+    r.push({ label: "Karşılaştırılan teklif", value: `${dolu.length}` });
+    r.push({ label: "En düşük maliyetli teklif", value: en ? en.ad : "—" });
+    dolu.forEach((h: any, sira: number) => {
+      r.push({ label: `${sira + 1} · ${h.ad}${sira === 0 ? " (en ucuz)" : ""}`, value: `${ay2(h.aylik)} aylık`, big: true });
+      r.push({ label: "Anapara", value: tl(h.P) });
+      r.push({ label: "Taksit sayısı", value: `${h.n} ay` });
+      r.push({ label: "Aylık taksit", value: tl(h.taksit) });
+      r.push({ label: "Toplam geri ödeme (vergiler dahil)", value: tl(h.T) });
+      r.push({ label: "Peşin kesintiler (komisyon, masraf, sigorta vb.)", value: tl(h.k) });
+      r.push({ label: "Eline geçen net tutar", value: tl(h.net) });
+      r.push({ label: "Toplam maliyet", value: tl(h.maliyet) });
+      r.push({ label: "Gerçek maliyet (yıllık bileşik)", value: ay2(h.yillik) });
+      if (sira > 0 && fark(h)) r.push({ label: "Fark", value: fark(h) });
+    });
+    r.push({ label: "Hesap varsayımı", value: "Taksitler aylık ve eşit; tutarlar vergi dahil" });
+    return r;
   };
 
   const a = teklifler[aktif];
@@ -29730,7 +29748,7 @@ function TeklifKarsilastirma({ s, kimlik, nav }: { s?: any; kimlik?: any; nav?: 
               fontSize: 12, fontWeight: secili ? 700 : 500, padding: "7px 14px", borderRadius: 16, cursor: "pointer",
               border: `1px solid ${secili ? C.blue : C.border}`, background: secili ? C.blueLight : "transparent",
               color: secili ? C.blue : C.sub }}>
-              Teklif {harf(i)}{tamam ? " ✓" : ""}
+              <span style={{ display: "inline-block", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", verticalAlign: "bottom" }}>{adGoster(i)}</span>{tamam ? " ✓" : ""}
             </button>
           );
         })}
@@ -29742,9 +29760,10 @@ function TeklifKarsilastirma({ s, kimlik, nav }: { s?: any; kimlik?: any; nav?: 
 
       <Card>
         <SecTitle>{`Teklif ${harf(aktif)}`}</SecTitle>
+        <Field key={`bk${aktif}`} label="Banka adı" value={a.banka} onChange={(v: string) => guncelle("banka", v)} type="text" hint="İstersen yaz; sonuçta ve raporda görünür" />
         <Field key={`an${aktif}`} label="Anapara" value={a.anapara} onChange={(v: string) => guncelle("anapara", v)} suffix="₺" hint="Kredi / finansman tutarı" />
         <Field key={`n${aktif}`} label="Taksit sayısı" value={a.n} onChange={(v: string) => guncelle("n", v)} suffix="Ay" />
-        <Field key={`tp${aktif}`} label="Toplam geri ödeme" value={a.toplam} onChange={(v: string) => guncelle("toplam", v)} suffix="₺" hint="Tüm taksitlerin toplamı" />
+        <Field key={`tp${aktif}`} label="Toplam geri ödeme" value={a.toplam} onChange={(v: string) => guncelle("toplam", v)} suffix="₺" hint="Tüm taksitlerin toplamı, vergiler (BSMV, KKDF vb.) dahil" />
         <Field key={`ks${aktif}`} label="Peşin kesintiler (komisyon, masraf, sigorta vb.)" value={a.kesinti} onChange={(v: string) => guncelle("kesinti", v)} suffix="₺" hint="Bankanın kestiği toplam, BSMV dahil" />
         {teklifler.length > 2 && (
           <button onClick={sil} style={{ border: "none", background: "transparent", color: C.red, fontSize: 12, fontWeight: 600, cursor: "pointer", padding: 0 }}>
@@ -29776,11 +29795,11 @@ function TeklifKarsilastirma({ s, kimlik, nav }: { s?: any; kimlik?: any; nav?: 
                 <div style={{ display: "flex", justifyContent: "space-between", marginTop: 9 }}>
                   <div>
                     <span style={{ display: "block", fontSize: 11, color: C.sub }}>Gerçek maliyet</span>
-                    <b style={{ fontSize: 17, fontVariantNumeric: "tabular-nums", color: kazanan ? C.green : C.label }}>{ay2(h.aylik)} aylık</b>
+                    <b style={{ fontSize: 17, fontFamily: "inherit", fontVariantNumeric: "tabular-nums", color: kazanan ? C.green : C.label }}>{ay2(h.aylik)} aylık</b>
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <span style={{ display: "block", fontSize: 11, color: C.sub }}>Aylık taksit</span>
-                    <b style={{ fontSize: 17, fontVariantNumeric: "tabular-nums", color: C.label }}>{tl(h.taksit)}</b>
+                    <b style={{ fontSize: 17, fontFamily: "inherit", fontVariantNumeric: "tabular-nums", color: C.label }}>{tl(h.taksit)}</b>
                   </div>
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", marginTop: 9, paddingTop: 8, borderTop: `1px solid ${C.border}`, fontSize: 11, color: C.sub }}>
@@ -29793,14 +29812,15 @@ function TeklifKarsilastirma({ s, kimlik, nav }: { s?: any; kimlik?: any; nav?: 
           })}
           <button onClick={paylas} style={{ width: "100%", padding: 11, borderRadius: 10, cursor: "pointer", border: `1px solid ${C.border}`,
             background: "transparent", color: C.sub, fontSize: 13, fontWeight: 600, marginTop: 2 }}>
-            {kopyalandi ? "Kopyalandı" : "Sonucu paylaş"}
+            📄 Raporu PDF olarak paylaş
             {proDegil && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 800, letterSpacing: 0.4, background: "#D8A94E", color: "#3A2A06", borderRadius: 6, padding: "2px 6px" }}>PRO</span>}
           </button>
         </>
       )}
       <p style={{ margin: "12px 2px 0", fontSize: 11, color: C.sub, lineHeight: 1.5 }}>
-        Bilgilendirme amaçlıdır; bankanın sözleşmesi esastır. Taksitler aylık ve eşit tutarlı varsayılır; bankanın yazdığı oranla küçük fark çıkabilir.
+        Toplam geri ödeme ve peşin kesintiler vergi (BSMV, KKDF vb.) dahil tutarlar olarak girilmelidir. Bilgilendirme amaçlıdır; bankanın sözleşmesi esastır. Taksitler aylık ve eşit tutarlı varsayılır; bankanın yazdığı oranla küçük fark çıkabilir.
       </p>
+      {raporAcik && dolu.length >= 2 && <RaporModal baslik="Teklif Karşılaştırma" satirlar={raporSatirlari()} plan={null} onClose={() => setRaporAcik(false)} showKdv={false} bsmvOran={0} kkdfOran={0} />}
     </div>
   );
 }
