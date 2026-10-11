@@ -17526,20 +17526,23 @@ function AnaSayfaAltinKarti({onAc}:any){
         <span onClick={onAc} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
       </div>
       <div style={{borderRadius:16,overflow:"hidden",background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 13px 6px",borderBottom:`1px solid ${WA(0.08)}`}}>
+          <span style={{flex:1,minWidth:0,fontSize:11,fontWeight:700,color:WA(0.6)}}>{CV("Ürün")}</span>
+          <span style={{minWidth:82,flexShrink:0,textAlign:"right",fontSize:11,fontWeight:700,color:WA(0.6)}}>{CV("Alış")}</span>
+          <span style={{minWidth:82,flexShrink:0,textAlign:"right",fontSize:11,fontWeight:700,color:WA(0.6)}}>{CV("Satış")}</span>
+        </div>
         {satirlar.map((x:any,i:number)=>{
           const d=x.d;
           const ham=(d.close)?(((d.bid+d.ask)/2-d.close)/d.close*100):null;
           const dg=(ham!=null&&Math.abs(ham)<=10)?ham:null;
           return(
-            <div key={x.k} className="kp-side-item" onClick={onAc} style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",padding:"9px 13px",borderTop:i===0?"none":`1px solid ${WA(0.07)}`}}>
+            <div key={x.k} className="kp-side-item" onClick={onAc} style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"9px 13px",borderTop:i===0?"none":`1px solid ${WA(0.07)}`}}>
               <div style={{flex:1,minWidth:0}}>
                 <p style={{margin:0,fontSize:12,fontWeight:700,color:C.soft,lineHeight:1.35}}>{x.ad}</p>
-                <p style={{margin:"1px 0 0",fontSize:11,fontWeight:600,color:WA(0.6)}}>{CV("Alış")} {fm(d.bid)}</p>
-              </div>
-              <div style={{textAlign:"right",flexShrink:0}}>
-                <p style={{margin:0,fontSize:13,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{fm(d.ask)}</p>
                 {dg!=null&&<p style={{margin:"1px 0 0",fontSize:11,fontWeight:600,color:dg>=0?"#22C55E":"#EF4444"}}>{dg>=0?"▲ +":"▼ "}{dg.toFixed(2).replace(".",",")}%</p>}
               </div>
+              <span style={{minWidth:82,flexShrink:0,textAlign:"right",fontSize:12,fontWeight:600,color:WA(0.6),fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{fm(d.bid)}</span>
+              <span style={{minWidth:82,flexShrink:0,textAlign:"right",fontSize:12,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{fm(d.ask)}</span>
             </div>
           );
         })}
