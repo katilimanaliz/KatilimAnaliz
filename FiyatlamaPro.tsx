@@ -17500,6 +17500,54 @@ function gostergeTarihEtiket(t:string):string{
 }
 const ppkSonEtiket=(evds?:any)=>gostergeTarihEtiket(ppkSonKarar(evds).tarih);
 
+// ─── ANA SAYFA ALTIN KARTI (2026-10-11) ────────────────────────────────────
+// Gram altın, çeyrek/yarım/tam ve gram gümüş: alış + satış + günlük değişim.
+// Kaynak Piyasa > Altın tablosuyla aynı (/api/piyasa-fiyatlar?tip=altinapi).
+// Değişim %10'u aşarsa gizlenir (kaynaktaki bozuk close değerleri için, bkz. AltinUrunleriTablo).
+// Dokununca Piyasa > Altın açılır (onAc). Veri hiç gelmezse kart hiç görünmez.
+function AnaSayfaAltinKarti({onAc}:any){
+  const [veri,setVeri]=useState<any>(null);
+  useEffect(()=>{
+    let iptal=false;
+    fetch(`${API_BASE}/api/piyasa-fiyatlar?tip=altinapi`)
+      .then(r=>r.ok?r.json():null)
+      .then(d=>{ if(!iptal) setVeri(d); })
+      .catch(()=>{});
+    return ()=>{iptal=true;};
+  },[]);
+  const urunler:[string,string][]=[["ALTIN","Gram Altın"],["CEYREK_YENI","Çeyrek Altın"],["YARIM_YENI","Yarım Altın"],["TEK_YENI","Tam Altın"],["GUMUSTRY","Gram Gümüş"]];
+  const satirlar=urunler.map(([k,ad])=>({k,ad,d:veri?.[k]})).filter((x:any)=>x.d&&x.d.bid!=null&&x.d.ask!=null);
+  if(satirlar.length===0) return null;
+  const fm=(v:number)=>"₺"+new Intl.NumberFormat("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}).format(v);
+  return (
+    <div style={{marginBottom:14}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+        <span style={{fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{CV("Altın")}</span>
+        <span onClick={onAc} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
+      </div>
+      <div style={{borderRadius:16,overflow:"hidden",background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`}}>
+        {satirlar.map((x:any,i:number)=>{
+          const d=x.d;
+          const ham=(d.close)?(((d.bid+d.ask)/2-d.close)/d.close*100):null;
+          const dg=(ham!=null&&Math.abs(ham)<=10)?ham:null;
+          return(
+            <div key={x.k} className="kp-side-item" onClick={onAc} style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",padding:"9px 13px",borderTop:i===0?"none":`1px solid ${WA(0.07)}`}}>
+              <div style={{flex:1,minWidth:0}}>
+                <p style={{margin:0,fontSize:12,fontWeight:700,color:C.soft,lineHeight:1.35}}>{x.ad}</p>
+                <p style={{margin:"1px 0 0",fontSize:11,fontWeight:600,color:WA(0.6)}}>{CV("Alış")} {fm(d.bid)}</p>
+              </div>
+              <div style={{textAlign:"right",flexShrink:0}}>
+                <p style={{margin:0,fontSize:13,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{fm(d.ask)}</p>
+                {dg!=null&&<p style={{margin:"1px 0 0",fontSize:11,fontWeight:600,color:dg>=0?"#22C55E":"#EF4444"}}>{dg>=0?"▲ +":"▼ "}{dg.toFixed(2).replace(".",",")}%</p>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── YAKLAŞAN TAKVİM BLOĞU (ana sayfa) ─────────────────────────────────────
 // tekKutu mantığı SonHaberlerBlok ile aynı (bkz. oradaki not).
 function YaklasanTakvimBlok({tekKutu,yaklasanTakvim,nav}:any){
@@ -45627,6 +45675,9 @@ function App(){
                 menü en alta alalım"): bu satır ÜÇ değil İKİ karta düştü;
                 Asistan kartı sağ rayın EN ALTINA taşındı (aşağıda,
                 Katılım Sektörü'nden sonra). */}
+            {/* Altın kartı (2026-10-11): Yaklaşan Takvim ile Haftalık Özet arasında */}
+            <AnaSayfaAltinKarti onAc={()=>{setPiyasaTabloFiltre("altin");nav("piyasaMenu");}}/>
+
             <div style={genisEkran?IKILI_SATIR:{}}>
             <div style={genisEkran?{minWidth:0}:{}}>
 {/* Haftalık Piyasa Özeti — ana menü alt kısayolu */}
