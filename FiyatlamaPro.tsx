@@ -5433,6 +5433,7 @@ const ICON_MAP: Record<string, any> = {
   zekatHesabi: Gift,             // zekât = vermek; Gift zaten import edilmiş, yeni import riski alınmadı
   erkenKapamaKarari: Zap,        // zaten import; erken kapama modalında da ⚡ kullanılıyor
   vadeFarkiKarari: CalendarClock, // zaten import
+  teklifKarsilastirma: Scale,     // 2026-10-12: Teklif Karşılaştırma (Scale zaten import)
   erkenKapamaKomisyonu: Percent,  // zaten import (yeni import riski yok); bu harita yoksa Araçlar/Hesapla kartı ikonsuz kalır
   tlYpKarari: ArrowLeftRight,     // zaten import
   kiraSertifikasi: FileText,
@@ -13296,6 +13297,7 @@ const EKRAN_KATEGORI: Record<string,string> = {
   // Tüzel Finansman
   spotFinansman:"tuzel", taksitliTicari:"tuzel", leasing:"tuzel", cekArkasiFinansman:"tuzel", posHesaplama:"tuzel",
   vadeFarkiKarari:"tuzel",
+  teklifKarsilastirma:"tuzel",
   erkenKapamaKomisyonu:"tuzel",
   tlYpKarari:"tuzel",
   tmKomisyon:"tuzel", akreditifKomisyon:"tuzel", soikReeskont:"tuzel",
@@ -29639,6 +29641,170 @@ function ErkenKapamaKarari({ s }: { s?: any }) {
 //
 // KARŞILAŞTIRMA NOKTASI: Her iki yolda da nakit çıkışı VADE SONUNDA ölçülüyor
 // (finansman da o gün geri ödeniyor), tutarlar doğrudan kıyaslanabilir.
+// ─── TEKLİF KARŞILAŞTIRMA (2026-10-12) ──────────────────────────────────────
+// Bankaların verdiği 4 rakamdan (anapara, taksit sayısı, toplam geri ödeme,
+// peşin kesintiler) GERÇEK aylık maliyeti çıkarır: eline geçen net tutar
+// (anapara − kesintiler) ile eşit taksit akışını eşitleyen aylık oran
+// (kararAylikOranBul, ikiye bölme). Böylece nominal oran / komisyon / masraf
+// sunum farkları kıyası bozmaz. Taksitlerin aylık eşit aralıklı ve eşit tutarlı
+// olduğu varsayılır (tarih ve düzensiz plan şimdilik YOK — bilinçli sadelik).
+// Sonuç bilgilendirme amaçlıdır; bankanın yazdığı "yıllık maliyet oranı"ndan küçük fark çıkabilir.
+// Paylaş Pro'ya özel: ücretsiz kullanıcı Pro ekranına gider; Geri'de girdiler 10 dk içinde geri gelir
+// (Erken Kapama Komisyonu ile aynı desen). Kayıt mount'ta bir kez tüketilir.
+let tkProDonusKaydi: any = null;
+function TeklifKarsilastirma({ s, kimlik, nav }: { s?: any; kimlik?: any; nav?: (ekran: string) => void }) {
+  const bos = () => ({ anapara: "", n: "", toplam: "", kesinti: "" });
+  const tkKayit = (tkProDonusKaydi && Date.now() - tkProDonusKaydi.ts < 600000) ? tkProDonusKaydi : null;
+  useEffect(() => { tkProDonusKaydi = null; }, []);
+  const [teklifler, setTeklifler] = useState<any[]>(tkKayit ? tkKayit.teklifler : [bos(), bos()]);
+  const [aktif, setAktif] = useState(tkKayit ? tkKayit.aktif : 0);
+  const [kopyalandi, setKopyalandi] = useState(false);
+  const harf = (i: number) => "ABCD"[i];
+  const guncelle = (alan: string, v: string) =>
+    setTeklifler(t => t.map((x, i) => (i === aktif ? { ...x, [alan]: v } : x)));
+  const ekle = () => {
+    if (teklifler.length >= 4) return;
+    setTeklifler(t => [...t, bos()]);
+    setAktif(teklifler.length);
+  };
+  const sil = () => {
+    if (teklifler.length <= 2) return;
+    setTeklifler(t => t.filter((_, i) => i !== aktif));
+    setAktif(0);
+  };
+
+  const hesap = teklifler.map((t, i) => {
+    const P = sayiOku(t.anapara), n = Math.round(sayiOku(t.n)), T = sayiOku(t.toplam), k = sayiOku(t.kesinti);
+    const hazir = P > 0 && n >= 1 && T > 0 && k >= 0 && k < P;
+    if (!hazir) return { i, ad: `Teklif ${harf(i)}`, hazir: false, P, n, T, k } as any;
+    const net = P - k;
+    const taksit = T / n;
+    const r = kararAylikOranBul(net, taksit, n);
+    const yillik = (Math.pow(1 + r, 12) - 1) * 100;
+    return { i, ad: `Teklif ${harf(i)}`, hazir: true, P, n, T, k, net, taksit, aylik: r * 100, yillik, maliyet: T - net };
+  });
+  const dolu = hesap.filter((h: any) => h.hazir).sort((a: any, b: any) => a.aylik - b.aylik);
+  const en = dolu[0];
+  const tl = (x: number) => kararTL(x);
+  const ay2 = (x: number) => `%${new Intl.NumberFormat("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(x)}`;
+
+  const fark = (h: any) => {
+    if (!en || h === en) return "";
+    if (h.P === en.P && h.n === en.n) return `${en.ad}'den ${tl(h.maliyet - en.maliyet)} pahalı`;
+    return `Aylık maliyeti ${en.ad}'den ${new Intl.NumberFormat("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(h.aylik - en.aylik)} puan yüksek`;
+  };
+
+  const paylasMetni = () =>
+    "Teklif karşılaştırma (Katılım Plus)\n" +
+    dolu.map((h: any, sira: number) =>
+      `${sira + 1}. ${h.ad}: gerçek maliyet ${ay2(h.aylik)} aylık (yıllık ${ay2(h.yillik)}), aylık taksit ${tl(h.taksit)}, toplam geri ödeme ${tl(h.T)}`
+    ).join("\n") + "\nBilgilendirme amaçlıdır; bankanın sözleşmesi esastır.";
+  const proDegil = !!kimlik && !!kimlik.pro && !kimlik.pro.aktif && !kimlik.proYukleniyor;
+  const paylas = async () => {
+    if (proDegil) {
+      tkProDonusKaydi = { ts: Date.now(), teklifler, aktif };
+      if (nav) kpProGerekliMi(kimlik.pro, nav);
+      return;
+    }
+    const metin = paylasMetni();
+    try {
+      if ((navigator as any).share) { await (navigator as any).share({ text: metin }); return; }
+    } catch { return; }
+    try { await navigator.clipboard.writeText(metin); setKopyalandi(true); setTimeout(() => setKopyalandi(false), 2000); } catch {}
+  };
+
+  const a = teklifler[aktif];
+  return (
+    <div style={{ padding: "14px 14px 90px" }}>
+      <KararNot tur="bilgi">
+        Bankanın verdiği 4 rakamı gir; komisyon ve masraf dahil gerçek maliyeti hesaplayıp teklifleri
+        en ucuzdan pahalıya sıralayalım.
+      </KararNot>
+
+      <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+        {teklifler.map((_, i) => {
+          const secili = i === aktif;
+          const tamam = hesap[i].hazir;
+          return (
+            <button key={i} onClick={() => setAktif(i)} style={{
+              fontSize: 12, fontWeight: secili ? 700 : 500, padding: "7px 14px", borderRadius: 16, cursor: "pointer",
+              border: `1px solid ${secili ? C.blue : C.border}`, background: secili ? C.blueLight : "transparent",
+              color: secili ? C.blue : C.sub }}>
+              Teklif {harf(i)}{tamam ? " ✓" : ""}
+            </button>
+          );
+        })}
+        {teklifler.length < 4 && (
+          <button onClick={ekle} style={{ fontSize: 12, fontWeight: 700, padding: "7px 13px", borderRadius: 16, cursor: "pointer",
+            border: `1px dashed ${C.border}`, background: "transparent", color: C.blue }}>+</button>
+        )}
+      </div>
+
+      <Card>
+        <SecTitle>{`Teklif ${harf(aktif)}`}</SecTitle>
+        <Field key={`an${aktif}`} label="Anapara" value={a.anapara} onChange={(v: string) => guncelle("anapara", v)} suffix="₺" hint="Kredi / finansman tutarı" />
+        <Field key={`n${aktif}`} label="Taksit sayısı" value={a.n} onChange={(v: string) => guncelle("n", v)} suffix="Ay" />
+        <Field key={`tp${aktif}`} label="Toplam geri ödeme" value={a.toplam} onChange={(v: string) => guncelle("toplam", v)} suffix="₺" hint="Tüm taksitlerin toplamı" />
+        <Field key={`ks${aktif}`} label="Peşin kesintiler (komisyon, masraf, sigorta vb.)" value={a.kesinti} onChange={(v: string) => guncelle("kesinti", v)} suffix="₺" hint="Bankanın kestiği toplam, BSMV dahil" />
+        {teklifler.length > 2 && (
+          <button onClick={sil} style={{ border: "none", background: "transparent", color: C.red, fontSize: 12, fontWeight: 600, cursor: "pointer", padding: 0 }}>
+            Bu teklifi sil
+          </button>
+        )}
+      </Card>
+
+      {dolu.length < 2 ? (
+        <Card>
+          <p style={{ margin: 0, fontSize: 13, color: C.sub, lineHeight: 1.6, textAlign: "center" }}>
+            Karşılaştırma için en az iki teklifin dört alanını da doldur.
+          </p>
+        </Card>
+      ) : (
+        <>
+          <SecTitle>Sonuç · en ucuzdan pahalıya</SecTitle>
+          {dolu.map((h: any, sira: number) => {
+            const kazanan = sira === 0;
+            return (
+              <div key={h.i} style={{ background: kazanan ? C.greenLight : C.card, border: `${kazanan ? 1.5 : 1}px solid ${kazanan ? C.green : C.border}`,
+                borderRadius: 16, padding: "12px 14px", marginBottom: 8 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: kazanan ? C.green : C.label }}>{sira + 1} · {h.ad}</span>
+                  {kazanan
+                    ? <span style={{ fontSize: 11, fontWeight: 700, color: C.green }}>En ucuz</span>
+                    : <span style={{ fontSize: 11, color: C.red, textAlign: "right" }}>{fark(h)}</span>}
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 9 }}>
+                  <div>
+                    <span style={{ display: "block", fontSize: 11, color: C.sub }}>Gerçek maliyet</span>
+                    <b style={{ fontSize: 17, fontVariantNumeric: "tabular-nums", color: kazanan ? C.green : C.label }}>{ay2(h.aylik)} aylık</b>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <span style={{ display: "block", fontSize: 11, color: C.sub }}>Aylık taksit</span>
+                    <b style={{ fontSize: 17, fontVariantNumeric: "tabular-nums", color: C.label }}>{tl(h.taksit)}</b>
+                  </div>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 9, paddingTop: 8, borderTop: `1px solid ${C.border}`, fontSize: 11, color: C.sub }}>
+                  <span>Yıllık {ay2(h.yillik)}</span>
+                  <span>Eline geçen {tl(h.net)}</span>
+                  <span>Toplam maliyet {tl(h.maliyet)}</span>
+                </div>
+              </div>
+            );
+          })}
+          <button onClick={paylas} style={{ width: "100%", padding: 11, borderRadius: 10, cursor: "pointer", border: `1px solid ${C.border}`,
+            background: "transparent", color: C.sub, fontSize: 13, fontWeight: 600, marginTop: 2 }}>
+            {kopyalandi ? "Kopyalandı" : "Sonucu paylaş"}
+            {proDegil && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 800, letterSpacing: 0.4, background: "#D8A94E", color: "#3A2A06", borderRadius: 6, padding: "2px 6px" }}>PRO</span>}
+          </button>
+        </>
+      )}
+      <p style={{ margin: "12px 2px 0", fontSize: 11, color: C.sub, lineHeight: 1.5 }}>
+        Bilgilendirme amaçlıdır; bankanın sözleşmesi esastır. Taksitler aylık ve eşit tutarlı varsayılır; bankanın yazdığı oranla küçük fark çıkabilir.
+      </p>
+    </div>
+  );
+}
+
 function VadeFarkiKarari({ s }: { s?: any }) {
   const [faturaS, setFaturaS] = useState("");
   const [iskontoS, setIskontoS] = useState("");
@@ -34217,6 +34383,7 @@ const MENU = {
   birikimHesaplayici:{title:"Birikim Hesaplayıcı",back:"araclarMenu"},
   erkenKapamaKarari:{title:"Erken Kapama Kararı",back:"hesaplaMenu"},
   vadeFarkiKarari:{title:"Vade Farkı Kararı",back:"hesaplaMenu"},
+  teklifKarsilastirma:{title:"Teklif Karşılaştırma",back:"hesaplaMenu"},
   erkenKapamaKomisyonu:{title:"Erken Kapama Komisyonu Hesaplama",back:"hesaplaMenu"},
   tlYpKarari:{title:"TL/YP Borçlanma Kararı",back:"hesaplaMenu"},
   kiraSertifikasi:{title:"Kira Sertifikası İhraçları",back:"araclarMenu"},
@@ -34251,7 +34418,7 @@ const TAB_OF_SCREEN:any = {
   hazineDoviz:"hesapla", hazineForward:"hesapla", hazineSwap:"hesapla",
   hazineBono:"hesapla", hazineSenaryo:"hesapla", hazineKurMakasi:"hesapla",
   piyasaHaberleri:"piyasa", finansalGostergeler:"piyasa",
-  araclarMenu:"araclar", sozluk:"araclar", egitim:"araclar", musteriPortfoyum:"araclar", vadeTakibi:"araclar", katilimBankalari:"araclar", kfkNedir:"araclar", zekatHesabi:"araclar", birikimHesaplayici:"araclar", erkenKapamaKarari:"hesapla", erkenKapamaKomisyonu:"hesapla", vadeFarkiKarari:"hesapla", tlYpKarari:"hesapla", kiraSertifikasi:"araclar", getiriKarsilastirma:"araclar", haftalikOzet:"araclar", portfoyum:"araclar", fonDetay:"araclar",
+  araclarMenu:"araclar", sozluk:"araclar", egitim:"araclar", musteriPortfoyum:"araclar", vadeTakibi:"araclar", katilimBankalari:"araclar", kfkNedir:"araclar", zekatHesabi:"araclar", birikimHesaplayici:"araclar", erkenKapamaKarari:"hesapla", erkenKapamaKomisyonu:"hesapla", vadeFarkiKarari:"hesapla", teklifKarsilastirma:"hesapla", tlYpKarari:"hesapla", kiraSertifikasi:"araclar", getiriKarsilastirma:"araclar", haftalikOzet:"araclar", portfoyum:"araclar", fonDetay:"araclar",
   asistan:"yapayzeka",
   profil:"profil",
 };
@@ -34357,6 +34524,7 @@ const SCREEN_TO_PATH: Record<string,string> = {
   birikimHesaplayici: "/birikim-hesaplayici",
   erkenKapamaKarari: "/erken-kapama-karari",
   vadeFarkiKarari: "/vade-farki-karari",
+  teklifKarsilastirma: "/teklif-karsilastirma",
   erkenKapamaKomisyonu: "/erken-kapama-komisyonu",
   tlYpKarari: "/tl-yp-karari",
   kiraSertifikasi: "/kira-sertifikasi-ihraclari",
@@ -34460,6 +34628,7 @@ const MENU_ARAMA_LIST=[
   {key:"esnekOdemePlanlari", label:"Esnek Ödeme Planları Hesaplama",       icon:"📋", grup:"Bireysel Finansman"},
   {key:"spotFinansman",      label:"Spot Finansman Hesaplama",             icon:"⚡", grup:"Tüzel Finansman"},
   {key:"erkenKapamaKomisyonu", label:"Erken Kapama Komisyonu Hesaplama",    icon:"💸", grup:"Tüzel Finansman", alt:["erken kapama","erken odeme","erken odeme ucreti","komisyon","tazminat","ticari kredi kapama","kapama ucreti","2020/4"]},
+  {key:"teklifKarsilastirma", label:"Teklif Karşılaştırma",                icon:"⚖️", grup:"Tüzel Finansman", alt:["teklif","banka teklifi","kredi karsilastirma","finansman karsilastirma","gercek maliyet","efektif maliyet","komisyon","masraf","hangi banka"]},
   {key:"vadeFarkiKarari",    label:"Vade Farkı Kararı",                    icon:"⏳", grup:"Tüzel Finansman", alt:["vade farki","pesin iskonto","pesin mi vadeli mi","tedarikci","iskonto","pesin odeme","karar"]},
   {key:"tlYpKarari",         label:"TL/YP Borçlanma Kararı",               icon:"💱", grup:"Tüzel Finansman", alt:["tl mi yp mi","doviz kredisi","yp finansman","kur riski","basabas kur","doviz borclanma","karar"]},
   {key:"taksitliTicari",     label:"Taksitli Ticari Finansman Hesaplama",  icon:"🏗️", grup:"Tüzel Finansman"},
@@ -34530,6 +34699,7 @@ const HESAPLA_ARAC_LISTESI = [
   {key:"taksitenKredi",      icon:"🔢", label:"Taksitten Tutar Hesaplama",            kat:"bireysel"},
   // Tüzel Finansman
   {key:"spotFinansman",      icon:"⚡", label:"Spot Finansman Hesaplama",             kat:"ticari"},
+  {key:"teklifKarsilastirma", icon:"⚖️", label:"Teklif Karşılaştırma",                kat:"ticari"},
   {key:"vadeFarkiKarari",    icon:"⏳", label:"Vade Farkı Kararı",                    kat:"ticari"},
   {key:"erkenKapamaKomisyonu", icon:"💸", label:"Erken Kapama Komisyonu Hesaplama",   kat:"ticari"},
   {key:"tlYpKarari",         icon:"💱", label:"TL/YP Borçlanma Kararı",               kat:"ticari"},
@@ -47074,6 +47244,7 @@ function App(){
         {screen==="birikimHesaplayici"&&<BirikimHesaplayici/>}
         {screen==="erkenKapamaKarari"&&<ErkenKapamaKarari s={settings}/>}
         {screen==="vadeFarkiKarari"&&<VadeFarkiKarari s={settings}/>}
+        {screen==="teklifKarsilastirma"&&<TeklifKarsilastirma s={settings} kimlik={kimlik} nav={nav}/>}
         {screen==="erkenKapamaKomisyonu"&&<ErkenKapamaKomisyonu s={settings} kimlik={kimlik} nav={nav}/>}
         {screen==="tlYpKarari"&&<TlYpKarari s={settings}/>}
         {screen==="kiraSertifikasi"&&<KiraSertifikasiIhraclari/>}
