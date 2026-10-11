@@ -20147,7 +20147,9 @@ function hesaplaOdemePlani(T, V, ao, bsmvOran, kkdfOran){
 
 // ─── RAPOR / PAYLAŞ ──────────────────────────────────────────────────────────
 // ─── RAPOR ÖNİZLEME + PAYLAŞ ────────────────────────────────────────────────
-function RaporModal({baslik, satirlar, plan, onClose, showKdv=false, bsmvOran=0, kkdfOran=0}){
+// tablo (opsiyonel, 2026-10-12): YAN YANA karşılaştırma tablosu — sütunlar teklifler, satırlar ölçütler;
+// enIdx = vurgulanan (en ucuz) sütun. Verilirse satirlar'ın altında hem önizlemede hem PDF'te çizilir.
+function RaporModal({baslik, satirlar, plan, onClose, showKdv=false, bsmvOran=0, kkdfOran=0, tablo=null as any}){
   const [yukleniyor, setYukleniyor] = useState(false);
   const tarih = new Date().toLocaleString("tr-TR");
   const fmt=(n)=>n==null?"—":new Intl.NumberFormat("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}).format(n);
@@ -20185,6 +20187,21 @@ function RaporModal({baslik, satirlar, plan, onClose, showKdv=false, bsmvOran=0,
             <span style="font-size:${s.big?14:12}px;color:${s.big?C.thead:"#1a1a1a"};font-weight:${s.big?900:600};font-family:monospace;">${escapeHtml(s.value)}</span>
           </div>`).join("")}
       </div>
+      ${tablo?`
+      <div style="padding:14px 24px 4px;">
+        <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
+          <thead><tr>
+            <th style="width:28%;"></th>
+            ${tablo.sutunlar.map((c,i)=>`<th style="padding:8px 4px;text-align:center;background:${i===tablo.enIdx?"#1B9E7A":"#1C3A5E"};color:#fff;font-size:10px;font-weight:700;border-left:2px solid #fff;word-wrap:break-word;">${i+1}. ${escapeHtml(c)}${i===tablo.enIdx?'<div style="font-size:8px;font-weight:600;margin-top:2px;">En ucuz</div>':""}</th>`).join("")}
+          </tr></thead>
+          <tbody>
+            ${tablo.satirlar.map((r,ri)=>`<tr style="background:${r.big?"rgba(91,155,216,0.15)":ri%2===0?"#FAFBFC":"#fff"};">
+              <td style="padding:${r.big?"9px":"7px"} 4px 7px 0;font-size:${r.big?10:9}px;color:${r.big?C.thead:"#6B7280"};font-weight:${r.big?700:500};border-bottom:1px solid #EEF1F4;">${escapeHtml(r.label)}</td>
+              ${r.degerler.map((v,i)=>`<td style="padding:${r.big?"9px":"7px"} 4px;text-align:center;font-size:${r.big?11:10}px;font-weight:${r.big?800:600};color:${r.big?(i===tablo.enIdx?"#1B9E7A":C.thead):"#1a1a1a"};font-family:monospace;background:${i===tablo.enIdx&&!r.big?"rgba(27,158,122,0.07)":"transparent"};border-left:2px solid #fff;border-bottom:1px solid #EEF1F4;">${escapeHtml(v)}</td>`).join("")}
+            </tr>`).join("")}
+          </tbody>
+        </table>
+      </div>`:""}
       ${planSatirlari.length>0?`
       <div style="margin-top:4px;">
         <div style="background:#1C3A5E;padding:9px 24px;">
@@ -20305,7 +20322,7 @@ function RaporModal({baslik, satirlar, plan, onClose, showKdv=false, bsmvOran=0,
       }
       // ── 2. YEDEK: METİN PAYLAŞIMI ───────────────────────────────────────
       try{
-        const metinSatirlar = satirlar.filter(s=>s?.label).map(s=>`${s.label}: ${s.value}`);
+        const metinSatirlar = [...satirlar.filter(s=>s?.label).map(s=>`${s.label}: ${s.value}`), ...(tablo?tablo.satirlar.map(r=>`${r.label}: ${tablo.sutunlar.map((c,i)=>`${c} ${r.degerler[i]}`).join(" | ")}`):[])];
         const planNotu = plan && plan.length>0 ? `\n(${plan.filter(r=>r&&!r._toplamSabitTaksit).length} taksitlik ödeme planı hesaplandı — detay için uygulamadaki Ödeme Planı ekranını kullanın)` : "";
         const rapor = `${baslik}\n${tarih}\n${"─".repeat(28)}\n${metinSatirlar.join("\n")}${planNotu}\n${"─".repeat(28)}\nBu hesaplamalar yalnızca bilgilendirme amaçlıdır; kesin teklif, resmi belge veya hukuki taahhüt niteliği taşımaz.\n\nKatılım Plus — katilimplus.com`;
         if(typeof navigator!=="undefined" && (navigator as any).share){
@@ -20369,6 +20386,30 @@ function RaporModal({baslik, satirlar, plan, onClose, showKdv=false, bsmvOran=0,
               <span style={{fontSize:13,fontWeight:s.big?800:600,color:s.big?C.blue:C.label}}>{s.value}</span>
             </div>
           ))}
+          {tablo&&(
+            <div style={{marginTop:12,overflowX:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",tableLayout:"fixed",minWidth:tablo.sutunlar.length>3?420:0}}>
+                <thead><tr>
+                  <th style={{width:"28%"}}/>
+                  {tablo.sutunlar.map((c,i)=>(
+                    <th key={i} style={{padding:"7px 3px",textAlign:"center",background:i===tablo.enIdx?C.green:C.blue,color:"#fff",fontSize:11,fontWeight:700,borderLeft:`2px solid ${C.card}`,wordBreak:"break-word"}}>
+                      {i+1}. {c}{i===tablo.enIdx&&<div style={{fontSize:9,fontWeight:600,marginTop:1}}>En ucuz</div>}
+                    </th>
+                  ))}
+                </tr></thead>
+                <tbody>
+                  {tablo.satirlar.map((r,ri)=>(
+                    <tr key={ri} style={{background:r.big?C.blueLight:"transparent"}}>
+                      <td style={{padding:"8px 4px 8px 0",fontSize:r.big?11:10,fontWeight:r.big?700:500,color:r.big?C.blue:C.sub,borderBottom:`1px solid ${C.border}`}}>{r.label}</td>
+                      {r.degerler.map((v,i)=>(
+                        <td key={i} style={{padding:"8px 3px",textAlign:"center",fontSize:r.big?12:11,fontWeight:r.big?800:600,fontFamily:"inherit",fontVariantNumeric:"tabular-nums",color:r.big?(i===tablo.enIdx?C.green:C.blue):C.label,borderLeft:`2px solid ${C.card}`,borderBottom:`1px solid ${C.border}`}}>{v}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
           {plan&&plan.length>0&&(
             <div style={{marginTop:12,background:C.blueLight,borderRadius:10,padding:"10px 12px"}}>
               <p style={{margin:0,fontSize:12,color:C.blue,fontWeight:700}}>📋 {plan.length} satır ödeme planı PDF'e dahil edilecek</p>
@@ -29711,25 +29752,32 @@ function TeklifKarsilastirma({ s, kimlik, nav }: { s?: any; kimlik?: any; nav?: 
     setRaporAcik(true);
   };
   // Ortak "Rapor / Paylaş" penceresi (PDF + iOS paylaşım menüsü) — diğer hesaplayıcılarla aynı.
-  const raporSatirlari = (): { label: string; value: string; big?: boolean }[] => {
-    const r: { label: string; value: string; big?: boolean }[] = [];
-    r.push({ label: "Karşılaştırılan teklif", value: `${dolu.length}` });
-    r.push({ label: "En düşük maliyetli teklif", value: en ? en.ad : "—" });
-    dolu.forEach((h: any, sira: number) => {
-      r.push({ label: `${sira + 1} · ${h.ad}${sira === 0 ? " (en ucuz)" : ""}`, value: `${ay2(h.aylik)} aylık`, big: true });
-      r.push({ label: "Anapara", value: tl(h.P) });
-      r.push({ label: "Taksit sayısı", value: `${h.n} ay` });
-      r.push({ label: "Aylık taksit", value: tl(h.taksit) });
-      r.push({ label: "Toplam geri ödeme (vergiler dahil)", value: tl(h.T) });
-      r.push({ label: "Peşin kesintiler (komisyon, masraf, sigorta vb.)", value: tl(h.k) });
-      r.push({ label: "Eline geçen net tutar", value: tl(h.net) });
-      r.push({ label: "Toplam maliyet", value: tl(h.maliyet) });
-      r.push({ label: "Gerçek maliyet (yıllık bileşik)", value: ay2(h.yillik) });
-      if (sira > 0 && fark(h)) r.push({ label: "Fark", value: fark(h) });
-    });
-    r.push({ label: "Hesap varsayımı", value: "Taksitler aylık ve eşit; tutarlar vergi dahil" });
-    return r;
+  const raporSatirlari = (): { label: string; value: string; big?: boolean }[] => [
+    { label: "Karşılaştırılan teklif", value: `${dolu.length}` },
+    { label: "En düşük maliyetli teklif", value: en ? en.ad : "—" },
+    { label: "Hesap varsayımı", value: "Taksitler aylık ve eşit; tutarlar vergi dahil" },
+  ];
+  const farkKisa = (h: any) => {
+    if (!en || h === en) return "—";
+    if (h.P === en.P && h.n === en.n) return `+${tl(h.maliyet - en.maliyet)}`;
+    return `+${new Intl.NumberFormat("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(h.aylik - en.aylik)} puan`;
   };
+  const raporTablosu = () => ({
+    sutunlar: dolu.map((h: any) => h.ad),
+    enIdx: 0,
+    satirlar: [
+      { label: "Anapara", degerler: dolu.map((h: any) => tl(h.P)) },
+      { label: "Taksit sayısı", degerler: dolu.map((h: any) => `${h.n} ay`) },
+      { label: "Aylık taksit", degerler: dolu.map((h: any) => tl(h.taksit)) },
+      { label: "Toplam geri ödeme (vergiler dahil)", degerler: dolu.map((h: any) => tl(h.T)) },
+      { label: "Peşin kesintiler (komisyon, masraf, sigorta vb.)", degerler: dolu.map((h: any) => tl(h.k)) },
+      { label: "Eline geçen net tutar", degerler: dolu.map((h: any) => tl(h.net)) },
+      { label: "Toplam maliyet", degerler: dolu.map((h: any) => tl(h.maliyet)) },
+      { label: "En ucuza göre fark", degerler: dolu.map((h: any) => farkKisa(h)) },
+      { label: "Gerçek maliyet (aylık)", degerler: dolu.map((h: any) => ay2(h.aylik)), big: true },
+      { label: "Gerçek maliyet (yıllık bileşik)", degerler: dolu.map((h: any) => ay2(h.yillik)), big: true },
+    ],
+  });
 
   const a = teklifler[aktif];
   return (
@@ -29820,7 +29868,7 @@ function TeklifKarsilastirma({ s, kimlik, nav }: { s?: any; kimlik?: any; nav?: 
       <p style={{ margin: "12px 2px 0", fontSize: 11, color: C.sub, lineHeight: 1.5 }}>
         Toplam geri ödeme ve peşin kesintiler vergi (BSMV, KKDF vb.) dahil tutarlar olarak girilmelidir. Bilgilendirme amaçlıdır; bankanın sözleşmesi esastır. Taksitler aylık ve eşit tutarlı varsayılır; bankanın yazdığı oranla küçük fark çıkabilir.
       </p>
-      {raporAcik && dolu.length >= 2 && <RaporModal baslik="Teklif Karşılaştırma" satirlar={raporSatirlari()} plan={null} onClose={() => setRaporAcik(false)} showKdv={false} bsmvOran={0} kkdfOran={0} />}
+      {raporAcik && dolu.length >= 2 && <RaporModal baslik="Teklif Karşılaştırma" satirlar={raporSatirlari()} tablo={raporTablosu()} plan={null} onClose={() => setRaporAcik(false)} showKdv={false} bsmvOran={0} kkdfOran={0} />}
     </div>
   );
 }
