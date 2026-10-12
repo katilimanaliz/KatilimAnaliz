@@ -17508,7 +17508,7 @@ const ppkSonEtiket=(evds?:any)=>gostergeTarihEtiket(ppkSonKarar(evds).tarih);
 // Kaynak Piyasa > Altın tablosuyla aynı (/api/piyasa-fiyatlar?tip=altinapi).
 // Değişim %10'u aşarsa gizlenir (kaynaktaki bozuk close değerleri için, bkz. AltinUrunleriTablo).
 // Dokununca Piyasa > Altın açılır (onAc). Veri hiç gelmezse kart hiç görünmez.
-function AnaSayfaAltinKarti({onAc}:any){
+function AnaSayfaAltinKarti({onAc,dar}:any){
   const [veri,setVeri]=useState<any>(null);
   useEffect(()=>{
     let iptal=false;
@@ -17523,29 +17523,29 @@ function AnaSayfaAltinKarti({onAc}:any){
   if(satirlar.length===0) return null;
   const fm=(v:number)=>"₺"+new Intl.NumberFormat("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}).format(v);
   return (
-    <div style={{marginBottom:14}}>
+    <div style={{marginBottom:dar?18:14}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
         <span style={{fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{CV("Altın")}</span>
         <span onClick={onAc} style={{fontSize:11,fontWeight:700,color:"#3B82F6",cursor:"pointer"}}>{CV("Tümü")} ›</span>
       </div>
       <div style={{borderRadius:16,overflow:"hidden",background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`}}>
-        <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 13px 6px",borderBottom:`1px solid ${WA(0.08)}`}}>
+        <div style={{display:"flex",alignItems:"center",gap:dar?6:8,padding:dar?"7px 11px 5px":"8px 13px 6px",borderBottom:`1px solid ${WA(0.08)}`}}>
           <span style={{flex:1,minWidth:0,fontSize:11,fontWeight:700,color:WA(0.6)}}>{CV("Ürün")}</span>
-          <span style={{minWidth:86,flexShrink:0,textAlign:"right",fontSize:11,fontWeight:700,color:WA(0.6)}}>{CV("Alış")}</span>
-          <span style={{minWidth:86,flexShrink:0,textAlign:"right",fontSize:11,fontWeight:700,color:WA(0.6)}}>{CV("Satış")}</span>
+          <span style={{minWidth:dar?66:86,flexShrink:0,textAlign:"right",fontSize:11,fontWeight:700,color:WA(0.6)}}>{CV("Alış")}</span>
+          <span style={{minWidth:dar?66:86,flexShrink:0,textAlign:"right",fontSize:11,fontWeight:700,color:WA(0.6)}}>{CV("Satış")}</span>
         </div>
         {satirlar.map((x:any,i:number)=>{
           const d=x.d;
           const ham=(d.close)?(((d.bid+d.ask)/2-d.close)/d.close*100):null;
           const dg=(ham!=null&&Math.abs(ham)<=10)?ham:null;
           return(
-            <div key={x.k} className="kp-side-item" onClick={onAc} style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"9px 13px",borderTop:i===0?"none":`1px solid ${WA(0.07)}`}}>
+            <div key={x.k} className="kp-side-item" onClick={onAc} style={{display:"flex",alignItems:"center",gap:dar?6:8,cursor:"pointer",padding:dar?"7px 11px":"9px 13px",borderTop:i===0?"none":`1px solid ${WA(0.07)}`}}>
               <div style={{flex:1,minWidth:0}}>
-                <p style={{margin:0,fontSize:13,fontWeight:700,color:WA(0.85),lineHeight:1.35}}>{x.ad}</p>
+                <p style={{margin:0,fontSize:dar?12:13,fontWeight:700,color:WA(0.85),lineHeight:1.35,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.ad}</p>
                 {dg!=null&&<p style={{margin:"1px 0 0",fontSize:10,fontWeight:700,color:dg>=0?"#22C55E":"#EF4444"}}>{dg>=0?"▲ +":"▼ "}{dg.toFixed(2).replace(".",",")}%</p>}
               </div>
-              <span style={{minWidth:86,flexShrink:0,textAlign:"right",fontSize:14,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"inherit",fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{fm(d.bid)}</span>
-              <span style={{minWidth:86,flexShrink:0,textAlign:"right",fontSize:14,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"inherit",fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{fm(d.ask)}</span>
+              <span style={{minWidth:dar?66:86,flexShrink:0,textAlign:"right",fontSize:dar?12:14,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"inherit",fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{fm(d.bid)}</span>
+              <span style={{minWidth:dar?66:86,flexShrink:0,textAlign:"right",fontSize:dar?12:14,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"inherit",fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{fm(d.ask)}</span>
             </div>
           );
         })}
@@ -17710,7 +17710,7 @@ function PiyasaOzetiBlok({dikey,piyasaGorunen,piyasaSurukle,piyasaOzetiSecim,set
 // Sayfa, Hesapla, Piyasa) da AYNI fonksiyona çağrı yapıyor. Ana sayfadaki
 // orijinal satır içi blok da bu bileşene çağrıya çevrildi (aşağıda,
 // "screen==='home'" dalında) — davranış hiç değişmedi, sadece paylaşıldı.
-function SagRay({nav, piyasaGorunen, piyasaSurukle, piyasaOzetiSecim, setPiyasaOzetiDuzenleAcik, setSeciliKur, yaklasanTakvim, genisEkran}: any){
+function SagRay({nav, piyasaGorunen, piyasaSurukle, piyasaOzetiSecim, setPiyasaOzetiDuzenleAcik, setSeciliKur, yaklasanTakvim, genisEkran, altinAc}: any){
   // ⚠️ 2026-09-21 (kullanıcı isteği: "sağdaki menüyü de sol menü gibi hafif
   // öne çıkıyormuş gibi gösterelim, sol menü izi gibi"): sol menüde bu
   // hissi borderRight + boxShadow:"4px 0 24px rgba(0,0,0,0.35)" veriyordu
@@ -17731,6 +17731,8 @@ function SagRay({nav, piyasaGorunen, piyasaSurukle, piyasaOzetiSecim, setPiyasaO
       {genisEkran && <KurIzlemeKarti nav={nav}/>}
 
       {genisEkran && <YaklasanTakvimBlok tekKutu yaklasanTakvim={yaklasanTakvim} nav={nav}/>}
+
+      {genisEkran && <AnaSayfaAltinKarti dar onAc={altinAc}/>}
 
       {genisEkran && (
         <div style={{marginBottom:18}}>
@@ -46220,7 +46222,7 @@ function App(){
                 Asistan kartı sağ rayın EN ALTINA taşındı (aşağıda,
                 Katılım Sektörü'nden sonra). */}
             {/* Altın kartı (2026-10-11): Yaklaşan Takvim ile Haftalık Özet arasında */}
-            <AnaSayfaAltinKarti onAc={()=>{setPiyasaTabloFiltre("altin");nav("piyasaMenu");}}/>
+            {!genisEkran&&<AnaSayfaAltinKarti onAc={()=>{setPiyasaTabloFiltre("altin");nav("piyasaMenu");}}/>}
 
             <div style={genisEkran?IKILI_SATIR:{}}>
             <div style={genisEkran?{minWidth:0}:{}}>
@@ -46289,7 +46291,8 @@ function App(){
             {/* ── SAĞ RAY — yalnızca dikey listeler ────────────────────────── */}
             <SagRay nav={nav} piyasaGorunen={piyasaGorunen} piyasaSurukle={piyasaSurukle}
               piyasaOzetiSecim={piyasaOzetiSecim} setPiyasaOzetiDuzenleAcik={setPiyasaOzetiDuzenleAcik}
-              setSeciliKur={setSeciliKur} yaklasanTakvim={yaklasanTakvim} genisEkran={genisEkran}/>
+              setSeciliKur={setSeciliKur} yaklasanTakvim={yaklasanTakvim} genisEkran={genisEkran}
+              altinAc={()=>{setPiyasaTabloFiltre("altin");nav("piyasaMenu");}}/>
 
             </div>{/* /ana kolon + sağ ray */}
 
