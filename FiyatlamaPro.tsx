@@ -32925,6 +32925,40 @@ const KATILIM_SIGORTA_SIRKETLERI:any[] = [
   },
 ];
 
+// Ürün bilgileri GENEL bilgidir (sektör uygulaması); şirketlerin güncel teminat/şartları için kendi sitelerine bakılmalıdır.
+const KATILIM_URUN_BILGI:{k:string[];ad:string;ne:string;kapsam:string[];dikkat:string[];emk?:boolean}[] = [
+  {k:["pert araç"],ad:"Pert Araç Kasko",ne:"Kasko ailesinde, ağır hasarlı (pert) araç durumuna odaklanan bir sürüm olarak sunulur.",kapsam:["Kaza, yangın, çalınma gibi risklerde aracın uğradığı zarar","Pert durumunda araç bedeli üzerinden tazminat (poliçeye göre)"],dikkat:["Kapsam ve pert tanımı şirketten şirkete değişir; poliçe şartlarını okuyun."]},
+  {k:["süper kasko"],ad:"Süper Kasko",ne:"Standart kaskodan geniş teminat paketi sunan kasko türüdür.",kapsam:["Çarpma, devrilme, yangın, çalınma, doğal afet","Genişletilmiş teminatlar (poliçeye göre değişir)"],dikkat:["Hangi ek teminatların dahil olduğunu poliçeden doğrulayın."]},
+  {k:["ekonomik kasko"],ad:"Ekonomik Kasko",ne:"Daha düşük prim hedefleyen, kapsamı sınırlandırılmış kasko türüdür.",kapsam:["Temel kasko riskleri (poliçeye göre)"],dikkat:["Prim düşer ama muafiyet veya kapsam sınırı olabilir; karşılaştırarak seçin."]},
+  {k:["kasko"],ad:"Kasko",ne:"Kendi aracınızın uğradığı hasarı karşılayan isteğe bağlı sigortadır.",kapsam:["Çarpma, devrilme, çarpışma","Yangın, çalınma, doğal afet","Seçilen ek teminatlar (cam, mini onarım, ikame araç vb.)"],dikkat:["Muafiyet (hasarın sizin ödediğiniz kısmı) ve araç değeri tanımını kontrol edin.","Zorunlu trafik sigortasının yerine geçmez."]},
+  {k:["trafik"],ad:"Trafik Sigortası",ne:"Aracınızla başkasına verdiğiniz zararı karşılayan zorunlu sigortadır.",kapsam:["Karşı tarafın araç hasarı","Karşı taraftaki kişilerin tedavi ve sakatlık/ölüm zararları"],dikkat:["Kendi aracınızdaki hasarı karşılamaz; onun için kasko gerekir.","Teminat limitleri resmî olarak belirlenir."]},
+  {k:["yeşil kart"],ad:"Yeşil Kart",ne:"Aracınızla yurt dışına çıkarken gerekli uluslararası zorunlu trafik sigortasıdır.",kapsam:["Anlaşmalı ülkelerde karşı tarafa verilen zararlar"],dikkat:["Geçerli olduğu ülkeleri ve süreyi poliçeden kontrol edin."]},
+  {k:["dask","zorunlu deprem"],ad:"DASK (Zorunlu Deprem)",ne:"Konutlar için zorunlu deprem sigortasıdır.",kapsam:["Depremin binanın yapısında yarattığı hasar (duvar, kolon, tavan vb.)","Deprem sonrası yangın, patlama, yanardağ, tsunami gibi bağlantılı riskler"],dikkat:["Ev eşyalarını karşılamaz; eşya için konut sigortasına deprem teminatı eklenir.","Teminat tutarı DASK tavanıyla sınırlıdır."]},
+  {k:["konut"],ad:"Konut Sigortası",ne:"Evinizi ve içindeki eşyayı çeşitli risklere karşı koruyan sigortadır.",kapsam:["Yangın, yıldırım, patlama","Hırsızlık, su baskını, fırtına","İsteğe bağlı: cam kırılması, deprem, sorumluluk"],dikkat:["Bina ve eşya bedelini gerçek değere yakın seçin; düşük bedel tazminatı azaltabilir."]},
+  {k:["ferdi kaza"],ad:"Ferdi Kaza",ne:"Kaza sonucu oluşan ölüm veya sakatlığa karşı teminat verir.",kapsam:["Kazaya bağlı ölüm","Kalıcı sakatlık","Teminata göre kaza kaynaklı tedavi giderleri"],dikkat:["Hastalık kaynaklı durumlar genelde kapsam dışıdır."]},
+  {k:["yurt dışı seyahat","seyahat"],ad:"Seyahat Sağlık",ne:"Yurt dışı seyahatte acil sağlık giderlerini karşılayan sigortadır.",kapsam:["Acil hastalık ve kaza durumunda tedavi masrafları","Teminata göre hastane nakli, ülkeye getirme, bagaj gibi ek hizmetler"],dikkat:["Vize başvurularında asgari teminat şartı aranabilir; ülke şartını kontrol edin.","Önceden var olan hastalıklar kapsam dışı olabilir."]},
+  {k:["kritik hastal","kadınca güven"],ad:"Kritik Hastalık",ne:"Poliçede sayılan ağır hastalıklardan biri teşhis edildiğinde teminat tutarını ödeyen sigortadır.",kapsam:["Belirlenen ağır hastalıkların teşhisinde ödeme (hastalık listesi poliçeye göre)"],dikkat:["Hastalık listesi ve bekleme süreleri şirkete göre değişir; poliçeden doğrulayın."]},
+  {k:["iş yeri"],ad:"İş Yeri Sigortası",ne:"İş yerinizi, makine ve stoklarınızı risklere karşı koruyan sigortadır.",kapsam:["Yangın, hırsızlık, su baskını","Makine, ekipman ve emtia hasarı (poliçeye göre)"],dikkat:["Stok ve ekipman değerleri güncel tutulmalıdır."]},
+  {k:["kobi"],ad:"KOBİ Paketi",ne:"Küçük ve orta ölçekli işletmeler için birkaç teminatı tek poliçede toplayan pakettir.",kapsam:["İş yeri ve ticari riskler için birleştirilmiş teminatlar (paket içeriğine göre)"],dikkat:["Paket içeriğini kendi ihtiyacınızla karşılaştırın."]},
+  {k:["nakliyat"],ad:"Nakliyat Sigortası",ne:"Taşınan malın taşıma sırasında uğradığı kayıp ve hasarı karşılar.",kapsam:["Kara, deniz, hava taşımasında emtia hasarı veya kaybı"],dikkat:["Teminat kapsamı (tüm riskler / sınırlı riskler) poliçeye göre değişir."]},
+  {k:["mühendislik"],ad:"Mühendislik Sigortaları",ne:"İnşaat, montaj ve makine projelerindeki riskleri kapsayan sigorta grubudur.",kapsam:["İnşaat ve montaj sırasındaki hasarlar","Makine kırılması gibi teknik riskler"],dikkat:["Proje tipine göre poliçe türü değişir."]},
+  {k:["sorumluluk"],ad:"Sorumluluk Sigortaları",ne:"Üçüncü kişilere verilen zararlardan doğan hukuki sorumluluğu karşılar.",kapsam:["İşveren, ürün, mesleki ve genel sorumluluk gibi türler"],dikkat:["Mesleki ve ticari faaliyetinize uygun türü seçin."]},
+  {k:["tarım"],ad:"Tarım Sigortaları",ne:"Tarımsal üretimi doğal afet ve benzeri risklere karşı koruyan sigorta grubudur.",kapsam:["Ürün, hayvan veya sera gibi varlıklarda risk teminatları (türüne göre)"],dikkat:["Devlet prim desteği ve kapsam ürün türüne göre değişir."]},
+  {k:["alacak"],ad:"Devlet Destekli Alacak Sigortası",ne:"Vadeli satışlardaki ticari alacakların tahsil edilememe riskini hedefleyen sigortadır.",kapsam:["Alacağın ödenmemesi riskine karşı teminat (şartlara göre)"],dikkat:["Destek ve şartlar için şirketle görüşün."]},
+  {k:["18 yaş"],ad:"18 Yaş Altı BES",ne:"Çocuklar adına açılan bireysel emeklilik planıdır.",kapsam:["Çocuk adına düzenli birikim","Devlet katkısı (mevzuat şartlarında)"],dikkat:["Fon seçimleri ve ödeme koşulları plana göre değişir."],emk:true},
+  {k:["otomatik katılım"],ad:"Otomatik Katılım",ne:"Çalışanların işveren aracılığıyla otomatik olarak bireysel emeklilik sistemine dahil edildiği uygulamadır.",kapsam:["Maaştan düzenli katkı payı","Devlet katkısı"],dikkat:["Çalışan, mevzuattaki süre içinde sistemden ayrılma hakkına sahiptir."],emk:true},
+  {k:["grup emeklilik"],ad:"Grup Emeklilik",ne:"İşverenin çalışanları için kurduğu toplu emeklilik planıdır.",kapsam:["İşveren ve/veya çalışan katkısıyla birikim"],dikkat:["Plan şartları sözleşmeyle belirlenir."],emk:true},
+  {k:["emeklilik fon"],ad:"Emeklilik Fonları",ne:"Emeklilik birikiminin yatırıldığı fonlardır; katılım esaslı fonlar faizsiz ilkelere göre yönetilir.",kapsam:["Kira sertifikası, altın, katılım hesabı gibi faizsiz araçlar (fona göre)"],dikkat:["Getiri garantisi yoktur; fonun risk düzeyine bakın."],emk:true},
+  {k:["ekin"],ad:"Ekin Emeklilik Planı",ne:"Bereket Emeklilik'in sunduğu bir bireysel emeklilik planıdır.",kapsam:["Plan kapsamı ve hedef kitle şirketin sitesinde belirtilir"],dikkat:["Ayrıntılar için şirketin sayfasına bakın."],emk:true},
+  {k:["bireysel emeklilik"],ad:"Bireysel Emeklilik (BES)",ne:"Gönüllü katkıyla birikim yapılan, devlet katkısı olan uzun vadeli emeklilik sistemidir.",kapsam:["Düzenli katkı payı ve fon yatırımı","Devlet katkısı (mevzuat şartlarında)","Emeklilik şartları: genel olarak 10 yıl katılım ve 56 yaş"],dikkat:["Erken çıkışta devlet katkısı ve getirisi kaybedilebilir.","Katılım esaslı fonlar faizli araçlara yatırılmaz."],emk:true},
+  {k:["hayat"],ad:"Hayat Sigortası",ne:"Sigortalının vefatı halinde belirlenen kişilere teminat tutarını ödeyen sigortadır.",kapsam:["Vefat teminatı","Poliçeye göre ek teminatlar (kaza, maluliyet vb.)"],dikkat:["Lehdar (ödemeyi alacak kişi) bilgisini güncel tutun."]},
+  {k:["sağlık"],ad:"Sağlık Sigortası",ne:"Hastalık veya kaza sonrası tedavi masraflarını karşılayan sigortadır.",kapsam:["Yatarak ve ayakta tedavi (pakete göre)","Anlaşmalı sağlık kurumları"],dikkat:["Bekleme süreleri, muafiyet ve anlaşmalı kurum listesini kontrol edin."]},
+];
+function katilimUrunBilgi(ad:string){
+  const a=ad.toLocaleLowerCase("tr");
+  return KATILIM_URUN_BILGI.find(u=>u.k.some(x=>a.includes(x)))||null;
+}
+
 const KATILIM_SIGORTA_ILKELER:{b:string;a:string}[] = [
   {b:"Faizsiz yapı", a:"Fonlar faizli araçlara yatırılmaz; yatırımlar katılım ilkelerine uygun yapılır."},
   {b:"Ortak havuz (tekafül)", a:"Katılımcılar katkılarıyla ortak bir havuz oluşturur; hasarlar bu havuzdan karşılanır."},
@@ -32934,6 +32968,7 @@ const KATILIM_SIGORTA_ILKELER:{b:string;a:string}[] = [
 
 function KatilimSigorta(){
   const [secili,setSecili]=useState<any>(null);
+  const [urunSecili,setUrunSecili]=useState<any>(null);
   const turRenk:any={"Hayat Dışı":C.blue,"Hayat & Emeklilik":C.purple};
   const kutu:any={background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`};
   const etiket:any={fontSize:11,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")};
@@ -32973,11 +33008,15 @@ function KatilimSigorta(){
 
         {secili.urunler.length>0&&(
           <>
-            <p style={{margin:"6px 0 8px",fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{CV("Ürün ve Branşlar")}</p>
+            <p style={{margin:"6px 0 2px",fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{CV("Ürün ve Branşlar")}</p>
+            <p style={{margin:"0 0 8px",fontSize:11,color:WA(0.6)}}>Ürün hakkında bilgi için dokun</p>
             <div style={{display:"flex",flexWrap:"wrap",gap:7,marginBottom:16}}>
-              {secili.urunler.map((u:string,i:number)=>(
-                <span key={i} style={{fontSize:12,fontWeight:600,color:C.soft,background:secili.renk+"1F",border:`1px solid ${secili.renk}40`,padding:"6px 11px",borderRadius:9}}>{u}</span>
-              ))}
+              {secili.urunler.map((u:string,i:number)=>{
+                const bilgi=katilimUrunBilgi(u);
+                return(
+                <span key={i} className={bilgi?"press-card":undefined} onClick={()=>{if(bilgi)setUrunSecili({...bilgi,gosterAd:u});}} style={{fontSize:12,fontWeight:600,color:C.soft,background:secili.renk+"1F",border:`1px solid ${secili.renk}40`,padding:"6px 11px",borderRadius:9,cursor:bilgi?"pointer":"default"}}>{u}{bilgi?" ›":""}</span>
+                );
+              })}
             </div>
           </>
         )}
@@ -33004,6 +33043,42 @@ function KatilimSigorta(){
             </div>
           ))}
         </div>
+
+        {urunSecili&&(
+          <div onClick={()=>setUrunSecili(null)} style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.55)",zIndex:9999,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
+            <div onClick={e=>e.stopPropagation()} style={{background:C.bg,border:`1px solid ${WA(0.12)}`,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:560,maxHeight:"82%",overflowY:"auto",padding:"16px 16px 28px",boxSizing:"border-box"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+                <p style={{margin:0,fontSize:16,fontWeight:700,color:baslikRenk}}>{urunSecili.gosterAd}</p>
+                <span onClick={()=>setUrunSecili(null)} style={{fontSize:20,color:WA(0.6),cursor:"pointer",padding:"0 4px"}}>✕</span>
+              </div>
+              <div style={{background:"rgba(91,155,216,0.08)",border:"1px solid rgba(91,155,216,0.2)",borderRadius:12,padding:"11px 13px",marginBottom:12}}>
+                <p style={{margin:0,fontSize:13,color:C.soft,lineHeight:1.55}}>{urunSecili.ne}</p>
+              </div>
+              <p style={{margin:"0 0 6px",...etiket}}>{CV("Genelde neyi kapsar?")}</p>
+              <div style={{...kutu,borderRadius:12,overflow:"hidden",marginBottom:12}}>
+                {urunSecili.kapsam.map((x:string,i:number)=>(
+                  <div key={i} style={{display:"flex",gap:9,padding:"10px 12px",borderBottom:i<urunSecili.kapsam.length-1?`1px solid ${WA(0.06)}`:"none"}}>
+                    <span style={{color:secili.renk,fontSize:13,flexShrink:0}}>✓</span>
+                    <span style={{fontSize:13,color:C.soft,lineHeight:1.45}}>{x}</span>
+                  </div>
+                ))}
+              </div>
+              <p style={{margin:"0 0 6px",...etiket}}>{CV("Dikkat edilecekler")}</p>
+              <div style={{...kutu,borderRadius:12,overflow:"hidden",marginBottom:12}}>
+                {urunSecili.dikkat.map((x:string,i:number)=>(
+                  <div key={i} style={{display:"flex",gap:9,padding:"10px 12px",borderBottom:i<urunSecili.dikkat.length-1?`1px solid ${WA(0.06)}`:"none"}}>
+                    <span style={{color:"#FBBF24",fontSize:13,flexShrink:0}}>!</span>
+                    <span style={{fontSize:13,color:C.soft,lineHeight:1.45}}>{x}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{background:"rgba(45,212,191,0.08)",border:"1px solid rgba(45,212,191,0.25)",borderRadius:12,padding:"10px 13px",marginBottom:12}}>
+                <p style={{margin:0,fontSize:12,color:C.soft,lineHeight:1.5}}>{urunSecili.emk?"Katılım farkı: Birikim, faizli araçlara değil katılım ilkelerine uygun fonlara yatırılır.":"Katılım farkı: Prim, ortak havuza (tekafül) katkı niteliğindedir; havuz faizli araçlarda değerlendirilmez."}</p>
+              </div>
+              <p style={{margin:0,fontSize:10,color:WA(0.6),lineHeight:1.5,textAlign:"center"}}>Genel bilgilendirmedir; teminat, istisna ve primler şirkete göre değişir. Güncel şartlar için şirketin sitesine veya poliçe metnine bakınız.</p>
+            </div>
+          </div>
+        )}
 
         <p style={{margin:"16px 0 0",fontSize:10,color:WA(0.6),textAlign:"center",lineHeight:1.5}}>Bilgiler şirketlerin kurumsal sitelerinden ve basın kaynaklarından derlenmiştir · Ekim 2026. Güncel ürün ve şartlar için şirketin kendi sitesine bakınız.</p>
       </div>
