@@ -5420,6 +5420,7 @@ const ICON_MAP: Record<string, any> = {
   getiriKarsilastirma: BarChart3,
   haftalikOzet: Newspaper,
   katilimBankalari: Landmark,
+  katilimSigorta: ShieldCheck,
   icazetBelgeleri: FileBadge,   // 2026-10-03: belge/sertifika ikonu; FileBadge zaten import edilmiş (yeni import riski yok). Bu harita yoksa Araçlar kartı ve sol menü İKONSUZ görünür.
   egitim: GraduationCap,   // 2026-10-04: Eğitim bölümü (Araçlar kartı + sol menü ikonu)
   musteriPortfoyum: Briefcase,   // 2026-10-04: Müşteri Portföyüm (Araçlar kartı + sol menü ikonu); Briefcase zaten import edilmiş
@@ -13304,7 +13305,7 @@ const EKRAN_KATEGORI: Record<string,string> = {
   // Piyasa & Veriler
   bistHisseTarayici:"piyasa", fonGetiriIzleme:"piyasa", karPayiOranlari:"piyasa", finansalGostergeler:"piyasa", piyasaHaberleri:"piyasa", fiyatAlarmlarim:"piyasa",
   // Araçlar / Hesaplama Araçları
-  finansalTakvim:"arac", vadeTakibi:"arac", katilimBankalari:"arac",
+  finansalTakvim:"arac", vadeTakibi:"arac", katilimBankalari:"arac", katilimSigorta:"arac",
   hazineDoviz:"arac", hazineForward:"arac", hazineSwap:"arac", hazineBono:"arac", hazineSenaryo:"arac", hazineKurMakasi:"arac",
   asistan:"arac", sozluk:"arac", egitim:"arac", musteriPortfoyum:"arac",
 };
@@ -27252,6 +27253,7 @@ function SiteAltBilgi({onEkran}:{onEkran:(sc:string)=>void}){
         {sutun("Bilgi", [
           {ad:"Ekonomi Sözlüğü",       ekran:"ekonomiSozluk"},
           {ad:"Katılım Bankaları",     ekran:"katilimBankalari"},
+          {ad:"Katılım Sigortacılığı", ekran:"katilimSigorta"},
           {ad:"Sektör Verileri",       ekran:"katilimSektoru"},
           {ad:"Kira Sertifikası",      ekran:"kiraSertifikasi"},
         ])}
@@ -32838,6 +32840,228 @@ function KatilimBankalari(){
   );
 }
 
+// ── KATILIM SİGORTACILIĞI (2026-10-12) ──────────────────────────────────────
+// Yalnızca kurumsal sitelerden/basından doğrulanan bilgiler. Doğrulanamayan alanlar (ürün listesi vb.) bilinçli olarak BOŞ bırakıldı → ekranda gizlenir.
+// Logolar: dağıtım betiği (Colab) şirket sitelerinden indirip gömer; indirilemezse harf avatarı gösterilir. İşaretçi: SLOGO yorumu (her şirketin logo alanında)
+const KATILIM_SIGORTA_SIRKETLERI:any[] = [
+  {
+    ad:"Neova Sigorta", kisa:"Neova", renk:"#0E7C66", harf:"N", logo:""/*SLOGO:neova*/,
+    tur:"Hayat Dışı", kurulus:"2009", sahip:"Kuveyt Türk (%100 iştirak, 2020)",
+    site:"neova.com.tr",
+    ozet:"Türkiye'de katılım (tekafül) esaslarına göre kurulan ilk sigorta şirketidir. Hayat dışı branşlarda faaliyet gösterir.",
+    urunler:["Trafik","Kasko","Konut","DASK","Ferdi Kaza","Seyahat"],
+    detaylar:[
+      "2009'da kuruldu; katılım esaslı ilk sigorta şirketidir.",
+      "Mayıs 2020'de Kuveyt Türk'ün %100 iştiraki haline geldi.",
+      "Katılım sigortacılığı alanında hayat dışı prim üretiminde ilk sırada yer almıştır (TSB verisi, 2020).",
+    ],
+  },
+  {
+    ad:"Türkiye Katılım Sigorta", kisa:"Türkiye Katılım Sigorta", renk:"#1D4E89", harf:"T", logo:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAMtElEQVR42sVae3hUxdmfmXPZc/bsfTc3kpB7EBKCXBok4bOBULBpCxWbtLZWrfaBGh/yqGi1tj4cW7WiBWurolT0e74+36curVpFI5iSKAIarhoIuZIbSXaz2Wz2evbcZr4/IDSmlmsS5789M/PO/Gbe9/e+874LwTQ1URSRGwCaHbUaZTVqlTUtgaOozLiiFg6HI7lWnsvEEDp0TTcqmsZIioIIAVGzkRu08IYzJbNyji0tyjv+jWvST8xPTx+EEBIAAIBTvfF1L71rPND8RW4wJC2MxKVrMCb5iqZnAwDS4qpmIYRQFEIKS1MDEMIWo4FtRRC22QW+S8d635pFs71hEA5uHxzUwaZNBEAIAABkTP6UAfie+JKrz+9bdXoo8MO4ohTpmDgJITwmhAIAAAgh5him32UR6mgKvm8WDE3+QGw4Lzs/Wr/pdnnshC/WJhMAnFMtCkaayfRGojcGwvEfR2U5j5zb8LlNawhCv0XgjqdYzW+k25M/WMIOekVRxFe86GTsfMOf3jfsaW4s9QUjVTFZuUHW9HRCCDq/CIIqzzKtPE29b7eaa/Pm5B6trbkl9J/kVbrd1LFX99G3/Ow7gj84bByNY+b0mWEjxUCckeSMJwiMVpCfPnpHaWn06gAQAkt++XR25+DwQ4Fo7LuqjhMIAdT4IQxNe1Ospm1GgX0tCzl6av9co4zXYQAAcLsJ9VrzH5wjMTjvZJ/nWt7AzhmOxDJ1XbcjhBiGRhogUE6ymVsJIMdnOO09pbPyusq+kdUFr0LHjaf6B1d4RoOPReJy4YTbJDRCQZuZ/3BOasrvlvOhk+PVpNLtps4cPGMdjYYyIY1KBkaCqxRNL5YU1QkAAQjCCENRXgqh9kSbpb4wM3l/QZa19dP29nCDKGpXpUKEEFhU/WiWNxKrDkSk21VNd04cYuINx+wC91xhRsrfa8Wa86pSJoq0ZxjNDoaiy6OyVq6o6kJZ05POMZEkcOxJmkIHTBy7P9XqOrpqycpesapQmVQbKP/VlvxDXf3PRmLyMkyIYXwfhZBiN/HuHGfCb3lHrGv8aX33sW2ph9t6NgQisbWqjtMwxvwYG1l57lOXRXiR5Y0fWSnWd2DrvfFJZyFRFNGeqLHoZK9nRzAWnz9xLk2hQKLF8tyiZOvT7zz1YHhM/pJ7t9p90dDafv/IQ5KiZY/NQwhJHE2fyEx0/LEie/E//vDAquiVqDJ9qQMbYo4ZTT1dW8KSvGBiH8fQ3iS79bfz8jP/+s6Dd4YBAKCy0k21pHYUt3gGasKSXKHpumXsxA0M3ekwCzvSXHZ3oyna0/zAqium0UsGkJCs+dMi9r+3DQwV6zo2jdu8Ly3RtnH5/FT39vV3qme970tM/aETP+jtDT6qaFrOGKVCCDWbybjHaRIeWb4wpWn7+vXq1VL4RQE889Yx2z9aum0Foe/3up8H24qqH/e1erxPKZqeQUEUMwvGZ/IY19/GNlMputk9nzX9uD8wulnV9MRx9hG1CfzOhfnZD+4R7xrqmCTvSV1sgHD9zUsaewLPtMGW3k8Czb15NtTqGZbbNB3PNhu5j2anpz75zy1nmaZy61a+sbP75wMjwSd1Hds4lvFTCHWaOPagUxBeWZSW8dQHj1X7JzNkuegNHDw9lBaQlKWSqj/X1Gy659SmdR9W2XfWtnzc0WGz8MF9T9T4xuj125v+VCLFtdJ0l+1liOBRC8N2eodHvInJ6WGbLRh5T6zWJjvmghfj/OT733jQG5R+DwAALIP8aXZTjZ1l3z4ifi/2VSGFbOjDY+pECDkbO14iJU46ALebUL85/tazbUPBu89fGUI+l4ndUpjoerHuoW8FJwKueuYg59MC1qGwlKGoZOaK2akHXrytpH+qAFxQhcTmnVQ4jtPGf9MwTvBF5Ifb6JHkaveJRxIBAH/7oj3JZTbMnbHx9WINg6LRuJJNMLFaeEN3KKrXTeV744I3sPLp3cLejsG9mk6Kv2IisfDMUR0DTtFwpqLrwvh+BEE8O8G0oeOJypenEgC6UGd+mmClEBK+0j4AgEFJXRiR1YKJmwcAEsHANBpZ9MFUv/guCODUmbALEiJcNjcjEDfx7JsO4PBMNQD632MegnaD3bZhLVxypG/kflnD6ZcrlKVRe5bFtKvhkWXatAIof6LOuSPgXhmKa1UxRS1XdWC63IgVQqCnWIz/nfpFpHs6sh0QAABuf7WeOz4QKu8aDN0XUfQFGBMrucLnptXIHr8u01m++74bRqYDAL1i64dz3/vC+/BIVF6jn4vRr6YxELSn2A2x6co3IX84nqhpOGxg0ACEUL9agQFJq/j0tG+tKIpoOgBQg/X/1/0/jS31TsG8y8oxXbKmp2iYOMlFGOoC4QcblXHuqDVz70D96/5psYHxv+96YZ/tI4+von9Eui2qanN1HSeQS4hav+zEoOI0G7bkplG/O3hflfS1eOI7dnxibmj3LPZH5ceDklJ8uYI5hurJcgi3nnr8po+/Fkf2yp1Lw7dyN+01cfSeKxEsq/rMoaj8SLW73vS1eWJRhDjBwh5BCH2FQ4LEQFOdCSbulVSr8KaFYw/SCLWyFOqlEPRCCIMhSV1c3zT6c7G+np4qABcVPDfZ8fmJM6EYBsAy3lYFljqZ4zLdc/fq9I9PDFnRnoZmNmUmLZiNvLOlL+AMKrrTzCGXquF4Z59iAABoXwuAeJjxOIyGrqGwNG+cfrek2oW71qLPD6xfdONYRkFuBSAMADgX/xBYLT4KAdgExFun7kFzUXapWpKOG+PO4piiXQsAAAYKdc+wCht/ali7VxSXfSkdstX9gSOasWDFaGZh1qzlR5ynQkCo63nbMHfNLUzR/BtwR2OtPu0AGhoaSMaKn6b5o/JKI0v1pjuF+8szM9/bsnEGnh80LMm4fiXo318XAgAA9F/FuKNruDQSk7f4Q5HbhsPRKg2QG8ORyLeHtVja4oqKk12f/FOaVgAAAGBcstagY7I0ycLdu+Basuuvt67Qix/YXNHc4/2LJGuOirU3729ueF/pqK3Vc3/xkybKr/SEJblc1rSZmo5TJEXNicWVkkBMzbqu4ubPuvfXhqYVQOma25W0RFujSTXtFRpigOx7a3lrn3dbXFGz44o6LxBX1IWl5ce6DzUog7t24W/96u7WqCfSKSlKkY6xAwCACAC0rGpzAtHowqySVe3LVld7mxt2XrVKXXLESQiBEEKSv27T0r7h0T9KqrpgbD6FUMxuMj6fZXVtPfTCLz1jqcXTqd3zOj3eeyJxebWmY+uYKAND91mN3CvJTvPra+16+7RVaMpEke7u1Z/vGfbfObGQgRCUbILxjYKCGQ/v+/W9g2Pfl971e/ugLq0e8Ad/LSlq7vnkLoQyzzKn0l22ZxfOcbz5vzU1oSkHAAAAZRs2p33uG9oSjMVXY0K4Ca8Z7LII+1xmw8a5SVTTTlE8n9v/0eYdM/a3dv3CFwzfpKh6BibYeDZdCrGV5485LPzLFE3tsSSleA5vWidNaZGvaIOY5h2V149GYz+TVXXGRDkcy3TYTfwLualJr+974l+3Uel2U72HurN7vaPfjMrxFYqqL1Y0LQ2fK7UaGLqDodAnAsd+lJ7oOPyTZYW9NRUV8qQDOKtOr3L9gz3FQ6GwGIrGrx9fjTyrIigqcMzxnOSkp/OWZtfurKpSxr+73x3YbB7V4+k8xxR7RgOrFFW/LhJXkwHAFIQowlDIS1FUR6JVaMidmXRg1fzC1tfebQsefmmdNv52rrpKWSE+n/x5z2CNLxj8kabhVEwI++UMBYw5LcJbFoPxOScPmj9zggiYYLQiIejk5u1mhJicAy2dxQjCoqgsZwTCUiJNIY6hKIwQjCVYTT08azil6Fr34lmZnUsLCpompcxaJor00BBT6A0GfyApypq4os7CmDD/Mg2IDTTt4xi6ziIY3klj7Q37t93v+096Xul2U6fr6pDTksfmZmWYY0r0S7bmsHJ6TtbcQHVZQXRSK/VlosiNnKFSArp8Q0iK3RGKydcSQujxQBCEISPLtNpMxl05KYlv52eUtm5fv0idFhq9nLbuSbf1sKej/LTHf7OkqAtUHTsAAEaMMTO2LsvQQSPLHncK/C4jze/XeNKNQ8HINxfnxLevX6+BCfXkaQVwXr9fred2tx3J7B4YLsAYXCOpyjWqqs+CAGRKimYnECAEAKAoFOBZtkPHepuBZrp4A9Nl5thui9E8UH7d7EDE0xH688iIeu4PH2TaAIw/rDKxnlJjjbwvFLJgFSWyND2TYencPn9gpo5JsoU3pGACElVN5xGCCkNRISPHDAmsYRhC0Jed4jpakp97+J7vl/WM2c//A/URAwFu9fUPAAAAAElFTkSuQmCC"/*SLOGO:tkatilim*/,
+    tur:"Hayat Dışı", kurulus:"", sahip:"Türkiye Varlık Fonu",
+    site:"turkiyekatilimsigorta.com.tr",
+    ozet:"Türkiye Varlık Fonu'na bağlı katılım sigortacılığı şirketidir; hayat dışı branşlarda faaliyet gösterir.",
+    urunler:[],
+    detaylar:[
+      "Katılım (tekafül) ilkeleriyle çalışan, Türkiye Varlık Fonu bünyesindeki sigorta şirketidir.",
+      "Aynı çatı altında Türkiye Katılım Emeklilik ve Hayat şirketi hayat ve emeklilik branşlarında hizmet verir.",
+    ],
+  },
+  {
+    ad:"Türkiye Katılım Emeklilik ve Hayat", kisa:"Türkiye Katılım Hayat", renk:"#1D4E89", harf:"T", logo:"data:image/png;base64,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"/*SLOGO:tkatilim*/,
+    tur:"Hayat & Emeklilik", kurulus:"", sahip:"Türkiye Varlık Fonu",
+    site:"turkiyekatilimsigorta.com.tr",
+    ozet:"Türkiye Varlık Fonu'na bağlı katılım esaslı hayat ve emeklilik şirketidir.",
+    urunler:[],
+    detaylar:[
+      "Hayat ve bireysel emeklilik branşlarında katılım ilkelerine uygun ürünler sunar.",
+    ],
+  },
+  {
+    ad:"HDI Katılım Sigorta", kisa:"HDI Katılım", renk:"#00704A", harf:"H", logo:"data:image/png;base64,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"/*SLOGO:hdi*/,
+    tur:"Hayat Dışı", kurulus:"", sahip:"",
+    site:"hdikatilimsigorta.com.tr",
+    ozet:"Kasko, konut ve işyeri başta olmak üzere hayat dışı branşlarda katılım esaslı ürünler sunar.",
+    urunler:["Süper Kasko","Ekonomik Kasko","Pert Araç Kasko","Konut","DASK","İş Yeri","Nakliyat","Mühendislik","Sorumluluk"],
+    detaylar:[
+      "Katılım sigortacılığı ilkelerini ve çalışma modellerini kendi sitesinde ayrıntılı olarak anlatır.",
+      "Bireysel (kasko, konut, DASK) ve ticari (iş yeri, nakliyat, mühendislik, sorumluluk) ürün grupları vardır.",
+    ],
+  },
+  {
+    ad:"Bereket Sigorta", kisa:"Bereket Sigorta", renk:"#2E7D32", harf:"B", logo:"data:image/png;base64,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"/*SLOGO:bereket*/,
+    tur:"Hayat Dışı", kurulus:"", sahip:"Tarım Kredi Grubu",
+    site:"bereket.com.tr",
+    ozet:"Tarım Kredi Grubu bünyesinde katılım esaslı hayat dışı sigorta ürünleri sunar; tarım sigortaları da portföyündedir.",
+    urunler:["Kasko","Trafik","Yeşil Kart","Konut","DASK","Kritik Hastalıklar","Seyahat Sağlık","Ferdi Kaza","İş Yeri","Tarım Sigortaları","Bereketli KOBİ Paket","Devlet Destekli Alacak"],
+    detaylar:[
+      "Tarım Kredi Grubu çatısı altında faaliyet gösterir.",
+      "Bireysel, KOBİ ve tarım odaklı ürün yelpazesi sunar; internetten teklif alınabilir.",
+      "Ürünlerin katılım ilkelerine uygunluğu Danışma Komitesi tarafından denetlenir.",
+    ],
+  },
+  {
+    ad:"Bereket Emeklilik ve Hayat", kisa:"Bereket Emeklilik", renk:"#2E7D32", harf:"B", logo:"data:image/png;base64,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"/*SLOGO:bereket*/,
+    tur:"Hayat & Emeklilik", kurulus:"", sahip:"Tarım Kredi Grubu",
+    site:"bereket.com.tr",
+    ozet:"Bireysel emeklilik, hayat ve kritik hastalık ürünlerini katılım esaslı fonlarla sunar.",
+    urunler:["Bireysel Emeklilik","Grup Emeklilik","Otomatik Katılım","Hayat","18 Yaş Altı BES","Ekin Emeklilik Planı","Kritik Hastalıklar"],
+    detaylar:[
+      "Emeklilik fonları katılım ilkelerine göre yönetilir.",
+      "Çocuklar için 18 yaş altı BES planı bulunur.",
+    ],
+  },
+  {
+    ad:"Katılım Emeklilik ve Hayat", kisa:"Katılım Emeklilik", renk:"#7A1F5C", harf:"K", logo:""/*SLOGO:katilimemeklilik*/,
+    tur:"Hayat & Emeklilik", kurulus:"", sahip:"",
+    site:"katilimemeklilik.com.tr",
+    ozet:"Bireysel emeklilik, otomatik katılım, sağlık, hayat ve ferdi kaza ürünlerini katılım ilkeleriyle sunan emeklilik ve hayat şirketidir.",
+    urunler:["Bireysel Emeklilik","Otomatik Katılım","Emeklilik Fonları","Sağlık","Hayat","Ferdi Kaza","Kadınca Güven Kritik Hastalık","Yurt Dışı Seyahat Sağlık"],
+    detaylar:[
+      "Katılım Cep ve Katılım Sağlık adlı sağlık odaklı paketleri vardır.",
+      "Kritik hastalık ve yurt dışı seyahat sağlık sigortası sunar.",
+      "Ürünlerin katılım ilkelerine uygunluğu Danışma Komitesi tarafından denetlenir.",
+    ],
+  },
+];
+
+const KATILIM_SIGORTA_ILKELER:{b:string;a:string}[] = [
+  {b:"Faizsiz yapı", a:"Fonlar faizli araçlara yatırılmaz; yatırımlar katılım ilkelerine uygun yapılır."},
+  {b:"Ortak havuz (tekafül)", a:"Katılımcılar katkılarıyla ortak bir havuz oluşturur; hasarlar bu havuzdan karşılanır."},
+  {b:"Fazlanın paylaşımı", a:"Hasar ve giderlerden artan tutar, şirketin kendi modeline göre katılımcılarla paylaşılabilir."},
+  {b:"Danışma Komitesi", a:"Ürün ve uygulamaların katılım ilkelerine uygunluğunu bağımsız bir komite denetler."},
+];
+
+function KatilimSigorta(){
+  const [secili,setSecili]=useState<any>(null);
+  const turRenk:any={"Hayat Dışı":C.blue,"Hayat & Emeklilik":C.purple};
+  const kutu:any={background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`};
+  const etiket:any={fontSize:11,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")};
+  const baslikRenk=(TEMA==="acik"?C.label:"#fff");
+  const Avatar=({s,boy,yaz}:{s:any;boy:number;yaz:number})=>(
+    <div style={{width:boy,height:boy,borderRadius:s.logo?10:boy>50?16:12,background:s.logo?"#fff":s.renk,display:"flex",alignItems:"center",justifyContent:"center",fontSize:yaz,fontWeight:700,color:"#fff",flexShrink:0,overflow:"hidden",padding:s.logo?4:0,boxSizing:"border-box"}}>
+      {s.logo ? <img src={s.logo} alt="" style={{width:"100%",height:"100%",objectFit:"contain",display:"block"}}/> : s.harf}
+    </div>
+  );
+
+  if(secili){
+    return(
+      <div style={{background:C.bg,padding:"12px 14px 92px",minHeight:"100%"}}>
+        <div onClick={()=>setSecili(null)} style={{display:"inline-flex",alignItems:"center",gap:6,color:C.blue,fontSize:13,fontWeight:700,cursor:"pointer",marginBottom:14}}>‹ Şirketler listesi</div>
+
+        <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:16}}>
+          <Avatar s={secili} boy={60} yaz={28}/>
+          <div style={{flex:1,minWidth:0}}>
+            <p style={{margin:0,fontSize:17,fontWeight:700,color:baslikRenk,lineHeight:1.25}}>{secili.ad}</p>
+            <div style={{display:"flex",alignItems:"center",gap:6,marginTop:5,flexWrap:"wrap"}}>
+              <span style={{fontSize:10,fontWeight:700,color:turRenk[secili.tur],background:turRenk[secili.tur]+"22",padding:"3px 8px",borderRadius:6}}>{secili.tur}</span>
+              {secili.kurulus&&<span style={{fontSize:11,color:WA(0.6)}}>Kuruluş: {secili.kurulus}</span>}
+            </div>
+          </div>
+        </div>
+
+        <div style={{background:"rgba(91,155,216,0.08)",border:"1px solid rgba(91,155,216,0.2)",borderRadius:14,padding:"13px 15px",marginBottom:14}}>
+          <p style={{margin:0,fontSize:13,color:C.soft,lineHeight:1.55}}>{secili.ozet}</p>
+        </div>
+
+        {secili.sahip&&(
+          <div style={{...kutu,borderRadius:12,padding:"11px 12px",marginBottom:10}}>
+            <p style={{margin:0,...etiket}}>{TR("Ortaklık Yapısı")}</p>
+            <p style={{margin:"3px 0 0",fontSize:13,fontWeight:700,color:baslikRenk,lineHeight:1.3}}>{secili.sahip}</p>
+          </div>
+        )}
+
+        {secili.urunler.length>0&&(
+          <>
+            <p style={{margin:"6px 0 8px",fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{CV("Ürün ve Branşlar")}</p>
+            <div style={{display:"flex",flexWrap:"wrap",gap:7,marginBottom:16}}>
+              {secili.urunler.map((u:string,i:number)=>(
+                <span key={i} style={{fontSize:12,fontWeight:600,color:C.soft,background:secili.renk+"1F",border:`1px solid ${secili.renk}40`,padding:"6px 11px",borderRadius:9}}>{u}</span>
+              ))}
+            </div>
+          </>
+        )}
+
+        {secili.site&&(
+          <div style={{...kutu,borderRadius:12,marginBottom:16,overflow:"hidden"}}>
+            <a href={`https://www.${secili.site}`} target="_blank" rel="noopener noreferrer" style={{textDecoration:"none",display:"flex",alignItems:"center",gap:10,padding:"11px 13px"}}>
+              <span style={{fontSize:14,flexShrink:0}}>🌐</span>
+              <div style={{flex:1,minWidth:0}}>
+                <p style={{margin:0,...etiket}}>{TR("Web Sitesi")}</p>
+                <p style={{margin:"2px 0 0",fontSize:13,fontWeight:700,color:C.blue}}>www.{secili.site}</p>
+              </div>
+              <span style={{color:WA(0.6),fontSize:14}}>↗</span>
+            </a>
+          </div>
+        )}
+
+        <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{CV("Öne Çıkanlar")}</p>
+        <div style={{...kutu,borderRadius:14,overflow:"hidden"}}>
+          {secili.detaylar.map((d:string,i:number)=>(
+            <div key={i} style={{display:"flex",gap:10,padding:"12px 14px",borderBottom:i<secili.detaylar.length-1?`1px solid ${WA(0.06)}`:"none"}}>
+              <span style={{color:secili.renk,fontSize:14,flexShrink:0,marginTop:1}}>◆</span>
+              <span style={{fontSize:13,color:C.soft,lineHeight:1.5}}>{d}</span>
+            </div>
+          ))}
+        </div>
+
+        <p style={{margin:"16px 0 0",fontSize:10,color:WA(0.6),textAlign:"center",lineHeight:1.5}}>Bilgiler şirketlerin kurumsal sitelerinden ve basın kaynaklarından derlenmiştir · Ekim 2026. Güncel ürün ve şartlar için şirketin kendi sitesine bakınız.</p>
+      </div>
+    );
+  }
+
+  return(
+    <div style={{background:C.bg,padding:"12px 14px 92px",minHeight:"100%"}}>
+      <div style={{background:"linear-gradient(160deg, rgba(91,155,216,0.10), rgba(45,212,191,0.04))",border:"1px solid rgba(91,155,216,0.25)",borderRadius:16,padding:"14px 16px",marginBottom:14}}>
+        <p style={{margin:0,fontSize:14,fontWeight:700,color:baslikRenk}}>🛡️ Katılım Sigortacılığı</p>
+        <p style={{margin:"5px 0 0",fontSize:12,color:WA(0.6),lineHeight:1.5}}>Faizsiz ilkelere göre çalışan, ortak havuz (tekafül) esaslı sigorta. Türkiye'deki {KATILIM_SIGORTA_SIRKETLERI.length} katılım sigorta ve emeklilik şirketi aşağıda. Detay için birine dokun.</p>
+      </div>
+
+      <div style={{display:"flex",gap:8,marginBottom:14}}>
+        {[
+          {d:"48,8 milyar ₺",e:"2026 ilk yarı prim üretimi"},
+          {d:"%50,1",e:"yıllık prim artışı"},
+          {d:"%7,5",e:"hayat dışı pazar payı (Haz. 2026)"},
+        ].map((k,i)=>(
+          <div key={i} style={{flex:1,...kutu,borderRadius:12,padding:"10px 8px",textAlign:"center"}}>
+            <p style={{margin:0,fontSize:14,fontWeight:700,color:baslikRenk}}>{k.d}</p>
+            <p style={{margin:"3px 0 0",fontSize:10,color:WA(0.6),lineHeight:1.3}}>{k.e}</p>
+          </div>
+        ))}
+      </div>
+
+      <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{CV("Nasıl Çalışır?")}</p>
+      <div style={{...kutu,borderRadius:14,overflow:"hidden",marginBottom:16}}>
+        {KATILIM_SIGORTA_ILKELER.map((p,i)=>(
+          <div key={i} style={{padding:"11px 14px",borderBottom:i<KATILIM_SIGORTA_ILKELER.length-1?`1px solid ${WA(0.06)}`:"none"}}>
+            <p style={{margin:0,fontSize:13,fontWeight:700,color:baslikRenk}}>{p.b}</p>
+            <p style={{margin:"3px 0 0",fontSize:12,color:C.soft,lineHeight:1.5}}>{p.a}</p>
+          </div>
+        ))}
+      </div>
+
+      <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{CV("Şirketler")}</p>
+      {KATILIM_SIGORTA_SIRKETLERI.map((s,i)=>(
+        <div className="press-card" key={i} onClick={()=>setSecili(s)} style={{
+          display:"flex",alignItems:"center",gap:13,...kutu,
+          borderRadius:14,padding:"12px 14px",marginBottom:9,cursor:"pointer",
+        }}>
+          <Avatar s={s} boy={46} yaz={21}/>
+          <div style={{flex:1,minWidth:0}}>
+            <p style={{margin:0,fontSize:14,fontWeight:700,color:baslikRenk,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.kisa}</p>
+            <div style={{display:"flex",alignItems:"center",gap:6,marginTop:3}}>
+              <span style={{fontSize:9,fontWeight:700,color:turRenk[s.tur],background:turRenk[s.tur]+"22",padding:"2px 7px",borderRadius:5}}>{s.tur}</span>
+              {s.sahip&&<span style={{fontSize:11,color:WA(0.6),overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.sahip.replace(/ \(.*\)/,"")}</span>}
+            </div>
+          </div>
+          <span style={{color:WA(0.6),fontSize:18,flexShrink:0}}>›</span>
+        </div>
+      ))}
+      <p style={{margin:"10px 0 0",fontSize:10,color:WA(0.6),textAlign:"center",lineHeight:1.5}}>Sektör rakamları basında yayımlanan TSB/SEDDK verilerine dayanır. Bu ekran tanıtım amaçlıdır; sigorta satışı veya tavsiye değildir.</p>
+    </div>
+  );
+}
+
 // ── FİNANSAL TAKVİM BİLDİRİMLERİ (2026-10-09) ───────────────────────────────
 // Kategori (PPK, FED, ZK, TL Payı, Kredi Büyüme) bazında YEREL bildirim: telefon kendi zamanlar (sunucu yok; bkz. bmLN notu).
 // Ayar: {kat:{ppk:true,...}, once:0|1|3} — "once" = olaydan kaç gün önce; 0 → aynı gün 09:00, diğerleri 10:00.
@@ -34441,6 +34665,7 @@ const MENU = {
   getiriKarsilastirma:{title:"Getiri Karşılaştırma",back:"home"},
   haftalikOzet:{title:"Haftalık Piyasa Özeti",back:"home"},
   katilimBankalari:{title:"Katılım Bankaları",back:"araclarMenu"},
+  katilimSigorta:{title:"Katılım Sigortacılığı",back:"araclarMenu"},
   icazetBelgeleri:{title:"İcazet Belgeleri",back:"araclarMenu"},
   egitim:{title:"Eğitim",back:"araclarMenu"},
   musteriPortfoyum:{title:"Müşteri Portföyüm",back:"araclarMenu"},
@@ -34486,7 +34711,7 @@ const TAB_OF_SCREEN:any = {
   hazineDoviz:"hesapla", hazineForward:"hesapla", hazineSwap:"hesapla",
   hazineBono:"hesapla", hazineSenaryo:"hesapla", hazineKurMakasi:"hesapla",
   piyasaHaberleri:"piyasa", finansalGostergeler:"piyasa",
-  araclarMenu:"araclar", sozluk:"araclar", egitim:"araclar", musteriPortfoyum:"araclar", vadeTakibi:"araclar", katilimBankalari:"araclar", kfkNedir:"araclar", zekatHesabi:"araclar", birikimHesaplayici:"araclar", erkenKapamaKarari:"hesapla", erkenKapamaKomisyonu:"hesapla", vadeFarkiKarari:"hesapla", teklifKarsilastirma:"hesapla", tlYpKarari:"hesapla", kiraSertifikasi:"araclar", getiriKarsilastirma:"araclar", haftalikOzet:"araclar", portfoyum:"araclar", fonDetay:"araclar",
+  araclarMenu:"araclar", sozluk:"araclar", egitim:"araclar", musteriPortfoyum:"araclar", vadeTakibi:"araclar", katilimBankalari:"araclar", katilimSigorta:"araclar", kfkNedir:"araclar", zekatHesabi:"araclar", birikimHesaplayici:"araclar", erkenKapamaKarari:"hesapla", erkenKapamaKomisyonu:"hesapla", vadeFarkiKarari:"hesapla", teklifKarsilastirma:"hesapla", tlYpKarari:"hesapla", kiraSertifikasi:"araclar", getiriKarsilastirma:"araclar", haftalikOzet:"araclar", portfoyum:"araclar", fonDetay:"araclar",
   asistan:"yapayzeka",
   profil:"profil",
 };
@@ -34509,6 +34734,7 @@ const SIDEBAR_GRUPLARI: {baslik:string; varsayilanAcik:boolean; ogeler:{key:stri
     {key:"egitim",label:"Eğitim"},
     {key:"kiraSertifikasi",label:"Kira Sertifikası İhraçları"},
     {key:"katilimBankalari",label:"Katılım Bankaları"},
+    {key:"katilimSigorta",label:"Katılım Sigortacılığı"},
     {key:"icazetBelgeleri",label:"İcazet Belgeleri"},
     {key:"kfkNedir",label:"Katılım Finans Kefalet (KFK) Nedir?"},
     {key:"katilimSektoru",label:"Katılım Bankacılığı Sektörü"},
@@ -34587,6 +34813,7 @@ const SCREEN_TO_PATH: Record<string,string> = {
   gecmis: "/son-hesaplamalar",
   vadeTakibi: "/vade-takip",
   katilimBankalari: "/katilim-bankalari",
+  katilimSigorta: "/katilim-sigortaciligi",
   kfkNedir: "/kfk-nedir",
   zekatHesabi: "/zekat-hesaplayici",
   birikimHesaplayici: "/birikim-hesaplayici",
@@ -34715,6 +34942,7 @@ const MENU_ARAMA_LIST=[
   {key:"getiriKarsilastirma",label:"Getiri Karşılaştırma",                        icon:"📊", grup:"Araçlar", alt:["getiri","karşılaştırma","dolar","euro","altın","gümüş","bist","katılım endeksi","performans"]},
   {key:"haftalikOzet",       label:"Haftalık Piyasa Özeti",                       icon:"📰", grup:"Araçlar", alt:["haftalık","bülten","özet","piyasa","hafta"]},
   {key:"katilimBankalari",   label:"Katılım Bankaları",                          icon:"🏛️", grup:"Araçlar"},
+  {key:"katilimSigorta",     label:"Katılım Sigortacılığı",                      icon:"🛡️", grup:"Araçlar", alt:["sigorta","tekafül","katılım sigorta","bereket","neova","hdi","emeklilik","bes"]},
   {key:"kfkNedir",           label:"Katılım Finans Kefalet (KFK) Nedir?",         icon:"🤝", grup:"Araçlar", alt:["kfk","kefalet","katılım finans kefalet","kgf","teminat","kobi"]},
   {key:"katilimSektoru",     label:"Katılım Bankacılığı Sektörü",               icon:"🏦", grup:"Araçlar", alt:["sektör","bddk","pay","aktif","toplanan fon","kullandırılan fon","katılma hesabı","özel cari","roe","kârlılık"]},
   {key:"icazetBelgeleri",    label:"İcazet Belgeleri",                          icon:"📑", grup:"Araçlar", alt:["icazet","icazet belgesi","danışma komitesi","faizsiz","uygunluk","fetva","murabaha","katılma hesabı","belge"]},
@@ -46927,6 +47155,7 @@ function App(){
             ]},
             {baslik:"KATILIM BANKACILIĞI", items:[
               {key:"katilimBankalari", label:"Katılım Bankaları", desc:"Türkiye'deki katılım bankaları, kuruluş tarihleri ve bilgileri"},
+              {key:"katilimSigorta", label:"Katılım Sigortacılığı", desc:"Katılım sigorta ve emeklilik şirketleri, ürünleri ve çalışma ilkeleri"},
               {key:"katilimSektoru", label:"Katılım Bankacılığı Sektörü", desc:"Sektör payı, fon büyüklükleri ve kârlılık — BDDK resmî verisiyle"},
               {key:"icazetBelgeleri", label:"İcazet Belgeleri", desc:"Banka ve ürün seç, bankanın kendi yayımladığı icazet belgesine git"},
               {key:"kfkNedir", label:"Katılım Finans Kefalet (KFK) Nedir?", desc:"9 kefalet paketi, size uygun olanı bulun — Katılım Finans Kefalet A.Ş."},
@@ -47302,6 +47531,7 @@ function App(){
         {screen==="finansalTakvim"&&<FinansalTakvim/>}
         {screen==="vadeTakibi"&&<VadeTakibi/>}
         {screen==="katilimBankalari"&&<KatilimBankalari/>}
+        {screen==="katilimSigorta"&&<KatilimSigorta/>}
         {screen==="icazetBelgeleri"&&<IcazetBelgeleri/>}
         {screen==="egitim"&&<Egitim kimlik={kimlik} nav={nav}/>}
         {screen==="musteriPortfoyum"&&<MusteriPortfoyumEkrani kimlik={kimlik} nav={nav} girisAc={musteriPortfoyuIcinHesapAc} geri={back}/>}
@@ -47344,7 +47574,7 @@ function App(){
         {screen==="gizlilikPolitikasi"&&<GizlilikPolitikasi/>}
 
         {/* ── YASAL UYARI FOOTER ── */}
-        {!["home","hesaplaMenu","piyasaMenu","araclarMenu","asistan","sozluk","finansalTakvim","finansalGostergeler","vadeTakibi","katilimBankalari","piyasaHaberleri","ayarlar","profil"].includes(screen)&&(
+        {!["home","hesaplaMenu","piyasaMenu","araclarMenu","asistan","sozluk","finansalTakvim","finansalGostergeler","vadeTakibi","katilimBankalari","katilimSigorta","piyasaHaberleri","ayarlar","profil"].includes(screen)&&(
           <div style={{
             margin:"4px 16px 28px",
             padding:"10px 14px",
