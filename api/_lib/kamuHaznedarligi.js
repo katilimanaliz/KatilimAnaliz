@@ -34,6 +34,9 @@ const KV_VERI = "khz:veri:v1";
 const KV_SERI = "khz:seri:v1";
 const KV_KONTROL_KILIT = "khz:kilit:kontrol";
 const KV_KALIBRE_KILIT = "khz:kilit:kalibre";
+const KV_ABONE = "khz:abone:v1";           // hash: push token → {gun, ts}
+const KV_BILDIRILDI = "khz:bildirildi:v1"; // son bildirilen kaydin yururluk tarihi (cift gonderimi onler)
+const CRON_ARALIK_MS = 15 * 60 * 1000;
 const KONTROL_ARALIK_MS = 3 * 3600 * 1000;
 const KALIBRE_DENEME_ARALIK_SN = 1800;    // başarısız kalibrasyon 30 dk'da bir denenir
 const VADE_GRUPLARI = ["1", "3", "6", "12"];   // 1 ay, 3 ay, 6 ay, 1 yıl (AOMF vade dilimi)
@@ -265,10 +268,10 @@ async function evdsGozlemleri(apiKey, harita) {
   return gozlem;
 }
 
-async function guncelle(apiKey, zorla, teshis) {
+async function guncelle(apiKey, zorla, teshis, aralikMs = KONTROL_ARALIK_MS) {
   const v = await veriOku();
   const simdi = Date.now();
-  if (!zorla && v.sonKontrol && simdi - v.sonKontrol < KONTROL_ARALIK_MS) return v;
+  if (!zorla && v.sonKontrol && simdi - v.sonKontrol < aralikMs) return v;
 
   let kilit = false;
   try { const s = await redis.set(KV_KONTROL_KILIT, "1", { nx: true, ex: zorla ? 20 : 120 }); kilit = (s === "OK" || s === true); } catch {}
@@ -281,6 +284,7 @@ async function guncelle(apiKey, zorla, teshis) {
     teshis.gozlemSayisi = gozlem.length;
     const bugun = istanbulBugunIso();
     let degisti = false;
+    const oncekiSon = v.kayitlar[v.kayitlar.length - 1];
     for (const g of gozlem) {
       const son = v.kayitlar[v.kayitlar.length - 1];
       const gecerli = yururlukTarihi(g.iso, bugun);
@@ -293,12 +297,114 @@ async function guncelle(apiKey, zorla, teshis) {
     v.seriDurumu = "hazir";
     await veriYaz(v);
     teshis.degisti = degisti;
+    if (degisti) {
+      try { teshis.bildirim = await degisimBildir(oncekiSon, v.kayitlar[v.kayitlar.length - 1]); } catch (e) { teshis.bildirimHata = e.message; }
+    }
   } catch (e) {
     teshis.hata = e.message;
   } finally {
     try { await redis.del(KV_KONTROL_KILIT); } catch {}
   }
   return v;
+}
+
+
+// ── Alarm: oran değişince push bildirimi ───────────────────────────────────
+const AYLAR = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
+function tarihYazi(iso) { const [y, m, d] = String(iso).split("-").map(Number); return `${d} ${AYLAR[m - 1]} ${y}`; }
+function trSayi(v, n) { return Number(v).toFixed(n).replace(".", ","); }
+function gunAraligi(vade) {
+  const t = String(vade || "").toLocaleLowerCase("tr");
+  if (t.includes("gecelik")) return [1, 1];
+  let m = /(\d+)\s*güne\s*kadar/.exec(t); if (m) return [2, parseInt(m[1], 10)];
+  m = /(\d+)\s*gün\s*-\s*(\d+)\s*gün/.exec(t); if (m) return [parseInt(m[1], 10), parseInt(m[2], 10)];
+  m = /(\d+)\s*gün\s*üzeri/.exec(t); if (m) return [parseInt(m[1], 10), Infinity];
+  return null;
+}
+// Ekrandaki gösterim kuralı (FiyatlamaPro khzGosterim ile aynı): 3. ondalık >=5 ise 2 ondalığa yuvarla, 4 hane göster
+function getiriYazi(ref, oran) {
+  const x = Math.round(ref * oran * 100) / 10000;
+  const ham = Math.round(x * 10000) / 10000;
+  const ucuncu = Math.floor(Math.round(ham * 10000) / 10) % 10;
+  return "%" + trSayi(ucuncu >= 5 ? Math.round(ham * 100) / 100 : ham, 4);
+}
+function satirBul(kayit, gun) {
+  for (const k of (kayit.katsayi || KATSAYI_VARSAYILAN)) {
+    const a = gunAraligi(k.vade);
+    if (a && gun >= a[0] && gun <= a[1]) return k;
+  }
+  return null;
+}
+async function degisimBildir(onceki, yeni) {
+  if (!onceki || !yeni || onceki.gecerli === yeni.gecerli) return { gonderilen: 0, not: "kayit yok" };
+  try { if ((await redis.get(KV_BILDIRILDI)) === yeni.gecerli) return { gonderilen: 0, not: "zaten bildirildi" }; } catch {}
+  try { await redis.set(KV_BILDIRILDI, yeni.gecerli); } catch {}
+  const aboneler = await redis.hgetall(KV_ABONE);
+  const tokenlar = Object.keys(aboneler || {});
+  if (!tokenlar.length) return { gonderilen: 0, not: "abone yok" };
+  const yur = tarihYazi(yeni.gecerli);
+  const genel = `Yeni AOMF: 1 ay ${trSayi(yeni.ref["1"], 2)} · 3 ay ${trSayi(yeni.ref["3"], 2)} · 6 ay ${trSayi(yeni.ref["6"], 2)} · 1 yıl ${trSayi(yeni.ref["12"], 2)}. Yürürlük: ${yur}.`;
+  const gruplar = new Map();   // gövde → tokenlar
+  for (const t of tokenlar) {
+    let a = aboneler[t]; if (typeof a === "string") { try { a = JSON.parse(a); } catch { a = {}; } }
+    const gun = a && Number.isInteger(a.gun) && a.gun >= 1 ? a.gun : null;
+    let govde = genel;
+    if (gun) {
+      const k0 = satirBul(onceki, gun), k1 = satirBul(yeni, gun);
+      if (!k1) continue;
+      const e = k0 ? getiriYazi(onceki.ref[k0.ref], k0.oran) : null;
+      const y = getiriYazi(yeni.ref[k1.ref], k1.oran);
+      if (e === y) continue;   // bu gün sayısının oranı değişmedi
+      govde = `${gun} gün için oran ${e ? e + " → " : ""}${y}. Yürürlük: ${yur}.`;
+    }
+    if (!gruplar.has(govde)) gruplar.set(govde, []);
+    gruplar.get(govde).push(t);
+  }
+  const { admin } = await import("./firebaseAdmin.js");
+  let gonderilen = 0; const gecersiz = [];
+  for (const [govde, liste] of gruplar) {
+    for (let i = 0; i < liste.length; i += 500) {
+      const grup = liste.slice(i, i + 500);
+      const sonuc = await admin.messaging().sendEachForMulticast({
+        notification: { title: "Kamu Haznedarlığı oranları değişti", body: govde },
+        data: { tip: "kamu-haznedarligi", gecerli: yeni.gecerli },
+        tokens: grup,
+        android: { notification: { sound: "default", channelId: "default" } },
+        apns: { payload: { aps: { sound: "default" } } },
+      });
+      gonderilen += sonuc.successCount;
+      sonuc.responses.forEach((r, idx) => {
+        const kod = r.error?.code || "";
+        if (!r.success && (kod.includes("registration-token-not-registered") || kod.includes("invalid-argument"))) gecersiz.push(grup[idx]);
+      });
+    }
+  }
+  if (gecersiz.length) { try { await redis.hdel(KV_ABONE, ...gecersiz); } catch {} }
+  return { gonderilen, abone: tokenlar.length, temizlenen: gecersiz.length };
+}
+
+// Dış zamanlayıcı (alarm-kontrol) çağırır: ekran açılmasa da yeni oran yakalanır ve bildirim gider.
+export async function khzCronKontrol() {
+  const apiKey = process.env.EVDS_KEY; if (!apiKey) return { not: "EVDS_KEY yok" };
+  const teshis = {};
+  await guncelle(apiKey, false, teshis, CRON_ARALIK_MS);
+  return teshis;
+}
+
+// POST ?khz=1&abone=1  { token, acik, gun? }
+async function aboneIslem(req, res) {
+  const { token, acik, gun } = req.body || {};
+  if (typeof token !== "string" || token.length < 20 || token.length > 4096 || typeof acik !== "boolean") {
+    return res.status(400).json({ hata: "'token' ve boolean 'acik' zorunlu" });
+  }
+  try {
+    if (!acik) { await redis.hdel(KV_ABONE, token); return res.status(200).json({ basarili: true, abone: false }); }
+    const g = Number.isInteger(gun) && gun >= 1 && gun <= 9999 ? gun : null;
+    await redis.hset(KV_ABONE, { [token]: JSON.stringify({ gun: g, ts: Date.now() }) });
+    return res.status(200).json({ basarili: true, abone: true, gun: g });
+  } catch (e) {
+    return res.status(500).json({ hata: "Alarm kaydedilemedi", detay: e.message });
+  }
 }
 
 // ── Hız sınırı (evds-proxy ile aynı mantık) ────────────────────────────────
@@ -319,11 +425,14 @@ async function hizSiniriAsildiMi(req) {
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  if (req.method === "OPTIONS") return res.status(200).end();
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") return res.status(204).end();
   if (await hizSiniriAsildiMi(req)) {
     res.setHeader("Retry-After", "60"); res.setHeader("Cache-Control", "no-store");
     return res.status(429).json({ hata: "Çok fazla istek gönderildi. Lütfen biraz sonra tekrar deneyin." });
   }
+  if (req.method === "POST") { res.setHeader("Cache-Control", "no-store"); return aboneIslem(req, res); }
   const apiKey = process.env.EVDS_KEY;
   const teshis = {};
   const teshisModu = req.query.teshis === "1";

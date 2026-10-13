@@ -30411,7 +30411,6 @@ const KHZ_TOHUM:any = {
   ],
 };
 const KHZ_REF_AD:Record<string,string> = {"1":"1 Aylık","3":"3 Aylık","6":"6 Aylık","12":"1 Yıllık"};
-function khzYuzde(v:number){ return "%"+v.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function khzSayi(v:number){ return v.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}); }
 // Vade etiketinden gün aralığı: "Gecelik" → 1-1, "7 Güne Kadar" → 2-7, "8 gün - 29 gün" → 8-29, "270 gün üzeri" → 270-∞
 function khzGunAraligi(vade:string):[number,number]|null{
@@ -30437,7 +30436,7 @@ function khzGunAdi(iso:string){
 function khzSatirlar(kayit:any){
   return (kayit.katsayi||KHZ_TOHUM.katsayi).map((k:any)=>{
     const r=kayit.ref?.[k.ref];
-    return {...k, tabanOran:r, getiri:(typeof r==="number")? Math.round(r*k.oran)/100 : null};
+    return {...k, tabanOran:r, getiri:(typeof r==="number")? Math.round(r*k.oran*100)/10000 : null};
   });
 }
 
@@ -30447,6 +30446,36 @@ function KamuHaznedarligi(){
   const [tarih,setTarih]=useState<string>(tarihBugunIso());
   const [gecmisAcik,setGecmisAcik]=useState(false);
   const [gun,setGun]=useState("");
+  // ── Alarm: oran değişince push bildirimi (cihaz tokenı ile sunucuya abone olunur) ──
+  const [alarm,setAlarm]=useState<{acik:boolean,gun:number|null}>(()=>{
+    try{ const j=JSON.parse(localStorage.getItem("kp_khz_alarm")||"null"); if(j&&typeof j.acik==="boolean") return {acik:j.acik,gun:Number.isInteger(j.gun)?j.gun:null}; }catch{}
+    return {acik:false,gun:null};
+  });
+  const [kapsam,setKapsam]=useState<number|null>(()=>alarm.gun);
+  const [alarmIslemde,setAlarmIslemde]=useState(false);
+  const [alarmHata,setAlarmHata]=useState("");
+  const alarmKaydet=(acik:boolean,g:number|null)=>{
+    const token=pushTokenAl();
+    if(!token){
+      const mobil=!!(window as any).Capacitor?.isNativePlatform?.();
+      let neden=""; try{ neden=localStorage.getItem("kp_push_hata")||""; }catch{}
+      setAlarmHata(mobil?bildirimHataMesaji(neden):"Bildirim için Katılım Plus mobil uygulamasını kullanın.");
+      return;
+    }
+    setAlarmIslemde(true); setAlarmHata("");
+    fetch(`${API_BASE}/api/evds-proxy?khz=1&abone=1`,{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({token,acik,gun:acik?g:undefined}),
+    }).then(r=>r.json().then(d=>({ok:r.ok,d})))
+      .then(({ok,d})=>{
+        setAlarmIslemde(false);
+        if(!ok||!d?.basarili){ setAlarmHata(d?.hata||"Alarm kaydedilemedi."); return; }
+        const yeni={acik,gun:acik?g:null};
+        setAlarm(yeni);
+        try{ localStorage.setItem("kp_khz_alarm",JSON.stringify(yeni)); }catch{}
+      })
+      .catch(()=>{ setAlarmIslemde(false); setAlarmHata("Bağlantı hatası, tekrar deneyin."); });
+  };
   const kutu:any={background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`};
   const baslikRenk=(TEMA==="acik"?C.label:"#fff");
   const etiket:any={fontSize:11,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")};
@@ -30529,24 +30558,59 @@ function KamuHaznedarligi(){
       {kayit&&(
         <div style={{...kutu,borderRadius:14,padding:"12px 14px",marginBottom:12}}>
           <p style={{margin:0,...etiket}}>{TR("Gün sayısına göre oran")}</p>
-          <div style={{display:"flex",alignItems:"center",gap:10,marginTop:8}}>
-            <input type="text" inputMode="numeric" pattern="[0-9]*" value={gun} placeholder="Gün sayısı, örn. 5"
+          <div style={{marginTop:8,background:eslesen&&eslesen.getiri!=null?"rgba(52,211,153,0.10)":WA(0.04),border:`1px solid ${eslesen&&eslesen.getiri!=null?"rgba(52,211,153,0.35)":WA(0.1)}`,borderRadius:12,padding:"11px 13px"}}>
+            {eslesen&&eslesen.getiri!=null?(
+              <>
+                <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:10}}>
+                  <span style={{fontSize:13,fontWeight:700,color:baslikRenk}}>{gunSayi} gün → {eslesen.vade}</span>
+                  <span style={{fontSize:26,fontWeight:800,color:"#34D399",fontVariantNumeric:"tabular-nums"}}>%{khzGosterim(eslesen.getiri)}</span>
+                </div>
+                <p style={{margin:"4px 0 0",fontSize:11,color:WA(0.6),lineHeight:1.4}}>{KHZ_REF_AD[eslesen.ref]} AOMF'nin %{eslesen.oran}'i · AOMF {khzSayi(eslesen.tabanOran)} · tam hesap {(Math.round(eslesen.tabanOran*eslesen.oran*100)/10000).toLocaleString("tr-TR",{minimumFractionDigits:4,maximumFractionDigits:4})}</p>
+              </>
+            ):(
+              <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:10}}>
+                <span style={{fontSize:12,color:WA(0.6)}}>Oran, gün sayısı yazınca burada görünür</span>
+                <span style={{fontSize:26,fontWeight:800,color:WA(0.3),fontVariantNumeric:"tabular-nums"}}>%—</span>
+              </div>
+            )}
+          </div>
+          <p style={{margin:"12px 0 0",fontSize:12,fontWeight:700,color:WA(0.7)}}>Gün sayısı yazınız</p>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginTop:6}}>
+            <input type="text" inputMode="numeric" pattern="[0-9]*" value={gun} placeholder="Örn. 5"
               onChange={(e:any)=>setGun(String(e.target.value).replace(/\D/g,"").slice(0,4))}
               style={{flex:1,minWidth:0,boxSizing:"border-box",background:(TEMA==="acik"?"#fff":"rgba(255,255,255,0.06)"),border:`1px solid ${WA(0.15)}`,borderRadius:10,padding:"11px 12px",fontSize:16,fontWeight:700,color:baslikRenk,fontFamily:"inherit",outline:"none"}}/>
             <span style={{fontSize:13,fontWeight:600,color:WA(0.6)}}>gün</span>
           </div>
           {gun.trim()!==""&&(gunSayi==null||gunSayi<1)&&<p style={{margin:"8px 0 0",fontSize:12,color:"#FBBF24"}}>1 veya daha büyük bir gün sayısı girin.</p>}
-          {eslesen&&eslesen.getiri!=null&&(
-            <div style={{marginTop:10,background:"rgba(52,211,153,0.10)",border:"1px solid rgba(52,211,153,0.35)",borderRadius:12,padding:"11px 13px"}}>
-              <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:10}}>
-                <span style={{fontSize:13,fontWeight:700,color:baslikRenk}}>{gunSayi} gün → {eslesen.vade}</span>
-                <span style={{fontSize:24,fontWeight:800,color:"#34D399",fontVariantNumeric:"tabular-nums"}}>{khzGosterim(eslesen.getiri)}</span>
-              </div>
-              <p style={{margin:"4px 0 0",fontSize:11,color:WA(0.6),lineHeight:1.4}}>{KHZ_REF_AD[eslesen.ref]} AOMF'nin %{eslesen.oran}'i · AOMF {khzSayi(eslesen.tabanOran)} · tam hesap {(Math.round(eslesen.tabanOran*eslesen.oran)/100).toLocaleString("tr-TR",{minimumFractionDigits:4,maximumFractionDigits:4})}</p>
-            </div>
-          )}
         </div>
       )}
+
+      <div style={{...kutu,borderRadius:14,padding:"12px 14px",marginBottom:12}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{flex:1,minWidth:0}}>
+            <p style={{margin:0,...etiket}}>{TR("Alarm")}</p>
+            <p style={{margin:"3px 0 0",fontSize:13,fontWeight:700,color:baslikRenk,lineHeight:1.35}}>Oranlar değişince bildirim gönder</p>
+          </div>
+          <div onClick={()=>{ if(alarmIslemde) return; alarmKaydet(!alarm.acik,kapsam); }}
+            role="switch" aria-checked={alarm.acik}
+            style={{width:46,height:28,borderRadius:14,background:alarm.acik?"#34D399":WA(0.2),position:"relative",cursor:"pointer",flexShrink:0,opacity:alarmIslemde?0.6:1,transition:"background .2s"}}>
+            <div style={{position:"absolute",top:3,left:alarm.acik?21:3,width:22,height:22,borderRadius:11,background:"#fff",boxShadow:"0 1px 3px rgba(0,0,0,0.3)",transition:"left .2s"}}/>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}>
+          {[{k:null as number|null,ad:"Tüm vadeler",ok:true},{k:(gunSayi!=null&&gunSayi>=1?gunSayi:(kapsam!=null?kapsam:null)) as number|null,ad:(gunSayi!=null&&gunSayi>=1)?`${gunSayi} gün için`:(kapsam!=null?`${kapsam} gün için`:"Gün sayısı yazın →"),ok:(gunSayi!=null&&gunSayi>=1)||kapsam!=null}].map((c,i)=>{
+            const secili=(i===0?kapsam==null:(kapsam!=null&&c.k===kapsam));
+            return(
+              <button key={i} disabled={!c.ok} onClick={()=>{ setKapsam(c.k); if(alarm.acik) alarmKaydet(true,c.k); }}
+                style={{padding:"7px 12px",borderRadius:20,border:`1px solid ${secili?"#34D399":WA(0.15)}`,background:secili?"rgba(52,211,153,0.14)":"transparent",color:secili?"#34D399":WA(0.7),fontSize:12,fontWeight:700,fontFamily:"inherit",cursor:c.ok?"pointer":"default",opacity:c.ok?1:0.5}}>{c.ad}</button>
+            );
+          })}
+        </div>
+        <p style={{margin:"9px 0 0",fontSize:11,color:WA(0.6),lineHeight:1.45}}>
+          {alarm.acik?`Alarm açık · ${alarm.gun?`${alarm.gun} gün için oran değişince`:"herhangi bir vadenin oranı değişince"} bildirim gelir. `:""}Yeni oranlar TCMB EVDS'de yayımlandığında (genellikle cuma) bildirim gönderilir; bildirimde yürürlük tarihi de yazar.
+        </p>
+        {alarmHata&&<p style={{margin:"6px 0 0",fontSize:12,color:"#FBBF24"}}>{alarmHata}</p>}
+      </div>
 
       {kayit&&(
         <>
@@ -30554,7 +30618,7 @@ function KamuHaznedarligi(){
             <div style={{display:"flex",alignItems:"center",gap:8,padding:"9px 14px 7px",borderBottom:`1px solid ${WA(0.08)}`}}>
               <span style={{flex:1,minWidth:0,fontSize:11,fontWeight:700,color:WA(0.6)}}>{CV("Vade")}</span>
               <span style={{width:44,textAlign:"center",fontSize:11,fontWeight:700,color:WA(0.6)}}>{CV("Para birimi")}</span>
-              <span style={{width:92,textAlign:"right",fontSize:11,fontWeight:700,color:WA(0.6)}}>{CV("Tahmini getiri")}</span>
+              <span style={{width:104,textAlign:"right",fontSize:11,fontWeight:700,color:WA(0.6)}}>{CV("Tahmini getiri")}</span>
             </div>
             {satirlar.map((s:any,i:number)=>{
               const oncekiG=oncekiSatirlar?.[i]?.getiri;
@@ -30566,8 +30630,8 @@ function KamuHaznedarligi(){
                     <p style={{margin:"2px 0 0",fontSize:10.5,color:WA(0.6),lineHeight:1.35}}>{KHZ_REF_AD[s.ref]} AOMF'nin %{s.oran}'i{typeof s.tabanOran==="number"?` · AOMF ${khzSayi(s.tabanOran)}`:""}</p>
                   </div>
                   <span style={{width:44,textAlign:"center",fontSize:11,fontWeight:700,color:C.blue,background:"rgba(91,155,216,0.14)",padding:"3px 0",borderRadius:6}}>TL</span>
-                  <div style={{width:92,textAlign:"right"}}>
-                    <p style={{margin:0,fontSize:16,fontWeight:800,color:baslikRenk,fontFamily:"inherit",fontVariantNumeric:"tabular-nums"}}>{s.getiri!=null?khzYuzde(s.getiri):"—"}</p>
+                  <div style={{width:104,textAlign:"right"}}>
+                    <p style={{margin:0,fontSize:16,fontWeight:800,color:baslikRenk,fontFamily:"inherit",fontVariantNumeric:"tabular-nums"}}>{s.getiri!=null?"%"+khzGosterim(s.getiri):"—"}</p>
                     {fark!=null&&fark!==0&&<p style={{margin:"1px 0 0",fontSize:10,fontWeight:700,color:fark>0?"#22C55E":"#EF4444"}}>{fark>0?"▲ +":"▼ "}{khzSayi(fark)} puan</p>}
                   </div>
                 </div>
