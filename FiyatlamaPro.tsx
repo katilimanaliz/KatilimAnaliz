@@ -5421,6 +5421,7 @@ const ICON_MAP: Record<string, any> = {
   haftalikOzet: Newspaper,
   katilimBankalari: Landmark,
   katilimSigorta: ShieldCheck,
+  kamuHaznedarligi: Landmark,
   icazetBelgeleri: FileBadge,   // 2026-10-03: belge/sertifika ikonu; FileBadge zaten import edilmiş (yeni import riski yok). Bu harita yoksa Araçlar kartı ve sol menü İKONSUZ görünür.
   egitim: GraduationCap,   // 2026-10-04: Eğitim bölümü (Araçlar kartı + sol menü ikonu)
   musteriPortfoyum: Briefcase,   // 2026-10-04: Müşteri Portföyüm (Araçlar kartı + sol menü ikonu); Briefcase zaten import edilmiş
@@ -13305,7 +13306,7 @@ const EKRAN_KATEGORI: Record<string,string> = {
   // Piyasa & Veriler
   bistHisseTarayici:"piyasa", fonGetiriIzleme:"piyasa", karPayiOranlari:"piyasa", finansalGostergeler:"piyasa", piyasaHaberleri:"piyasa", fiyatAlarmlarim:"piyasa",
   // Araçlar / Hesaplama Araçları
-  finansalTakvim:"arac", vadeTakibi:"arac", katilimBankalari:"arac", katilimSigorta:"arac",
+  finansalTakvim:"arac", vadeTakibi:"arac", katilimBankalari:"arac", katilimSigorta:"arac", kamuHaznedarligi:"arac",
   hazineDoviz:"arac", hazineForward:"arac", hazineSwap:"arac", hazineBono:"arac", hazineSenaryo:"arac", hazineKurMakasi:"arac",
   asistan:"arac", sozluk:"arac", egitim:"arac", musteriPortfoyum:"arac",
 };
@@ -27258,6 +27259,7 @@ function SiteAltBilgi({onEkran}:{onEkran:(sc:string)=>void}){
           {ad:"Katılım Sigortacılığı", ekran:"katilimSigorta"},
           {ad:"Sektör Verileri",       ekran:"katilimSektoru"},
           {ad:"Kira Sertifikası",      ekran:"kiraSertifikasi"},
+          {ad:"Kamu Haznedarlığı",     ekran:"kamuHaznedarligi"},
         ])}
         {sutun("Yasal", [
           {ad:"KVKK Aydınlatma Metni", ekran:"kvkkAydinlatma"},
@@ -30391,6 +30393,225 @@ function TrTakvim({ value, onChange, min, max, style, className, placeholder }: 
         </div>
       )}
     </>
+  );
+}
+
+// ── KAMU HAZNEDARLIĞI GETİRİ İZLEME (2026-10-13) ────────────────────────────
+// Kamu kurumlarının mevduatları için tahmini getiri oranları = TCMB haftalık mevduat AOMF oranı × vade katsayısı.
+// Veri /api/kamu-haznedarligi'nden gelir: oran değişikliği kayıtları (yürürlük tarihli, kalıcı). Seçilen tarihte, o tarihte
+// veya öncesindeki en son kayıt geçerlidir (oranlar değişene kadar her gün aynı oranlar geçerli sayılır).
+// API ulaşılamazsa aşağıdaki TOHUM kayıtla (9 Eki 2026) çalışır.
+const KHZ_TOHUM:any = {
+  gecerli:"2026-10-09", ref:{"1":43.11,"3":43.79,"6":43.14,"12":40.28},
+  katsayi:[
+    {vade:"Gecelik",ref:"1",oran:55},{vade:"7 Güne Kadar",ref:"1",oran:60},{vade:"8 gün - 29 gün",ref:"1",oran:65},
+    {vade:"30 gün - 59 gün",ref:"3",oran:65},{vade:"60 gün - 89 gün",ref:"3",oran:70},
+    {vade:"90 gün - 134 gün",ref:"6",oran:80},{vade:"135 gün - 179 gün",ref:"6",oran:85},
+    {vade:"180 gün - 269 gün",ref:"12",oran:90},{vade:"270 gün üzeri",ref:"12",oran:95},
+  ],
+};
+const KHZ_REF_AD:Record<string,string> = {"1":"1 Aylık","3":"3 Aylık","6":"6 Aylık","12":"1 Yıllık"};
+function khzYuzde(v:number){ return "%"+v.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function khzSayi(v:number){ return v.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}); }
+// Vade etiketinden gün aralığı: "Gecelik" → 1-1, "7 Güne Kadar" → 2-7, "8 gün - 29 gün" → 8-29, "270 gün üzeri" → 270-∞
+function khzGunAraligi(vade:string):[number,number]|null{
+  const v=String(vade||"").toLocaleLowerCase("tr");
+  if(v.includes("gecelik")) return [1,1];
+  let m=/(\d+)\s*güne\s*kadar/.exec(v); if(m) return [2,parseInt(m[1],10)];
+  m=/(\d+)\s*gün\s*-\s*(\d+)\s*gün/.exec(v); if(m) return [parseInt(m[1],10),parseInt(m[2],10)];
+  m=/(\d+)\s*gün\s*üzeri/.exec(v); if(m) return [parseInt(m[1],10),Infinity];
+  return null;
+}
+// TCMB ekranındaki gösterim: hesap sonucunun 3. ondalığı 5 veya üstüyse 2 ondalığa yuvarlanır (25,866 → 25,8700),
+// değilse hesaplanan değer korunur (23,7105; 30,653 → 30,6530). 4 ondalık hane gösterilir.
+function khzGosterim(x:number):string{
+  const ham=Math.round(x*10000)/10000;
+  const ucuncu=Math.floor(Math.round(ham*10000)/10)%10;
+  const v=ucuncu>=5?Math.round(ham*100)/100:ham;
+  return v.toLocaleString("tr-TR",{minimumFractionDigits:4,maximumFractionDigits:4});
+}
+function khzGunAdi(iso:string){
+  const c=tarihCoz(iso); if(!c) return "";
+  return ["Pazar","Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi"][new Date(c.y,c.m,c.d).getDay()];
+}
+function khzSatirlar(kayit:any){
+  return (kayit.katsayi||KHZ_TOHUM.katsayi).map((k:any)=>{
+    const r=kayit.ref?.[k.ref];
+    return {...k, tabanOran:r, getiri:(typeof r==="number")? Math.round(r*k.oran)/100 : null};
+  });
+}
+
+function KamuHaznedarligi(){
+  const [veri,setVeri]=useState<any>(null);
+  const [yukleniyor,setYukleniyor]=useState(true);
+  const [tarih,setTarih]=useState<string>(tarihBugunIso());
+  const [gecmisAcik,setGecmisAcik]=useState(false);
+  const [gun,setGun]=useState("");
+  const kutu:any={background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`};
+  const baslikRenk=(TEMA==="acik"?C.label:"#fff");
+  const etiket:any={fontSize:11,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")};
+
+  useEffect(()=>{
+    let iptal=false;
+    fetch(`${API_BASE}/api/kamu-haznedarligi`)
+      .then(r=>r.ok?r.json():null)
+      .then(d=>{ if(!iptal && d && Array.isArray(d.kayitlar) && d.kayitlar.length) setVeri(d); })
+      .catch(()=>{})
+      .finally(()=>{ if(!iptal) setYukleniyor(false); });
+    return ()=>{iptal=true;};
+  },[]);
+
+  const kayitlar:any[] = veri?.kayitlar || [KHZ_TOHUM];
+  const bugun = tarihBugunIso();
+  const ilkTarih = kayitlar[0].gecerli;
+  const sonKayit = kayitlar[kayitlar.length-1];
+  const secilenIdx = (()=>{ let b=-1; for(let i=0;i<kayitlar.length;i++){ if(kayitlar[i].gecerli<=tarih) b=i; } return b; })();
+  const kayit = secilenIdx>=0 ? kayitlar[secilenIdx] : null;
+  const onceki = secilenIdx>0 ? kayitlar[secilenIdx-1] : null;
+  const satirlar = kayit ? khzSatirlar(kayit) : [];
+  const oncekiSatirlar = onceki ? khzSatirlar(onceki) : null;
+  const guncelMi = kayit && kayit===sonKayit && tarih>=bugun;
+  const gunSayi = /^\d{1,4}$/.test(gun.trim()) ? parseInt(gun.trim(),10) : null;
+  const eslesenIdx = (gunSayi!=null && gunSayi>=1) ? satirlar.findIndex((s:any)=>{ const a=khzGunAraligi(s.vade); return !!a && gunSayi>=a[0] && gunSayi<=a[1]; }) : -1;
+  const eslesen = eslesenIdx>=0 ? satirlar[eslesenIdx] : null;
+  const sonKontrolMetin = (()=>{
+    const t=veri?.sonKontrol; if(!t) return "";
+    const d=new Date(t);
+    return `${d.getDate()} ${(TARIH_AYLAR.tr||[])[d.getMonth()]?.slice(0,3)} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+  })();
+
+  return(
+    <div style={{background:C.bg,padding:"12px 14px 92px",minHeight:"100%"}}>
+      <div style={{background:"linear-gradient(160deg, rgba(91,155,216,0.10), rgba(45,212,191,0.04))",border:"1px solid rgba(91,155,216,0.25)",borderRadius:16,padding:"14px 16px",marginBottom:14}}>
+        <p style={{margin:0,fontSize:14,fontWeight:700,color:baslikRenk}}>🏛️ Kamu Haznedarlığı Getiri İzleme</p>
+        <p style={{margin:"5px 0 0",fontSize:12,color:WA(0.6),lineHeight:1.5}}>Vadeye göre tahmini getiri oranları. Oran, TCMB'nin haftalık mevduat ağırlıklı ortalama faizinin (AOMF) vade katsayısıyla çarpımıdır.</p>
+      </div>
+
+      <div style={{...kutu,borderRadius:14,padding:"12px 14px",marginBottom:12}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{flex:1,minWidth:0}}>
+            <p style={{margin:0,...etiket}}>{TR("Geçerlilik tarihi")}</p>
+            <TrTakvim value={tarih} min={ilkTarih} max={bugun} onChange={(e:any)=>setTarih(e.target.value)}
+              style={{marginTop:4,background:"transparent",border:"none",padding:0,fontSize:17,fontWeight:700,color:baslikRenk}}/>
+            <p style={{margin:"2px 0 0",fontSize:11,color:WA(0.6)}}>{khzGunAdi(tarih)}</p>
+          </div>
+          {tarih!==bugun&&(
+            <button type="button" onClick={()=>setTarih(bugun)} style={{border:"1px solid rgba(91,155,216,0.4)",background:"rgba(91,155,216,0.12)",color:C.blue,fontSize:12,fontWeight:700,padding:"8px 12px",borderRadius:10,cursor:"pointer",fontFamily:"inherit"}}>Bugün</button>
+          )}
+        </div>
+        <div style={{height:1,background:WA(0.07),margin:"11px 0"}}/>
+        <div style={{display:"flex",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
+          <div>
+            <p style={{margin:0,...etiket}}>{TR("Son güncelleme")}</p>
+            <p style={{margin:"2px 0 0",fontSize:13,fontWeight:700,color:baslikRenk}}>{tarihYaz(sonKayit.gecerli)} <span style={{fontWeight:500,color:WA(0.6)}}>· {khzGunAdi(sonKayit.gecerli)}</span></p>
+          </div>
+          <div style={{textAlign:"right"}}>
+            <p style={{margin:0,...etiket}}>{TR("Kaynak")}</p>
+            <p style={{margin:"2px 0 0",fontSize:13,fontWeight:700,color:baslikRenk}}>TCMB · EVDS</p>
+          </div>
+        </div>
+        {sonKontrolMetin&&<p style={{margin:"8px 0 0",fontSize:10,color:WA(0.5)}}>Son kontrol: {sonKontrolMetin} · Oranlar genellikle cuma günleri güncellenir.</p>}
+      </div>
+
+      {!kayit&&(
+        <div style={{background:"rgba(251,191,36,0.1)",border:"1px solid rgba(251,191,36,0.3)",borderRadius:12,padding:"11px 13px",marginBottom:12,display:"flex",gap:8}}>
+          <span style={{fontSize:14}}>ℹ️</span>
+          <p style={{margin:0,fontSize:12,color:"#FDE68A",lineHeight:1.5}}>Bu tarih için kayıt yok. Kayıtlar {tarihYaz(ilkTarih)} tarihinde başlıyor.</p>
+        </div>
+      )}
+
+      {kayit&&!guncelMi&&(
+        <div style={{background:"rgba(91,155,216,0.08)",border:"1px solid rgba(91,155,216,0.25)",borderRadius:12,padding:"10px 13px",marginBottom:12}}>
+          <p style={{margin:0,fontSize:12,color:C.soft,lineHeight:1.5}}>{tarihYaz(tarih)} tarihinde geçerli olan oranlar gösteriliyor. Bu oranlar <b>{tarihYaz(kayit.gecerli)}</b> tarihinde yürürlüğe girdi{secilenIdx<kayitlar.length-1?` ve ${tarihYaz(kayitlar[secilenIdx+1].gecerli)} tarihine kadar geçerli`:""}.</p>
+        </div>
+      )}
+
+      {kayit&&(
+        <div style={{...kutu,borderRadius:14,padding:"12px 14px",marginBottom:12}}>
+          <p style={{margin:0,...etiket}}>{TR("Gün sayısına göre oran")}</p>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginTop:8}}>
+            <input type="text" inputMode="numeric" pattern="[0-9]*" value={gun} placeholder="Gün sayısı, örn. 5"
+              onChange={(e:any)=>setGun(String(e.target.value).replace(/\D/g,"").slice(0,4))}
+              style={{flex:1,minWidth:0,boxSizing:"border-box",background:(TEMA==="acik"?"#fff":"rgba(255,255,255,0.06)"),border:`1px solid ${WA(0.15)}`,borderRadius:10,padding:"11px 12px",fontSize:16,fontWeight:700,color:baslikRenk,fontFamily:"inherit",outline:"none"}}/>
+            <span style={{fontSize:13,fontWeight:600,color:WA(0.6)}}>gün</span>
+          </div>
+          {gun.trim()!==""&&(gunSayi==null||gunSayi<1)&&<p style={{margin:"8px 0 0",fontSize:12,color:"#FBBF24"}}>1 veya daha büyük bir gün sayısı girin.</p>}
+          {eslesen&&eslesen.getiri!=null&&(
+            <div style={{marginTop:10,background:"rgba(52,211,153,0.10)",border:"1px solid rgba(52,211,153,0.35)",borderRadius:12,padding:"11px 13px"}}>
+              <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:10}}>
+                <span style={{fontSize:13,fontWeight:700,color:baslikRenk}}>{gunSayi} gün → {eslesen.vade}</span>
+                <span style={{fontSize:24,fontWeight:800,color:"#34D399",fontVariantNumeric:"tabular-nums"}}>{khzGosterim(eslesen.getiri)}</span>
+              </div>
+              <p style={{margin:"4px 0 0",fontSize:11,color:WA(0.6),lineHeight:1.4}}>{KHZ_REF_AD[eslesen.ref]} AOMF'nin %{eslesen.oran}'i · AOMF {khzSayi(eslesen.tabanOran)} · tam hesap {(Math.round(eslesen.tabanOran*eslesen.oran)/100).toLocaleString("tr-TR",{minimumFractionDigits:4,maximumFractionDigits:4})}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {kayit&&(
+        <>
+          <div style={{...kutu,borderRadius:16,overflow:"hidden",marginBottom:12}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,padding:"9px 14px 7px",borderBottom:`1px solid ${WA(0.08)}`}}>
+              <span style={{flex:1,minWidth:0,fontSize:11,fontWeight:700,color:WA(0.6)}}>{CV("Vade")}</span>
+              <span style={{width:44,textAlign:"center",fontSize:11,fontWeight:700,color:WA(0.6)}}>{CV("Para birimi")}</span>
+              <span style={{width:92,textAlign:"right",fontSize:11,fontWeight:700,color:WA(0.6)}}>{CV("Tahmini getiri")}</span>
+            </div>
+            {satirlar.map((s:any,i:number)=>{
+              const oncekiG=oncekiSatirlar?.[i]?.getiri;
+              const fark=(s.getiri!=null&&typeof oncekiG==="number")? Math.round((s.getiri-oncekiG)*100)/100 : null;
+              return(
+                <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"11px 14px",borderTop:i===0?"none":`1px solid ${WA(0.07)}`,background:i===eslesenIdx?"rgba(52,211,153,0.10)":"transparent"}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <p style={{margin:0,fontSize:14,fontWeight:700,color:baslikRenk,lineHeight:1.3}}>{s.vade}</p>
+                    <p style={{margin:"2px 0 0",fontSize:10.5,color:WA(0.6),lineHeight:1.35}}>{KHZ_REF_AD[s.ref]} AOMF'nin %{s.oran}'i{typeof s.tabanOran==="number"?` · AOMF ${khzSayi(s.tabanOran)}`:""}</p>
+                  </div>
+                  <span style={{width:44,textAlign:"center",fontSize:11,fontWeight:700,color:C.blue,background:"rgba(91,155,216,0.14)",padding:"3px 0",borderRadius:6}}>TL</span>
+                  <div style={{width:92,textAlign:"right"}}>
+                    <p style={{margin:0,fontSize:16,fontWeight:800,color:baslikRenk,fontFamily:"inherit",fontVariantNumeric:"tabular-nums"}}>{s.getiri!=null?khzYuzde(s.getiri):"—"}</p>
+                    {fark!=null&&fark!==0&&<p style={{margin:"1px 0 0",fontSize:10,fontWeight:700,color:fark>0?"#22C55E":"#EF4444"}}>{fark>0?"▲ +":"▼ "}{khzSayi(fark)} puan</p>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <p style={{margin:"0 0 8px",fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{CV("TCMB haftalık AOMF oranları")}</p>
+          <div style={{display:"flex",gap:8,marginBottom:14}}>
+            {["1","3","6","12"].map(g=>(
+              <div key={g} style={{flex:1,...kutu,borderRadius:12,padding:"10px 6px",textAlign:"center"}}>
+                <p style={{margin:0,fontSize:10,fontWeight:700,color:WA(0.6)}}>{KHZ_REF_AD[g]}</p>
+                <p style={{margin:"3px 0 0",fontSize:15,fontWeight:800,color:baslikRenk,fontVariantNumeric:"tabular-nums"}}>{typeof kayit.ref?.[g]==="number"?khzSayi(kayit.ref[g]):"—"}</p>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {kayitlar.length>1&&(
+        <>
+          <div onClick={()=>setGecmisAcik(a=>!a)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",margin:"4px 0 8px"}}>
+            <span style={{fontSize:13,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")}}>{CV("Geçmiş kayıtlar")} ({kayitlar.length})</span>
+            <span style={{fontSize:12,fontWeight:700,color:C.blue}}>{gecmisAcik?"Gizle":"Göster"} ›</span>
+          </div>
+          {gecmisAcik&&(
+            <div style={{...kutu,borderRadius:14,overflow:"hidden",marginBottom:14}}>
+              {[...kayitlar].reverse().map((k:any,i:number,arr:any[])=>(
+                <div key={k.gecerli} className="press-card" onClick={()=>setTarih(k.gecerli>bugun?bugun:k.gecerli)} style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px",cursor:"pointer",borderTop:i===0?"none":`1px solid ${WA(0.07)}`}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <p style={{margin:0,fontSize:13,fontWeight:700,color:baslikRenk}}>{tarihYaz(k.gecerli)}</p>
+                    <p style={{margin:"2px 0 0",fontSize:10.5,color:WA(0.6)}}>AOMF: {["1","3","6","12"].map(g=>typeof k.ref?.[g]==="number"?khzSayi(k.ref[g]):"—").join(" · ")}</p>
+                  </div>
+                  <span style={{fontSize:16,color:WA(0.6)}}>›</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {yukleniyor&&<p style={{margin:"6px 0",fontSize:11,color:WA(0.5),textAlign:"center"}}>Güncel oranlar kontrol ediliyor…</p>}
+      <p style={{margin:"10px 0 0",fontSize:10,color:WA(0.6),textAlign:"center",lineHeight:1.5}}>Oranlar TCMB'nin yayımladığı haftalık verilerden ve Kamu Haznedarlığı Genel Tebliği katsayılarından hesaplanan tahmini değerlerdir; bilgilendirme amaçlıdır. Resmî oranlar için TCMB ve Hazine duyurularına bakınız.</p>
+    </div>
   );
 }
 
@@ -34757,6 +34978,7 @@ const MENU = {
   erkenKapamaKomisyonu:{title:"Erken Kapama Komisyonu Hesaplama",back:"hesaplaMenu"},
   tlYpKarari:{title:"TL/YP Borçlanma Kararı",back:"hesaplaMenu"},
   kiraSertifikasi:{title:"Kira Sertifikası İhraçları",back:"araclarMenu"},
+  kamuHaznedarligi:{title:"Kamu Haznedarlığı Getiri İzleme",back:"araclarMenu"},
   taksitKarsilastirma:{title:"Taksit Karşılaştırma",back:"hesaplaMenu"},
   portfoyum:{title:"Portföyüm",back:"araclarMenu"},
   fonDetay:{title:"Fon Detay",back:"portfoyum"},
@@ -34788,7 +35010,7 @@ const TAB_OF_SCREEN:any = {
   hazineDoviz:"hesapla", hazineForward:"hesapla", hazineSwap:"hesapla",
   hazineBono:"hesapla", hazineSenaryo:"hesapla", hazineKurMakasi:"hesapla",
   piyasaHaberleri:"piyasa", finansalGostergeler:"piyasa",
-  araclarMenu:"araclar", sozluk:"araclar", egitim:"araclar", musteriPortfoyum:"araclar", vadeTakibi:"araclar", katilimBankalari:"araclar", katilimSigorta:"araclar", kfkNedir:"araclar", zekatHesabi:"araclar", birikimHesaplayici:"araclar", erkenKapamaKarari:"hesapla", erkenKapamaKomisyonu:"hesapla", vadeFarkiKarari:"hesapla", teklifKarsilastirma:"hesapla", tlYpKarari:"hesapla", kiraSertifikasi:"araclar", getiriKarsilastirma:"araclar", haftalikOzet:"araclar", portfoyum:"araclar", fonDetay:"araclar",
+  araclarMenu:"araclar", sozluk:"araclar", egitim:"araclar", musteriPortfoyum:"araclar", vadeTakibi:"araclar", katilimBankalari:"araclar",  katilimSigorta:"araclar", kamuHaznedarligi:"araclar", kfkNedir:"araclar", zekatHesabi:"araclar", birikimHesaplayici:"araclar", erkenKapamaKarari:"hesapla", erkenKapamaKomisyonu:"hesapla", vadeFarkiKarari:"hesapla", teklifKarsilastirma:"hesapla", tlYpKarari:"hesapla", kiraSertifikasi:"araclar", getiriKarsilastirma:"araclar", haftalikOzet:"araclar", portfoyum:"araclar", fonDetay:"araclar",
   asistan:"yapayzeka",
   profil:"profil",
 };
@@ -34810,6 +35032,7 @@ const SIDEBAR_GRUPLARI: {baslik:string; varsayilanAcik:boolean; ogeler:{key:stri
   {baslik:"BİLGİ", varsayilanAcik:false, ogeler:[
     {key:"egitim",label:"Eğitim"},
     {key:"kiraSertifikasi",label:"Kira Sertifikası İhraçları"},
+    {key:"kamuHaznedarligi",label:"Kamu Haznedarlığı Getiri İzleme"},
     {key:"katilimBankalari",label:"Katılım Bankaları"},
     {key:"katilimSigorta",label:"Katılım Sigortacılığı"},
     {key:"icazetBelgeleri",label:"İcazet Belgeleri"},
@@ -34900,6 +35123,7 @@ const SCREEN_TO_PATH: Record<string,string> = {
   erkenKapamaKomisyonu: "/erken-kapama-komisyonu",
   tlYpKarari: "/tl-yp-karari",
   kiraSertifikasi: "/kira-sertifikasi-ihraclari",
+  kamuHaznedarligi: "/kamu-haznedarligi-getiri",
   portfoyum: "/portfoyum",
   hazineDoviz: "/doviz-donusturucu",
   hazineForward: "/forward-hesaplama",
@@ -35029,6 +35253,7 @@ const MENU_ARAMA_LIST=[
   {key:"birikimHesaplayici", label:"Birikim Hesaplayıcı", icon:"🎯", grup:"Araçlar", alt:["birikim","hedef","tasarruf","biriktir","aylık","umre","hac","ev","araba","peşinat","acil durum","enflasyon","reel","planla"]},
   {key:"zekatHesabi",        label:"Zekât Hesaplayıcı",                               icon:"🌙", grup:"Araçlar", alt:["zekat","zekât","nisap","nisab","kırkta bir","sadaka","altın nisabı","dini","ibadet","hesapla"]},
   {key:"kiraSertifikasi",    label:"Kira Sertifikası İhraçları",                 icon:"📜", grup:"Araçlar", alt:["kira sertifikası","sukuk","ihraç","vekâlet","murabaha","icare","varlık kiralama","spk"]},
+  {key:"kamuHaznedarligi",   label:"Kamu Haznedarlığı Getiri İzleme",            icon:"🏛️", grup:"Araçlar", alt:["kamu","haznedarlık","hazinedarlık","aomf","tahmini getiri","mevduat","tavan faiz","kamu kurumu","getiri oranı","tcmb haftalık"]},
   {key:"hazineDoviz",        label:"Döviz Dönüştürücü",                          icon:"💱", grup:"Hesaplama Araçları", alt:["kur","dolar","euro","dolar kaç tl"]},
   {key:"piyasaMenu",         label:"Piyasa & Veriler",                           icon:"📊", grup:"Piyasa & Veriler", alt:["tüfe","enflasyon","gösterge","politika faizi","sofr","euribor","tlref","tlrefk","aofm","rezerv","cds","borsa","bist","altın","gümüş","emtia","kripto"]},
   {key:"hazineForward",      label:"Forward Hesaplama",                          icon:"📅", grup:"Hesaplama Araçları"},
@@ -47230,6 +47455,7 @@ function App(){
             {baslik:"PİYASA VE TAKİP", items:[
               {key:"haftalikOzet", label:"Haftalık Piyasa Özeti", desc:haftalikDesc},
               {key:"kiraSertifikasi", label:"Kira Sertifikası İhraçları", desc:"Türkiye'de sukuk ihraçları — SPK resmî verisiyle tür ve yıl bazında"},
+              {key:"kamuHaznedarligi", label:"Kamu Haznedarlığı Getiri İzleme", desc:"Vadeye göre tahmini getiri oranları; TCMB haftalık oranlarıyla otomatik güncellenir, tarih seçerek geçmişe bak"},
             ]},
             {baslik:"KATILIM BANKACILIĞI", items:[
               {key:"katilimBankalari", label:"Katılım Bankaları", desc:"Türkiye'deki katılım bankaları, kuruluş tarihleri ve bilgileri"},
@@ -47624,6 +47850,7 @@ function App(){
         {screen==="erkenKapamaKomisyonu"&&<ErkenKapamaKomisyonu s={settings} kimlik={kimlik} nav={nav}/>}
         {screen==="tlYpKarari"&&<TlYpKarari s={settings}/>}
         {screen==="kiraSertifikasi"&&<KiraSertifikasiIhraclari/>}
+        {screen==="kamuHaznedarligi"&&<KamuHaznedarligi/>}
         {screen==="getiriKarsilastirma"&&<GetiriKarsilastirma/>}
         {screen==="haftalikOzet"&&<HaftalikPiyasaOzeti/>}
         {screen==="hazineDoviz"&&<HtDovizDonusturucu/>}
