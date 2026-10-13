@@ -30447,14 +30447,14 @@ function KamuHaznedarligi(){
   const [gecmisAcik,setGecmisAcik]=useState(false);
   const [gun,setGun]=useState("");
   // ── Alarm: oran değişince push bildirimi (cihaz tokenı ile sunucuya abone olunur) ──
-  const [alarm,setAlarm]=useState<{acik:boolean,gun:number|null}>(()=>{
-    try{ const j=JSON.parse(localStorage.getItem("kp_khz_alarm")||"null"); if(j&&typeof j.acik==="boolean") return {acik:j.acik,gun:Number.isInteger(j.gun)?j.gun:null}; }catch{}
-    return {acik:false,gun:null};
+  const [alarm,setAlarm]=useState<{acik:boolean}>(()=>{
+    try{ const j=JSON.parse(localStorage.getItem("kp_khz_alarm")||"null"); if(j&&typeof j.acik==="boolean") return {acik:j.acik}; }catch{}
+    return {acik:false};
   });
-  const [kapsam,setKapsam]=useState<number|null>(()=>alarm.gun);
+  const [alarmPanel,setAlarmPanel]=useState(false);
   const [alarmIslemde,setAlarmIslemde]=useState(false);
   const [alarmHata,setAlarmHata]=useState("");
-  const alarmKaydet=(acik:boolean,g:number|null)=>{
+  const alarmKaydet=(acik:boolean)=>{
     const token=pushTokenAl();
     if(!token){
       const mobil=!!(window as any).Capacitor?.isNativePlatform?.();
@@ -30465,12 +30465,12 @@ function KamuHaznedarligi(){
     setAlarmIslemde(true); setAlarmHata("");
     fetch(`${API_BASE}/api/evds-proxy?khz=1&abone=1`,{
       method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({token,acik,gun:acik?g:undefined}),
+      body:JSON.stringify({token,acik}),
     }).then(r=>r.json().then(d=>({ok:r.ok,d})))
       .then(({ok,d})=>{
         setAlarmIslemde(false);
         if(!ok||!d?.basarili){ setAlarmHata(d?.hata||"Alarm kaydedilemedi."); return; }
-        const yeni={acik,gun:acik?g:null};
+        const yeni={acik};
         setAlarm(yeni);
         try{ localStorage.setItem("kp_khz_alarm",JSON.stringify(yeni)); }catch{}
       })
@@ -30511,8 +30511,39 @@ function KamuHaznedarligi(){
 
   return(
     <div style={{background:C.bg,padding:"12px 14px 92px",minHeight:"100%"}}>
+      {alarmPanel&&(
+        <div onClick={()=>setAlarmPanel(false)} style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.55)",zIndex:9999,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
+          <div onClick={(e:any)=>e.stopPropagation()} style={{background:C.bg,border:`1px solid ${WA(0.12)}`,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:560,maxHeight:"82%",overflowY:"auto",padding:"16px 16px 28px",boxSizing:"border-box"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+              <p style={{margin:0,fontSize:16,fontWeight:700,color:baslikRenk}}>🔔 Oran alarmı</p>
+              <span onClick={()=>setAlarmPanel(false)} style={{fontSize:20,color:WA(0.6),cursor:"pointer",padding:"0 4px"}}>✕</span>
+            </div>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{flex:1,minWidth:0}}>
+            <p style={{margin:"3px 0 0",fontSize:13,fontWeight:700,color:baslikRenk,lineHeight:1.35}}>Oranlar değişince bildirim gönder</p>
+          </div>
+          <div onClick={()=>{ if(alarmIslemde) return; alarmKaydet(!alarm.acik); }}
+            role="switch" aria-checked={alarm.acik}
+            style={{width:46,height:28,borderRadius:14,background:alarm.acik?"#34D399":WA(0.2),position:"relative",cursor:"pointer",flexShrink:0,opacity:alarmIslemde?0.6:1,transition:"background .2s"}}>
+            <div style={{position:"absolute",top:3,left:alarm.acik?21:3,width:22,height:22,borderRadius:11,background:"#fff",boxShadow:"0 1px 3px rgba(0,0,0,0.3)",transition:"left .2s"}}/>
+          </div>
+        </div>
+        <p style={{margin:"10px 0 0",fontSize:12,color:WA(0.6),lineHeight:1.5}}>
+          {alarm.acik?"Alarm açık. ":""}TCMB EVDS'de yeni oranlar yayımlandığında (genellikle cuma) bildirim gelir; bildirimde yürürlük tarihi yazar. Oranlar değişince tüm vadeler değişir, güncel getirileri bu ekrandan görürsünüz.
+        </p>
+        {alarmHata&&<p style={{margin:"6px 0 0",fontSize:12,color:"#FBBF24"}}>{alarmHata}</p>}
+          </div>
+        </div>
+      )}
+
       <div style={{background:"linear-gradient(160deg, rgba(91,155,216,0.10), rgba(45,212,191,0.04))",border:"1px solid rgba(91,155,216,0.25)",borderRadius:16,padding:"14px 16px",marginBottom:14}}>
-        <p style={{margin:0,fontSize:14,fontWeight:700,color:baslikRenk}}>🏛️ Kamu Haznedarlığı Getiri İzleme</p>
+        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
+          <p style={{margin:0,fontSize:14,fontWeight:700,color:baslikRenk}}>🏛️ Kamu Haznedarlığı Getiri İzleme</p>
+          <div onClick={()=>setAlarmPanel(true)} role="button" aria-label="Oran alarmı" style={{position:"relative",width:34,height:34,borderRadius:17,flexShrink:0,marginTop:-4,marginRight:-6,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",background:alarm.acik?"rgba(52,211,153,0.16)":WA(0.07),border:`1px solid ${alarm.acik?"rgba(52,211,153,0.5)":WA(0.12)}`}}>
+            <Bell size={17} color={alarm.acik?"#34D399":WA(0.7)}/>
+            {alarm.acik&&<span style={{position:"absolute",top:5,right:5,width:8,height:8,borderRadius:4,background:"#34D399",border:`1.5px solid ${C.bg}`}}/>}
+          </div>
+        </div>
         <p style={{margin:"5px 0 0",fontSize:12,color:WA(0.6),lineHeight:1.5}}>Vadeye göre tahmini getiri oranları. Oran, TCMB'nin haftalık mevduat ağırlıklı ortalama faizinin (AOMF) vade katsayısıyla çarpımıdır.</p>
       </div>
 
@@ -30562,14 +30593,14 @@ function KamuHaznedarligi(){
             {eslesen&&eslesen.getiri!=null?(
               <>
                 <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:10}}>
-                  <span style={{fontSize:13,fontWeight:700,color:baslikRenk}}>{gunSayi} gün → {eslesen.vade}</span>
+                  <span style={{fontSize:13,fontWeight:700,color:baslikRenk,lineHeight:1.35}}>{gunSayi} günlük vade için<br/>tahmini getiri oranı</span>
                   <span style={{fontSize:26,fontWeight:800,color:"#34D399",fontVariantNumeric:"tabular-nums"}}>%{khzGosterim(eslesen.getiri)}</span>
                 </div>
-                <p style={{margin:"4px 0 0",fontSize:11,color:WA(0.6),lineHeight:1.4}}>{KHZ_REF_AD[eslesen.ref]} AOMF'nin %{eslesen.oran}'i · AOMF {khzSayi(eslesen.tabanOran)} · tam hesap {(Math.round(eslesen.tabanOran*eslesen.oran*100)/10000).toLocaleString("tr-TR",{minimumFractionDigits:4,maximumFractionDigits:4})}</p>
+                <p style={{margin:"6px 0 0",fontSize:11,color:WA(0.6),lineHeight:1.45}}>{gunSayi} gün, <b>{eslesen.vade}</b> vade dilimine girer. Hesap: {KHZ_REF_AD[eslesen.ref]} AOMF {khzSayi(eslesen.tabanOran)} × %{eslesen.oran} = {(Math.round(eslesen.tabanOran*eslesen.oran*100)/10000).toLocaleString("tr-TR",{minimumFractionDigits:4,maximumFractionDigits:4})}</p>
               </>
             ):(
               <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:10}}>
-                <span style={{fontSize:12,color:WA(0.6)}}>Oran, gün sayısı yazınca burada görünür</span>
+                <span style={{fontSize:12,color:WA(0.6)}}>Gün sayısını yazın, o vadeye ait tahmini getiri burada görünsün</span>
                 <span style={{fontSize:26,fontWeight:800,color:WA(0.3),fontVariantNumeric:"tabular-nums"}}>%—</span>
               </div>
             )}
@@ -30584,33 +30615,6 @@ function KamuHaznedarligi(){
           {gun.trim()!==""&&(gunSayi==null||gunSayi<1)&&<p style={{margin:"8px 0 0",fontSize:12,color:"#FBBF24"}}>1 veya daha büyük bir gün sayısı girin.</p>}
         </div>
       )}
-
-      <div style={{...kutu,borderRadius:14,padding:"12px 14px",marginBottom:12}}>
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <div style={{flex:1,minWidth:0}}>
-            <p style={{margin:0,...etiket}}>{TR("Alarm")}</p>
-            <p style={{margin:"3px 0 0",fontSize:13,fontWeight:700,color:baslikRenk,lineHeight:1.35}}>Oranlar değişince bildirim gönder</p>
-          </div>
-          <div onClick={()=>{ if(alarmIslemde) return; alarmKaydet(!alarm.acik,kapsam); }}
-            role="switch" aria-checked={alarm.acik}
-            style={{width:46,height:28,borderRadius:14,background:alarm.acik?"#34D399":WA(0.2),position:"relative",cursor:"pointer",flexShrink:0,opacity:alarmIslemde?0.6:1,transition:"background .2s"}}>
-            <div style={{position:"absolute",top:3,left:alarm.acik?21:3,width:22,height:22,borderRadius:11,background:"#fff",boxShadow:"0 1px 3px rgba(0,0,0,0.3)",transition:"left .2s"}}/>
-          </div>
-        </div>
-        <div style={{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}>
-          {[{k:null as number|null,ad:"Tüm vadeler",ok:true},{k:(gunSayi!=null&&gunSayi>=1?gunSayi:(kapsam!=null?kapsam:null)) as number|null,ad:(gunSayi!=null&&gunSayi>=1)?`${gunSayi} gün için`:(kapsam!=null?`${kapsam} gün için`:"Gün sayısı yazın →"),ok:(gunSayi!=null&&gunSayi>=1)||kapsam!=null}].map((c,i)=>{
-            const secili=(i===0?kapsam==null:(kapsam!=null&&c.k===kapsam));
-            return(
-              <button key={i} disabled={!c.ok} onClick={()=>{ setKapsam(c.k); if(alarm.acik) alarmKaydet(true,c.k); }}
-                style={{padding:"7px 12px",borderRadius:20,border:`1px solid ${secili?"#34D399":WA(0.15)}`,background:secili?"rgba(52,211,153,0.14)":"transparent",color:secili?"#34D399":WA(0.7),fontSize:12,fontWeight:700,fontFamily:"inherit",cursor:c.ok?"pointer":"default",opacity:c.ok?1:0.5}}>{c.ad}</button>
-            );
-          })}
-        </div>
-        <p style={{margin:"9px 0 0",fontSize:11,color:WA(0.6),lineHeight:1.45}}>
-          {alarm.acik?`Alarm açık · ${alarm.gun?`${alarm.gun} gün için oran değişince`:"herhangi bir vadenin oranı değişince"} bildirim gelir. `:""}Yeni oranlar TCMB EVDS'de yayımlandığında (genellikle cuma) bildirim gönderilir; bildirimde yürürlük tarihi de yazar.
-        </p>
-        {alarmHata&&<p style={{margin:"6px 0 0",fontSize:12,color:"#FBBF24"}}>{alarmHata}</p>}
-      </div>
 
       {kayit&&(
         <>
