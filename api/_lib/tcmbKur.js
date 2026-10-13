@@ -203,6 +203,30 @@ async function madenDogrula(apiKey, aday, hesap, teshis, ad) {
 }
 
 // ── Güncelleme ─────────────────────────────────────────────────────────────
+// TCMB'nin kendi güncel bülteni (today.xml): EVDS'ten önce/doğrudan yayımlanır; en son günü bununla düzeltiriz
+async function tcmbBultenOku(teshis) {
+  try {
+    const r = await fetchZamanli("https://www.tcmb.gov.tr/kurlar/today.xml", { headers: { "User-Agent": "Mozilla/5.0" } }, 8000);
+    if (!r.ok) { teshis.xmlHata = "http " + r.status; return null; }
+    const x = await r.text();
+    const tm = /<Tarih_Date[^>]*\sTarih="(\d{2})\.(\d{2})\.(\d{4})"/.exec(x);
+    if (!tm) { teshis.xmlHata = "tarih yok"; return null; }
+    const iso = `${tm[3]}-${tm[2]}-${tm[1]}`;
+    const bn = (/Bulten_No="([^"]+)"/.exec(x) || [])[1] || "";
+    const g = {};
+    for (const c of DOVIZLER) {
+      const m = new RegExp(`<Currency[^>]*CurrencyCode="${c}"[^>]*>([\\s\\S]*?)</Currency>`).exec(x);
+      if (!m) continue;
+      const al = parseFloat((/<ForexBuying>([^<]+)</.exec(m[1]) || [])[1]);
+      const sa = parseFloat((/<ForexSelling>([^<]+)</.exec(m[1]) || [])[1]);
+      if (kurGecerli(al) && kurGecerli(sa)) g[c] = [al, sa];
+    }
+    if (!DOVIZLER.every((c) => g[c])) { teshis.xmlHata = "eksik kur"; return null; }
+    teshis.xml = { iso, bulten: bn, USD: g.USD };
+    return { iso, g, bulten: bn };
+  } catch (e) { teshis.xmlHata = e.message; return null; }
+}
+
 async function guncelle(apiKey, zorla, teshis, aralikMs = KONTROL_ARALIK_MS) {
   const v = await veriOku();
   const simdi = Date.now();
@@ -228,6 +252,10 @@ async function guncelle(apiKey, zorla, teshis, aralikMs = KONTROL_ARALIK_MS) {
     if (!Object.keys(gozlem).length) { teshis.seri = "bulunamadi"; v.sonKontrol = simdi; await veriYaz(v); return v; }
     v.seri = harita; teshis.seri = "hazir";
     for (const [iso, g] of Object.entries(gozlem)) v.gunler[iso] = { ...(v.gunler[iso] || {}), ...g };
+    const xml = await tcmbBultenOku(teshis);
+    if (xml) { v.xmlGun = v.xmlGun || {}; v.xmlGun[xml.iso] = xml.g; v.bulten = { iso: xml.iso, no: xml.bulten }; }
+    for (const [iso, g] of Object.entries(v.xmlGun || {})) v.gunler[iso] = { ...(v.gunler[iso] || {}), ...g };
+    for (const iso of Object.keys(v.xmlGun || {})) if (iso < gunEkle(bit, -SAKLAMA_GUN)) delete v.xmlGun[iso];
 
     // 2) altın / gümüş (hesaplanan; uygun EVDS serisi doğrulanırsa o)
     const [gc, si] = await Promise.all([yahooOns("GC=F"), yahooOns("SI=F")]);
