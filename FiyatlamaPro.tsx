@@ -30453,7 +30453,7 @@ function KamuHaznedarligi(){
 
   useEffect(()=>{
     let iptal=false;
-    fetch(`${API_BASE}/api/kamu-haznedarligi`)
+    fetch(`${API_BASE}/api/evds-proxy?khz=1`)
       .then(r=>r.ok?r.json():null)
       .then(d=>{ if(!iptal && d && Array.isArray(d.kayitlar) && d.kayitlar.length) setVeri(d); })
       .catch(()=>{})

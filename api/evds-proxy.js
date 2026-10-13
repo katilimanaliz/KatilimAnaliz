@@ -1400,6 +1400,7 @@ async function evdsFetch(url,apiKey){
 export default async function handler(req,res){
   res.setHeader("Access-Control-Allow-Origin","*");
   if(req.method==="OPTIONS") return res.status(200).end();
+  if(req.query.khz!==undefined) return (await import("./_lib/kamuHaznedarligi.js")).default(req,res); // Kamu Haznedarligi
 
   if(await hizSiniriAsildiMi(req)){
     res.setHeader("Retry-After", String(HIZ_SINIRI_PENCERE));
