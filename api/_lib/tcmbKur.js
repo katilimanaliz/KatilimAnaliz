@@ -28,7 +28,7 @@ const KONTROL_ARALIK_MS = 30 * 60 * 1000;  // ekran açılışı
 const CRON_ARALIK_MS = 10 * 60 * 1000;     // zamanlayıcı
 const DOVIZLER = ["USD", "EUR", "GBP", "CHF"];
 const OUNCE_GRAM = 31.1034768;
-const AD = { USD: "ABD Doları", EUR: "Euro", GBP: "İngiliz Sterlini", CHF: "İsviçre Frangı", ALTIN: "Gram Altın", GUMUS: "Gram Gümüş" };
+const AD = { USD: "ABD Doları", EUR: "Euro", GBP: "İngiliz Sterlini", CHF: "İsviçre Frangı", EURUSD: "EUR/USD", GBPUSD: "GBP/USD", ALTIN: "Gram Altın", GUMUS: "Gram Gümüş" };
 
 // ── Yardımcılar ────────────────────────────────────────────────────────────
 async function fetchZamanli(url, opsiyonlar = {}, msTimeout = 9000) {
@@ -169,24 +169,34 @@ function sonDeger(harita, iso) {          // iso veya öncesindeki en yakın de�
   return null;
 }
 async function madenSeriAra(apiKey, teshis) {
-  const seriler = await katalogSeriler(apiKey, (ad) => ad.includes("ALTIN") || ad.includes("GUMUS") || ad.includes("KIYMETLI MADEN"), teshis, "maden");
-  const bul = (anahtar) => seriler.filter((s) => {
-    const ad = N(s.ad);
-    return ad.includes(anahtar) && (ad.includes("TL") || ad.includes("YTL") || ad.includes("GRAM") || ad.includes("GR)")) && !ad.includes("ONS") && !ad.includes("USD") && !ad.includes("SWAP") && !ad.includes("MEVDUAT") && !ad.includes("KG");
-  }).slice(0, 8);
-  return { altin: bul("ALTIN"), gumus: bul("GUMUS") };
+  const seriler = await katalogSeriler(apiKey, (ad) => ad.includes("ALTIN") || ad.includes("GUMUS") || ad.includes("KIYMETLI MADEN") || ad.includes("REESKONT") || ad.includes("DOVIZ KURLARI") || ad.includes("GOSTERGE"), teshis, "maden");
+  const bul = (anahtar, kodlar) => seriler.filter((s) => {
+    const ad = N(s.ad), kod = String(s.kod || "").toUpperCase();
+    const eslesir = ad.includes(anahtar) || kodlar.some((k) => kod.includes(k) || ad.includes("(" + k + ")"));
+    return eslesir && !ad.includes("USD/") && !ad.includes("SWAP") && !ad.includes("MEVDUAT") && !ad.includes("KG") && !ad.includes("TON");
+  }).slice(0, 12);
+  // bilinen/tahmini kodlar (listede yoksa da denenir)
+  const tahmin = (xk) => [`TP.DK.${xk}.A.YTL`, `TP.DK.${xk}.S.YTL`].map((kod) => ({ kod, ad: kod + " (tahmin)" }));
+  const birlestir = (a, b) => [...b, ...a.filter((x) => !b.some((y) => y.kod === x.kod))];
+  return { altin: birlestir(bul("ALTIN", ["XAU", "XAS"]), tahmin("XAU")), gumus: birlestir(bul("GUMUS", ["XAG"]), tahmin("XAG")) };
 }
-// Aday seriyi son 30 günde hesaplanan değerle doğrula
+// Aday seriyi son 30 günde hesaplanan değerle doğrula. Değer TL/gram ya da TL/ons olabilir (ölçek 1 veya 31,1035).
 async function madenDogrula(apiKey, aday, hesap, teshis, ad) {
   const bit = istanbulBugunIso(), bas = gunEkle(bit, -30);
   for (const s of aday) {
     try {
       const j = await evdsJson(`${BASE}/series=${s.kod}&startDate=${tarihEvds(bas)}&endDate=${tarihEvds(bit)}&type=json`, apiKey, 10000);
       const satirlar = (j.items || []).map((r) => ({ iso: tarihCoz(r.Tarih), v: degerOku(r, s.kod) })).filter((x) => x.iso && kurGecerli(x.v));
-      let uyus = 0, say = 0;
-      for (const x of satirlar) { const h = hesap[x.iso]; if (typeof h === "number") { say++; if (Math.abs(x.v / h - 1) <= 0.12) uyus++; } }
-      (teshis[ad + "Adaylar"] = teshis[ad + "Adaylar"] || []).push({ kod: s.kod, ad: s.ad, satir: satirlar.length, karsilastirilan: say, uyusan: uyus });
-      if (say >= 3 && uyus === say) return s.kod;
+      const sonuc = { kod: s.kod, ad: s.ad, satir: satirlar.length };
+      let bulundu = null;
+      for (const olcek of [1, OUNCE_GRAM]) {
+        let uyus = 0, say = 0;
+        for (const x of satirlar) { const h = hesap[x.iso]; if (typeof h === "number") { say++; if (Math.abs(x.v / olcek / h - 1) <= 0.12) uyus++; } }
+        sonuc["olcek" + (olcek === 1 ? "1" : "ons")] = `${uyus}/${say}`;
+        if (!bulundu && say >= 3 && uyus === say) bulundu = { kod: s.kod, olcek };
+      }
+      (teshis[ad + "Adaylar"] = teshis[ad + "Adaylar"] || []).push(sonuc);
+      if (bulundu) return bulundu;
     } catch {}
   }
   return null;
@@ -230,8 +240,8 @@ async function guncelle(apiKey, zorla, teshis, aralikMs = KONTROL_ARALIK_MS) {
         if (o) hesap[k][iso] = [yuvarla(o * usd[0] / OUNCE_GRAM, 2), yuvarla(o * usd[1] / OUNCE_GRAM, 2)];
       }
     }
-    if (!v.maden || (!v.maden.denendi || simdi - v.maden.denendi > 24 * 3600 * 1000)) {
-      const m = { altin: null, gumus: null, denendi: simdi };
+    if (!v.maden || v.maden.surum !== 2 || !v.maden.denendi || simdi - v.maden.denendi > 24 * 3600 * 1000) {
+      const m = { altin: null, gumus: null, denendi: simdi, surum: 2 };
       try {
         const aday = await madenSeriAra(apiKey, teshis);
         const ort = (k) => Object.fromEntries(Object.entries(hesap[k]).map(([i, x]) => [i, (x[0] + x[1]) / 2]));
@@ -241,12 +251,14 @@ async function guncelle(apiKey, zorla, teshis, aralikMs = KONTROL_ARALIK_MS) {
       v.maden = m;
     }
     for (const [k, anahtar] of [["ALTIN", "altin"], ["GUMUS", "gumus"]]) {
-      const kod = v.maden?.[anahtar];
+      const ms = v.maden?.[anahtar];
+      const kod = ms && typeof ms === "object" ? ms.kod : (typeof ms === "string" ? ms : null);
+      const olcek = ms && typeof ms === "object" && ms.olcek ? ms.olcek : 1;
       let evdsGun = {};
       if (kod) {
         try {
           const j = await evdsJson(`${BASE}/series=${kod}&startDate=${tarihEvds(bas)}&endDate=${tarihEvds(bit)}&type=json`, apiKey, 10000);
-          for (const r of (j.items || [])) { const iso = tarihCoz(r.Tarih), x = degerOku(r, kod); if (iso && kurGecerli(x)) evdsGun[iso] = [yuvarla(x, 2), yuvarla(x, 2)]; }
+          for (const r of (j.items || [])) { const iso = tarihCoz(r.Tarih), x = degerOku(r, kod); if (iso && kurGecerli(x)) evdsGun[iso] = [yuvarla(x / olcek, 2), yuvarla(x / olcek, 2)]; }
         } catch {}
       }
       for (const iso of Object.keys(v.gunler)) {
@@ -288,7 +300,10 @@ async function alarmlariDegerlendir(v, iso) {
   const aboneler = await redis.hgetall(KV_ABONE);
   const tokenlar = Object.keys(aboneler || {});
   if (!tokenlar.length) return { gonderilen: 0, not: "abone yok" };
-  const bugun = v.gunler[iso];
+  const bugun = { ...v.gunler[iso] };
+  const r4 = (x) => Math.round(x * 10000) / 10000;
+  if (bugun.EUR && bugun.USD) bugun.EURUSD = [r4(bugun.EUR[0] / bugun.USD[0]), r4(bugun.EUR[1] / bugun.USD[1])];
+  if (bugun.GBP && bugun.USD) bugun.GBPUSD = [r4(bugun.GBP[0] / bugun.USD[0]), r4(bugun.GBP[1] / bugun.USD[1])];
   const mesajlar = [];   // {token, baslik, govde}
   const guncelAbone = {};
   for (const t of tokenlar) {
@@ -298,7 +313,7 @@ async function alarmlariDegerlendir(v, iso) {
       const x = bugun[h.k]; if (!x) { kalan.push(h); continue; }
       const s = x[1];
       const tetik = h.yon === "ust" ? s >= h.hedef : s <= h.hedef;
-      if (tetik) mesajlar.push({ token: t, baslik: `${AD[h.k]} hedefe ulaştı`, govde: `${AD[h.k]} satış ${nSayi(h.k, s)} ₺ (hedef ${h.yon === "ust" ? "üstü" : "altı"} ${nSayi(h.k, h.hedef)}). TCMB ${tarihYazi(iso)}.` });
+      if (tetik) mesajlar.push({ token: t, baslik: `${AD[h.k]} hedefe ulaştı`, govde: `${AD[h.k]} satış ${nSayi(h.k, s)}${h.k === "EURUSD" || h.k === "GBPUSD" ? "" : " ₺"} (hedef ${h.yon === "ust" ? "üstü" : "altı"} ${nSayi(h.k, h.hedef)}). TCMB ${tarihYazi(iso)}.` });
       else kalan.push(h);
     }
     if (a.ozet) {

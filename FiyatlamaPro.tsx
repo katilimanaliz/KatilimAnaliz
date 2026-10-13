@@ -30552,9 +30552,11 @@ function KamuHaznedarligi(){
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           <div style={{flex:1,minWidth:0}}>
             <p style={{margin:0,...etiket}}>{TR("Geçerlilik tarihi")}</p>
-            <TrTakvim value={tarih} min={ilkTarih} max={bugun} onChange={(e:any)=>setTarih(e.target.value)}
-              style={{marginTop:4,background:"transparent",border:"none",padding:0,fontSize:17,fontWeight:700,color:baslikRenk}}/>
-            <p style={{margin:"2px 0 0",fontSize:11,color:WA(0.6)}}>{khzGunAdi(tarih)}</p>
+            <div style={{display:"flex",alignItems:"baseline",gap:8,flexWrap:"wrap",marginTop:4}}>
+              <TrTakvim value={tarih} min={ilkTarih} max={bugun} onChange={(e:any)=>setTarih(e.target.value)}
+                style={{display:"inline-block",background:"transparent",border:"none",padding:0,fontSize:17,fontWeight:700,color:baslikRenk}}/>
+              <span style={{fontSize:13,color:WA(0.6)}}>· {khzGunAdi(tarih)}</span>
+            </div>
           </div>
           {tarih!==bugun&&(
             <button type="button" onClick={()=>setTarih(bugun)} style={{border:"1px solid rgba(91,155,216,0.4)",background:"rgba(91,155,216,0.12)",color:C.blue,fontSize:12,fontWeight:700,padding:"8px 12px",borderRadius:10,cursor:"pointer",fontFamily:"inherit"}}>Bugün</button>
@@ -30689,8 +30691,10 @@ function KamuHaznedarligi(){
 // tarih seçince o günün (hafta sonu/tatilde son iş gününün) değeri gösterilir. Çevirici, tarih karşılaştırma, grafik, alarm.
 const KUR_DOVIZ=[{k:"USD",ad:"ABD Doları",b:"🇺🇸"},{k:"EUR",ad:"Euro",b:"🇪🇺"},{k:"GBP",ad:"İngiliz Sterlini",b:"🇬🇧"},{k:"CHF",ad:"İsviçre Frangı",b:"🇨🇭"}];
 const KUR_MADEN=[{k:"ALTIN",ad:"Gram Altın",b:"🥇"},{k:"GUMUS",ad:"Gram Gümüş",b:"🥈"}];
-const KUR_TUMU=[...KUR_DOVIZ,...KUR_MADEN];
-const KUR_KISA:Record<string,string>={USD:"USD",EUR:"EUR",GBP:"GBP",CHF:"CHF",ALTIN:"Altın",GUMUS:"Gümüş"};
+const KUR_PARITE=[{k:"EURUSD",ad:"Euro / ABD Doları",b:"🇪🇺"},{k:"GBPUSD",ad:"Sterlin / ABD Doları",b:"🇬🇧"}];
+const KUR_TUMU=[...KUR_DOVIZ,...KUR_PARITE,...KUR_MADEN];
+const KUR_CEVIR=[...KUR_DOVIZ,...KUR_MADEN]; // çevirici: pariteler hariç
+const KUR_KISA:Record<string,string>={USD:"USD",EUR:"EUR",GBP:"GBP",CHF:"CHF",EURUSD:"EUR/USD",GBPUSD:"GBP/USD",ALTIN:"Altın",GUMUS:"Gümüş"};
 function kurSayi(k:string,v:number){ const d=(k==="ALTIN"||k==="GUMUS")?2:4; return v.toLocaleString("tr-TR",{minimumFractionDigits:d,maximumFractionDigits:d}); }
 function kurYuzde(v:number){ return "%"+Math.abs(v).toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function kurGunEkleIso(iso:string,n:number){ const c=tarihCoz(iso); if(!c) return iso; const d=new Date(c.y,c.m,c.d+n); return tarihIso(d.getFullYear(),d.getMonth(),d.getDate()); }
@@ -30731,8 +30735,18 @@ function TcmbKurIzleme(){
     return ()=>{iptal=true;};
   },[]);
 
-  const gunler:any=veri?.gunler||{};
-  const tarihler:string[]=useMemo(()=>Object.keys(gunler).sort(),[veri]);
+  // Pariteler (EUR/USD, GBP/USD): TCMB çapraz kuru gibi, TL kurlarının oranı (alış/alış, satış/satış)
+  const gunler:any=useMemo(()=>{
+    const o:any={}; const r4=(v:number)=>Math.round(v*10000)/10000;
+    for(const [iso,d] of Object.entries(veri?.gunler||{}) as [string,any][]){
+      const x:any={...d};
+      if(d.EUR&&d.USD) x.EURUSD=[r4(d.EUR[0]/d.USD[0]),r4(d.EUR[1]/d.USD[1])];
+      if(d.GBP&&d.USD) x.GBPUSD=[r4(d.GBP[0]/d.USD[0]),r4(d.GBP[1]/d.USD[1])];
+      o[iso]=x;
+    }
+    return o;
+  },[veri]);
+  const tarihler:string[]=useMemo(()=>Object.keys(gunler).sort(),[gunler]);
   const bugun=tarihBugunIso();
   const iso=(()=>{ let b=""; for(const t of tarihler){ if(t<=tarih) b=t; else break; } return b; })();
   const idx=iso?tarihler.indexOf(iso):-1;
@@ -30758,6 +30772,7 @@ function TcmbKurIzleme(){
 
   // çevirici
   const cSayi=parseFloat(String(tutar).replace(/\./g,"").replace(",","."));
+  const tutarYaz=(s:string)=>{ const ham=String(s).replace(/[^0-9,]/g,""); const [ta,...o]=ham.split(","); const ond=o.join("").slice(0,4); const tam=ta.replace(/^0+(?=\d)/,"").replace(/\B(?=(\d{3})+(?!\d))/g,"."); return ham.includes(",")?`${tam||"0"},${ond}`:tam; };
   const cKur=g?.[ckalem];
   const cGecerli=isFinite(cSayi)&&cSayi>=0&&!!cKur;
   const cBirim=(ckalem==="ALTIN"||ckalem==="GUMUS")?"gr":ckalem;
@@ -30792,7 +30807,7 @@ function TcmbKurIzleme(){
       .catch(()=>{ setAlarmIslemde(false); setAlarmHata("Bağlantı hatası, tekrar deneyin."); });
   };
   const hedefEkle=()=>{
-    const h=parseFloat(String(yH).replace(/\./g,"").replace(",","."));
+    const hs=String(yH); const h=hs.includes(",")?parseFloat(hs.replace(/\./g,"").replace(",",".")):((hs.match(/\./g)||[]).length===1&&/\.\d{1,4}$/.test(hs)?parseFloat(hs):parseFloat(hs.replace(/\./g,"")));
     if(!isFinite(h)||h<=0){ setAlarmHata("Geçerli bir hedef değer yazın."); return; }
     if(alarm.hedefler.length>=5){ setAlarmHata("En fazla 5 hedef alarmı kurulabilir."); return; }
     alarmKaydet({ozet:alarm.ozet,hedefler:[...alarm.hedefler,{k:yK,yon:yY,hedef:h}]});
@@ -30802,18 +30817,18 @@ function TcmbKurIzleme(){
   const sonKontrolMetin=(()=>{ const t=veri?.sonKontrol; if(!t) return ""; const d=new Date(t); return `${d.getDate()} ${(TARIH_AYLAR.tr||[])[d.getMonth()]?.slice(0,3)} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`; })();
   const chip=(aktif:boolean):any=>({padding:"7px 12px",borderRadius:20,border:`1px solid ${aktif?"#34D399":WA(0.15)}`,background:aktif?"rgba(52,211,153,0.14)":"transparent",color:aktif?"#34D399":WA(0.7),fontSize:12,fontWeight:700,fontFamily:"inherit",cursor:"pointer"});
   const satir=(x:{k:string,ad:string,b:string},i:number)=>{
-    const v=g?.[x.k]; const d=degisim(x.k); const secili=sec===x.k;
+    const v=g?.[x.k]; const d=degisim(x.k); const secili=sec===x.k; const maden=(x.k==="ALTIN"||x.k==="GUMUS"); const parite=(x.k==="EURUSD"||x.k==="GBPUSD");
+    const alt=maden?(madenHesap(x.k)?"hesaplanan":"TCMB / EVDS"):x.ad;
     return(
-      <div key={x.k} className="press-card" onClick={()=>setSec(x.k)} style={{display:"flex",alignItems:"center",gap:6,padding:"10px 14px",borderTop:i===0?"none":`1px solid ${WA(0.07)}`,background:secili?"rgba(91,155,216,0.10)":"transparent",cursor:"pointer"}}>
+      <div key={x.k} className="press-card" onClick={()=>setSec(x.k)} style={{display:"flex",alignItems:"center",gap:6,padding:"10px 12px 10px 14px",borderTop:i===0?"none":`1px solid ${WA(0.07)}`,background:secili?"rgba(91,155,216,0.10)":"transparent",cursor:"pointer"}}>
         <div style={{flex:1,minWidth:0}}>
-          <p style={{margin:0,fontSize:14,fontWeight:700,color:baslikRenk}}>{x.b} {KUR_KISA[x.k]==="Altın"||KUR_KISA[x.k]==="Gümüş"?x.ad:x.k}</p>
-          <p style={{margin:"1px 0 0",fontSize:10.5,color:WA(0.6)}}>{(x.k==="ALTIN"||x.k==="GUMUS")?(madenHesap(x.k)?"Ons ve TCMB USD kurundan hesaplanır":"TCMB / EVDS"):x.ad}</p>
+          <p style={{margin:0,fontSize:14,fontWeight:700,color:baslikRenk,whiteSpace:"nowrap"}}>{x.b} {maden?x.ad:(parite?KUR_KISA[x.k]:x.k)}</p>
+          <p style={{margin:"2px 0 0",fontSize:10.5,color:WA(0.6),whiteSpace:"nowrap"}}>
+            {d!=null&&Math.abs(d)>=0.005&&<span style={{fontWeight:700,color:d>0?"#22C55E":"#EF4444"}}>{d>0?"▲":"▼"} {kurYuzde(d)} · </span>}{alt}
+          </p>
         </div>
-        <span style={{width:76,textAlign:"right",fontSize:14.5,fontWeight:800,color:baslikRenk,fontVariantNumeric:"tabular-nums"}}>{v?kurSayi(x.k,v[0]):"—"}</span>
-        <div style={{width:80,textAlign:"right"}}>
-          <p style={{margin:0,fontSize:14.5,fontWeight:800,color:baslikRenk,fontVariantNumeric:"tabular-nums"}}>{v?kurSayi(x.k,v[1]):"—"}</p>
-          {d!=null&&Math.abs(d)>=0.005&&<p style={{margin:"1px 0 0",fontSize:10,fontWeight:700,color:d>0?"#22C55E":"#EF4444"}}>{d>0?"▲ ":"▼ "}{kurYuzde(d)}</p>}
-        </div>
+        <span style={{width:84,textAlign:"right",fontSize:15,fontWeight:800,color:baslikRenk,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{v?kurSayi(x.k,v[0]):"—"}</span>
+        <span style={{width:84,textAlign:"right",fontSize:15,fontWeight:800,color:baslikRenk,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{v?kurSayi(x.k,v[1]):"—"}</span>
       </div>
     );
   };
@@ -30877,9 +30892,11 @@ function TcmbKurIzleme(){
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           <div style={{flex:1,minWidth:0}}>
             <p style={{margin:0,...etiket}}>{TR("Kur tarihi")}</p>
-            <TrTakvim value={tarih} min={tarihler[0]} max={bugun} onChange={(e:any)=>setTarih(e.target.value)}
-              style={{marginTop:4,background:"transparent",border:"none",padding:0,fontSize:17,fontWeight:700,color:baslikRenk}}/>
-            <p style={{margin:"2px 0 0",fontSize:11,color:WA(0.6)}}>{khzGunAdi(tarih)}</p>
+            <div style={{display:"flex",alignItems:"baseline",gap:8,flexWrap:"wrap",marginTop:4}}>
+              <TrTakvim value={tarih} min={tarihler[0]} max={bugun} onChange={(e:any)=>setTarih(e.target.value)}
+                style={{display:"inline-block",background:"transparent",border:"none",padding:0,fontSize:17,fontWeight:700,color:baslikRenk}}/>
+              <span style={{fontSize:13,color:WA(0.6)}}>· {khzGunAdi(tarih)}</span>
+            </div>
           </div>
           {tarih!==bugun&&(
             <button type="button" onClick={()=>setTarih(bugun)} style={{border:"1px solid rgba(91,155,216,0.4)",background:"rgba(91,155,216,0.12)",color:C.blue,fontSize:12,fontWeight:700,padding:"8px 12px",borderRadius:10,cursor:"pointer",fontFamily:"inherit"}}>Bugün</button>
@@ -30898,10 +30915,12 @@ function TcmbKurIzleme(){
           <div style={{...kutu,borderRadius:16,overflow:"hidden",marginBottom:12}}>
             <div style={{display:"flex",alignItems:"center",gap:6,padding:"9px 14px 7px",borderBottom:`1px solid ${WA(0.08)}`}}>
               <span style={{flex:1,fontSize:11,fontWeight:700,color:WA(0.6)}}>Döviz</span>
-              <span style={{width:76,textAlign:"right",fontSize:11,fontWeight:700,color:WA(0.6)}}>Alış</span>
-              <span style={{width:80,textAlign:"right",fontSize:11,fontWeight:700,color:WA(0.6)}}>Satış</span>
+              <span style={{width:84,textAlign:"right",fontSize:11,fontWeight:700,color:WA(0.6)}}>Alış</span>
+              <span style={{width:84,textAlign:"right",fontSize:11,fontWeight:700,color:WA(0.6),marginRight:-2}}>Satış</span>
             </div>
             {KUR_DOVIZ.map(satir)}
+            <div style={{padding:"7px 14px",borderTop:`1px solid ${WA(0.08)}`,background:WA(0.03)}}><span style={{fontSize:10.5,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),letterSpacing:0.3}}>PARİTE (ÇAPRAZ KUR)</span></div>
+            {KUR_PARITE.map(satir)}
             <div style={{padding:"7px 14px",borderTop:`1px solid ${WA(0.08)}`,background:WA(0.03)}}><span style={{fontSize:10.5,fontWeight:700,color:(TEMA==="acik"?"#1A2430":"#A8C2DC"),letterSpacing:0.3}}>KIYMETLİ MADEN · TL/GRAM</span></div>
             {KUR_MADEN.map(satir)}
           </div>
@@ -30936,9 +30955,9 @@ function TcmbKurIzleme(){
               ))}
             </div>
             <div style={{display:"flex",gap:8,marginTop:8}}>
-              <input type="text" inputMode="decimal" value={tutar} onChange={(e:any)=>setTutar(String(e.target.value).replace(/[^0-9.,]/g,"").slice(0,14))} style={{...girdi,flex:1,minWidth:0}}/>
+              <input type="text" inputMode="decimal" value={tutarYaz(tutar)} onChange={(e:any)=>setTutar(tutarYaz(String(e.target.value)).slice(0,20))} style={{...girdi,flex:1,minWidth:0}}/>
               <select value={ckalem} onChange={(e:any)=>setCkalem(e.target.value)} style={{...girdi,width:104,padding:"11px 8px",fontSize:14}}>
-                {KUR_TUMU.map(x=><option key={x.k} value={x.k}>{KUR_KISA[x.k]}</option>)}
+                {KUR_CEVIR.map(x=><option key={x.k} value={x.k}>{KUR_KISA[x.k]}</option>)}
               </select>
             </div>
             {cSonuc!=null&&cAlt!=null&&(
@@ -30947,7 +30966,7 @@ function TcmbKurIzleme(){
                   <span style={{fontSize:12,fontWeight:700,color:baslikRenk,lineHeight:1.35}}>{tarihYaz(iso)} TCMB<br/>satış kuruyla</span>
                   <span style={{fontSize:22,fontWeight:800,color:"#34D399",fontVariantNumeric:"tabular-nums"}}>{yon==="dTL"?`${tlYaz(cSonuc)} ₺`:`${dvYaz(cSonuc)} ${cBirim}`}</span>
                 </div>
-                <p style={{margin:"6px 0 0",fontSize:11,color:WA(0.6),lineHeight:1.45}}>{yon==="dTL"?`${tutar} ${cBirim} × ${kurSayi(ckalem,cKur[1])}`:`${tutar} ₺ ÷ ${kurSayi(ckalem,cKur[1])}`} · Alış kuruyla: {yon==="dTL"?`${tlYaz(cAlt)} ₺`:`${dvYaz(cAlt)} ${cBirim}`}</p>
+                <p style={{margin:"6px 0 0",fontSize:11,color:WA(0.6),lineHeight:1.45}}>{yon==="dTL"?`${tutarYaz(tutar)} ${cBirim} × ${kurSayi(ckalem,cKur[1])}`:`${tutarYaz(tutar)} ₺ ÷ ${kurSayi(ckalem,cKur[1])}`} · Alış kuruyla: {yon==="dTL"?`${tlYaz(cAlt)} ₺`:`${dvYaz(cAlt)} ${cBirim}`}</p>
               </div>
             )}
           </div>
