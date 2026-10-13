@@ -136,6 +136,7 @@ import { admin } from "./_lib/firebaseAdmin.js";
 import { kilitliCalistir } from "./_lib/kilitliOnbellek.js";
 import { haberleriGonder, HABER_BILDIRIM_TOKENS_KEY, HABER_BILDIRIM_KATEGORI_PREFIX } from "./_lib/haberBildirimi.js";
 import { khzCronKontrol } from "./_lib/kamuHaznedarligi.js";
+import { kurCronKontrol } from "./_lib/tcmbKur.js";
 
 // NOT: Vercel KV entegrasyonu, Upstash'in standart isimlendirmesi olan
 // UPSTASH_REDIS_REST_URL/TOKEN yerine KV_REST_API_URL/KV_REST_API_TOKEN
@@ -2339,6 +2340,7 @@ async function alarmKontrol(req, res) {
   }
 
   try { await Promise.race([khzCronKontrol(), new Promise((r)=>setTimeout(r,15000))]); } catch (e) { console.error("khz kontrol:", e?.message); } // Kamu Haznedarligi
+  try { await Promise.race([kurCronKontrol(), new Promise((r)=>setTimeout(r,15000))]); } catch (e) { console.error("kur kontrol:", e?.message); } // TCMB Kur Izleme
   try {
     const { basarili, sonuc } = await kilitliCalistir(
       redis,
