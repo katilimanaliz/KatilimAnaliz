@@ -222,6 +222,19 @@ async function tcmbBultenOku(teshis) {
       if (kurGecerli(al) && kurGecerli(sa)) g[c] = [al, sa];
     }
     if (!DOVIZLER.every((c) => g[c])) { teshis.xmlHata = "eksik kur"; return null; }
+    // TCMB'nin kendi çapraz kuru (EUR/USD, GBP/USD): alış=satış tek değer; yönü TL kurlarından doğrula
+    for (const [c, k] of [["EUR", "EURUSD"], ["GBP", "GBPUSD"]]) {
+      const m = new RegExp(`<Currency[^>]*CurrencyCode="${c}"[^>]*>([\\s\\S]*?)</Currency>`).exec(x);
+      if (!m) continue;
+      const hesap = g[c][0] / g.USD[0];
+      for (const et of ["CrossRateUSD", "CrossRateOther"]) {
+        const cv = parseFloat((new RegExp(`<${et}>([^<]+)<`).exec(m[1]) || [])[1]);
+        if (!kurGecerli(cv)) continue;
+        if (Math.abs(cv / hesap - 1) < 0.01) { g[k] = [cv, cv]; break; }
+        if (Math.abs(1 / cv / hesap - 1) < 0.01) { const t = Math.round((1 / cv) * 10000) / 10000; g[k] = [t, t]; break; }
+      }
+    }
+    teshis.xmlCapraz = { EURUSD: g.EURUSD || null, GBPUSD: g.GBPUSD || null };
     teshis.xml = { iso, bulten: bn, USD: g.USD };
     return { iso, g, bulten: bn };
   } catch (e) { teshis.xmlHata = e.message; return null; }
@@ -330,8 +343,8 @@ async function alarmlariDegerlendir(v, iso) {
   if (!tokenlar.length) return { gonderilen: 0, not: "abone yok" };
   const bugun = { ...v.gunler[iso] };
   const r4 = (x) => Math.round(x * 10000) / 10000;
-  if (bugun.EUR && bugun.USD) bugun.EURUSD = [r4(bugun.EUR[0] / bugun.USD[0]), r4(bugun.EUR[1] / bugun.USD[1])];
-  if (bugun.GBP && bugun.USD) bugun.GBPUSD = [r4(bugun.GBP[0] / bugun.USD[0]), r4(bugun.GBP[1] / bugun.USD[1])];
+  if (!bugun.EURUSD && bugun.EUR && bugun.USD) bugun.EURUSD = [r4(bugun.EUR[0] / bugun.USD[0]), r4(bugun.EUR[1] / bugun.USD[1])];
+  if (!bugun.GBPUSD && bugun.GBP && bugun.USD) bugun.GBPUSD = [r4(bugun.GBP[0] / bugun.USD[0]), r4(bugun.GBP[1] / bugun.USD[1])];
   const mesajlar = [];   // {token, baslik, govde}
   const guncelAbone = {};
   for (const t of tokenlar) {

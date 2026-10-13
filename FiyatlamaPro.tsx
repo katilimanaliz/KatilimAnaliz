@@ -30735,13 +30735,13 @@ function TcmbKurIzleme(){
     return ()=>{iptal=true;};
   },[]);
 
-  // Pariteler (EUR/USD, GBP/USD): TCMB çapraz kuru gibi, TL kurlarının oranı (alış/alış, satış/satış)
+  // Pariteler (EUR/USD, GBP/USD): TCMB bülteninin çapraz kuru varsa o; yoksa TL kurlarının oranı
   const gunler:any=useMemo(()=>{
     const o:any={}; const r4=(v:number)=>Math.round(v*10000)/10000;
     for(const [iso,d] of Object.entries(veri?.gunler||{}) as [string,any][]){
       const x:any={...d};
-      if(d.EUR&&d.USD) x.EURUSD=[r4(d.EUR[0]/d.USD[0]),r4(d.EUR[1]/d.USD[1])];
-      if(d.GBP&&d.USD) x.GBPUSD=[r4(d.GBP[0]/d.USD[0]),r4(d.GBP[1]/d.USD[1])];
+      if(!d.EURUSD&&d.EUR&&d.USD) x.EURUSD=[r4(d.EUR[0]/d.USD[0]),r4(d.EUR[1]/d.USD[1])];
+      if(!d.GBPUSD&&d.GBP&&d.USD) x.GBPUSD=[r4(d.GBP[0]/d.USD[0]),r4(d.GBP[1]/d.USD[1])];
       o[iso]=x;
     }
     return o;
@@ -30824,7 +30824,7 @@ function TcmbKurIzleme(){
         <div style={{flex:1,minWidth:0}}>
           <p style={{margin:0,fontSize:14,fontWeight:700,color:baslikRenk,whiteSpace:"nowrap"}}>{x.b} {maden?x.ad:(parite?KUR_KISA[x.k]:x.k)}</p>
           <p style={{margin:"2px 0 0",fontSize:10.5,color:WA(0.6),whiteSpace:"nowrap"}}>
-            {d!=null&&Math.abs(d)>=0.005&&<span style={{fontWeight:700,color:d>0?"#22C55E":"#EF4444"}}>{d>0?"▲":"▼"} {kurYuzde(d)} · </span>}{alt}
+            {d!=null&&(Math.abs(d)>=0.005?<span style={{fontWeight:700,color:d>0?"#22C55E":"#EF4444"}}>{d>0?"▲":"▼"} {kurYuzde(d)} · </span>:<span style={{fontWeight:700,color:WA(0.55)}}>■ %0,00 · </span>)}{alt}
           </p>
         </div>
         <span style={{width:84,textAlign:"right",fontSize:15,fontWeight:800,color:baslikRenk,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{v?kurSayi(x.k,v[0]):"—"}</span>
