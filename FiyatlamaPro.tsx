@@ -6191,7 +6191,7 @@ const EN_SOZLUK: Record<string, string> = {
   "Uygulamayı yükle": "Install the app",
   "VERGİ": "TAX",
   "Vade (Gün)": "Maturity (Days)",
-  "Vade Farkı Kararı": "Maturity Differential Decision",
+  "Vade Farklı mı, Peşin Ödeme mi?": "Deferred Price or Pay Upfront?",
   "Vade Sonu Geri Ödeme (Nominal Anapara)": "End-of-Term Repayment (Nominal Principal)",
   "Vade Tarihi": "Maturity Date",
   "Vade kullanımı": "Maturity usage",
@@ -6430,7 +6430,7 @@ const EN_SOZLUK: Record<string, string> = {
   "Endeks üyeliği değişirse uyar": "Alert me if index membership changes",
   "Enerji Enflasyonu (Yıllık)": "Energy Inflation (Annual)",
   "Enflasyon Beklentisi — Hanehalkı (12 Ay Sonrası)": "Inflation Expectation — Households (12 Months Ahead)",
-  "Erken Kapama Kararı": "Early Closure Decision",
+  "Krediyi Erken Kapatmalı mıyım?": "Should I Close My Loan Early?",
   "Erken kapama ücreti": "Early closure fee",
   "Erken ödenecek anapara": "Principal to be prepaid",
   "Evet, ancak en az bir mali dönem geçmesi gerekir.": "Yes, but at least one fiscal period must pass.",
@@ -7578,7 +7578,7 @@ const EN_SOZLUK: Record<string, string> = {
   "TL Katılım Hesabı": "TL Participation Account",
   "TL Yıllık Kâr Payı Oranı": "TL Annual Profit Share Rate",
   "TL karşılığı": "TL equivalent",
-  "TL/YP Borçlanma Kararı": "TL/FX Borrowing Decision",
+  "TL mi, Döviz mi Borçlanmalıyım?": "Should I Borrow in TL or FX?",
   "TM Tutarı": "TM Amount",
   "TOPLAM GERİ ÖDEME": "TOTAL REPAYMENT",
   "Tablo kapsamı dışı": "Outside table scope",
@@ -9372,7 +9372,7 @@ const AR_SOZLUK: Record<string, string> = {
   "Tüketiciye yapılacak toplam indirim (isteğe bağlı)": "إجمالي الخصم الممنوح للمستهلك (اختياري)",
   "Türk Lirası": "الليرة التركية",
   "Uluslararası Rezervler": "الاحتياطيات الدولية",
-  "Vade Farkı Kararı": "قرار فرق الأجل",
+  "Vade Farklı mı, Peşin Ödeme mi?": "بسعر آجل أم دفع نقدي؟",
   "Vade sonunda tek ödeme": "دفعة واحدة عند حلول الأجل",
   "Varlıklarını gir, nisabı aşıp aşmadığını görelim.": "أدخل أصولك لنرى هل تتجاوز النصاب.",
   "YP İşlemde BSMV": "BSMV على المعاملات بالعملة الأجنبية",
@@ -11017,7 +11017,7 @@ const AR_SOZLUK: Record<string, string> = {
   "EFEKTİF YILLIK ORAN": "النسبة السنوية الفعلية",
   "Eklendiğinden beri %": "منذ الإضافة %",
   "En Çok Yükselen Fonlar": "الصناديق الأكثر ارتفاعًا",
-  "Erken Kapama Kararı": "قرار الإغلاق المبكر",
+  "Krediyi Erken Kapatmalı mıyım?": "هل أغلق قرضي مبكرًا؟",
   "F/K (Fiyat/Kazanç)": "مكرر الربحية (السعر/الربح)",
   "Farklı bir kelime dene ya da kategorilerden birine göz at.": "جرّب كلمة مختلفة أو تصفّح إحدى الفئات.",
   "Finansman tutarı bu değer üzerinden hesaplanır": "يُحسب مبلغ التمويل على هذه القيمة",
@@ -11303,7 +11303,7 @@ const AR_SOZLUK: Record<string, string> = {
   "Süre": "المدة",
   "TCMB Ağırlıklı Fonlama Oranı": "نسبة التمويل المرجّحة من TCMB",
   "TKBB (Türkiye Katılım Bankaları Birliği)": "TKBB (اتحاد بنوك المشاركة في تركيا)",
-  "TL/YP Borçlanma Kararı": "قرار الاقتراض بالليرة/العملة الأجنبية",
+  "TL mi, Döviz mi Borçlanmalıyım?": "هل أقترض بالليرة أم بالعملة الأجنبية؟",
   "Tahsis Kararı Finansman Yüzdesi": "نسبة التمويل في قرار التخصيص",
   "Taksitli Ticari Finansman": "التمويل التجاري بالتقسيط",
   "Taşıt Finansmanı": "تمويل المركبات",
@@ -29464,6 +29464,13 @@ function ErkenKapamaKarari({ s }: { s?: any }) {
   const [bilesikS, setBilesikS] = useState("");   // ticari: elle girilen yıllık bileşik oran
   const [yatirimVadeS, setYatirimVadeS] = useState("32");
   const [getiriS, setGetiriS] = useState("");
+  const [kaynak, setKaynak] = useState("nakit");        // nakit | refinans
+  const [yeniGiris, setYeniGiris] = useState("oran");   // oran | taksit
+  const [yeniOranS, setYeniOranS] = useState("");
+  const [yeniTaksitS, setYeniTaksitS] = useState("");
+  const [yeniVadeS, setYeniVadeS] = useState("");
+  const [masrafS, setMasrafS] = useState("");
+  const refin = kaynak === "refinans";
 
   const anapara = sayiOku(anaparaS), taksit = sayiOku(taksitS);
   const n = Math.round(sayiOku(vadeS)), nakit = sayiOku(nakitS);
@@ -29507,6 +29514,33 @@ function ErkenKapamaKarari({ s }: { s?: any }) {
   }
   const kapamaTutari = anapara + ucret + bsmv;
 
+  // ── REFİNANSMAN: kapama tutarı yeni bir finansmanla ödenir.
+  // Karşılaştırma BUGÜNKÜ DEĞER üzerinden: eski taksitlerin, yeni finansmanın oranıyla iskonto edilmiş değeri
+  // ile (kapama tutarı + masraf) kıyaslanır. Yeni finansmanın kendi taksitlerinin bugünkü değeri (aynı oranla)
+  // zaten borç tutarına eşittir; bu yüzden vadeler farklı olsa da karşılaştırma tutarlıdır.
+  const yeniVade = Math.round(sayiOku(yeniVadeS)), masraf = sayiOku(masrafS);
+  const borc = kapamaTutari;
+  let rYeni = 0, yeniTaksit = 0;
+  if (yeniGiris === "oran") {
+    rYeni = sayiOku(yeniOranS) / 100;
+    yeniTaksit = rYeni > 0 && yeniVade > 0 ? borc * rYeni / (1 - Math.pow(1 + rYeni, -yeniVade)) : 0;
+  } else {
+    yeniTaksit = sayiOku(yeniTaksitS);
+    rYeni = yeniVade > 0 ? kararAylikOranBul(borc, yeniTaksit, yeniVade) : 0;
+  }
+  const pvEski = (r: number) => (r > 0 ? taksit * (1 - Math.pow(1 + r, -n)) / r : taksit * n);
+  const hazirRef = anapara > 0 && taksit > 0 && n > 0 && yeniVade > 0 && rYeni > 0 && yeniTaksit > 0;
+  const refAvantaj = hazirRef ? pvEski(rYeni) - borc - masraf : 0;
+  const refAvantajli = refAvantaj > 0;
+  const eskiToplam = taksit * n, yeniToplam = yeniTaksit * yeniVade + masraf;
+  const yeniYillik = (Math.pow(1 + rYeni, 12) - 1) * 100;
+  const refBasabas = (() => {   // yeni aylık oranın bu değerin altında olması gerekir
+    if (!hazirRef || eskiToplam <= borc + masraf) return null;
+    let alt = 0.000001, ust = 0.5;
+    for (let k = 0; k < 80; k++) { const m = (alt + ust) / 2; if (pvEski(m) > borc + masraf) alt = m; else ust = m; }
+    return (alt + ust) / 2;
+  })();
+
   const hazir = anapara > 0 && taksit > 0 && n > 0 && nakit > 0 && brutGetiri > 0;
   const yetersizNakit = hazir && nakit < kapamaTutari;
 
@@ -29541,12 +29575,90 @@ function ErkenKapamaKarari({ s }: { s?: any }) {
     ticariYP: "TCMB formülü: %3 + ağırlıklı ortalama vade × %0,10, üzerine %5 BSMV.",
   };
 
+  const REFINANS_SONUC = !hazirRef ? (
+    <Card>
+      <p style={{ margin: 0, fontSize: 13, color: C.sub, lineHeight: 1.6, textAlign: "center" }}>
+        Karşılaştırma için mevcut finansmanın bilgilerini ve yeni finansman teklifinin oranını (ya da taksitini) ve vadesini gir.
+      </p>
+    </Card>
+  ) : (yeniGiris === "taksit" && yeniTaksit * yeniVade <= borc) ? (
+    <KararNot tur="uyari">
+      Girdiğin yeni taksit ve vade, kapatılacak tutarı ({kararTL(borc)}) karşılamıyor
+      ({kararTL(yeniTaksit)} × {yeniVade} ay = {kararTL(yeniTaksit * yeniVade)}). Rakamları kontrol et.
+    </KararNot>
+  ) : (
+    <>
+      <KararSonucKart basarili={refAvantajli}
+        baslik={refAvantajli ? "Bu teklifle refinansmanla kapatmak avantajlı" : "Bu teklifle mevcut finansmanda devam etmek avantajlı"}
+        aciklama={refAvantajli
+          ? `Yeni finansmanın maliyeti ve masrafları, mevcut finansmanda kalan ödemelerin bugünkü değerinden düşük çıkıyor.`
+          : `Erken kapama ücreti ve yeni finansmanın maliyeti, mevcut finansmanda kalan ödemelerin bugünkü değerinin üstünde çıkıyor.`}
+        solEtiket="Bugünkü değer farkı" solDeger={kararTL(Math.abs(refAvantaj))}
+        sagEtiket="Aylık taksit farkı" sagDeger={`${yeniTaksit - taksit < 0 ? "−" : "+"}${kararTL(Math.abs(yeniTaksit - taksit))}`} />
+
+      <KararOranCubuk solEtiket="Yeni finansman (yıllık bileşik)" solDeger={yeniYillik}
+        sagEtiket="Mevcut finansman (yıllık bileşik)" sagDeger={yillikBilesik} solKazandi={yeniYillik < yillikBilesik} />
+
+      <Card>
+        <SecTitle>İki Yol</SecTitle>
+        <div style={{ display: "flex", gap: 9 }}>
+          <KararYolKart baslik="Mevcut finansmanda devam" tutar={kararTL(eskiToplam)} not="kalan toplam ödeme"
+            kazanan={!refAvantajli}
+            satirlar={[
+              ["Aylık taksit", kararTL(taksit)],
+              ["Kalan vade", `${n} ay`],
+              ["Bugünkü değeri", kararTL(pvEski(rYeni))],
+            ] as [string, string][]} />
+          <KararYolKart baslik="Refinansmanla kapat" tutar={kararTL(yeniToplam)} not="toplam ödeme (masraf dahil)"
+            kazanan={refAvantajli}
+            satirlar={[
+              ["Kapatılacak tutar", kararTL(borc)],
+              ["Yeni aylık taksit", kararTL(yeniTaksit)],
+              ["Yeni vade", `${yeniVade} ay`],
+              ...(masraf > 0 ? [["Yeni finansman masrafı", kararTL(masraf)] as [string, string]] : []),
+            ] as [string, string][]} />
+        </div>
+        <p style={{ margin: "11px 0 0", fontSize: 12, color: C.sub, lineHeight: 1.55 }}>
+          Vade uzarsa taksit düşer ama toplam ödeme artabilir. Bu yüzden karar, ödemelerin bugünkü değeri üzerinden verilir; toplam ödeme tek başına yanıltıcı olabilir.
+        </p>
+      </Card>
+
+      {yeniVade > n && (
+        <KararNot tur="uyari">Yeni vade ({yeniVade} ay) mevcut kalan vadeden ({n} ay) uzun. Taksit düşse de toplam ödeme artmış olabilir; yukarıdaki kartlardan toplamı karşılaştır.</KararNot>
+      )}
+
+      <KararNot tur="uyari">
+        <b>Erken kapama ücreti: {ucret + bsmv > 0 ? kararTL(ucret + bsmv) : "yok"}.</b> {ucretAciklama}.
+        Bunlar mevzuattaki azami oranlardır; bankan daha düşük uygulayabilir. Yeni finansmanın tahsis, sigorta, ekspertiz gibi masraflarını “Yeni finansman masrafı” alanına eklemeyi unutma.
+      </KararNot>
+
+      {refBasabas != null && (
+        <Card>
+          <SecTitle>Başabaş Noktası</SecTitle>
+          <p style={{ margin: 0, fontSize: 13, color: C.sub, lineHeight: 1.6 }}>
+            Yeni finansmanın aylık oranı <b style={{ color: C.label }}>{kararYuzde(refBasabas * 100)}</b> (yıllık bileşik {kararYuzde((Math.pow(1 + refBasabas, 12) - 1) * 100)})
+            seviyesinin altındaysa refinansmanla kapatmak kârlı hale gelir. Teklifin aylık oranı: <b style={{ color: C.label }}>{kararYuzde(rYeni * 100)}</b>.
+          </p>
+        </Card>
+      )}
+    </>
+  );
+
   return (
     <div style={{ padding: "14px 14px 90px" }}>
       <KararNot tur="bilgi">
-        Elindeki parayla finansmanı erken kapatmak mı, katılma hesabında tutup taksite devam
-        etmek mi daha kârlı? İki yolun vade sonundaki net varlığını karşılaştırıyoruz.
+        {refin
+          ? "Mevcut finansmanı yeni bir finansmanla (refinansman) kapatmak mı, olduğu gibi devam etmek mi daha avantajlı? İki yolu ödemelerin bugünkü değeri üzerinden karşılaştırıyoruz."
+          : "Elindeki parayla finansmanı erken kapatmak mı, katılma hesabında tutup taksite devam etmek mi daha kârlı? İki yolun vade sonundaki net varlığını karşılaştırıyoruz."}
       </KararNot>
+
+      <Card>
+        <SecTitle>Neyle Kapatacaksın?</SecTitle>
+        <Seg options={[{ v: "nakit", l: "Elimdeki para" }, { v: "refinans", l: "Refinansman" }]} value={kaynak} onChange={setKaynak} />
+        <p style={{ margin: "-6px 0 0", fontSize: 12, color: C.sub, lineHeight: 1.5 }}>
+          {refin ? "Kapama tutarını yeni bir finansman çekerek ödersin." : "Kapama tutarını elindeki birikimle ödersin."}
+        </p>
+      </Card>
 
       <Card>
         <SecTitle>Mevcut Finansmanın</SecTitle>
@@ -29583,6 +29695,20 @@ function ErkenKapamaKarari({ s }: { s?: any }) {
         </KararNot>
       )}
 
+      {refin ? (
+        <Card>
+          <SecTitle>Yeni Finansman Teklifi</SecTitle>
+          <Seg options={[{ v: "oran", l: "Oranı biliyorum" }, { v: "taksit", l: "Taksiti biliyorum" }]} value={yeniGiris} onChange={setYeniGiris} />
+          {yeniGiris === "oran"
+            ? <Field label="Yeni Finansmanın Aylık Kâr Payı Oranı" value={yeniOranS} onChange={setYeniOranS} suffix="%" hint="Teklifteki aylık oran" />
+            : <Field label="Yeni Aylık Taksit Tutarı" value={yeniTaksitS} onChange={setYeniTaksitS} suffix="₺" hint="Teklifte yazan taksit" />}
+          <Field label="Yeni Finansman Vadesi" value={yeniVadeS} onChange={setYeniVadeS} suffix="Ay" />
+          <Field label="Yeni Finansman Masrafı" value={masrafS} onChange={setMasrafS} suffix="₺" hint="Tahsis, sigorta, ekspertiz vb. (yoksa boş bırak)" />
+          {borc > 0 && <RRow label="Finanse Edilecek Tutar" value={kararTL(borc)} accent={C.blue} />}
+          {hazirRef && yeniGiris === "oran" && <RRow label="Yeni Aylık Taksit" value={kararTL(yeniTaksit)} accent={C.orange} />}
+          {hazirRef && yeniGiris === "taksit" && <RRow label="Yeni Finansmanın Aylık Oranı" value={kararYuzde(rYeni * 100)} accent={C.orange} />}
+        </Card>
+      ) : (
       <Card>
         <SecTitle>Elindeki Para</SecTitle>
         <Field label="Kapatmaya Ayırdığın Tutar" value={nakitS} onChange={setNakitS} suffix="₺" />
@@ -29592,8 +29718,9 @@ function ErkenKapamaKarari({ s }: { s?: any }) {
         <RRow label={`Stopaj (${yatirimVade} gün)`} value={kararYuzde(sOran)} accent={C.orange} sub />
         {brutGetiri > 0 && <RRow label="Net Yıllık Getiri" value={kararYuzde(netYillik)} accent={C.green} />}
       </Card>
+      )}
 
-      {!hazir ? (
+      {refin ? REFINANS_SONUC : !hazir ? (
         <Card>
           <p style={{ margin: 0, fontSize: 13, color: C.sub, lineHeight: 1.6, textAlign: "center" }}>
             Karşılaştırma için kalan anapara, taksit, vade, elindeki tutar ve beklenen kâr payını gir.
@@ -29675,7 +29802,7 @@ function ErkenKapamaKarari({ s }: { s?: any }) {
 
       <p style={{ margin: "6px 4px 0", fontSize: 11, color: C.sub, lineHeight: 1.6, opacity: 0.85 }}>
         Bu ekran bilgilendirme amaçlıdır; yatırım, finansman veya danışmanlık hizmeti sunmaz ve
-        tavsiye niteliği taşımaz. Kâr payı oranı garanti edilmez; gerçekleşen getiri girdiğin
+        tavsiye niteliği taşımaz. {refin ? "Yeni finansman teklifi onaya tabidir; oran ve koşullar bankanın değerlendirmesine göre değişebilir." : "Kâr payı oranı garanti edilmez;"} gerçekleşen getiri girdiğin
         varsayımdan farklı olabilir. Erken kapama tutarını bankandan teyit et.
         Sonuçlar girdiğin varsayımlara dayanır; karar ve sorumluluk sana aittir.
       </p>
@@ -29880,7 +30007,7 @@ function TeklifKarsilastirma({ s, kimlik, nav }: { s?: any; kimlik?: any; nav?: 
       <p style={{ margin: "12px 2px 0", fontSize: 11, color: C.sub, lineHeight: 1.5 }}>
         Toplam geri ödeme ve peşin kesintiler vergi (BSMV, KKDF vb.) dahil tutarlar olarak girilmelidir. Bilgilendirme amaçlıdır; bankanın sözleşmesi esastır. Taksitler aylık ve eşit tutarlı varsayılır; bankanın yazdığı oranla küçük fark çıkabilir.
       </p>
-      {raporAcik && dolu.length >= 2 && <RaporModal baslik="Teklif Karşılaştırma" satirlar={raporSatirlari()} tablo={raporTablosu()} plan={null} onClose={() => setRaporAcik(false)} showKdv={false} bsmvOran={0} kkdfOran={0} />}
+      {raporAcik && dolu.length >= 2 && <RaporModal baslik="Banka Teklif Karşılaştırma" satirlar={raporSatirlari()} tablo={raporTablosu()} plan={null} onClose={() => setRaporAcik(false)} showKdv={false} bsmvOran={0} kkdfOran={0} />}
     </div>
   );
 }
@@ -30752,7 +30879,10 @@ function TcmbKurIzleme(){
     return o;
   },[veri]);
   const tarihler:string[]=useMemo(()=>Object.keys(gunler).sort(),[gunler]);
-  const bugun=tarihBugunIso();
+  const bugunGercek=tarihBugunIso();
+  // 15:30'da açıklanan bülten ertesi iş günü için geçerli; veri bugünden ilerideyse en yeni kur esas alınır
+  const bugun=(tarihler.length&&tarihler[tarihler.length-1]>bugunGercek)?tarihler[tarihler.length-1]:bugunGercek;
+  useEffect(()=>{ if(bugun>bugunGercek) setTarih(t=>t===bugunGercek?bugun:t); },[bugun,bugunGercek]);
   const iso=(()=>{ let b=""; for(const t of tarihler){ if(t<=tarih) b=t; else break; } return b; })();
   const idx=iso?tarihler.indexOf(iso):-1;
   const oncekiIso=idx>0?tarihler[idx-1]:"";
@@ -30909,7 +31039,7 @@ function TcmbKurIzleme(){
         </div>
         {iso&&iso!==tarih&&<p style={{margin:"8px 0 0",fontSize:11,color:"#FBBF24",lineHeight:1.45}}>{tarihYaz(tarih)} için kur yok (hafta sonu, resmî tatil ya da henüz yayımlanmadı). {tarihYaz(iso)} kuru gösteriliyor.</p>}
         <div style={{height:1,background:WA(0.07),margin:"10px 0 8px"}}/>
-        <p style={{margin:0,fontSize:11,color:WA(0.6),lineHeight:1.5}}>Gösterge kurlar iş günlerinde 15:30'da yayımlanır. <b style={{color:baslikRenk}}>Kaynak:</b> {veri?.kaynak||"TCMB · EVDS"}{iso?` · Son kur: ${tarihYaz(iso)}`:""}{sonKontrolMetin?` · Son kontrol: ${sonKontrolMetin}`:""}</p>
+        <p style={{margin:0,fontSize:11,color:WA(0.6),lineHeight:1.5}}>Gösterge kurlar iş günlerinde 15:30'da yayımlanır. <b style={{color:baslikRenk}}>Kaynak:</b> {veri?.kaynak||"TCMB · EVDS"}{iso?` · Son kur: ${tarihYaz(iso)}${iso>bugunGercek?" (yarın geçerli)":""}`:""}{sonKontrolMetin?` · Son kontrol: ${sonKontrolMetin}`:""}</p>
       </div>
 
       {yukleniyor&&!veri&&<p style={{margin:"14px 0",fontSize:12,color:WA(0.5),textAlign:"center"}}>Kurlar yükleniyor…</p>}
@@ -36369,11 +36499,11 @@ const MENU = {
   ekonomiSozluk:{title:"Ekonomi Sözlüğü",back:"araclarMenu"},
   zekatHesabi:{title:"Zekât Hesaplayıcı",back:"araclarMenu"},
   birikimHesaplayici:{title:"Birikim Hesaplayıcı",back:"araclarMenu"},
-  erkenKapamaKarari:{title:"Erken Kapama Kararı",back:"hesaplaMenu"},
-  vadeFarkiKarari:{title:"Vade Farkı Kararı",back:"hesaplaMenu"},
-  teklifKarsilastirma:{title:"Teklif Karşılaştırma",back:"hesaplaMenu"},
+  erkenKapamaKarari:{title:"Krediyi Erken Kapatmalı mıyım?",back:"hesaplaMenu"},
+  vadeFarkiKarari:{title:"Vade Farklı mı, Peşin Ödeme mi?",back:"hesaplaMenu"},
+  teklifKarsilastirma:{title:"Banka Teklif Karşılaştırma",back:"hesaplaMenu"},
   erkenKapamaKomisyonu:{title:"Erken Kapama Komisyonu Hesaplama",back:"hesaplaMenu"},
-  tlYpKarari:{title:"TL/YP Borçlanma Kararı",back:"hesaplaMenu"},
+  tlYpKarari:{title:"TL mi, Döviz mi Borçlanmalıyım?",back:"hesaplaMenu"},
   kiraSertifikasi:{title:"Kira Sertifikası İhraçları",back:"araclarMenu"},
   kamuHaznedarligi:{title:"Kamu Haznedarlığı Getiri İzleme",back:"araclarMenu"},
   taksitKarsilastirma:{title:"Taksit Karşılaştırma",back:"hesaplaMenu"},
@@ -36619,16 +36749,16 @@ const MENU_ARAMA_LIST=[
   {key:"kasaOranAnalizi",    label:"Basitten Bileşiğe Oran Hesaplama",             icon:"🏛️", grup:"Katılım Hesabı"},
   {key:"verimlilikAnalizi",  label:"Verimlilik Analizi",                   icon:"📊", grup:"Katılım Hesabı"},
   {key:"konutFinansman",     label:"Konut Finansmanı Hesaplama",           icon:"🏠", grup:"Bireysel Finansman"},
-  {key:"erkenKapamaKarari",  label:"Erken Kapama Kararı",                  icon:"⚡", grup:"Bireysel Finansman", alt:["erken kapama","erken odeme","kapatayim mi","kapatmak","borc kapatma","yatirimda tut","tazminat","ceza","karar"]},
+  {key:"erkenKapamaKarari",  label:"Krediyi Erken Kapatmalı mıyım?",       icon:"⚡", grup:"Bireysel Finansman", alt:["erken kapama","erken odeme","kapatayim mi","refinansman","krediyi kapat","yapilandirma","kapatmak","borc kapatma","yatirimda tut","tazminat","ceza","karar"]},
   {key:"tasitFinansman",     label:"Taşıt Finansmanı Hesaplama",           icon:"🚗", grup:"Bireysel Finansman"},
   {key:"yatirimFonuFinansman",label:"İhtiyaç Finansmanı Hesaplama",  icon:"📈", grup:"Bireysel Finansman"},
   {key:"toggFinansman",      label:"Togg Finansmanı Hesaplama",            icon:"⚡", grup:"Bireysel Finansman"},
   {key:"esnekOdemePlanlari", label:"Esnek Ödeme Planları Hesaplama",       icon:"📋", grup:"Bireysel Finansman"},
   {key:"spotFinansman",      label:"Spot Finansman Hesaplama",             icon:"⚡", grup:"Tüzel Finansman"},
   {key:"erkenKapamaKomisyonu", label:"Erken Kapama Komisyonu Hesaplama",    icon:"💸", grup:"Tüzel Finansman", alt:["erken kapama","erken odeme","erken odeme ucreti","komisyon","tazminat","ticari kredi kapama","kapama ucreti","2020/4"]},
-  {key:"teklifKarsilastirma", label:"Teklif Karşılaştırma",                icon:"⚖️", grup:"Tüzel Finansman", alt:["teklif","banka teklifi","kredi karsilastirma","finansman karsilastirma","gercek maliyet","efektif maliyet","komisyon","masraf","hangi banka"]},
-  {key:"vadeFarkiKarari",    label:"Vade Farkı Kararı",                    icon:"⏳", grup:"Tüzel Finansman", alt:["vade farki","pesin iskonto","pesin mi vadeli mi","tedarikci","iskonto","pesin odeme","karar"]},
-  {key:"tlYpKarari",         label:"TL/YP Borçlanma Kararı",               icon:"💱", grup:"Tüzel Finansman", alt:["tl mi yp mi","doviz kredisi","yp finansman","kur riski","basabas kur","doviz borclanma","karar"]},
+  {key:"teklifKarsilastirma", label:"Banka Teklif Karşılaştırma",           icon:"⚖️", grup:"Tüzel Finansman", alt:["teklif","banka teklifi","kredi karsilastirma","finansman karsilastirma","gercek maliyet","efektif maliyet","komisyon","masraf","hangi banka"]},
+  {key:"vadeFarkiKarari",    label:"Vade Farklı mı, Peşin Ödeme mi?",              icon:"⏳", grup:"Tüzel Finansman", alt:["vade farki","pesin iskonto","pesin mi vadeli mi","tedarikci","iskonto","pesin odeme","karar"]},
+  {key:"tlYpKarari",         label:"TL mi, Döviz mi Borçlanmalıyım?",                icon:"💱", grup:"Tüzel Finansman", alt:["tl mi yp mi","doviz kredisi","yp finansman","kur riski","basabas kur","doviz borclanma","karar"]},
   {key:"taksitliTicari",     label:"Taksitli Ticari Finansman Hesaplama",  icon:"🏗️", grup:"Tüzel Finansman"},
   {key:"leasing",            label:"Finansal Kiralama Hesaplama",          icon:"🔑", grup:"Tüzel Finansman"},
   {key:"cekArkasiFinansman", label:"Çek Teminatlı Finansman Hesaplama",   icon:"🧾", grup:"Tüzel Finansman", alt:["çek","iskonto","kırdırma","çek arkası","teminat","bugünkü değer"]},
@@ -36693,7 +36823,7 @@ const HESAPLA_ARAC_LISTESI = [
   // Bireysel Finansman
   {key:"taksitKarsilastirma", icon:"⚖️", label:"Taksit Karşılaştırma (Bankalar)", kat:"bireysel"},
   {key:"konutFinansman",     icon:"🏠", label:"Konut Finansmanı Hesaplama",           kat:"bireysel"},
-  {key:"erkenKapamaKarari",  icon:"⚡", label:"Erken Kapama Kararı",                  kat:"bireysel"},
+  {key:"erkenKapamaKarari",  icon:"⚡", label:"Krediyi Erken Kapatmalı mıyım?",       kat:"bireysel"},
   {key:"tasitFinansman",     icon:"🚗", label:"Taşıt Finansmanı Hesaplama",           kat:"bireysel"},
   {key:"yatirimFonuFinansman",icon:"📦", label:"İhtiyaç Finansmanı Hesaplama",   kat:"bireysel"},
   {key:"toggFinansman",      icon:"⚡", label:"Togg Finansmanı Hesaplama",            kat:"bireysel"},
@@ -36701,10 +36831,10 @@ const HESAPLA_ARAC_LISTESI = [
   {key:"taksitenKredi",      icon:"🔢", label:"Taksitten Tutar Hesaplama",            kat:"bireysel"},
   // Tüzel Finansman
   {key:"spotFinansman",      icon:"⚡", label:"Spot Finansman Hesaplama",             kat:"ticari"},
-  {key:"teklifKarsilastirma", icon:"⚖️", label:"Teklif Karşılaştırma",                kat:"ticari"},
-  {key:"vadeFarkiKarari",    icon:"⏳", label:"Vade Farkı Kararı",                    kat:"ticari"},
+  {key:"teklifKarsilastirma", icon:"⚖️", label:"Banka Teklif Karşılaştırma",           kat:"ticari"},
+  {key:"vadeFarkiKarari",    icon:"⏳", label:"Vade Farklı mı, Peşin Ödeme mi?",              kat:"ticari"},
   {key:"erkenKapamaKomisyonu", icon:"💸", label:"Erken Kapama Komisyonu Hesaplama",   kat:"ticari"},
-  {key:"tlYpKarari",         icon:"💱", label:"TL/YP Borçlanma Kararı",               kat:"ticari"},
+  {key:"tlYpKarari",         icon:"💱", label:"TL mi, Döviz mi Borçlanmalıyım?",                kat:"ticari"},
   {key:"taksitliTicari",     icon:"🏗️", label:"Taksitli Ticari Finansman Hesaplama",  kat:"ticari"},
   {key:"esnekOdemePlanlari", icon:"📋", label:"Esnek Ödeme Planları Hesaplama",       kat:"ticari"},
   {key:"cekArkasiFinansman", icon:"🧾", label:"Çek Teminatlı Finansman Hesaplama",   kat:"ticari"},
