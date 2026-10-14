@@ -31142,11 +31142,11 @@ const KF = (() => {
   interface SaglikKalemi { ad: string; puan: number; azami: number; aciklama: string; }
   interface Saglik { skor: number; seviye: "guclu" | "dikkat" | "riskli"; kalemler: SaglikKalemi[]; }
   function saglikAnalizi(is: Isletme, bugun: Iso): Saglik {
-    const k = projeksiyon(is, bugun, 90, "kesin"), b = projeksiyon(is, bugun, 90, "beklenen");
+    const b = projeksiyon(is, bugun, 90, "beklenen");
     const kal: SaglikKalemi[] = [];
     // 1) Nakit açığı (kesin tahsilatlarla 90 gün) — 35
-    const a1 = k.ozet.acikGunSayisi === 0 ? 35 : (b.ozet.acikGunSayisi === 0 ? 20 : (b.ozet.acikGunSayisi <= 10 ? 10 : 0));
-    kal.push({ ad: "Nakit yeterliliği", puan: a1, azami: 35, aciklama: k.ozet.acikGunSayisi === 0 ? "90 günde yalnızca kesin tahsilatlarla açık görünmüyor." : (b.ozet.acikGunSayisi === 0 ? "Beklenen tahsilatlar gelirse açık oluşmuyor." : "Beklenen tahsilatlarla bile açık günler var.") });
+    const a1 = b.ozet.acikGunSayisi === 0 ? 35 : (b.ozet.acikGunSayisi <= 10 ? 15 : 0);
+    kal.push({ ad: "Nakit yeterliliği", puan: a1, azami: 35, aciklama: b.ozet.acikGunSayisi === 0 ? "90 günde planlanan tahsilat ve ödemelerle nakit açığı görünmüyor." : `90 günde ${b.ozet.acikGunSayisi} gün nakit açığı görünüyor.` });
     // 2) Gecikmiş tahsilat oranı — 20
     const acik = is.tahsilatlar.filter((t) => !t.tahsilEdildi); const topT = acik.reduce((s, t) => s + t.tutar, 0), gec = acik.filter((t) => t.vade < bugun).reduce((s, t) => s + t.tutar, 0);
     const gecOran = topT > 0 ? (gec * 10000) / topT : 0;
@@ -31189,9 +31189,8 @@ const KF = (() => {
   // ───────── Uyarılar (her uyarı ilgili senaryo ekranına işaret eder) ─────────
   interface Uyari { kod: string; seviye: "bilgi" | "dikkat" | "kritik"; metin: string; hedef: "radar" | "tahsilat" | "finansman" | "senaryo" | "cek"; }
   function uyarilar(is: Isletme, bugun: Iso): Uyari[] {
-    const u: Uyari[] = [], k = projeksiyon(is, bugun, 90, "kesin"), b = projeksiyon(is, bugun, 90, "beklenen");
-    if (k.ozet.ilkAcikTarihi) u.push({ kod: "ACIK_KESIN", seviye: b.ozet.ilkAcikTarihi ? "kritik" : "dikkat", metin: `Yalnızca kesin tahsilatlarla ${k.ozet.ilkAcikTarihi} tarihinde nakit açığı görünüyor.`, hedef: "radar" });
-    if (b.ozet.ilkAcikTarihi) u.push({ kod: "ACIK_BEKLENEN", seviye: "kritik", metin: `Beklenen tahsilatlar dahil edilse de ${b.ozet.ilkAcikTarihi} tarihinde açık oluşuyor (en yüksek ihtiyaç ${formatTL(b.ozet.maksFinansman, false)} TL).`, hedef: "finansman" });
+    const u: Uyari[] = [], k = projeksiyon(is, bugun, 90, "beklenen"), b = k;
+    if (b.ozet.ilkAcikTarihi) u.push({ kod: "ACIK_BEKLENEN", seviye: "kritik", metin: `${b.ozet.ilkAcikTarihi} tarihinde nakit açığı görünüyor (en yüksek ihtiyaç ${formatTL(b.ozet.maksFinansman, false)} TL).`, hedef: "finansman" });
     const gec = k.gecikmis.length ? k.gecikmis : b.gecikmis;
     if (gec.length) u.push({ kod: "GECIKMIS", seviye: "dikkat", metin: `${gec.length} tahsilat vadesini geçti (${formatTL(gec.reduce((s, t) => s + t.tutar, 0), false)} TL).`, hedef: "tahsilat" });
     if (is.cekSenet.some((c) => c.karsiliksiz)) u.push({ kod: "KARSILIKSIZ", seviye: "kritik", metin: "Karşılıksız işaretli çek/senet var.", hedef: "cek" });
@@ -31217,7 +31216,7 @@ function kfNormalle(d: any): any {
   const metin = (x: any, k = 120) => (typeof x === "string" ? x.slice(0, k) : "");
   const dz = (x: any) => (Array.isArray(x) ? x : []);
   b.isletme = { ad: metin(d.isletme && d.isletme.ad), nakit: tam(d.isletme && d.isletme.nakit), nakitTarihi: tarih(d.isletme && d.isletme.nakitTarihi) };
-  b.tahsilatlar = dz(d.tahsilatlar).filter((t: any) => t && tarih(t.vade) && Number.isSafeInteger(t.tutar) && t.tutar > 0).map((t: any) => ({ id: String(t.id || kfId()), musteri: metin(t.musteri) || "—", tutar: t.tutar, vade: t.vade, durum: t.durum === "kesin" ? "kesin" : "beklenen", tahsilEdildi: !!t.tahsilEdildi, tahsilTarihi: tarih(t.tahsilTarihi) }));
+  b.tahsilatlar = dz(d.tahsilatlar).filter((t: any) => t && tarih(t.vade) && Number.isSafeInteger(t.tutar) && t.tutar > 0).map((t: any) => ({ id: String(t.id || kfId()), musteri: metin(t.musteri) || "—", tutar: t.tutar, vade: t.vade, durum: "beklenen", tahsilEdildi: !!t.tahsilEdildi, tahsilTarihi: tarih(t.tahsilTarihi) }));
   b.odemeler = dz(d.odemeler).filter((o: any) => o && tarih(o.tarih) && Number.isSafeInteger(o.tutar) && o.tutar > 0).map((o: any) => ({ id: String(o.id || kfId()), ad: metin(o.ad) || "—", tutar: o.tutar, tarih: o.tarih, tekrar: o.tekrar === "aylik" || o.tekrar === "haftalik" ? o.tekrar : null, bitis: tarih(o.bitis) || null }));
   b.cekSenet = dz(d.cekSenet).filter((c: any) => c && tarih(c.vade) && Number.isSafeInteger(c.tutar) && c.tutar > 0).map((c: any) => ({ id: String(c.id || kfId()), yon: c.yon === "borc" ? "borc" : "alacak", tur: c.tur === "senet" ? "senet" : "cek", taraf: metin(c.taraf) || "—", tutar: c.tutar, vade: c.vade, kapandi: !!c.kapandi, karsiliksiz: !!c.karsiliksiz }));
   const g = d.ayar && d.ayar.gecikmis; b.ayar = { gecikmis: g === 7 || g === 15 || g === 30 ? g : "haric" };
@@ -31242,14 +31241,63 @@ const kfTL = (k: number, kurus = false) => KF.formatTL(k, kurus) + " ₺";
 const kfKisa = (k: number) => { const a = Math.abs(k) / 100, s = k < 0 ? "−" : ""; return a >= 1e6 ? s + (a / 1e6).toFixed(2).replace(".", ",") + " Mn ₺" : a >= 1e4 ? s + Math.round(a / 1e3) + " B ₺" : s + KF.formatTL(Math.abs(k), false) + " ₺"; };
 const kfKalan = (vade: string, bugun: string) => { const n = KF.gunFarki(vade, bugun); return n === 0 ? "Bugün" : n === 1 ? "Yarın" : n === -1 ? "Dün" : n > 0 ? `${n} gün sonra` : `${-n} gün gecikti`; };
 
+// Yazarken binlik ayraç (nokta) ve virgüllü kuruş: 1.234.567,50
+const kfMaskele = (raw: string): string => {
+  let t = String(raw).replace(/[^\d,.\-]/g, ""); const neg = t.startsWith("-"); t = t.replace(/-/g, "").replace(/\./g, "");
+  const vi = t.indexOf(","); let ip = vi >= 0 ? t.slice(0, vi) : t; const fp = vi >= 0 ? t.slice(vi + 1).replace(/,/g, "").slice(0, 2) : null;
+  ip = ip.replace(/^0+(?=\d)/, "").replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return (neg ? "-" : "") + ip + (fp !== null ? "," + fp : "");
+};
 function KfPara({ deger, onDeg, etiket, yer }: { deger: number | null; onDeg: (k: number | null) => void; etiket: string; yer?: string }) {
-  const [t, setT] = useState(deger ? KF.formatTL(deger).replace(/\.(?=\d{3}\b)/g, ".") : "");
+  const [t, setT] = useState(deger ? KF.formatTL(deger, deger % 100 !== 0) : "");
   return (
     <label style={{ display: "block", marginBottom: 12 }}>
       <span style={{ display: "block", fontSize: 11, fontWeight: 600, color: (TEMA === "acik" ? "#1A2430" : "#A8C2DC"), marginBottom: 5 }}>{etiket}</span>
-      <input inputMode="decimal" value={t} placeholder={yer || "0,00"} onChange={(e: any) => { setT(e.target.value); onDeg(KF.parseTL(e.target.value)); }}
+      <input inputMode="decimal" value={t} placeholder={yer || "0,00"} onChange={(e: any) => { const m = kfMaskele(e.target.value); setT(m); onDeg(KF.parseTL(m)); }}
         style={{ width: "100%", boxSizing: "border-box", background: (TEMA === "acik" ? "#fff" : WA(0.06)), border: `1px solid ${WA(0.14)}`, borderRadius: 11, padding: "11px 12px", fontSize: 16, fontWeight: 700, color: (TEMA === "acik" ? C.label : "#fff"), fontFamily: "inherit", outline: "none" }} />
     </label>
+  );
+}
+// Türkçe takvim (tarayıcının İngilizce tarih seçicisi yerine)
+const KF_AY_KISA_GUN = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
+function KfTarih({ etiket, deger, onDeg, bos }: any) {
+  const bugunS = kfBugun();
+  const ilk = /^\d{4}-\d{2}-\d{2}$/.test(deger || "") ? deger : bugunS;
+  const [acik, setAcik] = useState(false);
+  const [ay, setAy] = useState<[number, number]>([Number(ilk.slice(0, 4)), Number(ilk.slice(5, 7)) - 1]);
+  const [y, m] = ay;
+  const bas = (new Date(Date.UTC(y, m, 1)).getUTCDay() + 6) % 7, gunSayisi = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  const hucre: (number | null)[] = []; for (let i = 0; i < bas; i++) hucre.push(null); for (let g = 1; g <= gunSayisi; g++) hucre.push(g);
+  const iso = (g: number) => `${y}-${String(m + 1).padStart(2, "0")}-${String(g).padStart(2, "0")}`;
+  const git = (d: number) => { const t = m + d; setAy([y + Math.floor(t / 12), ((t % 12) + 12) % 12]); };
+  const metinR = TEMA === "acik" ? C.label : "#fff";
+  const gecerli = /^\d{4}-\d{2}-\d{2}$/.test(deger || "");
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <span style={{ display: "block", fontSize: 11, fontWeight: 600, color: (TEMA === "acik" ? "#1A2430" : "#A8C2DC"), marginBottom: 5 }}>{etiket}</span>
+      <div onClick={() => setAcik(!acik)} style={{ background: (TEMA === "acik" ? "#fff" : WA(0.06)), border: `1px solid ${WA(0.14)}`, borderRadius: 11, padding: "11px 12px", fontSize: 15, color: metinR, cursor: "pointer", display: "flex", justifyContent: "space-between" }}>
+        <span>{gecerli ? `${kfTarUzun(deger)} · ${kfGunAdi(deger)}` : (bos || "Tarih seç")}</span><span style={{ color: WA(0.5) }}>{acik ? "▴" : "▾"}</span>
+      </div>
+      {acik && (
+        <div style={{ marginTop: 6, background: (TEMA === "acik" ? "#fff" : WA(0.06)), border: `1px solid ${WA(0.14)}`, borderRadius: 13, padding: "10px 8px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 6px 8px" }}>
+            <span onClick={() => git(-1)} style={{ padding: "4px 12px", fontSize: 18, color: C.blue, cursor: "pointer" }}>‹</span>
+            <b style={{ fontSize: 14, color: metinR }}>{KF_AY[m]} {y}</b>
+            <span onClick={() => git(1)} style={{ padding: "4px 12px", fontSize: 18, color: C.blue, cursor: "pointer" }}>›</span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", textAlign: "center", rowGap: 2 }}>
+            {KF_AY_KISA_GUN.map((g) => <span key={g} style={{ fontSize: 10.5, fontWeight: 700, color: WA(0.5), padding: "4px 0" }}>{g}</span>)}
+            {hucre.map((g, i) => g === null ? <span key={i} /> : (
+              <span key={i} onClick={() => { onDeg(iso(g)); setAcik(false); }} style={{ padding: "8px 0", fontSize: 14, borderRadius: 9, cursor: "pointer", fontWeight: iso(g) === deger ? 800 : 500, background: iso(g) === deger ? C.blue : "transparent", color: iso(g) === deger ? "#fff" : iso(g) === bugunS ? C.blue : metinR }}>{g}</span>
+            ))}
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 8px 0" }}>
+            {bos !== undefined ? <span onClick={() => { onDeg(""); setAcik(false); }} style={{ fontSize: 12.5, fontWeight: 700, color: WA(0.6), cursor: "pointer" }}>Temizle</span> : <span />}
+            <span onClick={() => { onDeg(bugunS); setAcik(false); }} style={{ fontSize: 12.5, fontWeight: 700, color: C.blue, cursor: "pointer" }}>Bugün</span>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 function KfAlan({ etiket, deger, onDeg, tip, yer }: any) {
@@ -31286,20 +31334,21 @@ function KfSheet({ baslik, kapat, children }: any) {
   );
 }
 
-// Nakit grafiği: yalnız kesin (düz) ve beklenenler dahil (kesikli); sıfırın altı kırmızı bölge; kaydırıcı ile gün seçimi
-function KfGrafik({ k, b, ufuk, sec, onSec, yuk }: any) {
-  const W = 340, H = yuk || 150, kv = k.gunler.map((g: any) => g.nakit / 100), bv = b.gunler.map((g: any) => g.nakit / 100);
-  const hepsi = [...kv, ...bv, 0], mx = Math.max(...hepsi), mn = Math.min(...hepsi), pad = (mx - mn || 1) * 0.12, hi = mx + pad, lo = mn - pad;
+// Nakit grafiği: tek çizgi (tüm tahsilatlar beklenen); sıfırın altı kırmızı bölge; kaydırıcı ile gün seçimi
+function KfGrafik({ b, ufuk, sec, onSec, yuk }: any) {
+  const kap = useRef<any>(null); const [gen, setGen] = useState(340);
+  useEffect(() => { const el = kap.current; if (!el) return; const f = () => setGen(Math.max(240, Math.round(el.clientWidth || 340))); f(); let ro: any = null; try { ro = new (window as any).ResizeObserver(f); ro.observe(el); } catch {} window.addEventListener("resize", f); return () => { try { ro && ro.disconnect(); } catch {} window.removeEventListener("resize", f); }; }, []);
+  const W = gen, H = yuk || 150, kv = b.gunler.map((g: any) => g.nakit / 100);
+  const hepsi = [...kv, 0], mx = Math.max(...hepsi), mn = Math.min(...hepsi), pad = (mx - mn || 1) * 0.12, hi = mx + pad, lo = mn - pad;
   const X = (i: number) => 6 + (i * (W - 12)) / ufuk, Y = (v: number) => 8 + ((hi - v) * (H - 22)) / (hi - lo);
   const yol = (a: number[]) => a.map((v, i) => (i ? "L" : "M") + X(i).toFixed(1) + " " + Y(v).toFixed(1)).join(" ");
   const s0 = Y(0), ia = kv.findIndex((v: number) => v < 0);
-  const ck = TEMA === "acik" ? "#2F6DB0" : "#7FB4EA", cb = TEMA === "acik" ? "#12A37A" : "#34D399";
+  const ck = TEMA === "acik" ? "#2F6DB0" : "#7FB4EA";
   return (
-    <div>
+    <div ref={kap}>
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} style={{ display: "block" }}>
         <rect x="0" y={s0} width={W} height={Math.max(0, H - 14 - s0)} fill={TEMA === "acik" ? "rgba(220,60,60,0.10)" : "rgba(248,113,113,0.16)"} />
         <line x1="0" x2={W} y1={s0} y2={s0} stroke={WA(0.2)} strokeWidth="1.2" />
-        <path d={yol(bv)} fill="none" stroke={cb} strokeWidth="2" strokeDasharray="5 4" strokeLinejoin="round" />
         <path d={yol(kv)} fill="none" stroke={ck} strokeWidth="2.4" strokeLinejoin="round" />
         {ia >= 0 && <circle cx={X(ia)} cy={Y(kv[ia])} r="5" fill="#E5484D" stroke={C.bg} strokeWidth="2" />}
         {sec != null && <line x1={X(sec)} x2={X(sec)} y1="4" y2={H - 14} stroke={WA(0.35)} strokeWidth="1" />}
@@ -31307,10 +31356,7 @@ function KfGrafik({ k, b, ufuk, sec, onSec, yuk }: any) {
         <text x={W - 6} y={H - 1} fontSize="9.5" fill={WA(0.55)} textAnchor="end">{ufuk}. gün</text>
       </svg>
       {onSec && <input type="range" min={0} max={ufuk} value={sec == null ? 0 : sec} onChange={(e: any) => onSec(Number(e.target.value))} style={{ width: "100%", marginTop: 6 }} aria-label="Gün seç" />}
-      <div style={{ display: "flex", gap: 16, fontSize: 11.5, color: WA(0.6), marginTop: 4 }}>
-        <span><i style={{ display: "inline-block", width: 16, borderTop: `2.5px solid ${ck}`, verticalAlign: "middle", marginRight: 6 }} />Yalnız kesin</span>
-        <span><i style={{ display: "inline-block", width: 16, borderTop: `2.5px dashed ${cb}`, verticalAlign: "middle", marginRight: 6 }} />Beklenenler dahil</span>
-      </div>
+      <div style={{ fontSize: 11.5, color: WA(0.6), marginTop: 4 }}><i style={{ display: "inline-block", width: 16, borderTop: `2.5px solid ${ck}`, verticalAlign: "middle", marginRight: 6 }} />Tahmini nakit bakiyesi · kırmızı bölge: nakit açığı</div>
     </div>
   );
 }
@@ -31362,7 +31408,6 @@ function IsletmeFinansHesapli({ uid, nav }: { uid: string; nav?: any }) {
   const [yenile, setYenile] = useState(0);
   const [sec, setSec] = useState<number | null>(null);
   const [silOnay, setSilOnay] = useState("");
-  const [fSen, setFSen] = useState<"kesin" | "beklenen">("kesin");
   const [fTampon, setFTampon] = useState(0);
   const [fOran, setFOran] = useState<number | null>(null);
   const [fOranT, setFOranT] = useState("");
@@ -31385,7 +31430,6 @@ function IsletmeFinansHesapli({ uid, nav }: { uid: string; nav?: any }) {
   const is = useMemo(() => veri ? ({ ad: veri.isletme.ad, nakit: veri.isletme.nakit, nakitTarihi: bugun, tahsilatlar: veri.tahsilatlar, odemeler: veri.odemeler, cekSenet: veri.cekSenet }) : null, [veri, bugun]);
   const gv: any = veri && veri.ayar.gecikmis !== "haric" ? veri.ayar.gecikmis : "haric";
   const ayar = { gecikmisVarsayim: gv };
-  const kes = useMemo(() => is ? KF.projeksiyon(is, bugun, ufuk, "kesin", ayar) : null, [is, ufuk, gv, bugun]);
   const bek = useMemo(() => is ? KF.projeksiyon(is, bugun, ufuk, "beklenen", ayar) : null, [is, ufuk, gv, bugun]);
   const uyar = useMemo(() => is ? KF.uyarilar(is, bugun) : [], [is, bugun]);
   const metin = (c: any) => TEMA === "acik" ? C.label : "#fff";
@@ -31417,11 +31461,25 @@ function IsletmeFinansHesapli({ uid, nav }: { uid: string; nav?: any }) {
   );
   const ufukSec = <KfSeg secenekler={[[30, "30 gün"], [60, "60 gün"], [90, "90 gün"]]} deger={ufuk} onDeg={(v: number) => { setUfuk(v); setSec(null); }} />;
   const nakitGuncel = () => setSheet({ tur: "nakit" });
+  const NAKIT_OZET = (() => {
+    if (!bek) return null;
+    const o = bek.ozet, gec = bek.gecikmis.length;
+    const sat = (ad: string, v: number, renk?: string) => (<div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 13, color: metin(0) }}><span>{ad}</span><b style={{ color: renk || metin(0), fontVariantNumeric: "tabular-nums" }}>{v < 0 ? "−" : ""}{kfTL(Math.abs(v))}</b></div>);
+    return (
+      <div style={kart}>
+        <p style={{ ...et, marginBottom: 4 }}>{ufuk}. gün hesabı</p>
+        {sat("Başlangıç nakdi (kasa + banka)", veri.isletme.nakit)}
+        {sat("+ Planlanan tahsilatlar", o.toplamTahsilat, C.green)}
+        {sat("− Planlanan ödemeler", -o.toplamOdeme, C.red)}
+        <div style={{ borderTop: `1px solid ${WA(0.1)}`, marginTop: 4, paddingTop: 4 }}>{sat(`${ufuk}. gün tahmini nakit`, o.sonNakit, o.sonNakit < 0 ? C.red : undefined)}</div>
+        {gec > 0 && veri.ayar.gecikmis === "haric" && <p style={{ margin: "6px 0 0", fontSize: 11.5, color: WA(0.6) }}>{gec} gecikmiş tahsilat hesaba girmedi (Radar'daki varsayımı değiştirebilirsin).</p>}
+      </div>
+    );
+  })();
 
   const ANA = () => {
     const bosVeri = !veri.tahsilatlar.length && !veri.odemeler.length;
     const eskiBeyan = veri.isletme.nakitTarihi && KF.gunFarki(bugun, veri.isletme.nakitTarihi) > 7;
-    const ek = bek!.ozet.toplamTahsilat - kes!.ozet.toplamTahsilat;
     return (
       <>
         <div style={{ ...kart, padding: "16px 16px 14px" }}>
@@ -31432,8 +31490,8 @@ function IsletmeFinansHesapli({ uid, nav }: { uid: string; nav?: any }) {
         </div>
         {ufukSec}
         <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
-          {kpi("Kesin tahsilat", kfKisa(kes!.ozet.toplamTahsilat), ek > 0 ? `+ ${kfKisa(ek)} beklenen (kesin değil)` : `${ufuk} gün`, C.green)}
-          {kpi("Planlanan ödeme", kfKisa(kes!.ozet.toplamOdeme), `${ufuk} gün`)}
+          {kpi("Beklenen tahsilat", kfKisa(bek!.ozet.toplamTahsilat), `${ufuk} gün`, C.green)}
+          {kpi("Planlanan ödeme", kfKisa(bek!.ozet.toplamOdeme), `${ufuk} gün`)}
         </div>
         {bosVeri && (
           <div style={{ ...kart, textAlign: "center" }}>
@@ -31448,7 +31506,7 @@ function IsletmeFinansHesapli({ uid, nav }: { uid: string; nav?: any }) {
         {!bosVeri && (
           <div style={kart}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}><p style={et}>{ufuk} günlük nakit radarı</p><span onClick={() => setTab("radar")} style={{ fontSize: 12, fontWeight: 700, color: C.blue, cursor: "pointer" }}>Aç ›</span></div>
-            <KfGrafik k={kes} b={bek} ufuk={ufuk} yuk={118} />
+            <KfGrafik b={bek} ufuk={ufuk} yuk={118} />
           </div>
         )}
         {!bosVeri && (
@@ -31497,21 +31555,20 @@ function IsletmeFinansHesapli({ uid, nav }: { uid: string; nav?: any }) {
         </div>
         <div style={{ textAlign: "right" }}>
           <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: metin(0), fontVariantNumeric: "tabular-nums" }}>{kfTL(t.tutar)}</p>
-          <span style={{ display: "inline-block", marginTop: 3, fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 7, background: t.durum === "kesin" ? "rgba(52,211,153,0.16)" : "rgba(245,177,61,0.18)", color: t.durum === "kesin" ? C.green : "#C77700" }}>{t.durum === "kesin" ? "Kesin" : "Beklenen"}</span>
+          
         </div>
       </div>
     );
     return (
       <>
         <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-          {kpi("Kesin", kfKisa(top(bek2, (t) => t.durum === "kesin")), undefined, C.green)}
-          {kpi("Beklenen", kfKisa(top(bek2, (t) => t.durum !== "kesin")))}
+          {kpi("Bekleyen", kfKisa(top(bek2)), `${bek2.length} kayıt`, C.green)}
           {kpi("Gecikmiş", kfKisa(top(gec)), undefined, gec.length ? C.red : undefined)}
         </div>
         <div className="press-card" onClick={() => setSheet({ tur: "tahsilat" })} style={{ textAlign: "center", padding: "11px", borderRadius: 13, background: C.blue, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", marginBottom: 12 }}>+ Tahsilat ekle</div>
         {gec.length > 0 && <div style={kart}><p style={{ ...et, color: C.red }}>Gecikmiş · {gec.length}</p>{gec.map(satir)}<p style={{ margin: "8px 0 0", fontSize: 11.5, color: WA(0.6) }}>Gecikmiş tahsilatlar varsayılan olarak nakit akışına dahil edilmez (Radar'dan değiştirebilirsin).</p></div>}
         <div style={kart}><p style={et}>Bekleyen · {bek2.length}</p>{bek2.length ? bek2.map(satir) : <p style={{ margin: "8px 0 2px", fontSize: 13, color: WA(0.6) }}>Bekleyen tahsilat yok.</p>}
-          <p style={{ margin: "8px 0 0", fontSize: 11.5, color: WA(0.6), lineHeight: 1.45 }}><b>Kesin:</b> güvence altındaki (ör. onaylı havale, sözleşmeyle bağlı). <b>Beklenen:</b> müşterinin sözüne dayalı; kesin nakit sayılmaz.</p></div>
+          <p style={{ margin: "8px 0 0", fontSize: 11.5, color: WA(0.6), lineHeight: 1.45 }}>Hiçbir tahsilat garanti sayılmaz; hepsi "beklenen" olarak planlanır.</p></div>
         {alinan.length > 0 && <div style={kart}><p style={et}>Son tahsil edilenler</p>{alinan.map(satir)}</div>}
       </>
     );
@@ -31525,7 +31582,7 @@ function IsletmeFinansHesapli({ uid, nav }: { uid: string; nav?: any }) {
     return (
       <>
         <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
-          {kpi("Önümüzdeki 30 gün", kfKisa(KF.projeksiyon(is!, bugun, 30, "kesin", ayar).ozet.toplamOdeme))}
+          {kpi("Önümüzdeki 30 gün", kfKisa(KF.projeksiyon(is!, bugun, 30, "beklenen", ayar).ozet.toplamOdeme))}
           {kpi("Aylık sabit", kfKisa(aylik), "tekrarlı ödemeler")}
         </div>
         <div className="press-card" onClick={() => setSheet({ tur: "odeme" })} style={{ textAlign: "center", padding: "11px", borderRadius: 13, background: C.blue, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", marginBottom: 12 }}>+ Ödeme ekle</div>
@@ -31554,39 +31611,37 @@ function IsletmeFinansHesapli({ uid, nav }: { uid: string; nav?: any }) {
   };
 
   const RADAR = () => {
-    const ok = kes!.ozet, ob = bek!.ozet, i = sec == null ? 0 : sec, gk = kes!.gunler[i], gb = bek!.gunler[i];
+    const ob = bek!.ozet, i = sec == null ? 0 : sec, gb = bek!.gunler[i];
     const kalemler = [...KF.odemeOlaylari(is!, bugun, ufuk).map((e: any) => ({ ...e, tutar: -e.tutar, tip: "o" })), ...KF.tahsilatOlaylari(is!, bugun, ufuk, "beklenen", ayar).olaylar.map((e: any) => ({ ...e, tip: "t" }))].sort((a: any, b: any) => Math.abs(b.tutar) - Math.abs(a.tutar)).slice(0, 5);
-    const kesinSet = new Set(veri.tahsilatlar.filter((t: any) => t.durum === "kesin").map((t: any) => t.id));
     return (
       <>
         {ufukSec}
         <div style={{ ...kart, padding: "12px 12px 10px" }}>
-          <KfGrafik k={kes} b={bek} ufuk={ufuk} yuk={190} sec={i} onSec={setSec} />
+          <KfGrafik b={bek} ufuk={ufuk} yuk={190} sec={i} onSec={setSec} />
           <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 12.5 }}>
-            <span style={{ color: WA(0.6) }}>{kfTar(gk.tarih)} · {kfGunAdi(gk.tarih)}</span>
-            <span><b style={{ color: gk.nakit < 0 ? C.red : metin(0) }}>{kfKisa(gk.nakit)}</b> <span style={{ color: WA(0.5) }}>kesin</span> · <b style={{ color: gb.nakit < 0 ? C.red : metin(0) }}>{kfKisa(gb.nakit)}</b> <span style={{ color: WA(0.5) }}>beklenen dahil</span></span>
+            <span style={{ color: WA(0.6) }}>{kfTar(gb.tarih)} · {kfGunAdi(gb.tarih)}</span>
+            <span>tahmini nakit <b style={{ color: gb.nakit < 0 ? C.red : metin(0) }}>{kfTL(gb.nakit)}</b></span>
           </div>
         </div>
+        {NAKIT_OZET}
         <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
-          {kpi("İlk nakit açığı", ok.ilkAcikTarihi ? kfTar(ok.ilkAcikTarihi) : "Açık yok", "yalnız kesinlerle", ok.ilkAcikTarihi ? C.red : C.green)}
-          {kpi("Beklenenlerle", ob.ilkAcikTarihi ? kfTar(ob.ilkAcikTarihi) : "Açık yok", ob.ilkAcikTarihi ? "ilk açık" : `en düşük ${kfKisa(ob.enDusukNakit)}`, ob.ilkAcikTarihi ? C.red : C.green)}
+          {kpi("İlk nakit açığı", ob.ilkAcikTarihi ? kfTar(ob.ilkAcikTarihi) : "Açık yok", ob.ilkAcikTarihi ? undefined : `en düşük ${kfKisa(ob.enDusukNakit)}`, ob.ilkAcikTarihi ? C.red : C.green)}
+          {kpi("Açık süresi", ob.enUzunAcikSuresi ? `${ob.enUzunAcikSuresi} gün` : "—", ob.acikGunSayisi ? `${ob.acikGunSayisi} gün açık` : undefined)}
         </div>
         <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
-          {kpi("Maks. finansman ihtiyacı", ok.maksFinansman ? kfKisa(ok.maksFinansman) : "—", ok.maksFinansmanTarihi ? `${kfTar(ok.maksFinansmanTarihi)} · yalnız kesinler` : undefined)}
-          {kpi("Açık süresi", ok.enUzunAcikSuresi ? `${ok.enUzunAcikSuresi} gün` : "—", ok.acikGunSayisi ? `${ok.acikGunSayisi} gün açık · kesinlerle` : undefined)}
+          {kpi("Maks. finansman ihtiyacı", ob.maksFinansman ? kfKisa(ob.maksFinansman) : "—", ob.maksFinansmanTarihi ? kfTar(ob.maksFinansmanTarihi) : undefined)}
         </div>
-        {ob.maksFinansman > 0 && <div style={{ ...kart, fontSize: 12.5, color: metin(0) }}>Beklenen tahsilatlar dahil edilse bile en yüksek finansman ihtiyacı <b>{kfTL(ob.maksFinansman)}</b> ({kfTar(ob.maksFinansmanTarihi)}), {ob.acikGunSayisi} gün nakit açığı görünüyor.</div>}
         <div style={kart}>
           <p style={et}>Gecikmiş tahsilat varsayımı</p>
           <div style={{ marginTop: 8 }}><KfSeg secenekler={[["haric", "Hariç"], [7, "7 gün sonra"], [15, "15 gün"], [30, "30 gün"]]} deger={veri.ayar.gecikmis} onDeg={(v: any) => guncelle((x: any) => ({ ...x, ayar: { ...x.ayar, gecikmis: v } }))} /></div>
-          <p style={{ margin: 0, fontSize: 11.5, color: WA(0.6), lineHeight: 1.45 }}>Vadesi geçmiş tahsilatlar yalnızca "beklenenler dahil" çizgisinde ve seçtiğin varsayımla hesaba girer; kesin nakit sayılmaz.</p>
+          <p style={{ margin: 0, fontSize: 11.5, color: WA(0.6), lineHeight: 1.45 }}>Vadesi geçmiş tahsilatlar seçtiğin varsayımla hesaba girer; "Hariç" seçilirse hiç girmez.</p>
         </div>
         <div style={kart}>
           <p style={{ ...et, marginBottom: 4 }}>Bu dönemin en büyük kalemleri</p>
           {kalemler.length === 0 && <p style={{ margin: "6px 0 2px", fontSize: 13, color: WA(0.6) }}>Henüz kalem yok.</p>}
           {kalemler.map((e: any, j: number) => (
             <div key={j} style={{ display: "flex", justifyContent: "space-between", padding: "9px 0", borderTop: j ? `1px solid ${WA(0.08)}` : "none", fontSize: 13 }}>
-              <span style={{ color: metin(0), minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingRight: 8 }}>{e.kaynak} · {kfTar(e.tarih)}{e.tip === "t" && !kesinSet.has(e.id) ? " (beklenen)" : ""}</span>
+              <span style={{ color: metin(0), minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingRight: 8 }}>{e.kaynak} · {kfTar(e.tarih)}</span>
               <b style={{ color: e.tutar < 0 ? C.red : C.green, whiteSpace: "nowrap" }}>{e.tutar < 0 ? "−" : "+"}{kfTL(Math.abs(e.tutar))}</b>
             </div>
           ))}
@@ -31597,18 +31652,17 @@ function IsletmeFinansHesapli({ uid, nav }: { uid: string; nav?: any }) {
 
   // ── Finansman ihtiyacı
   const FINANSMAN = () => {
-    const p = fSen === "kesin" ? kes! : bek!;
-    const fa = KF.finansmanAnalizi(p, fTampon * 100, fOran);
+    const fa = KF.finansmanAnalizi(bek!, fTampon * 100, fOran);
     const var_ = fa.ihtiyac > 0;
     return (
       <>
-        <KfSeg secenekler={[["kesin", "Yalnız kesin tahsilat"], ["beklenen", "Beklenenler dahil"]]} deger={fSen} onDeg={setFSen} />
         {ufukSec}
         <div style={{ ...kart, textAlign: "center", padding: "18px 14px" }}>
           <p style={et}>{ufuk} günde en yüksek finansman ihtiyacı</p>
           <p style={{ margin: "6px 0 2px", fontSize: 34, fontWeight: 800, letterSpacing: -1, color: var_ ? C.red : C.green, fontVariantNumeric: "tabular-nums" }}>{var_ ? KF.formatTL(fa.ihtiyac, false) : "0"}<span style={{ fontSize: 17, color: WA(0.6), marginLeft: 3 }}>₺</span></p>
           <p style={{ margin: 0, fontSize: 12.5, color: WA(0.65), lineHeight: 1.5 }}>{var_ ? `İlk açık: ${fa.ihtiyacTarihi ? kfTar(fa.ihtiyacTarihi) : "—"} · toplam ${fa.acikGunSayisi} gün açık görünüyor` : "Bu varsayımla seçilen dönemde nakit açığı görünmüyor."}</p>
         </div>
+        {NAKIT_OZET}
         {var_ && (
           <div style={kart}>
             <p style={et}>Güvenlik payı</p>
@@ -31667,7 +31721,7 @@ function IsletmeFinansHesapli({ uid, nav }: { uid: string; nav?: any }) {
         <div style={kart}><p style={et}>Alacak çek / senet</p>{alacak.length ? alacak.map(satir) : <p style={{ margin: "8px 0 2px", fontSize: 13, color: WA(0.6) }}>Kayıt yok.</p>}</div>
         <div style={kart}><p style={et}>Borç çek / senet</p>{borc.length ? borc.map(satir) : <p style={{ margin: "8px 0 2px", fontSize: 13, color: WA(0.6) }}>Kayıt yok.</p>}</div>
         {liste.some((c: any) => c.kapandi) && <div style={kart}><p style={et}>Kapananlar</p>{liste.filter((c: any) => c.kapandi).slice(0, 6).map(satir)}</div>}
-        <p style={{ margin: "0 4px 8px", fontSize: 11.5, color: WA(0.6), lineHeight: 1.45 }}>Alacak evrakların vadesinde tahsil edileceği varsayılır ve "beklenenler dahil" çizgisine girer; borç evraklar ödeme olarak vadesinde nakit akışından düşer.</p>
+        <p style={{ margin: "0 4px 8px", fontSize: 11.5, color: WA(0.6), lineHeight: 1.45 }}>Alacak evrakların vadesinde tahsil edileceği varsayılır ve nakit akışına girer; borç evraklar ödeme olarak vadesinde nakit akışından düşer.</p>
       </>
     );
   };
@@ -31686,7 +31740,7 @@ function IsletmeFinansHesapli({ uid, nav }: { uid: string; nav?: any }) {
   const SENARYO = () => {
     const d = senDegisiklik(); const var_ = Object.keys(d).length > 0;
     const musteriler = Array.from(new Set(veri.tahsilatlar.filter((t: any) => !t.tahsilEdildi).map((t: any) => t.musteri))) as string[];
-    const sonuc = var_ ? KF.senaryoKarsilastir(is!, d, bugun, ufuk, fSen, ayar) : null;
+    const sonuc = var_ ? KF.senaryoKarsilastir(is!, d, bugun, ufuk, "beklenen", ayar) : null;
     const fark = (v: number, ters: boolean) => v === 0 ? WA(0.6) : (ters ? (v > 0 ? C.red : C.green) : (v > 0 ? C.green : C.red));
     const lbl = { margin: "0 0 5px", fontSize: 11, fontWeight: 600, color: (TEMA === "acik" ? "#1A2430" : "#A8C2DC") } as any;
     const satirK = (ad: string, once: string, sonra: string, f: string, renk: string) => (
@@ -31698,7 +31752,6 @@ function IsletmeFinansHesapli({ uid, nav }: { uid: string; nav?: any }) {
     const isr = (v: number, tl = true) => (v > 0 ? "+" : v < 0 ? "−" : "") + (tl ? kfKisa(Math.abs(v)) : String(Math.abs(v)));
     return (
       <>
-        <KfSeg secenekler={[["kesin", "Yalnız kesin"], ["beklenen", "Beklenenler dahil"]]} deger={fSen} onDeg={setFSen} />
         {ufukSec}
         <div style={kart}>
           <p style={lbl}>Tahsilatlar şu kadar gün geç gelirse</p>
@@ -31716,7 +31769,7 @@ function IsletmeFinansHesapli({ uid, nav }: { uid: string; nav?: any }) {
             </label>
           )}
           <KfPara etiket="Yeni ödeme ekle (₺)" deger={sn.yeniTutar} onDeg={(v: number | null) => setSn({ ...sn, yeniTutar: v })} yer="Boş bırak" />
-          {sn.yeniTutar ? <KfAlan etiket="Yeni ödeme tarihi" tip="date" deger={sn.yeniTarih || KF.gunEkle(bugun, 15)} onDeg={(v: string) => setSn({ ...sn, yeniTarih: v })} /> : null}
+          {sn.yeniTutar ? <KfTarih etiket="Yeni ödeme tarihi" deger={sn.yeniTarih || KF.gunEkle(bugun, 15)} onDeg={(v: string) => setSn({ ...sn, yeniTarih: v })} /> : null}
           <KfPara etiket="Nakit değişimi (₺) — ör. sermaye girişi, eksi için “-”" deger={sn.nakit} onDeg={(v: number | null) => setSn({ ...sn, nakit: v })} yer="Boş bırak" />
           {var_ && <div className="press-card" onClick={() => setSn({ gecikme: 0, kayip: 0, artis: 0, musteri: "", yeniTutar: null, yeniTarih: "", nakit: null })} style={{ textAlign: "center", fontSize: 12.5, fontWeight: 700, color: C.blue, cursor: "pointer" }}>Senaryoyu sıfırla</div>}
         </div>
@@ -31762,18 +31815,18 @@ function IsletmeFinansHesapli({ uid, nav }: { uid: string; nav?: any }) {
 
   // ── Finansal durum raporu
   const raporMetni = () => {
-    const sg = KF.saglikAnalizi(is!, bugun), k90 = KF.projeksiyon(is!, bugun, 90, "kesin", ayar), b90 = KF.projeksiyon(is!, bugun, 90, "beklenen", ayar);
-    const fa = KF.finansmanAnalizi(b90, 0, null), faK = KF.finansmanAnalizi(k90, 0, null);
+    const sg = KF.saglikAnalizi(is!, bugun), b90 = KF.projeksiyon(is!, bugun, 90, "beklenen", ayar);
+    const fa = KF.finansmanAnalizi(b90, 0, null);
     const cs = veri.cekSenet.filter((c: any) => !c.kapandi);
     const acikT = veri.tahsilatlar.filter((t: any) => !t.tahsilEdildi);
     const L: string[] = [];
     L.push(`${veri.isletme.ad} — Finansal Durum Raporu`, `Tarih: ${kfTarUzun(bugun)}`, "Hazırlayan: Katılım Plus · İşletmem Finans Asistanım", "");
     L.push("1) Güncel durum", `Beyan edilen nakit: ${kfTL(veri.isletme.nakit)} (${kfTarUzun(veri.isletme.nakitTarihi)})`, `Açık tahsilat: ${acikT.length} kayıt, ${kfTL(acikT.reduce((x: number, t: any) => x + t.tutar, 0))}`, `Tanımlı ödeme: ${veri.odemeler.length} kalem`, `Açık çek/senet: ${cs.length} evrak`, "");
-    L.push("2) 90 günlük nakit görünümü", `Yalnız kesin tahsilatlarla: ${k90.ozet.ilkAcikTarihi ? `ilk açık ${kfTar(k90.ozet.ilkAcikTarihi)}, en yüksek ihtiyaç ${kfTL(k90.ozet.maksFinansman)}, ${k90.ozet.acikGunSayisi} gün açık` : "nakit açığı görünmüyor"}`, `Beklenenler dahil: ${b90.ozet.ilkAcikTarihi ? `ilk açık ${kfTar(b90.ozet.ilkAcikTarihi)}, en yüksek ihtiyaç ${kfTL(b90.ozet.maksFinansman)}, ${b90.ozet.acikGunSayisi} gün açık` : `nakit açığı görünmüyor (en düşük nakit ${kfTL(b90.ozet.enDusukNakit)})`}`, `90. gün tahmini nakit: ${kfTL(k90.ozet.sonNakit)} (kesin) / ${kfTL(b90.ozet.sonNakit)} (beklenen dahil)`, "");
-    L.push("3) Finansman ihtiyacı", fa.ihtiyac > 0 || faK.ihtiyac > 0 ? `Kesin: ${kfTL(faK.ihtiyac)} · Beklenen dahil: ${kfTL(fa.ihtiyac)}` : "Bu dönemde finansman ihtiyacı görünmüyor.", "");
+    L.push("2) 90 günlük nakit görünümü", `Planlanan tahsilat: ${kfTL(b90.ozet.toplamTahsilat)} · Planlanan ödeme: ${kfTL(b90.ozet.toplamOdeme)}`, b90.ozet.ilkAcikTarihi ? `İlk nakit açığı: ${kfTar(b90.ozet.ilkAcikTarihi)} · en yüksek ihtiyaç ${kfTL(b90.ozet.maksFinansman)} · ${b90.ozet.acikGunSayisi} gün açık` : `Nakit açığı görünmüyor (en düşük nakit ${kfTL(b90.ozet.enDusukNakit)})`, `90. gün tahmini nakit: ${kfTL(b90.ozet.sonNakit)}`, "");
+    L.push("3) Finansman ihtiyacı", fa.ihtiyac > 0 ? `En yüksek ihtiyaç: ${kfTL(fa.ihtiyac)}` : "Bu dönemde finansman ihtiyacı görünmüyor.", "");
     L.push(`4) Finansal sağlık: ${sg.skor}/100 (${sg.seviye === "guclu" ? "güçlü" : sg.seviye === "dikkat" ? "dikkat" : "riskli"})`, ...sg.kalemler.map((x: any) => `- ${x.ad}: ${x.puan}/${x.azami} — ${x.aciklama}`), "");
     L.push("5) Dikkat edilecekler", ...(uyar.length ? uyar.map((u: any) => `- ${u.metin.replace(/\d{4}-\d{2}-\d{2}/g, (d: string) => kfTarUzun(d))}`) : ["- Uyarı yok."]), "");
-    L.push("Varsayımlar ve sınırlar", `- Gecikmiş tahsilat varsayımı: ${veri.ayar.gecikmis === "haric" ? "hariç" : veri.ayar.gecikmis + " gün sonra"}`, "- Tüm veriler kullanıcı beyanına dayanır.", "- Bu rapor kesin nakit tahmini, kredi değerlendirmesi veya finansman onayı değildir.");
+    L.push("Varsayımlar ve sınırlar", `- Gecikmiş tahsilat varsayımı: ${veri.ayar.gecikmis === "haric" ? "hariç" : veri.ayar.gecikmis + " gün sonra"}`, "- Hiçbir tahsilat garanti sayılmaz; tüm tahsilatlar beklenen olarak planlanır.", "- Tüm veriler kullanıcı beyanına dayanır.", "- Bu rapor kesin nakit tahmini, kredi değerlendirmesi veya finansman onayı değildir.");
     return L.join("\n");
   };
   const RAPOR = () => {
@@ -31794,17 +31847,15 @@ function IsletmeFinansHesapli({ uid, nav }: { uid: string; nav?: any }) {
   // ── Düzenleme sayfaları
   const SheetTah = () => {
     const k0 = sheet.kayit; const [ad, setAd] = useState(k0 ? k0.musteri : ""); const [tut, setTut] = useState<number | null>(k0 ? k0.tutar : null);
-    const [vade, setVade] = useState(k0 ? k0.vade : KF.gunEkle(bugun, 7)); const [durum, setDurum] = useState(k0 ? k0.durum : "beklenen");
+    const [vade, setVade] = useState(k0 ? k0.vade : KF.gunEkle(bugun, 7));
     const gecerli = ad.trim() && tut != null && tut > 0 && /^\d{4}-\d{2}-\d{2}$/.test(vade);
     return (
       <KfSheet baslik={k0 ? "Tahsilatı düzenle" : "Tahsilat ekle"} kapat={() => setSheet(null)}>
         <KfAlan etiket="Müşteri / kaynak" deger={ad} onDeg={setAd} yer="Örn. Atlas Market" />
         <KfPara etiket="Tutar (₺)" deger={tut} onDeg={setTut} />
-        <KfAlan etiket="Vade tarihi" tip="date" deger={vade} onDeg={setVade} />
-        <p style={{ margin: "0 0 5px", fontSize: 11, fontWeight: 600, color: (TEMA === "acik" ? "#1A2430" : "#A8C2DC") }}>Durum</p>
-        <KfSeg secenekler={[["kesin", "Kesin"], ["beklenen", "Beklenen"]]} deger={durum} onDeg={setDurum} />
-        <p style={{ margin: "-4px 0 14px", fontSize: 11.5, color: WA(0.6), lineHeight: 1.45 }}>Emin değilsen "Beklenen" seç: beklenen tahsilatlar kesin nakit olarak gösterilmez.</p>
-        <div className="press-card" onClick={() => { if (!gecerli) return; const yeni = { id: k0 ? k0.id : kfId(), musteri: ad.trim(), tutar: tut as number, vade, durum, tahsilEdildi: k0 ? k0.tahsilEdildi : false, tahsilTarihi: k0 ? k0.tahsilTarihi : "" }; guncelle((v: any) => ({ ...v, tahsilatlar: k0 ? v.tahsilatlar.map((t: any) => (t.id === k0.id ? yeni : t)) : [...v.tahsilatlar, yeni] })); setSheet(null); }} style={{ textAlign: "center", padding: "12px", borderRadius: 13, background: gecerli ? C.blue : WA(0.15), color: "#fff", fontSize: 15, fontWeight: 700, cursor: gecerli ? "pointer" : "default" }}>Kaydet</div>
+        <KfTarih etiket="Vade tarihi" deger={vade} onDeg={setVade} />
+        <p style={{ margin: "-4px 0 14px", fontSize: 11.5, color: WA(0.6), lineHeight: 1.45 }}>Tahsilatlar garanti sayılmaz; hepsi "beklenen" olarak planlanır.</p>
+        <div className="press-card" onClick={() => { if (!gecerli) return; const yeni = { id: k0 ? k0.id : kfId(), musteri: ad.trim(), tutar: tut as number, vade, durum: "beklenen", tahsilEdildi: k0 ? k0.tahsilEdildi : false, tahsilTarihi: k0 ? k0.tahsilTarihi : "" }; guncelle((v: any) => ({ ...v, tahsilatlar: k0 ? v.tahsilatlar.map((t: any) => (t.id === k0.id ? yeni : t)) : [...v.tahsilatlar, yeni] })); setSheet(null); }} style={{ textAlign: "center", padding: "12px", borderRadius: 13, background: gecerli ? C.blue : WA(0.15), color: "#fff", fontSize: 15, fontWeight: 700, cursor: gecerli ? "pointer" : "default" }}>Kaydet</div>
         {k0 && !k0.tahsilEdildi && <div className="press-card" onClick={() => { guncelle((v: any) => ({ ...v, tahsilatlar: v.tahsilatlar.map((t: any) => (t.id === k0.id ? { ...t, tahsilEdildi: true, tahsilTarihi: bugun } : t)) })); setSheet(null); }} style={{ textAlign: "center", padding: "12px", marginTop: 10, borderRadius: 13, border: `1px solid ${C.green}`, color: C.green, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Tahsil edildi olarak işaretle</div>}
         {k0 && k0.tahsilEdildi && <div className="press-card" onClick={() => { guncelle((v: any) => ({ ...v, tahsilatlar: v.tahsilatlar.map((t: any) => (t.id === k0.id ? { ...t, tahsilEdildi: false, tahsilTarihi: "" } : t)) })); setSheet(null); }} style={{ textAlign: "center", padding: "12px", marginTop: 10, borderRadius: 13, border: `1px solid ${WA(0.2)}`, color: C.blue, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Tekrar bekleyen yap</div>}
         {k0 && <div className="press-card" onClick={() => { if (silOnay !== k0.id) { setSilOnay(k0.id); return; } guncelle((v: any) => ({ ...v, tahsilatlar: v.tahsilatlar.filter((t: any) => t.id !== k0.id) })); setSilOnay(""); setSheet(null); }} style={{ textAlign: "center", padding: "12px", marginTop: 10, color: C.red, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{silOnay === k0.id ? "Silmek için tekrar dokun" : "Sil"}</div>}
@@ -31819,10 +31870,10 @@ function IsletmeFinansHesapli({ uid, nav }: { uid: string; nav?: any }) {
       <KfSheet baslik={k0 ? "Ödemeyi düzenle" : "Ödeme ekle"} kapat={() => setSheet(null)}>
         <KfAlan etiket="Ödeme adı" deger={ad} onDeg={setAd} yer="Örn. Kira, maaşlar, tedarikçi" />
         <KfPara etiket="Tutar (₺)" deger={tut} onDeg={setTut} />
-        <KfAlan etiket="İlk ödeme tarihi" tip="date" deger={tarih} onDeg={setTarih} />
+        <KfTarih etiket="İlk ödeme tarihi" deger={tarih} onDeg={setTarih} />
         <p style={{ margin: "0 0 5px", fontSize: 11, fontWeight: 600, color: (TEMA === "acik" ? "#1A2430" : "#A8C2DC") }}>Tekrar</p>
         <KfSeg secenekler={[["yok", "Tek sefer"], ["haftalik", "Haftalık"], ["aylik", "Aylık"]]} deger={tekrar} onDeg={setTekrar} />
-        {tekrar !== "yok" && <KfAlan etiket="Bitiş tarihi (isteğe bağlı)" tip="date" deger={bitis} onDeg={setBitis} />}
+        {tekrar !== "yok" && <KfTarih etiket="Bitiş tarihi (isteğe bağlı)" deger={bitis} onDeg={setBitis} bos="Belirsiz (süresiz)" />}
         <div className="press-card" onClick={() => { if (!gecerli) return; const yeni = { id: k0 ? k0.id : kfId(), ad: ad.trim(), tutar: tut as number, tarih, tekrar: tekrar === "yok" ? null : tekrar, bitis: tekrar !== "yok" && bitis ? bitis : null }; guncelle((v: any) => ({ ...v, odemeler: k0 ? v.odemeler.map((o: any) => (o.id === k0.id ? yeni : o)) : [...v.odemeler, yeni] })); setSheet(null); }} style={{ textAlign: "center", padding: "12px", borderRadius: 13, background: gecerli ? C.blue : WA(0.15), color: "#fff", fontSize: 15, fontWeight: 700, cursor: gecerli ? "pointer" : "default" }}>Kaydet</div>
         {k0 && <div className="press-card" onClick={() => { if (silOnay !== k0.id) { setSilOnay(k0.id); return; } guncelle((v: any) => ({ ...v, odemeler: v.odemeler.filter((o: any) => o.id !== k0.id) })); setSilOnay(""); setSheet(null); }} style={{ textAlign: "center", padding: "12px", marginTop: 10, color: C.red, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{silOnay === k0.id ? "Silmek için tekrar dokun" : "Sil"}</div>}
       </KfSheet>
@@ -31840,7 +31891,7 @@ function IsletmeFinansHesapli({ uid, nav }: { uid: string; nav?: any }) {
         <p style={lbl}>Tür</p><KfSeg secenekler={[["cek", "Çek"], ["senet", "Senet"]]} deger={tur} onDeg={setTur} />
         <KfAlan etiket={yon === "alacak" ? "Keşideci / borçlu" : "Lehtar / alacaklı"} deger={taraf} onDeg={setTaraf} yer="Örn. Atlas Market" />
         <KfPara etiket="Tutar (₺)" deger={tut} onDeg={setTut} />
-        <KfAlan etiket="Vade tarihi" tip="date" deger={vade} onDeg={setVade} />
+        <KfTarih etiket="Vade tarihi" deger={vade} onDeg={setVade} />
         {yon === "alacak" && <><p style={lbl}>Karşılıksız çıktı mı?</p><KfSeg secenekler={[[false, "Hayır"], [true, "Evet"]]} deger={kars} onDeg={setKars} /></>}
         {k0 && <><p style={lbl}>Durum</p><KfSeg secenekler={[[false, "Açık"], [true, "Kapandı (tahsil/ödendi)"]]} deger={kapandi} onDeg={setKapandi} /></>}
         <div className="press-card" onClick={() => { if (!gecerli) return; const yeni = { id: k0 ? k0.id : kfId(), yon, tur, taraf: taraf.trim(), tutar: tut as number, vade, kapandi, karsiliksiz: yon === "alacak" && kars }; guncelle((v: any) => ({ ...v, cekSenet: k0 ? v.cekSenet.map((c: any) => (c.id === k0.id ? yeni : c)) : [...v.cekSenet, yeni] })); setSheet(null); }} style={{ textAlign: "center", padding: "12px", borderRadius: 13, background: gecerli ? C.blue : WA(0.15), color: "#fff", fontSize: 15, fontWeight: 700, cursor: gecerli ? "pointer" : "default" }}>Kaydet</div>
