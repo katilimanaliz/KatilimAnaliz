@@ -13040,7 +13040,7 @@ const fmtTL = (n) => isNaN(n)||n===null ? "—" : new Intl.NumberFormat("tr-TR",
 const DEFAULT_SETTINGS = {
   stopajTL_0_180:17.5, stopajTL_181_365:15, stopajTL_365plus:10, stopajYP_tum:25,
   bireyselKKDF:15, bireyselBSMV:15, ticariKKDF:0, ticariBSMV:5,
-  zkTL_vadesiz:17, zkTL_6ay:10, zkYP_vadesiz:30, zkYP_diger:26,
+  zkTL_vadesiz:17, zkTL_6ay:10, zkYP_vadesiz:32, zkYP_diger:28,
   fonlamaMaliyeti:24.0,
   referansOran:3.11,
   bkmTakas:3.36,
@@ -13068,6 +13068,8 @@ function normalizeSettings(s: any) {
   for (const k of Object.keys(DEFAULT_SETTINGS)) {
     out[k] = sayiOku(s?.[k], (DEFAULT_SETTINGS as any)[k]);
   }
+  // TCMB 1 Temmuz 2026: YP zorunlu karşılık %30/%26 → %32/%28. Kullanıcı eski varsayılana dokunmadıysa güncelle.
+  if (out.zkYP_vadesiz === 30 && out.zkYP_diger === 26) { out.zkYP_vadesiz = 32; out.zkYP_diger = 28; }
   return out;
 }
 // PDF/rapor önizlemesi innerHTML ile kuruluyor — başlık/etiket gibi alanlar teorik olarak
@@ -23125,8 +23127,8 @@ function Ayarlar({settings,onSave}){
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
           <Field label="TL Vadesiz/Kısa" value={s.zkTL_vadesiz} onChange={upd("zkTL_vadesiz")} suffix="%"/>
           <Field label="TL 6ay-1yıl" value={s.zkTL_6ay} onChange={upd("zkTL_6ay")} suffix="%"/>
-          <Field label="YP Vadesiz" value={s.zkYP_vadesiz} onChange={upd("zkYP_vadesiz")} suffix="%"/>
-          <Field label="YP 3ay+" value={s.zkYP_diger} onChange={upd("zkYP_diger")} suffix="%"/>
+          <Field label="YP Vadesiz/1 aya kadar" value={s.zkYP_vadesiz} onChange={upd("zkYP_vadesiz")} suffix="%"/>
+          <Field label="YP Daha uzun vade" value={s.zkYP_diger} onChange={upd("zkYP_diger")} suffix="%"/>
         </div>
       </Card>
       <Card>
@@ -29461,7 +29463,7 @@ function ErkenKapamaKarari({ s }: { s?: any }) {
   const [taksitS, setTaksitS] = useState("");
   const [vadeS, setVadeS] = useState("");
   const [nakitS, setNakitS] = useState("");
-  const [bilesikS, setBilesikS] = useState("");   // ticari: elle girilen yıllık bileşik oran
+  const [bilesikS, setBilesikS] = useState("");   // ticari: elle girilen AYLIK kâr payı oranı
   const [yatirimVadeS, setYatirimVadeS] = useState("32");
   const [getiriS, setGetiriS] = useState("");
   const [kaynak, setKaynak] = useState("nakit");        // nakit | refinans
@@ -29490,7 +29492,9 @@ function ErkenKapamaKarari({ s }: { s?: any }) {
   // elle de girilebiliyor; girilmişse o kullanılır.
   const aylikOran = kararAylikOranBul(anapara, taksit, n);
   const turetilenBilesik = aylikOran > 0 ? (Math.pow(1 + aylikOran, 12) - 1) * 100 : 0;
-  const elleBilesik = sayiOku(bilesikS);
+  const elleAylik = sayiOku(bilesikS) / 100;   // elle girilen AYLIK oran
+  const elleBilesik = elleAylik > 0 ? (Math.pow(1 + elleAylik, 12) - 1) * 100 : 0;
+  const oranTutarsiz = elleAylik > 0 && aylikOran > 0 && Math.abs(elleAylik / aylikOran - 1) > 0.15;
   const yillikBilesik = elleBilesik > 0 ? elleBilesik : turetilenBilesik;
   // Girilen taksit ve vade, kalan anaparayı karşılamıyorsa veri tutarsızdır.
   const planTutarsiz = anapara > 0 && taksit > 0 && n > 0 && taksit * n <= anapara;
@@ -29596,8 +29600,8 @@ function ErkenKapamaKarari({ s }: { s?: any }) {
         solEtiket="Bugünkü değer farkı" solDeger={kararTL(Math.abs(refAvantaj))}
         sagEtiket="Aylık taksit farkı" sagDeger={`${yeniTaksit - taksit < 0 ? "−" : "+"}${kararTL(Math.abs(yeniTaksit - taksit))}`} />
 
-      <KararOranCubuk solEtiket="Yeni finansman (yıllık bileşik)" solDeger={yeniYillik}
-        sagEtiket="Mevcut finansman (yıllık bileşik)" sagDeger={yillikBilesik} solKazandi={yeniYillik < yillikBilesik} />
+      <KararOranCubuk solEtiket="Yeni finansman (aylık oran)" solDeger={rYeni * 100}
+        sagEtiket="Mevcut finansman (aylık oran)" sagDeger={aylikOran > 0 ? aylikOran * 100 : elleAylik * 100} solKazandi={rYeni < (aylikOran > 0 ? aylikOran : elleAylik)} />
 
       <Card>
         <SecTitle>İki Yol</SecTitle>
@@ -29671,20 +29675,30 @@ function ErkenKapamaKarari({ s }: { s?: any }) {
         <Field label="Ödenen Aylık Taksit Tutarı" value={taksitS} onChange={setTaksitS} suffix="₺" hint="Her ay ödediğin tutar" />
         <Field label="Kalan Vade" value={vadeS} onChange={setVadeS} suffix="Ay" hint="Kaç taksit kaldı" />
         {tur === "ticariTL" && (
-          <Field label="Yıllık Bileşik Kâr Payı Oranı" value={bilesikS} onChange={setBilesikS} suffix="%"
-            hint={turetilenBilesik > 0
-              ? `Boş bırakırsan taksit ve vadeden hesaplanan ${kararYuzde(turetilenBilesik)} kullanılır`
-              : "Erken kapama ücreti bu orana bağlı — sözleşmendeki oranı gir"} />
+          <Field label="Aylık Kâr Payı Oranı" value={bilesikS} onChange={setBilesikS} suffix="%"
+            hint={aylikOran > 0
+              ? `Boş bırakırsan taksit ve vadeden hesaplanan aylık ${kararYuzde(aylikOran * 100)} kullanılır`
+              : "Erken kapama ücreti bu orana bağlı — sözleşmendeki aylık oranı gir"} />
         )}
         {yillikBilesik > 0 && (
-          <RRow label={elleBilesik > 0 ? "Finansmanın Yıllık Maliyeti (girilen)" : "Finansmanın Yıllık Maliyeti"}
-            value={kararYuzde(yillikBilesik)} accent={C.orange} />
+          <RRow label={elleBilesik > 0 ? "Finansmanın Aylık Maliyeti (girilen)" : "Finansmanın Aylık Maliyeti"}
+            value={kararYuzde(elleAylik > 0 ? elleAylik * 100 : aylikOran * 100)} accent={C.orange} />
+        )}
+        {yillikBilesik > 0 && (
+          <RRow label="Yıllık Bileşik Karşılığı" value={kararYuzde(yillikBilesik)} accent={C.orange} />
         )}
         {anapara > 0 && n > 0 && (
           <RRow label="Erken Kapama Ücreti" value={ucret + bsmv > 0 ? kararTL(ucret + bsmv) : "Yok"}
             accent={ucret + bsmv > 0 ? C.orange : C.green} />
         )}
       </Card>
+
+      {oranTutarsiz && !planTutarsiz && (
+        <KararNot tur="uyari">
+          Girdiğin aylık oran ({kararYuzde(elleAylik * 100)}) taksit ve vadeden hesaplanan orandan ({kararYuzde(aylikOran * 100)}) farklı.
+          Karşılaştırma gerçek taksitlerle yapılır; girdiğin oran yalnızca erken kapama ücretini etkiler. Rakamları kontrol et.
+        </KararNot>
+      )}
 
       {planTutarsiz && (
         <KararNot tur="uyari">
