@@ -5361,6 +5361,7 @@ const ICON_MAP: Record<string, any> = {
   hazineSenaryo: TrendingUp,
   hazineKurMakasi: Percent,   // 2026-10-04: Katılım Bankaları Kur İzleme (eski ad: Kur Makası ve Marj)
   hazineTcmbKur: Landmark,    // 2026-10-13: TCMB Kur İzleme
+  isletmeFinans: Wallet,      // 2026-10-14: İşletmem · Finans Asistanım
   // Katılım Fonu
   vadeliKatilim: Wallet,
   getiridenAnapara: Target,
@@ -13308,7 +13309,7 @@ const EKRAN_KATEGORI: Record<string,string> = {
   bistHisseTarayici:"piyasa", fonGetiriIzleme:"piyasa", karPayiOranlari:"piyasa", finansalGostergeler:"piyasa", piyasaHaberleri:"piyasa", fiyatAlarmlarim:"piyasa",
   // Araçlar / Hesaplama Araçları
   finansalTakvim:"arac", vadeTakibi:"arac", katilimBankalari:"arac", katilimSigorta:"arac", kamuHaznedarligi:"arac",
-  hazineDoviz:"arac", hazineForward:"arac", hazineSwap:"arac", hazineBono:"arac", hazineSenaryo:"arac", hazineKurMakasi:"arac", hazineTcmbKur:"arac",
+  hazineDoviz:"arac", hazineForward:"arac", hazineSwap:"arac", hazineBono:"arac", hazineSenaryo:"arac", hazineKurMakasi:"arac", hazineTcmbKur:"arac", isletmeFinans:"arac",
   asistan:"arac", sozluk:"arac", egitim:"arac", musteriPortfoyum:"arac",
 };
 const KategoriRenkContext = createContext<string|null>(null);
@@ -31014,6 +31015,882 @@ function TcmbKurIzleme(){
   );
 }
 
+
+// ── İŞLETMEM · FİNANS ASİSTANIM — hesaplama motoru (tam sayı kuruş; testler: kobi/test.mjs) ──
+const KF = (() => {
+  // Katılım Plus · KOBİ Finans Asistanı — hesaplama motoru
+  // Tüm tutarlar TAM SAYI KURUŞ (1 TL = 100). Kayan nokta kullanılmaz; çarpma/bölme BigInt ile yuvarlanır (yarım yukarı).
+  // Tüm girdiler KULLANICI BEYANIDIR; çıktılar kesin nakit tahmini, kredi değerlendirmesi veya finansman onayı değildir.
+
+  type Kurus = number;
+  type Iso = string; // "YYYY-MM-DD"
+
+  interface Tahsilat { id: string; musteri: string; tutar: Kurus; vade: Iso; durum: "kesin" | "beklenen"; tahsilEdildi?: boolean; }
+  interface Odeme { id: string; ad: string; tutar: Kurus; tarih: Iso; tekrar?: "haftalik" | "aylik" | null; bitis?: Iso | null; }
+  interface CekSenet { id: string; yon: "alacak" | "borc"; tur: "cek" | "senet"; taraf: string; tutar: Kurus; vade: Iso; kapandi?: boolean; karsiliksiz?: boolean; }
+  interface Isletme { ad: string; nakit: Kurus; nakitTarihi: Iso; tahsilatlar: Tahsilat[]; odemeler: Odeme[]; cekSenet: CekSenet[]; }
+  interface Ayar { gecikmisVarsayim: "haric" | number; }   // number: gecikmiş tahsilat bugünden kaç gün sonra gelir varsayılır
+
+  // ───────── Para ─────────
+  function parseTL(s: string): Kurus | null {
+    let t = String(s ?? "").replace(/\s|₺|TL/gi, "");
+    if (!t) return null;
+    let neg = false;
+    if (t[0] === "-") { neg = true; t = t.slice(1); }
+    if (!/^[\d.,]+$/.test(t)) return null;
+    if (t.includes(",")) { if ((t.match(/,/g) as string[]).length > 1) return null; t = t.replace(/\./g, "").replace(",", "."); }
+    else if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, "");
+    else if ((t.match(/\./g) || []).length > 1) return null;
+    const [i, f = ""] = t.split(".");
+    if (!/^\d+$/.test(i) || (f && !/^\d+$/.test(f))) return null;
+    const frac = (f + "00").slice(0, 2);
+    const roundUp = f.length > 2 && f.charCodeAt(2) >= 53 ? 1 : 0;      // 3. hane ≥5 → yukarı
+    const k = Number(i) * 100 + Number(frac) + roundUp;
+    if (!Number.isSafeInteger(k)) return null;
+    return neg ? -k : k;
+  }
+  function formatTL(k: Kurus, kurusGoster = true): string {
+    const neg = k < 0; const a = Math.abs(k);
+    const tl = Math.floor(a / 100), ks = a % 100;
+    const g = String(tl).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    return (neg ? "-" : "") + g + (kurusGoster ? "," + String(ks).padStart(2, "0") : "");
+  }
+  /** tutar × baz puan / 10000, yarım yukarı (BigInt). bps=100 → %1 */
+  function oranUygula(k: Kurus, bps: number): Kurus {
+    const n = BigInt(k) * BigInt(Math.round(bps)); const d = 10000n;
+    const q = n / d, r = n % d; const abs = (x: bigint) => (x < 0n ? -x : x);
+    let res = q; if (abs(r) * 2n >= d) res += n < 0n ? -1n : 1n;
+    return Number(res);
+  }
+
+  // ───────── Tarih (UTC gün aritmetiği, saat dilimi etkisi yok) ─────────
+  const ms = (s: Iso) => { const [y, m, d] = s.split("-").map(Number); return Date.UTC(y, m - 1, d); };
+  const gunEkle = (s: Iso, n: number): Iso => new Date(ms(s) + n * 86400000).toISOString().slice(0, 10);
+  const gunFarki = (a: Iso, b: Iso): number => Math.round((ms(a) - ms(b)) / 86400000);
+  function ayEkle(s: Iso, n: number): Iso {
+    const [y, m, d] = s.split("-").map(Number);
+    const t = new Date(Date.UTC(y, m - 1 + n, 1)); const son = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 0)).getUTCDate();
+    return new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), Math.min(d, son))).toISOString().slice(0, 10);
+  }
+
+  // ───────── Olay üretimi ─────────
+  interface Olay { tarih: Iso; tutar: Kurus; kaynak: string; id: string; }
+  /** Ödemeleri (tekrarlıları açarak) ve borç çek/senetleri ufuk içinde günlere dağıtır. Geçmiş tarihli ödemeler ufkun ilk gününe (bugün) çekilir: ödenmemiş yük kabul edilir. */
+  function odemeOlaylari(is: Isletme, bugun: Iso, ufuk: number): Olay[] {
+    const son = gunEkle(bugun, ufuk), out: Olay[] = [];
+    for (const o of is.odemeler) {
+      if (!o.tekrar) { out.push({ tarih: o.tarih < bugun ? bugun : o.tarih, tutar: o.tutar, kaynak: o.ad, id: o.id }); continue; }
+      let k = 0, t = o.tarih;
+      while (t <= son && (!o.bitis || t <= o.bitis) && k < 400) {
+        if (t >= bugun) out.push({ tarih: t, tutar: o.tutar, kaynak: o.ad, id: o.id });
+        k++; t = o.tekrar === "haftalik" ? gunEkle(o.tarih, 7 * k) : ayEkle(o.tarih, k);
+      }
+    }
+    for (const c of is.cekSenet) if (c.yon === "borc" && !c.kapandi) out.push({ tarih: c.vade < bugun ? bugun : c.vade, tutar: c.tutar, kaynak: (c.tur === "cek" ? "Çek" : "Senet") + " · " + c.taraf, id: c.id });
+    return out.filter((e) => e.tarih <= son);
+  }
+  type Senaryo = "kesin" | "beklenen";
+  /** Tahsilatlar. kesin: yalnız 'kesin' işaretliler. beklenen: kesin + beklenen (+ alacak çek/senet). Gecikmişler ayara göre. */
+  function tahsilatOlaylari(is: Isletme, bugun: Iso, ufuk: number, sen: Senaryo, ayar: Ayar): { olaylar: Olay[]; gecikmis: Tahsilat[] } {
+    const son = gunEkle(bugun, ufuk), out: Olay[] = [], gecikmis: Tahsilat[] = [];
+    const ekle = (t: Iso, tutar: Kurus, kaynak: string, id: string) => { if (t <= son) out.push({ tarih: t, tutar, kaynak, id }); };
+    for (const t of is.tahsilatlar) {
+      if (t.tahsilEdildi) continue;
+      if (sen === "kesin" && t.durum !== "kesin") { if (t.vade < bugun) gecikmis.push(t); continue; }
+      if (t.vade < bugun) { gecikmis.push(t); if (sen === "beklenen" && ayar.gecikmisVarsayim !== "haric") ekle(gunEkle(bugun, ayar.gecikmisVarsayim as number), t.tutar, t.musteri + " (gecikmiş)", t.id); continue; }
+      ekle(t.vade, t.tutar, t.musteri, t.id);
+    }
+    if (sen === "beklenen") for (const c of is.cekSenet) if (c.yon === "alacak" && !c.kapandi && !c.karsiliksiz) ekle(c.vade < bugun ? gunEkle(bugun, ayar.gecikmisVarsayim === "haric" ? 0 : (ayar.gecikmisVarsayim as number)) : c.vade, c.tutar, (c.tur === "cek" ? "Çek" : "Senet") + " · " + c.taraf, c.id);
+    return { olaylar: out, gecikmis };
+  }
+
+  // ───────── Günlük projeksiyon ─────────
+  interface Gun { tarih: Iso; tahsilat: Kurus; odeme: Kurus; nakit: Kurus; }
+  interface Ozet { ilkAcikTarihi: Iso | null; enDusukNakit: Kurus; enDusukTarih: Iso; maksFinansman: Kurus; maksFinansmanTarihi: Iso | null; acikGunSayisi: number; enUzunAcikSuresi: number; sonNakit: Kurus; toplamTahsilat: Kurus; toplamOdeme: Kurus; }
+  interface Projeksiyon { gunler: Gun[]; ozet: Ozet; gecikmis: Tahsilat[]; }
+  /** Gün Sonu Nakit = Önceki Gün Nakdi + Gerçekleşmesi Beklenen Tahsilatlar − Planlanan Ödemeler. Gün 0 = bugün (açılış nakdi + bugünün işlemleri). */
+  function projeksiyon(is: Isletme, bugun: Iso, ufuk: 30 | 60 | 90 | number, sen: Senaryo, ayar: Ayar = { gecikmisVarsayim: "haric" }): Projeksiyon {
+    const { olaylar: tah, gecikmis } = tahsilatOlaylari(is, bugun, ufuk, sen, ayar);
+    const ode = odemeOlaylari(is, bugun, ufuk);
+    const tA: Record<string, number> = {}, oA: Record<string, number> = {};
+    for (const e of tah) tA[e.tarih] = (tA[e.tarih] || 0) + e.tutar;
+    for (const e of ode) oA[e.tarih] = (oA[e.tarih] || 0) + e.tutar;
+    const gunler: Gun[] = []; let nakit = is.nakit, ilk: Iso | null = null, enDusuk = Infinity, enDusukT = bugun, aciklar = 0, seri = 0, enUzun = 0, tt = 0, to = 0;
+    for (let i = 0; i <= ufuk; i++) {
+      const t = gunEkle(bugun, i), a = tA[t] || 0, b = oA[t] || 0;
+      nakit = nakit + a - b; tt += a; to += b;
+      gunler.push({ tarih: t, tahsilat: a, odeme: b, nakit });
+      if (nakit < enDusuk) { enDusuk = nakit; enDusukT = t; }
+      if (nakit < 0) { if (!ilk) ilk = t; aciklar++; seri++; if (seri > enUzun) enUzun = seri; } else seri = 0;
+    }
+    const maks = enDusuk < 0 ? -enDusuk : 0;
+    return { gunler, gecikmis, ozet: { ilkAcikTarihi: ilk, enDusukNakit: enDusuk, enDusukTarih: enDusukT, maksFinansman: maks, maksFinansmanTarihi: maks > 0 ? enDusukT : null, acikGunSayisi: aciklar, enUzunAcikSuresi: enUzun, sonNakit: nakit, toplamTahsilat: tt, toplamOdeme: to } };
+  }
+
+  // ───────── Finansman ihtiyacı ─────────
+  interface FinansmanAnalizi { ihtiyac: Kurus; tampon: Kurus; toplamIhtiyac: Kurus; ihtiyacTarihi: Iso | null; acikGunSayisi: number; tahminiMaliyet: Kurus | null; gunlukTutarToplami: string; }
+  /** tamponBps: kullanıcının seçtiği güvenlik payı (baz puan). aylikOranBps: kullanıcı beyanı aylık maliyet (ör. %3 → 300). Maliyet = Σ günlük açık × aylık oran / 30 (BASİT KABUL, teklif değildir). */
+  function finansmanAnalizi(p: Projeksiyon, tamponBps = 0, aylikOranBps: number | null = null): FinansmanAnalizi {
+    const ihtiyac = p.ozet.maksFinansman, tampon = oranUygula(ihtiyac, tamponBps);
+    let toplam = 0n; for (const g of p.gunler) if (g.nakit < 0) toplam += BigInt(-g.nakit);
+    let maliyet: Kurus | null = null;
+    if (aylikOranBps != null && ihtiyac > 0) { const n = toplam * BigInt(Math.round(aylikOranBps)); const d = 300000n; maliyet = Number((n * 2n + d) / (d * 2n)); }
+    return { ihtiyac, tampon, toplamIhtiyac: ihtiyac + tampon, ihtiyacTarihi: p.ozet.ilkAcikTarihi, acikGunSayisi: p.ozet.acikGunSayisi, tahminiMaliyet: maliyet, gunlukTutarToplami: toplam.toString() };
+  }
+
+  // ───────── Sağlık analizi (şeffaf kural tabanlı; skor kredi notu DEĞİLDİR) ─────────
+  interface SaglikKalemi { ad: string; puan: number; azami: number; aciklama: string; }
+  interface Saglik { skor: number; seviye: "guclu" | "dikkat" | "riskli"; kalemler: SaglikKalemi[]; }
+  function saglikAnalizi(is: Isletme, bugun: Iso): Saglik {
+    const k = projeksiyon(is, bugun, 90, "kesin"), b = projeksiyon(is, bugun, 90, "beklenen");
+    const kal: SaglikKalemi[] = [];
+    // 1) Nakit açığı (kesin tahsilatlarla 90 gün) — 35
+    const a1 = k.ozet.acikGunSayisi === 0 ? 35 : (b.ozet.acikGunSayisi === 0 ? 20 : (b.ozet.acikGunSayisi <= 10 ? 10 : 0));
+    kal.push({ ad: "Nakit yeterliliği", puan: a1, azami: 35, aciklama: k.ozet.acikGunSayisi === 0 ? "90 günde yalnızca kesin tahsilatlarla açık görünmüyor." : (b.ozet.acikGunSayisi === 0 ? "Beklenen tahsilatlar gelirse açık oluşmuyor." : "Beklenen tahsilatlarla bile açık günler var.") });
+    // 2) Gecikmiş tahsilat oranı — 20
+    const acik = is.tahsilatlar.filter((t) => !t.tahsilEdildi); const topT = acik.reduce((s, t) => s + t.tutar, 0), gec = acik.filter((t) => t.vade < bugun).reduce((s, t) => s + t.tutar, 0);
+    const gecOran = topT > 0 ? (gec * 10000) / topT : 0;
+    kal.push({ ad: "Gecikmiş tahsilat", puan: gecOran === 0 ? 20 : gecOran <= 1000 ? 14 : gecOran <= 2500 ? 7 : 0, azami: 20, aciklama: topT ? `Açık alacağın %${(gecOran / 100).toFixed(0)}'i vadesini geçmiş.` : "Açık alacak kaydı yok." });
+    // 3) Müşteri yoğunlaşması — 15
+    const m: Record<string, number> = {}; for (const t of acik) m[t.musteri] = (m[t.musteri] || 0) + t.tutar;
+    const enBuyuk = Math.max(0, ...Object.values(m)); const yog = topT > 0 ? (enBuyuk * 10000) / topT : 0;
+    kal.push({ ad: "Müşteri yoğunlaşması", puan: topT === 0 ? 8 : yog <= 3500 ? 15 : yog <= 6000 ? 9 : 3, azami: 15, aciklama: topT ? `En büyük müşteri açık alacağın %${(yog / 100).toFixed(0)}'ini oluşturuyor.` : "Veri yok." });
+    // 4) Ödeme yükü / tahsilat dengesi (30 gün, beklenen) — 20
+    const p30 = projeksiyon(is, bugun, 30, "beklenen"); const oran = p30.ozet.toplamOdeme > 0 ? (p30.ozet.toplamTahsilat * 100) / p30.ozet.toplamOdeme : 999;
+    kal.push({ ad: "Tahsilat / ödeme dengesi", puan: oran >= 120 ? 20 : oran >= 100 ? 14 : oran >= 80 ? 7 : 0, azami: 20, aciklama: p30.ozet.toplamOdeme > 0 ? `30 günde beklenen tahsilat, planlanan ödemenin %${Math.round(oran)}'i.` : "30 günde planlı ödeme yok." });
+    // 5) Karşılıksız çek/senet — 10
+    const kars = is.cekSenet.filter((c) => c.karsiliksiz).length;
+    kal.push({ ad: "Çek / senet riski", puan: kars === 0 ? 10 : 0, azami: 10, aciklama: kars === 0 ? "Karşılıksız işaretli evrak yok." : `${kars} evrak karşılıksız işaretli.` });
+    const skor = kal.reduce((s, x) => s + x.puan, 0);
+    return { skor, seviye: skor >= 75 ? "guclu" : skor >= 45 ? "dikkat" : "riskli", kalemler: kal };
+  }
+
+  // ───────── Senaryo laboratuvarı ─────────
+  interface Degisiklik { tahsilatGecikmeGun?: number; tahsilatKayipBps?: number; odemeArtisBps?: number; musteriKaybi?: string; yeniOdeme?: { ad: string; tutar: Kurus; tarih: Iso }; nakitDegisim?: Kurus; }
+  function senaryoUygula(is: Isletme, d: Degisiklik, bugun: Iso): Isletme {
+    const c: Isletme = JSON.parse(JSON.stringify(is));
+    c.tahsilatlar = c.tahsilatlar.filter((t) => !(d.musteriKaybi && t.musteri === d.musteriKaybi && !t.tahsilEdildi)).map((t) => {
+      if (t.tahsilEdildi) return t;
+      const tut = d.tahsilatKayipBps ? t.tutar - oranUygula(t.tutar, d.tahsilatKayipBps) : t.tutar;
+      const vade = d.tahsilatGecikmeGun && t.vade >= bugun ? gunEkle(t.vade, d.tahsilatGecikmeGun) : t.vade;
+      return { ...t, tutar: tut, vade };
+    });
+    c.cekSenet = c.cekSenet.map((x) => (x.yon === "alacak" && d.tahsilatGecikmeGun && x.vade >= bugun ? { ...x, vade: gunEkle(x.vade, d.tahsilatGecikmeGun) } : x));
+    if (d.odemeArtisBps) c.odemeler = c.odemeler.map((o) => ({ ...o, tutar: o.tutar + oranUygula(o.tutar, d.odemeArtisBps as number) }));
+    if (d.yeniOdeme) c.odemeler.push({ id: "senaryo-yeni", ad: d.yeniOdeme.ad, tutar: d.yeniOdeme.tutar, tarih: d.yeniOdeme.tarih, tekrar: null });
+    if (d.nakitDegisim) c.nakit += d.nakitDegisim;
+    return c;
+  }
+  function senaryoKarsilastir(is: Isletme, d: Degisiklik, bugun: Iso, ufuk = 90, sen: Senaryo = "beklenen", ayar: Ayar = { gecikmisVarsayim: "haric" }) {
+    const once = projeksiyon(is, bugun, ufuk, sen, ayar), sonra = projeksiyon(senaryoUygula(is, d, bugun), bugun, ufuk, sen, ayar);
+    return { once: once.ozet, sonra: sonra.ozet, fark: { maksFinansman: sonra.ozet.maksFinansman - once.ozet.maksFinansman, acikGun: sonra.ozet.acikGunSayisi - once.ozet.acikGunSayisi, sonNakit: sonra.ozet.sonNakit - once.ozet.sonNakit } };
+  }
+
+  // ───────── Uyarılar (her uyarı ilgili senaryo ekranına işaret eder) ─────────
+  interface Uyari { kod: string; seviye: "bilgi" | "dikkat" | "kritik"; metin: string; hedef: "radar" | "tahsilat" | "finansman" | "senaryo" | "cek"; }
+  function uyarilar(is: Isletme, bugun: Iso): Uyari[] {
+    const u: Uyari[] = [], k = projeksiyon(is, bugun, 90, "kesin"), b = projeksiyon(is, bugun, 90, "beklenen");
+    if (k.ozet.ilkAcikTarihi) u.push({ kod: "ACIK_KESIN", seviye: b.ozet.ilkAcikTarihi ? "kritik" : "dikkat", metin: `Yalnızca kesin tahsilatlarla ${k.ozet.ilkAcikTarihi} tarihinde nakit açığı görünüyor.`, hedef: "radar" });
+    if (b.ozet.ilkAcikTarihi) u.push({ kod: "ACIK_BEKLENEN", seviye: "kritik", metin: `Beklenen tahsilatlar dahil edilse de ${b.ozet.ilkAcikTarihi} tarihinde açık oluşuyor (en yüksek ihtiyaç ${formatTL(b.ozet.maksFinansman, false)} TL).`, hedef: "finansman" });
+    const gec = k.gecikmis.length ? k.gecikmis : b.gecikmis;
+    if (gec.length) u.push({ kod: "GECIKMIS", seviye: "dikkat", metin: `${gec.length} tahsilat vadesini geçti (${formatTL(gec.reduce((s, t) => s + t.tutar, 0), false)} TL).`, hedef: "tahsilat" });
+    if (is.cekSenet.some((c) => c.karsiliksiz)) u.push({ kod: "KARSILIKSIZ", seviye: "kritik", metin: "Karşılıksız işaretli çek/senet var.", hedef: "cek" });
+    return u;
+  }
+
+  return { finansmanAnalizi, formatTL, gunEkle, gunFarki, odemeOlaylari, oranUygula, parseTL, projeksiyon, saglikAnalizi, senaryoKarsilastir, senaryoUygula, tahsilatOlaylari, uyarilar };
+})();
+
+// ── İŞLETMEM · FİNANS ASİSTANIM (2026-10-14) · Aşama 1: İşletmem, Tahsilat, Ödemeler, Nakit Radarı ──
+// Veriler KULLANICI BEYANIDIR. Kesin nakit tahmini, kredi değerlendirmesi veya finansman onayı DEĞİLDİR.
+// Saklama: Firestore isletmeFinans/{uid} (yalnızca hesap sahibi; cihazda kalıcı kopya tutulmaz). Tutarlar tam sayı KURUŞ (bkz. KF).
+const KF_KOK = "isletmeFinans";
+const KF_HAZIR = new Set(["radar", "tahsilat", "odeme", "finansman", "cek", "senaryo", "saglik", "rapor"]);
+const KF_HEDEF_AD: Record<string, string> = { radar: "Radar", tahsilat: "Tahsilat", odeme: "Ödemeler", finansman: "Finansman", cek: "Çek/Senet", senaryo: "Senaryo", saglik: "Sağlık", rapor: "Rapor" };
+const kfBos = (): any => ({ v: 1, isletme: { ad: "", nakit: 0, nakitTarihi: "" }, tahsilatlar: [], odemeler: [], cekSenet: [], ayar: { gecikmis: "haric" } });
+const kfId = () => Math.random().toString(36).slice(2, 10);
+function kfNormalle(d: any): any {
+  const b = kfBos(); if (!d || typeof d !== "object") return b;
+  const tarih = (x: any) => (typeof x === "string" && /^\d{4}-\d{2}-\d{2}$/.test(x) ? x : "");
+  const tam = (x: any) => (Number.isSafeInteger(x) ? x : 0);
+  const metin = (x: any, k = 120) => (typeof x === "string" ? x.slice(0, k) : "");
+  const dz = (x: any) => (Array.isArray(x) ? x : []);
+  b.isletme = { ad: metin(d.isletme && d.isletme.ad), nakit: tam(d.isletme && d.isletme.nakit), nakitTarihi: tarih(d.isletme && d.isletme.nakitTarihi) };
+  b.tahsilatlar = dz(d.tahsilatlar).filter((t: any) => t && tarih(t.vade) && Number.isSafeInteger(t.tutar) && t.tutar > 0).map((t: any) => ({ id: String(t.id || kfId()), musteri: metin(t.musteri) || "—", tutar: t.tutar, vade: t.vade, durum: t.durum === "kesin" ? "kesin" : "beklenen", tahsilEdildi: !!t.tahsilEdildi, tahsilTarihi: tarih(t.tahsilTarihi) }));
+  b.odemeler = dz(d.odemeler).filter((o: any) => o && tarih(o.tarih) && Number.isSafeInteger(o.tutar) && o.tutar > 0).map((o: any) => ({ id: String(o.id || kfId()), ad: metin(o.ad) || "—", tutar: o.tutar, tarih: o.tarih, tekrar: o.tekrar === "aylik" || o.tekrar === "haftalik" ? o.tekrar : null, bitis: tarih(o.bitis) || null }));
+  b.cekSenet = dz(d.cekSenet).filter((c: any) => c && tarih(c.vade) && Number.isSafeInteger(c.tutar) && c.tutar > 0).map((c: any) => ({ id: String(c.id || kfId()), yon: c.yon === "borc" ? "borc" : "alacak", tur: c.tur === "senet" ? "senet" : "cek", taraf: metin(c.taraf) || "—", tutar: c.tutar, vade: c.vade, kapandi: !!c.kapandi, karsiliksiz: !!c.karsiliksiz }));
+  const g = d.ayar && d.ayar.gecikmis; b.ayar = { gecikmis: g === 7 || g === 15 || g === 30 ? g : "haric" };
+  return b;
+}
+async function kfFs(): Promise<any> { const app = await kpFirebaseWebApp(); const m: any = await import("firebase/firestore"); return { db: m.getFirestore(app), m }; }
+async function kfYukle(uid: string): Promise<any> {
+  const { db, m } = await kfFs();
+  const s = await kpZamanAsimi(m.getDoc(m.doc(db, KF_KOK, uid)), 20000, "firestore");
+  return s.exists() ? kfNormalle(s.data()) : kfBos();
+}
+async function kfYaz(uid: string, veri: any): Promise<void> {
+  const { db, m } = await kfFs();
+  await kpZamanAsimi(m.setDoc(m.doc(db, KF_KOK, uid), { ...JSON.parse(JSON.stringify(veri)), guncelleme: new Date().toISOString() }), 20000, "firestore-yaz");
+}
+const KF_AY = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
+const KF_GUN = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
+const kfTar = (iso: string) => { if (!iso) return "—"; const [y, m, d] = iso.split("-").map(Number); return `${d} ${KF_AY[m - 1]}`; };
+const kfTarUzun = (iso: string) => { if (!iso) return "—"; const [y, m, d] = iso.split("-").map(Number); return `${d} ${KF_AY[m - 1]} ${y}`; };
+const kfGunAdi = (iso: string) => { const [y, m, d] = iso.split("-").map(Number); return KF_GUN[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]; };
+const kfTL = (k: number, kurus = false) => KF.formatTL(k, kurus) + " ₺";
+const kfKisa = (k: number) => { const a = Math.abs(k) / 100, s = k < 0 ? "−" : ""; return a >= 1e6 ? s + (a / 1e6).toFixed(2).replace(".", ",") + " Mn ₺" : a >= 1e4 ? s + Math.round(a / 1e3) + " B ₺" : s + KF.formatTL(Math.abs(k), false) + " ₺"; };
+const kfKalan = (vade: string, bugun: string) => { const n = KF.gunFarki(vade, bugun); return n === 0 ? "Bugün" : n === 1 ? "Yarın" : n === -1 ? "Dün" : n > 0 ? `${n} gün sonra` : `${-n} gün gecikti`; };
+
+function KfPara({ deger, onDeg, etiket, yer }: { deger: number | null; onDeg: (k: number | null) => void; etiket: string; yer?: string }) {
+  const [t, setT] = useState(deger ? KF.formatTL(deger).replace(/\.(?=\d{3}\b)/g, ".") : "");
+  return (
+    <label style={{ display: "block", marginBottom: 12 }}>
+      <span style={{ display: "block", fontSize: 11, fontWeight: 600, color: (TEMA === "acik" ? "#1A2430" : "#A8C2DC"), marginBottom: 5 }}>{etiket}</span>
+      <input inputMode="decimal" value={t} placeholder={yer || "0,00"} onChange={(e: any) => { setT(e.target.value); onDeg(KF.parseTL(e.target.value)); }}
+        style={{ width: "100%", boxSizing: "border-box", background: (TEMA === "acik" ? "#fff" : WA(0.06)), border: `1px solid ${WA(0.14)}`, borderRadius: 11, padding: "11px 12px", fontSize: 16, fontWeight: 700, color: (TEMA === "acik" ? C.label : "#fff"), fontFamily: "inherit", outline: "none" }} />
+    </label>
+  );
+}
+function KfAlan({ etiket, deger, onDeg, tip, yer }: any) {
+  return (
+    <label style={{ display: "block", marginBottom: 12 }}>
+      <span style={{ display: "block", fontSize: 11, fontWeight: 600, color: (TEMA === "acik" ? "#1A2430" : "#A8C2DC"), marginBottom: 5 }}>{etiket}</span>
+      <input type={tip || "text"} value={deger} placeholder={yer || ""} onChange={(e: any) => onDeg(e.target.value)}
+        style={{ width: "100%", boxSizing: "border-box", background: (TEMA === "acik" ? "#fff" : WA(0.06)), border: `1px solid ${WA(0.14)}`, borderRadius: 11, padding: "11px 12px", fontSize: 15, color: (TEMA === "acik" ? C.label : "#fff"), fontFamily: "inherit", outline: "none" }} />
+    </label>
+  );
+}
+function KfSeg({ secenekler, deger, onDeg }: { secenekler: [any, string][]; deger: any; onDeg: (v: any) => void }) {
+  return (
+    <div style={{ display: "flex", background: WA(0.06), borderRadius: 11, padding: 3, marginBottom: 12 }}>
+      {secenekler.map(([v, ad]) => (
+        <div key={String(v)} onClick={() => onDeg(v)} style={{ flex: 1, textAlign: "center", padding: "8px 4px", borderRadius: 9, fontSize: 12.5, fontWeight: 700, cursor: "pointer", background: deger === v ? (TEMA === "acik" ? "#fff" : WA(0.14)) : "transparent", color: deger === v ? (TEMA === "acik" ? C.label : "#fff") : WA(0.6), boxShadow: deger === v && TEMA === "acik" ? "0 1px 3px rgba(0,0,0,0.12)" : "none" }}>{ad}</div>
+      ))}
+    </div>
+  );
+}
+// Sayfa içeriği üst bileşen yenilense de yeniden oluşmasın (odak/yazı kaybolmasın)
+function KfCalistir({ f }: any) { return f(); }
+function KfSheet({ baslik, kapat, children }: any) {
+  return (
+    <div onClick={kapat} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.55)", zIndex: 9999, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div onClick={(e: any) => e.stopPropagation()} style={{ background: C.bg, border: `1px solid ${WA(0.12)}`, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 560, maxHeight: "88%", overflowY: "auto", padding: "16px 16px 28px", boxSizing: "border-box" }}>
+        <div style={{ display: "flex", alignItems: "center", marginBottom: 14 }}>
+          <p style={{ margin: 0, flex: 1, fontSize: 16, fontWeight: 800, color: (TEMA === "acik" ? C.label : "#fff") }}>{baslik}</p>
+          <span onClick={kapat} style={{ fontSize: 13, fontWeight: 700, color: C.blue, cursor: "pointer" }}>Kapat</span>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// Nakit grafiği: yalnız kesin (düz) ve beklenenler dahil (kesikli); sıfırın altı kırmızı bölge; kaydırıcı ile gün seçimi
+function KfGrafik({ k, b, ufuk, sec, onSec, yuk }: any) {
+  const W = 340, H = yuk || 150, kv = k.gunler.map((g: any) => g.nakit / 100), bv = b.gunler.map((g: any) => g.nakit / 100);
+  const hepsi = [...kv, ...bv, 0], mx = Math.max(...hepsi), mn = Math.min(...hepsi), pad = (mx - mn || 1) * 0.12, hi = mx + pad, lo = mn - pad;
+  const X = (i: number) => 6 + (i * (W - 12)) / ufuk, Y = (v: number) => 8 + ((hi - v) * (H - 22)) / (hi - lo);
+  const yol = (a: number[]) => a.map((v, i) => (i ? "L" : "M") + X(i).toFixed(1) + " " + Y(v).toFixed(1)).join(" ");
+  const s0 = Y(0), ia = kv.findIndex((v: number) => v < 0);
+  const ck = TEMA === "acik" ? "#2F6DB0" : "#7FB4EA", cb = TEMA === "acik" ? "#12A37A" : "#34D399";
+  return (
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} style={{ display: "block" }}>
+        <rect x="0" y={s0} width={W} height={Math.max(0, H - 14 - s0)} fill={TEMA === "acik" ? "rgba(220,60,60,0.10)" : "rgba(248,113,113,0.16)"} />
+        <line x1="0" x2={W} y1={s0} y2={s0} stroke={WA(0.2)} strokeWidth="1.2" />
+        <path d={yol(bv)} fill="none" stroke={cb} strokeWidth="2" strokeDasharray="5 4" strokeLinejoin="round" />
+        <path d={yol(kv)} fill="none" stroke={ck} strokeWidth="2.4" strokeLinejoin="round" />
+        {ia >= 0 && <circle cx={X(ia)} cy={Y(kv[ia])} r="5" fill="#E5484D" stroke={C.bg} strokeWidth="2" />}
+        {sec != null && <line x1={X(sec)} x2={X(sec)} y1="4" y2={H - 14} stroke={WA(0.35)} strokeWidth="1" />}
+        <text x="6" y={H - 1} fontSize="9.5" fill={WA(0.55)}>Bugün</text>
+        <text x={W - 6} y={H - 1} fontSize="9.5" fill={WA(0.55)} textAnchor="end">{ufuk}. gün</text>
+      </svg>
+      {onSec && <input type="range" min={0} max={ufuk} value={sec == null ? 0 : sec} onChange={(e: any) => onSec(Number(e.target.value))} style={{ width: "100%", marginTop: 6 }} aria-label="Gün seç" />}
+      <div style={{ display: "flex", gap: 16, fontSize: 11.5, color: WA(0.6), marginTop: 4 }}>
+        <span><i style={{ display: "inline-block", width: 16, borderTop: `2.5px solid ${ck}`, verticalAlign: "middle", marginRight: 6 }} />Yalnız kesin</span>
+        <span><i style={{ display: "inline-block", width: 16, borderTop: `2.5px dashed ${cb}`, verticalAlign: "middle", marginRight: 6 }} />Beklenenler dahil</span>
+      </div>
+    </div>
+  );
+}
+
+const KF_KART: any = () => ({ background: (TEMA === "acik" ? "#E9EEF4" : WA(0.05)), border: `1px solid ${WA(0.08)}`, borderRadius: 18, padding: "13px 14px", marginBottom: 12 });
+const KF_ET: any = () => ({ margin: 0, fontSize: 11, fontWeight: 600, letterSpacing: 0.3, textTransform: "uppercase", color: (TEMA === "acik" ? "#1A2430" : "#A8C2DC") });
+const KF_NOT = "Veriler kullanıcı beyanına dayanır. Bu ekran kesin nakit tahmini, kredi değerlendirmesi veya finansman onayı değildir.";
+
+function IsletmeFinans({ kimlik, nav, girisAc, geri }: any) {
+  const k = kimlik && kimlik.kullanici;
+  if (!k) {
+    return (
+      <div style={{ background: C.bg, padding: "12px 14px 92px", minHeight: "100%" }}>
+        <div style={{ ...KF_KART(), textAlign: "center", padding: "26px 18px" }}>
+          <p style={{ margin: 0, fontSize: 18, fontWeight: 800, color: (TEMA === "acik" ? C.label : "#fff") }}>İşletmem · Finans Asistanım</p>
+          <p style={{ margin: "10px 0 16px", fontSize: 13, color: WA(0.7), lineHeight: 1.55 }}>Nakit durumunu, tahsilatlarını ve ödemelerini gir; 30-60-90 günlük nakit akışını gör. İşletme verilerin yalnızca senin hesabına bağlı saklanır, başka kullanıcılarla paylaşılmaz.</p>
+          {kimlik && kimlik.kimlikYukleniyor ? <p style={{ fontSize: 12, color: WA(0.6) }}>Hesap kontrol ediliyor…</p> : (
+            <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+              <div className="press-card" onClick={() => girisAc("kayit")} style={{ padding: "11px 18px", borderRadius: 12, background: C.blue, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Üye ol</div>
+              <div className="press-card" onClick={() => girisAc("giris")} style={{ padding: "11px 18px", borderRadius: 12, border: `1px solid ${WA(0.2)}`, color: C.blue, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Giriş yap</div>
+            </div>
+          )}
+        </div>
+        <p style={{ fontSize: 10.5, color: WA(0.6), textAlign: "center", lineHeight: 1.5 }}>{KF_NOT}</p>
+      </div>
+    );
+  }
+  return <IsletmeFinansHesapli key={k.uid} uid={k.uid} nav={nav} />;
+}
+
+function IsletmeFinansHesapli({ uid, nav }: { uid: string; nav?: any }) {
+  const bugun = bugunISO();
+  const [veri, setVeri] = useState<any>(null);
+  const [faz, setFaz] = useState("yukleniyor"); // yukleniyor | hata | hazir
+  const [senk, setSenk] = useState("kayitli");  // kayitli | bekliyor | hata
+  const [tab, setTab] = useState("ana");
+  const [ufuk, setUfuk] = useState(90);
+  const [sheet, setSheet] = useState<any>(null);
+  const [yenile, setYenile] = useState(0);
+  const [sec, setSec] = useState<number | null>(null);
+  const [silOnay, setSilOnay] = useState("");
+  const [fSen, setFSen] = useState<"kesin" | "beklenen">("kesin");
+  const [fTampon, setFTampon] = useState(0);
+  const [fOran, setFOran] = useState<number | null>(null);
+  const [fOranT, setFOranT] = useState("");
+  const [sn, setSn] = useState<any>({ gecikme: 0, kayip: 0, artis: 0, musteri: "", yeniTutar: null, yeniTarih: "", nakit: null });
+  const [kopya, setKopya] = useState("");
+  const ilk = useRef(false), zam = useRef<any>(null), canli = useRef(true), son = useRef<any>(null);
+  useEffect(() => { canli.current = true; return () => { canli.current = false; clearTimeout(zam.current); }; }, []);
+  useEffect(() => {
+    setFaz("yukleniyor");
+    kfYukle(uid).then((d: any) => { if (!canli.current) return; setVeri(d); ilk.current = true; setFaz("hazir"); }).catch(() => { if (canli.current) setFaz("hata"); });
+  }, [uid, yenile]);
+  const kaydetGonder = useCallback(async () => {
+    try { await kfYaz(uid, son.current); if (canli.current) setSenk("kayitli"); }
+    catch { if (canli.current) { setSenk("hata"); clearTimeout(zam.current); zam.current = setTimeout(kaydetGonder, 8000); } }
+  }, [uid]);
+  const guncelle = (f: (v: any) => any) => {
+    setVeri((v: any) => { const n = f(v); son.current = n; return n; });
+    setSenk("bekliyor"); clearTimeout(zam.current); zam.current = setTimeout(kaydetGonder, 700);
+  };
+  const is = useMemo(() => veri ? ({ ad: veri.isletme.ad, nakit: veri.isletme.nakit, nakitTarihi: bugun, tahsilatlar: veri.tahsilatlar, odemeler: veri.odemeler, cekSenet: veri.cekSenet }) : null, [veri, bugun]);
+  const gv: any = veri && veri.ayar.gecikmis !== "haric" ? veri.ayar.gecikmis : "haric";
+  const ayar = { gecikmisVarsayim: gv };
+  const kes = useMemo(() => is ? KF.projeksiyon(is, bugun, ufuk, "kesin", ayar) : null, [is, ufuk, gv, bugun]);
+  const bek = useMemo(() => is ? KF.projeksiyon(is, bugun, ufuk, "beklenen", ayar) : null, [is, ufuk, gv, bugun]);
+  const uyar = useMemo(() => is ? KF.uyarilar(is, bugun) : [], [is, bugun]);
+  const metin = (c: any) => TEMA === "acik" ? C.label : "#fff";
+  const kart = KF_KART(), et = KF_ET();
+
+  if (faz === "yukleniyor") return <div style={{ background: C.bg, padding: "40px 14px", minHeight: "100%", textAlign: "center", color: WA(0.6), fontSize: 13 }}>İşletme verilerin yükleniyor…</div>;
+  if (faz === "hata" || !veri) return (
+    <div style={{ background: C.bg, padding: "40px 14px", minHeight: "100%", textAlign: "center" }}>
+      <p style={{ color: C.red, fontWeight: 700, fontSize: 14, margin: 0 }}>Verilere ulaşılamadı</p>
+      <p style={{ color: WA(0.6), fontSize: 12.5, lineHeight: 1.5 }}>Bağlantını kontrol edip tekrar dene. Kayıtların silinmedi.</p>
+      <div className="press-card" onClick={() => setYenile(yenile + 1)} style={{ display: "inline-block", marginTop: 8, padding: "10px 18px", borderRadius: 12, background: C.blue, color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Tekrar dene</div>
+    </div>
+  );
+
+  // ── İlk açılış: yalnızca işletme adı + mevcut nakit
+  if (!veri.isletme.ad) {
+    return <KfIlkAcilis onKaydet={(ad: string, nakit: number) => guncelle((v: any) => ({ ...v, isletme: { ad, nakit, nakitTarihi: bugun } }))} />;
+  }
+  const sekmeler: [string, string][] = [["ana", "İşletmem"], ["tahsilat", "Tahsilat"], ["odeme", "Ödemeler"], ["radar", "Radar"], ["finansman", "Finansman"], ["cek", "Çek/Senet"], ["senaryo", "Senaryo"], ["saglik", "Sağlık"], ["rapor", "Rapor"]];
+  const git = (h: string) => { if (KF_HAZIR.has(h)) { setTab(h); if (typeof window !== "undefined") { try { window.scrollTo(0, 0); } catch {} } } };
+
+  // ── Alt bileşenler (satır içi)
+  const kpi = (ad: string, deger: string, alt?: string, renk?: string) => (
+    <div style={{ flex: 1, minWidth: 0, ...kart, marginBottom: 0 }}>
+      <p style={et}>{ad}</p>
+      <p style={{ margin: "4px 0 0", fontSize: 19, fontWeight: 800, letterSpacing: -0.4, color: renk || metin(0), fontVariantNumeric: "tabular-nums" }}>{deger}</p>
+      {alt && <p style={{ margin: "3px 0 0", fontSize: 11.5, color: WA(0.6) }}>{alt}</p>}
+    </div>
+  );
+  const ufukSec = <KfSeg secenekler={[[30, "30 gün"], [60, "60 gün"], [90, "90 gün"]]} deger={ufuk} onDeg={(v: number) => { setUfuk(v); setSec(null); }} />;
+  const nakitGuncel = () => setSheet({ tur: "nakit" });
+
+  const ANA = () => {
+    const bosVeri = !veri.tahsilatlar.length && !veri.odemeler.length;
+    const eskiBeyan = veri.isletme.nakitTarihi && KF.gunFarki(bugun, veri.isletme.nakitTarihi) > 7;
+    const ek = bek!.ozet.toplamTahsilat - kes!.ozet.toplamTahsilat;
+    return (
+      <>
+        <div style={{ ...kart, padding: "16px 16px 14px" }}>
+          <p style={et}>Güncel nakit · {veri.isletme.ad}</p>
+          <p style={{ margin: "4px 0 2px", fontSize: 36, fontWeight: 800, letterSpacing: -1.2, color: veri.isletme.nakit < 0 ? C.red : metin(0), fontVariantNumeric: "tabular-nums" }}>{KF.formatTL(veri.isletme.nakit, false)}<span style={{ fontSize: 18, color: WA(0.6), marginLeft: 3 }}>₺</span></p>
+          <p style={{ margin: 0, fontSize: 12, color: WA(0.6) }}>Kullanıcı beyanı · {kfTarUzun(veri.isletme.nakitTarihi)} <span onClick={nakitGuncel} style={{ color: C.blue, fontWeight: 700, cursor: "pointer", marginLeft: 6 }}>Güncelle</span></p>
+          {eskiBeyan && <p style={{ margin: "8px 0 0", fontSize: 12, color: C.orange || "#E3C777" }}>Nakit beyanın {KF.gunFarki(bugun, veri.isletme.nakitTarihi)} gün önceki; analizlerin doğruluğu için güncelle.</p>}
+        </div>
+        {ufukSec}
+        <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+          {kpi("Kesin tahsilat", kfKisa(kes!.ozet.toplamTahsilat), ek > 0 ? `+ ${kfKisa(ek)} beklenen (kesin değil)` : `${ufuk} gün`, C.green)}
+          {kpi("Planlanan ödeme", kfKisa(kes!.ozet.toplamOdeme), `${ufuk} gün`)}
+        </div>
+        {bosVeri && (
+          <div style={{ ...kart, textAlign: "center" }}>
+            <p style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: metin(0) }}>Radarın dolması için iki şey ekle</p>
+            <p style={{ margin: "6px 0 12px", fontSize: 12.5, color: WA(0.65), lineHeight: 1.5 }}>Beklediğin tahsilatları ve planlanan ödemeleri girdikçe nakit akışın otomatik oluşur.</p>
+            <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+              <div className="press-card" onClick={() => setSheet({ tur: "tahsilat" })} style={{ padding: "9px 14px", borderRadius: 11, background: C.blue, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Tahsilat ekle</div>
+              <div className="press-card" onClick={() => setSheet({ tur: "odeme" })} style={{ padding: "9px 14px", borderRadius: 11, border: `1px solid ${WA(0.2)}`, color: C.blue, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Ödeme ekle</div>
+            </div>
+          </div>
+        )}
+        {!bosVeri && (
+          <div style={kart}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}><p style={et}>{ufuk} günlük nakit radarı</p><span onClick={() => setTab("radar")} style={{ fontSize: 12, fontWeight: 700, color: C.blue, cursor: "pointer" }}>Aç ›</span></div>
+            <KfGrafik k={kes} b={bek} ufuk={ufuk} yuk={118} />
+          </div>
+        )}
+        {!bosVeri && (
+          <div style={kart}>
+            <p style={{ ...et, marginBottom: 6 }}>Dikkat edilecekler</p>
+            {uyar.length === 0 && <p style={{ margin: "4px 0 2px", fontSize: 13, color: C.green, fontWeight: 600 }}>Şu an dikkat çeken bir uyarı yok.</p>}
+            {uyar.map((u: any, i: number) => (
+              <div key={u.kod} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "10px 0", borderTop: i ? `1px solid ${WA(0.08)}` : "none" }}>
+                <span style={{ width: 8, height: 8, borderRadius: 4, marginTop: 5, flexShrink: 0, background: u.seviye === "kritik" ? C.red : u.seviye === "dikkat" ? "#F5B13D" : C.blue }} />
+                <p style={{ margin: 0, flex: 1, fontSize: 13, lineHeight: 1.45, color: metin(0) }}>{u.metin.replace(/\d{4}-\d{2}-\d{2}/g, (d: string) => kfTarUzun(d))}</p>
+                {KF_HAZIR.has(u.hedef) && <span onClick={() => git(u.hedef)} style={{ fontSize: 12, fontWeight: 700, color: C.blue, cursor: "pointer", whiteSpace: "nowrap", marginTop: 1 }}>{KF_HEDEF_AD[u.hedef]} ›</span>}
+              </div>
+            ))}
+          </div>
+        )}
+        {!bosVeri && (() => {
+          const sg = KF.saglikAnalizi(is!, bugun); const renk = sg.seviye === "guclu" ? C.green : sg.seviye === "dikkat" ? "#F5B13D" : C.red;
+          return (
+            <div className="press-card" onClick={() => git("saglik")} style={{ ...kart, display: "flex", alignItems: "center", gap: 14, cursor: "pointer" }}>
+              <div style={{ width: 54, height: 54, borderRadius: 27, border: `4px solid ${renk}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 800, color: metin(0) }}>{sg.skor}</div>
+              <div style={{ flex: 1 }}><p style={et}>Finansal sağlık</p><p style={{ margin: "3px 0 0", fontSize: 13, color: metin(0) }}>{sg.seviye === "guclu" ? "Güçlü görünüyor" : sg.seviye === "dikkat" ? "Dikkat edilmeli" : "Riskli görünüyor"}</p></div>
+              <span style={{ color: C.blue, fontSize: 18 }}>›</span>
+            </div>
+          );
+        })()}
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          {([["finansman", "Finansman ihtiyacı"], ["senaryo", "Senaryo dene"], ["rapor", "Durum raporu"]] as [string, string][]).map(([h, ad]) => (
+            <div key={h} className="press-card" onClick={() => git(h)} style={{ flex: 1, textAlign: "center", padding: "11px 4px", borderRadius: 13, border: `1px solid ${WA(0.16)}`, color: C.blue, fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>{ad}</div>
+          ))}
+        </div>
+      </>
+    );
+  };
+
+  const TAHSILAT = () => {
+    const acik = veri.tahsilatlar.filter((t: any) => !t.tahsilEdildi);
+    const gec = acik.filter((t: any) => t.vade < bugun).sort((a: any, b: any) => a.vade.localeCompare(b.vade));
+    const bek2 = acik.filter((t: any) => t.vade >= bugun).sort((a: any, b: any) => a.vade.localeCompare(b.vade));
+    const top = (a: any[], f?: (t: any) => boolean) => a.filter(f || (() => true)).reduce((s: number, t: any) => s + t.tutar, 0);
+    const alinan = veri.tahsilatlar.filter((t: any) => t.tahsilEdildi).sort((a: any, b: any) => (b.tahsilTarihi || "").localeCompare(a.tahsilTarihi || "")).slice(0, 5);
+    const satir = (t: any) => (
+      <div key={t.id} className="press-card" onClick={() => setSheet({ tur: "tahsilat", kayit: t })} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 2px", borderTop: `1px solid ${WA(0.08)}`, cursor: "pointer" }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: metin(0), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.musteri}</p>
+          <p style={{ margin: "3px 0 0", fontSize: 11.5, color: t.vade < bugun && !t.tahsilEdildi ? C.red : WA(0.6) }}>{kfTar(t.vade)} · {t.tahsilEdildi ? "Tahsil edildi" : kfKalan(t.vade, bugun)}</p>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: metin(0), fontVariantNumeric: "tabular-nums" }}>{kfTL(t.tutar)}</p>
+          <span style={{ display: "inline-block", marginTop: 3, fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 7, background: t.durum === "kesin" ? "rgba(52,211,153,0.16)" : "rgba(245,177,61,0.18)", color: t.durum === "kesin" ? C.green : "#C77700" }}>{t.durum === "kesin" ? "Kesin" : "Beklenen"}</span>
+        </div>
+      </div>
+    );
+    return (
+      <>
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          {kpi("Kesin", kfKisa(top(bek2, (t) => t.durum === "kesin")), undefined, C.green)}
+          {kpi("Beklenen", kfKisa(top(bek2, (t) => t.durum !== "kesin")))}
+          {kpi("Gecikmiş", kfKisa(top(gec)), undefined, gec.length ? C.red : undefined)}
+        </div>
+        <div className="press-card" onClick={() => setSheet({ tur: "tahsilat" })} style={{ textAlign: "center", padding: "11px", borderRadius: 13, background: C.blue, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", marginBottom: 12 }}>+ Tahsilat ekle</div>
+        {gec.length > 0 && <div style={kart}><p style={{ ...et, color: C.red }}>Gecikmiş · {gec.length}</p>{gec.map(satir)}<p style={{ margin: "8px 0 0", fontSize: 11.5, color: WA(0.6) }}>Gecikmiş tahsilatlar varsayılan olarak nakit akışına dahil edilmez (Radar'dan değiştirebilirsin).</p></div>}
+        <div style={kart}><p style={et}>Bekleyen · {bek2.length}</p>{bek2.length ? bek2.map(satir) : <p style={{ margin: "8px 0 2px", fontSize: 13, color: WA(0.6) }}>Bekleyen tahsilat yok.</p>}
+          <p style={{ margin: "8px 0 0", fontSize: 11.5, color: WA(0.6), lineHeight: 1.45 }}><b>Kesin:</b> güvence altındaki (ör. onaylı havale, sözleşmeyle bağlı). <b>Beklenen:</b> müşterinin sözüne dayalı; kesin nakit sayılmaz.</p></div>
+        {alinan.length > 0 && <div style={kart}><p style={et}>Son tahsil edilenler</p>{alinan.map(satir)}</div>}
+      </>
+    );
+  };
+
+  const ODEME = () => {
+    const ev = KF.odemeOlaylari(is!, bugun, 90).sort((a: any, b: any) => a.tarih.localeCompare(b.tarih));
+    const gruplar: Record<string, any[]> = {}; ev.forEach((e: any) => { (gruplar[e.tarih] = gruplar[e.tarih] || []).push(e); });
+    const tanimlar = veri.odemeler.slice().sort((a: any, b: any) => a.tarih.localeCompare(b.tarih));
+    const aylik = veri.odemeler.reduce((s: number, o: any) => s + (o.tekrar === "aylik" ? o.tutar : 0), 0);
+    return (
+      <>
+        <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+          {kpi("Önümüzdeki 30 gün", kfKisa(KF.projeksiyon(is!, bugun, 30, "kesin", ayar).ozet.toplamOdeme))}
+          {kpi("Aylık sabit", kfKisa(aylik), "tekrarlı ödemeler")}
+        </div>
+        <div className="press-card" onClick={() => setSheet({ tur: "odeme" })} style={{ textAlign: "center", padding: "11px", borderRadius: 13, background: C.blue, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", marginBottom: 12 }}>+ Ödeme ekle</div>
+        <div style={kart}>
+          <p style={et}>Takvim · 90 gün</p>
+          {Object.keys(gruplar).length === 0 && <p style={{ margin: "8px 0 2px", fontSize: 13, color: WA(0.6) }}>Planlanan ödeme yok.</p>}
+          {Object.entries(gruplar).map(([t, a]) => (
+            <div key={t} style={{ borderTop: `1px solid ${WA(0.08)}`, padding: "10px 2px" }}>
+              <p style={{ margin: "0 0 4px", fontSize: 12, fontWeight: 700, color: WA(0.6) }}>{kfTar(t)} · {kfGunAdi(t)} <span style={{ fontWeight: 600 }}>· {kfKalan(t, bugun)}</span></p>
+              {a.map((e: any, i: number) => (
+                <div key={i} onClick={() => { const o = veri.odemeler.find((x: any) => x.id === e.id); if (o) setSheet({ tur: "odeme", kayit: o }); }} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", cursor: "pointer" }}>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: metin(0) }}>{e.kaynak}</span>
+                  <span style={{ fontSize: 14, fontWeight: 800, color: C.red, fontVariantNumeric: "tabular-nums" }}>−{kfTL(e.tutar)}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+        {tanimlar.length > 0 && <div style={kart}><p style={et}>Tanımlı ödemeler</p>{tanimlar.map((o: any) => (
+          <div key={o.id} onClick={() => setSheet({ tur: "odeme", kayit: o })} className="press-card" style={{ display: "flex", justifyContent: "space-between", padding: "9px 2px", borderTop: `1px solid ${WA(0.08)}`, cursor: "pointer" }}>
+            <span style={{ fontSize: 13.5, color: metin(0) }}>{o.ad}<span style={{ color: WA(0.55), fontSize: 11.5 }}> · {o.tekrar === "aylik" ? "her ay" : o.tekrar === "haftalik" ? "her hafta" : kfTar(o.tarih)}</span></span>
+            <span style={{ fontSize: 13.5, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: metin(0) }}>{kfTL(o.tutar)}</span>
+          </div>))}</div>}
+      </>
+    );
+  };
+
+  const RADAR = () => {
+    const ok = kes!.ozet, ob = bek!.ozet, i = sec == null ? 0 : sec, gk = kes!.gunler[i], gb = bek!.gunler[i];
+    const kalemler = [...KF.odemeOlaylari(is!, bugun, ufuk).map((e: any) => ({ ...e, tutar: -e.tutar, tip: "o" })), ...KF.tahsilatOlaylari(is!, bugun, ufuk, "beklenen", ayar).olaylar.map((e: any) => ({ ...e, tip: "t" }))].sort((a: any, b: any) => Math.abs(b.tutar) - Math.abs(a.tutar)).slice(0, 5);
+    const kesinSet = new Set(veri.tahsilatlar.filter((t: any) => t.durum === "kesin").map((t: any) => t.id));
+    return (
+      <>
+        {ufukSec}
+        <div style={{ ...kart, padding: "12px 12px 10px" }}>
+          <KfGrafik k={kes} b={bek} ufuk={ufuk} yuk={190} sec={i} onSec={setSec} />
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 12.5 }}>
+            <span style={{ color: WA(0.6) }}>{kfTar(gk.tarih)} · {kfGunAdi(gk.tarih)}</span>
+            <span><b style={{ color: gk.nakit < 0 ? C.red : metin(0) }}>{kfKisa(gk.nakit)}</b> <span style={{ color: WA(0.5) }}>kesin</span> · <b style={{ color: gb.nakit < 0 ? C.red : metin(0) }}>{kfKisa(gb.nakit)}</b> <span style={{ color: WA(0.5) }}>beklenen dahil</span></span>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+          {kpi("İlk nakit açığı", ok.ilkAcikTarihi ? kfTar(ok.ilkAcikTarihi) : "Açık yok", "yalnız kesinlerle", ok.ilkAcikTarihi ? C.red : C.green)}
+          {kpi("Beklenenlerle", ob.ilkAcikTarihi ? kfTar(ob.ilkAcikTarihi) : "Açık yok", ob.ilkAcikTarihi ? "ilk açık" : `en düşük ${kfKisa(ob.enDusukNakit)}`, ob.ilkAcikTarihi ? C.red : C.green)}
+        </div>
+        <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+          {kpi("Maks. finansman ihtiyacı", ok.maksFinansman ? kfKisa(ok.maksFinansman) : "—", ok.maksFinansmanTarihi ? `${kfTar(ok.maksFinansmanTarihi)} · yalnız kesinler` : undefined)}
+          {kpi("Açık süresi", ok.enUzunAcikSuresi ? `${ok.enUzunAcikSuresi} gün` : "—", ok.acikGunSayisi ? `${ok.acikGunSayisi} gün açık · kesinlerle` : undefined)}
+        </div>
+        {ob.maksFinansman > 0 && <div style={{ ...kart, fontSize: 12.5, color: metin(0) }}>Beklenen tahsilatlar dahil edilse bile en yüksek finansman ihtiyacı <b>{kfTL(ob.maksFinansman)}</b> ({kfTar(ob.maksFinansmanTarihi)}), {ob.acikGunSayisi} gün nakit açığı görünüyor.</div>}
+        <div style={kart}>
+          <p style={et}>Gecikmiş tahsilat varsayımı</p>
+          <div style={{ marginTop: 8 }}><KfSeg secenekler={[["haric", "Hariç"], [7, "7 gün sonra"], [15, "15 gün"], [30, "30 gün"]]} deger={veri.ayar.gecikmis} onDeg={(v: any) => guncelle((x: any) => ({ ...x, ayar: { ...x.ayar, gecikmis: v } }))} /></div>
+          <p style={{ margin: 0, fontSize: 11.5, color: WA(0.6), lineHeight: 1.45 }}>Vadesi geçmiş tahsilatlar yalnızca "beklenenler dahil" çizgisinde ve seçtiğin varsayımla hesaba girer; kesin nakit sayılmaz.</p>
+        </div>
+        <div style={kart}>
+          <p style={{ ...et, marginBottom: 4 }}>Bu dönemin en büyük kalemleri</p>
+          {kalemler.length === 0 && <p style={{ margin: "6px 0 2px", fontSize: 13, color: WA(0.6) }}>Henüz kalem yok.</p>}
+          {kalemler.map((e: any, j: number) => (
+            <div key={j} style={{ display: "flex", justifyContent: "space-between", padding: "9px 0", borderTop: j ? `1px solid ${WA(0.08)}` : "none", fontSize: 13 }}>
+              <span style={{ color: metin(0), minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingRight: 8 }}>{e.kaynak} · {kfTar(e.tarih)}{e.tip === "t" && !kesinSet.has(e.id) ? " (beklenen)" : ""}</span>
+              <b style={{ color: e.tutar < 0 ? C.red : C.green, whiteSpace: "nowrap" }}>{e.tutar < 0 ? "−" : "+"}{kfTL(Math.abs(e.tutar))}</b>
+            </div>
+          ))}
+        </div>
+      </>
+    );
+  };
+
+  // ── Finansman ihtiyacı
+  const FINANSMAN = () => {
+    const p = fSen === "kesin" ? kes! : bek!;
+    const fa = KF.finansmanAnalizi(p, fTampon * 100, fOran);
+    const var_ = fa.ihtiyac > 0;
+    return (
+      <>
+        <KfSeg secenekler={[["kesin", "Yalnız kesin tahsilat"], ["beklenen", "Beklenenler dahil"]]} deger={fSen} onDeg={setFSen} />
+        {ufukSec}
+        <div style={{ ...kart, textAlign: "center", padding: "18px 14px" }}>
+          <p style={et}>{ufuk} günde en yüksek finansman ihtiyacı</p>
+          <p style={{ margin: "6px 0 2px", fontSize: 34, fontWeight: 800, letterSpacing: -1, color: var_ ? C.red : C.green, fontVariantNumeric: "tabular-nums" }}>{var_ ? KF.formatTL(fa.ihtiyac, false) : "0"}<span style={{ fontSize: 17, color: WA(0.6), marginLeft: 3 }}>₺</span></p>
+          <p style={{ margin: 0, fontSize: 12.5, color: WA(0.65), lineHeight: 1.5 }}>{var_ ? `İlk açık: ${fa.ihtiyacTarihi ? kfTar(fa.ihtiyacTarihi) : "—"} · toplam ${fa.acikGunSayisi} gün açık görünüyor` : "Bu varsayımla seçilen dönemde nakit açığı görünmüyor."}</p>
+        </div>
+        {var_ && (
+          <div style={kart}>
+            <p style={et}>Güvenlik payı</p>
+            <div style={{ marginTop: 8 }}><KfSeg secenekler={[[0, "Yok"], [10, "%10"], [20, "%20"], [30, "%30"]]} deger={fTampon} onDeg={setFTampon} /></div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "4px 0", color: metin(0) }}><span>Hesaplanan ihtiyaç</span><b style={{ fontVariantNumeric: "tabular-nums" }}>{kfTL(fa.ihtiyac)}</b></div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "4px 0", color: metin(0) }}><span>Güvenlik payı</span><b style={{ fontVariantNumeric: "tabular-nums" }}>{kfTL(fa.tampon)}</b></div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, padding: "8px 0 2px", borderTop: `1px solid ${WA(0.1)}`, color: metin(0) }}><b>Toplam ihtiyaç</b><b style={{ fontVariantNumeric: "tabular-nums" }}>{kfTL(fa.toplamIhtiyac)}</b></div>
+          </div>
+        )}
+        {var_ && (
+          <div style={kart}>
+            <p style={et}>Tahmini maliyet (isteğe bağlı)</p>
+            <div style={{ marginTop: 8 }}>
+              <KfAlan etiket="Aylık maliyet oranı (%) — kendi beyanın" tip="text" deger={fOranT} onDeg={(v: string) => { setFOranT(v); const t = String(v).replace(",", ".").trim(); if (!t) { setFOran(null); return; } const n = Number(t); setFOran(isFinite(n) && n >= 0 && n < 100 ? Math.round(n * 100) : null); }} yer="Örn. 3,5" />
+            </div>
+            {fa.tahminiMaliyet != null ? <p style={{ margin: 0, fontSize: 13.5, color: metin(0) }}>Açık gün tutarlarına göre basit tahmini maliyet: <b>{kfTL(fa.tahminiMaliyet)}</b></p> : <p style={{ margin: 0, fontSize: 12, color: WA(0.6) }}>Oran girersen açık günlere göre basit bir maliyet tahmini görürsün.</p>}
+            <p style={{ margin: "8px 0 0", fontSize: 11.5, color: WA(0.6), lineHeight: 1.45 }}>Bu bir teklif veya limit değildir; günlük açık × aylık oran ÷ 30 şeklinde basit bir kabuldür. Gerçek maliyet için kendi tekliflerini karşılaştır.</p>
+            {nav && <div className="press-card" onClick={() => nav("teklifKarsilastirma")} style={{ textAlign: "center", marginTop: 10, padding: "10px", borderRadius: 12, border: `1px solid ${WA(0.2)}`, color: C.blue, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Teklifleri karşılaştır ›</div>}
+          </div>
+        )}
+        <div style={kart}>
+          <p style={et}>Açığı azaltmak için dene</p>
+          <p style={{ margin: "6px 0 10px", fontSize: 12.5, color: WA(0.65), lineHeight: 1.5 }}>Tahsilatı öne çekmek, bir ödemeyi ertelemek veya yeni bir gelir eklemenin etkisini Senaryo ekranında görebilirsin.</p>
+          <div className="press-card" onClick={() => git("senaryo")} style={{ textAlign: "center", padding: "10px", borderRadius: 12, background: C.blue, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Senaryo Laboratuvarı ›</div>
+        </div>
+      </>
+    );
+  };
+
+  // ── Çek / Senet
+  const CEK = () => {
+    const liste = veri.cekSenet.slice().sort((a: any, b: any) => a.vade.localeCompare(b.vade));
+    const ac = (a: any[]) => a.filter((c: any) => !c.kapandi);
+    const alacak = ac(liste.filter((c: any) => c.yon === "alacak")), borc = ac(liste.filter((c: any) => c.yon === "borc"));
+    const top = (a: any[]) => a.reduce((x: number, c: any) => x + c.tutar, 0);
+    const kars = liste.filter((c: any) => c.karsiliksiz && !c.kapandi);
+    const yedi = ac(liste).filter((c: any) => c.vade >= bugun && c.vade <= KF.gunEkle(bugun, 7));
+    const satir = (c: any) => (
+      <div key={c.id} className="press-card" onClick={() => setSheet({ tur: "cek", kayit: c })} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 2px", borderTop: `1px solid ${WA(0.08)}`, cursor: "pointer", opacity: c.kapandi ? 0.55 : 1 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: metin(0), overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.tur === "cek" ? "Çek" : "Senet"} · {c.taraf}</p>
+          <p style={{ margin: "3px 0 0", fontSize: 11.5, color: !c.kapandi && c.vade < bugun ? C.red : WA(0.6) }}>{kfTar(c.vade)} · {c.kapandi ? "Kapandı" : kfKalan(c.vade, bugun)}{c.karsiliksiz ? " · karşılıksız" : ""}</p>
+        </div>
+        <b style={{ fontSize: 14, color: c.yon === "alacak" ? C.green : C.red, fontVariantNumeric: "tabular-nums" }}>{c.yon === "alacak" ? "+" : "−"}{kfTL(c.tutar)}</b>
+      </div>
+    );
+    return (
+      <>
+        <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+          {kpi("Alacak evrak", kfKisa(top(alacak)), `${alacak.length} adet`, C.green)}
+          {kpi("Borç evrak", kfKisa(top(borc)), `${borc.length} adet`, borc.length ? C.red : undefined)}
+        </div>
+        {kars.length > 0 && <div style={{ ...kart, borderColor: C.red }}><p style={{ margin: 0, fontSize: 13, color: C.red, fontWeight: 700 }}>{kars.length} evrak karşılıksız işaretli ({kfTL(top(kars))}). Karşılıksız alacaklar nakit akışına dahil edilmez.</p></div>}
+        {yedi.length > 0 && <div style={kart}><p style={et}>Önümüzdeki 7 gün</p>{yedi.map(satir)}</div>}
+        <div className="press-card" onClick={() => setSheet({ tur: "cek" })} style={{ textAlign: "center", padding: "11px", borderRadius: 13, background: C.blue, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", marginBottom: 12 }}>+ Çek / senet ekle</div>
+        <div style={kart}><p style={et}>Alacak çek / senet</p>{alacak.length ? alacak.map(satir) : <p style={{ margin: "8px 0 2px", fontSize: 13, color: WA(0.6) }}>Kayıt yok.</p>}</div>
+        <div style={kart}><p style={et}>Borç çek / senet</p>{borc.length ? borc.map(satir) : <p style={{ margin: "8px 0 2px", fontSize: 13, color: WA(0.6) }}>Kayıt yok.</p>}</div>
+        {liste.some((c: any) => c.kapandi) && <div style={kart}><p style={et}>Kapananlar</p>{liste.filter((c: any) => c.kapandi).slice(0, 6).map(satir)}</div>}
+        <p style={{ margin: "0 4px 8px", fontSize: 11.5, color: WA(0.6), lineHeight: 1.45 }}>Alacak evrakların vadesinde tahsil edileceği varsayılır ve "beklenenler dahil" çizgisine girer; borç evraklar ödeme olarak vadesinde nakit akışından düşer.</p>
+      </>
+    );
+  };
+
+  // ── Senaryo laboratuvarı
+  const senDegisiklik = () => {
+    const d: any = {};
+    if (sn.gecikme) d.tahsilatGecikmeGun = sn.gecikme;
+    if (sn.kayip) d.tahsilatKayipBps = sn.kayip * 100;
+    if (sn.artis) d.odemeArtisBps = sn.artis * 100;
+    if (sn.musteri) d.musteriKaybi = sn.musteri;
+    if (sn.yeniTutar && sn.yeniTutar > 0) d.yeniOdeme = { ad: "Yeni ödeme", tutar: sn.yeniTutar, tarih: /^\d{4}-\d{2}-\d{2}$/.test(sn.yeniTarih) ? sn.yeniTarih : KF.gunEkle(bugun, 15) };
+    if (sn.nakit) d.nakitDegisim = sn.nakit;
+    return d;
+  };
+  const SENARYO = () => {
+    const d = senDegisiklik(); const var_ = Object.keys(d).length > 0;
+    const musteriler = Array.from(new Set(veri.tahsilatlar.filter((t: any) => !t.tahsilEdildi).map((t: any) => t.musteri))) as string[];
+    const sonuc = var_ ? KF.senaryoKarsilastir(is!, d, bugun, ufuk, fSen, ayar) : null;
+    const fark = (v: number, ters: boolean) => v === 0 ? WA(0.6) : (ters ? (v > 0 ? C.red : C.green) : (v > 0 ? C.green : C.red));
+    const lbl = { margin: "0 0 5px", fontSize: 11, fontWeight: 600, color: (TEMA === "acik" ? "#1A2430" : "#A8C2DC") } as any;
+    const satirK = (ad: string, once: string, sonra: string, f: string, renk: string) => (
+      <div style={{ display: "flex", padding: "9px 0", borderTop: `1px solid ${WA(0.08)}`, fontSize: 13, alignItems: "center" }}>
+        <span style={{ flex: 1.3, color: metin(0) }}>{ad}</span><span style={{ flex: 1, textAlign: "right", color: WA(0.65), fontVariantNumeric: "tabular-nums" }}>{once}</span>
+        <span style={{ flex: 1, textAlign: "right", fontWeight: 700, color: metin(0), fontVariantNumeric: "tabular-nums" }}>{sonra}</span><span style={{ flex: 1, textAlign: "right", fontWeight: 700, color: renk, fontVariantNumeric: "tabular-nums" }}>{f}</span>
+      </div>
+    );
+    const isr = (v: number, tl = true) => (v > 0 ? "+" : v < 0 ? "−" : "") + (tl ? kfKisa(Math.abs(v)) : String(Math.abs(v)));
+    return (
+      <>
+        <KfSeg secenekler={[["kesin", "Yalnız kesin"], ["beklenen", "Beklenenler dahil"]]} deger={fSen} onDeg={setFSen} />
+        {ufukSec}
+        <div style={kart}>
+          <p style={lbl}>Tahsilatlar şu kadar gün geç gelirse</p>
+          <KfSeg secenekler={[[0, "Yok"], [7, "7 gün"], [15, "15 gün"], [30, "30 gün"]]} deger={sn.gecikme} onDeg={(v: number) => setSn({ ...sn, gecikme: v })} />
+          <p style={lbl}>Tahsilat tutarlarında kayıp</p>
+          <KfSeg secenekler={[[0, "Yok"], [5, "%5"], [10, "%10"], [20, "%20"]]} deger={sn.kayip} onDeg={(v: number) => setSn({ ...sn, kayip: v })} />
+          <p style={lbl}>Ödemeler artarsa</p>
+          <KfSeg secenekler={[[0, "Yok"], [5, "%5"], [10, "%10"], [20, "%20"]]} deger={sn.artis} onDeg={(v: number) => setSn({ ...sn, artis: v })} />
+          {musteriler.length > 0 && (
+            <label style={{ display: "block", marginBottom: 12 }}>
+              <span style={lbl}>Bir müşteriyi kaybedersem</span>
+              <select value={sn.musteri} onChange={(e: any) => setSn({ ...sn, musteri: e.target.value })} style={{ width: "100%", boxSizing: "border-box", background: (TEMA === "acik" ? "#fff" : WA(0.06)), border: `1px solid ${WA(0.14)}`, borderRadius: 11, padding: "11px 12px", fontSize: 15, color: (TEMA === "acik" ? C.label : "#fff"), fontFamily: "inherit" }}>
+                <option value="">Seçilmedi</option>{musteriler.map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </label>
+          )}
+          <KfPara etiket="Yeni ödeme ekle (₺)" deger={sn.yeniTutar} onDeg={(v: number | null) => setSn({ ...sn, yeniTutar: v })} yer="Boş bırak" />
+          {sn.yeniTutar ? <KfAlan etiket="Yeni ödeme tarihi" tip="date" deger={sn.yeniTarih || KF.gunEkle(bugun, 15)} onDeg={(v: string) => setSn({ ...sn, yeniTarih: v })} /> : null}
+          <KfPara etiket="Nakit değişimi (₺) — ör. sermaye girişi, eksi için “-”" deger={sn.nakit} onDeg={(v: number | null) => setSn({ ...sn, nakit: v })} yer="Boş bırak" />
+          {var_ && <div className="press-card" onClick={() => setSn({ gecikme: 0, kayip: 0, artis: 0, musteri: "", yeniTutar: null, yeniTarih: "", nakit: null })} style={{ textAlign: "center", fontSize: 12.5, fontWeight: 700, color: C.blue, cursor: "pointer" }}>Senaryoyu sıfırla</div>}
+        </div>
+        {!sonuc && <div style={kart}><p style={{ margin: 0, fontSize: 13, color: WA(0.65), lineHeight: 1.5 }}>Yukarıdan bir değişiklik seç; mevcut planınla yan yana karşılaştırmasını göreceksin. Gerçek verilerin değişmez.</p></div>}
+        {sonuc && (
+          <div style={kart}>
+            <div style={{ display: "flex", fontSize: 10.5, color: WA(0.55), fontWeight: 700, paddingBottom: 6 }}><span style={{ flex: 1.3 }}>{ufuk} gün</span><span style={{ flex: 1, textAlign: "right" }}>Şimdi</span><span style={{ flex: 1, textAlign: "right" }}>Senaryo</span><span style={{ flex: 1, textAlign: "right" }}>Fark</span></div>
+            {satirK("Maks. finansman", kfKisa(sonuc.once.maksFinansman), kfKisa(sonuc.sonra.maksFinansman), isr(sonuc.fark.maksFinansman), fark(sonuc.fark.maksFinansman, true))}
+            {satirK("Açık gün sayısı", String(sonuc.once.acikGunSayisi), String(sonuc.sonra.acikGunSayisi), isr(sonuc.fark.acikGun, false), fark(sonuc.fark.acikGun, true))}
+            {satirK(`${ufuk}. gün nakit`, kfKisa(sonuc.once.sonNakit), kfKisa(sonuc.sonra.sonNakit), isr(sonuc.fark.sonNakit), fark(sonuc.fark.sonNakit, false))}
+            {satirK("İlk açık", sonuc.once.ilkAcikTarihi ? kfTar(sonuc.once.ilkAcikTarihi) : "Yok", sonuc.sonra.ilkAcikTarihi ? kfTar(sonuc.sonra.ilkAcikTarihi) : "Yok", "", WA(0.6))}
+            <p style={{ margin: "10px 0 0", fontSize: 12.5, lineHeight: 1.5, color: metin(0) }}>{sonuc.sonra.maksFinansman > sonuc.once.maksFinansman ? `Bu senaryoda en yüksek finansman ihtiyacı ${kfTL(sonuc.sonra.maksFinansman - sonuc.once.maksFinansman)} artıyor.` : sonuc.sonra.maksFinansman < sonuc.once.maksFinansman ? `Bu senaryoda en yüksek finansman ihtiyacı ${kfTL(sonuc.once.maksFinansman - sonuc.sonra.maksFinansman)} azalıyor.` : sonuc.fark.acikGun !== 0 ? `En yüksek ihtiyaç değişmiyor; nakit açığı ${Math.abs(sonuc.fark.acikGun)} gün ${sonuc.fark.acikGun > 0 ? "daha uzun sürüyor" : "daha kısa sürüyor"}.` : "Bu senaryo nakit açığını değiştirmiyor."}</p>
+            <div className="press-card" onClick={() => git("finansman")} style={{ textAlign: "center", marginTop: 10, padding: "10px", borderRadius: 12, border: `1px solid ${WA(0.2)}`, color: C.blue, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Finansman ihtiyacına dön ›</div>
+          </div>
+        )}
+      </>
+    );
+  };
+
+  // ── Finansal sağlık
+  const SAGLIK = () => {
+    const sg = KF.saglikAnalizi(is!, bugun); const renk = sg.seviye === "guclu" ? C.green : sg.seviye === "dikkat" ? "#F5B13D" : C.red;
+    const kalemHedef: Record<string, string> = { "Nakit yeterliliği": "radar", "Gecikmiş tahsilat": "tahsilat", "Müşteri yoğunlaşması": "senaryo", "Tahsilat / ödeme dengesi": "odeme", "Çek / senet riski": "cek" };
+    return (
+      <>
+        <div style={{ ...kart, textAlign: "center", padding: "20px 14px" }}>
+          <div style={{ width: 96, height: 96, borderRadius: 48, border: `7px solid ${renk}`, margin: "0 auto 10px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+            <span style={{ fontSize: 30, fontWeight: 800, color: metin(0), lineHeight: 1 }}>{sg.skor}</span><span style={{ fontSize: 10.5, color: WA(0.55) }}>/ 100</span>
+          </div>
+          <p style={{ margin: 0, fontSize: 15, fontWeight: 800, color: renk }}>{sg.seviye === "guclu" ? "Güçlü görünüyor" : sg.seviye === "dikkat" ? "Dikkat edilmeli" : "Riskli görünüyor"}</p>
+          <p style={{ margin: "6px 0 0", fontSize: 11.5, color: WA(0.6), lineHeight: 1.45 }}>Girdiğin verilere göre şeffaf kurallarla hesaplanır. Kredi notu veya finansman değerlendirmesi değildir.</p>
+        </div>
+        {sg.kalemler.map((k: any) => (
+          <div key={k.ad} style={kart}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}><p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: metin(0) }}>{k.ad}</p><b style={{ fontSize: 13, color: metin(0), fontVariantNumeric: "tabular-nums" }}>{k.puan} / {k.azami}</b></div>
+            <div style={{ height: 6, borderRadius: 3, background: WA(0.1), margin: "8px 0" }}><div style={{ height: 6, borderRadius: 3, width: `${Math.round((k.puan / k.azami) * 100)}%`, background: k.puan === k.azami ? C.green : k.puan === 0 ? C.red : "#F5B13D" }} /></div>
+            <p style={{ margin: 0, fontSize: 12.5, color: WA(0.7), lineHeight: 1.45 }}>{k.aciklama} {k.puan < k.azami && kalemHedef[k.ad] && <span onClick={() => git(kalemHedef[k.ad])} style={{ color: C.blue, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>{KF_HEDEF_AD[kalemHedef[k.ad]]} ›</span>}</p>
+          </div>
+        ))}
+      </>
+    );
+  };
+
+  // ── Finansal durum raporu
+  const raporMetni = () => {
+    const sg = KF.saglikAnalizi(is!, bugun), k90 = KF.projeksiyon(is!, bugun, 90, "kesin", ayar), b90 = KF.projeksiyon(is!, bugun, 90, "beklenen", ayar);
+    const fa = KF.finansmanAnalizi(b90, 0, null), faK = KF.finansmanAnalizi(k90, 0, null);
+    const cs = veri.cekSenet.filter((c: any) => !c.kapandi);
+    const acikT = veri.tahsilatlar.filter((t: any) => !t.tahsilEdildi);
+    const L: string[] = [];
+    L.push(`${veri.isletme.ad} — Finansal Durum Raporu`, `Tarih: ${kfTarUzun(bugun)}`, "Hazırlayan: Katılım Plus · İşletmem Finans Asistanım", "");
+    L.push("1) Güncel durum", `Beyan edilen nakit: ${kfTL(veri.isletme.nakit)} (${kfTarUzun(veri.isletme.nakitTarihi)})`, `Açık tahsilat: ${acikT.length} kayıt, ${kfTL(acikT.reduce((x: number, t: any) => x + t.tutar, 0))}`, `Tanımlı ödeme: ${veri.odemeler.length} kalem`, `Açık çek/senet: ${cs.length} evrak`, "");
+    L.push("2) 90 günlük nakit görünümü", `Yalnız kesin tahsilatlarla: ${k90.ozet.ilkAcikTarihi ? `ilk açık ${kfTar(k90.ozet.ilkAcikTarihi)}, en yüksek ihtiyaç ${kfTL(k90.ozet.maksFinansman)}, ${k90.ozet.acikGunSayisi} gün açık` : "nakit açığı görünmüyor"}`, `Beklenenler dahil: ${b90.ozet.ilkAcikTarihi ? `ilk açık ${kfTar(b90.ozet.ilkAcikTarihi)}, en yüksek ihtiyaç ${kfTL(b90.ozet.maksFinansman)}, ${b90.ozet.acikGunSayisi} gün açık` : `nakit açığı görünmüyor (en düşük nakit ${kfTL(b90.ozet.enDusukNakit)})`}`, `90. gün tahmini nakit: ${kfTL(k90.ozet.sonNakit)} (kesin) / ${kfTL(b90.ozet.sonNakit)} (beklenen dahil)`, "");
+    L.push("3) Finansman ihtiyacı", fa.ihtiyac > 0 || faK.ihtiyac > 0 ? `Kesin: ${kfTL(faK.ihtiyac)} · Beklenen dahil: ${kfTL(fa.ihtiyac)}` : "Bu dönemde finansman ihtiyacı görünmüyor.", "");
+    L.push(`4) Finansal sağlık: ${sg.skor}/100 (${sg.seviye === "guclu" ? "güçlü" : sg.seviye === "dikkat" ? "dikkat" : "riskli"})`, ...sg.kalemler.map((x: any) => `- ${x.ad}: ${x.puan}/${x.azami} — ${x.aciklama}`), "");
+    L.push("5) Dikkat edilecekler", ...(uyar.length ? uyar.map((u: any) => `- ${u.metin.replace(/\d{4}-\d{2}-\d{2}/g, (d: string) => kfTarUzun(d))}`) : ["- Uyarı yok."]), "");
+    L.push("Varsayımlar ve sınırlar", `- Gecikmiş tahsilat varsayımı: ${veri.ayar.gecikmis === "haric" ? "hariç" : veri.ayar.gecikmis + " gün sonra"}`, "- Tüm veriler kullanıcı beyanına dayanır.", "- Bu rapor kesin nakit tahmini, kredi değerlendirmesi veya finansman onayı değildir.");
+    return L.join("\n");
+  };
+  const RAPOR = () => {
+    const m = raporMetni();
+    const kopyala = async () => { try { await navigator.clipboard.writeText(m); setKopya("Kopyalandı"); } catch { setKopya("Kopyalanamadı"); } setTimeout(() => setKopya(""), 2200); };
+    const paylas = async () => { try { if ((navigator as any).share) await (navigator as any).share({ title: `${veri.isletme.ad} — Finansal Durum Raporu`, text: m }); else await kopyala(); } catch {} };
+    return (
+      <>
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <div className="press-card" onClick={paylas} style={{ flex: 1, textAlign: "center", padding: "11px", borderRadius: 13, background: C.blue, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Paylaş</div>
+          <div className="press-card" onClick={kopyala} style={{ flex: 1, textAlign: "center", padding: "11px", borderRadius: 13, border: `1px solid ${WA(0.2)}`, color: C.blue, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>{kopya || "Kopyala"}</div>
+        </div>
+        <div style={kart}><pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word", fontFamily: "inherit", fontSize: 12.5, lineHeight: 1.6, color: metin(0) }}>{m}</pre></div>
+      </>
+    );
+  };
+
+  // ── Düzenleme sayfaları
+  const SheetTah = () => {
+    const k0 = sheet.kayit; const [ad, setAd] = useState(k0 ? k0.musteri : ""); const [tut, setTut] = useState<number | null>(k0 ? k0.tutar : null);
+    const [vade, setVade] = useState(k0 ? k0.vade : KF.gunEkle(bugun, 7)); const [durum, setDurum] = useState(k0 ? k0.durum : "beklenen");
+    const gecerli = ad.trim() && tut != null && tut > 0 && /^\d{4}-\d{2}-\d{2}$/.test(vade);
+    return (
+      <KfSheet baslik={k0 ? "Tahsilatı düzenle" : "Tahsilat ekle"} kapat={() => setSheet(null)}>
+        <KfAlan etiket="Müşteri / kaynak" deger={ad} onDeg={setAd} yer="Örn. Atlas Market" />
+        <KfPara etiket="Tutar (₺)" deger={tut} onDeg={setTut} />
+        <KfAlan etiket="Vade tarihi" tip="date" deger={vade} onDeg={setVade} />
+        <p style={{ margin: "0 0 5px", fontSize: 11, fontWeight: 600, color: (TEMA === "acik" ? "#1A2430" : "#A8C2DC") }}>Durum</p>
+        <KfSeg secenekler={[["kesin", "Kesin"], ["beklenen", "Beklenen"]]} deger={durum} onDeg={setDurum} />
+        <p style={{ margin: "-4px 0 14px", fontSize: 11.5, color: WA(0.6), lineHeight: 1.45 }}>Emin değilsen "Beklenen" seç: beklenen tahsilatlar kesin nakit olarak gösterilmez.</p>
+        <div className="press-card" onClick={() => { if (!gecerli) return; const yeni = { id: k0 ? k0.id : kfId(), musteri: ad.trim(), tutar: tut as number, vade, durum, tahsilEdildi: k0 ? k0.tahsilEdildi : false, tahsilTarihi: k0 ? k0.tahsilTarihi : "" }; guncelle((v: any) => ({ ...v, tahsilatlar: k0 ? v.tahsilatlar.map((t: any) => (t.id === k0.id ? yeni : t)) : [...v.tahsilatlar, yeni] })); setSheet(null); }} style={{ textAlign: "center", padding: "12px", borderRadius: 13, background: gecerli ? C.blue : WA(0.15), color: "#fff", fontSize: 15, fontWeight: 700, cursor: gecerli ? "pointer" : "default" }}>Kaydet</div>
+        {k0 && !k0.tahsilEdildi && <div className="press-card" onClick={() => { guncelle((v: any) => ({ ...v, tahsilatlar: v.tahsilatlar.map((t: any) => (t.id === k0.id ? { ...t, tahsilEdildi: true, tahsilTarihi: bugun } : t)) })); setSheet(null); }} style={{ textAlign: "center", padding: "12px", marginTop: 10, borderRadius: 13, border: `1px solid ${C.green}`, color: C.green, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Tahsil edildi olarak işaretle</div>}
+        {k0 && k0.tahsilEdildi && <div className="press-card" onClick={() => { guncelle((v: any) => ({ ...v, tahsilatlar: v.tahsilatlar.map((t: any) => (t.id === k0.id ? { ...t, tahsilEdildi: false, tahsilTarihi: "" } : t)) })); setSheet(null); }} style={{ textAlign: "center", padding: "12px", marginTop: 10, borderRadius: 13, border: `1px solid ${WA(0.2)}`, color: C.blue, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Tekrar bekleyen yap</div>}
+        {k0 && <div className="press-card" onClick={() => { if (silOnay !== k0.id) { setSilOnay(k0.id); return; } guncelle((v: any) => ({ ...v, tahsilatlar: v.tahsilatlar.filter((t: any) => t.id !== k0.id) })); setSilOnay(""); setSheet(null); }} style={{ textAlign: "center", padding: "12px", marginTop: 10, color: C.red, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{silOnay === k0.id ? "Silmek için tekrar dokun" : "Sil"}</div>}
+      </KfSheet>
+    );
+  };
+  const SheetOde = () => {
+    const k0 = sheet.kayit; const [ad, setAd] = useState(k0 ? k0.ad : ""); const [tut, setTut] = useState<number | null>(k0 ? k0.tutar : null);
+    const [tarih, setTarih] = useState(k0 ? k0.tarih : KF.gunEkle(bugun, 7)); const [tekrar, setTekrar] = useState(k0 ? k0.tekrar || "yok" : "yok"); const [bitis, setBitis] = useState(k0 && k0.bitis ? k0.bitis : "");
+    const gecerli = ad.trim() && tut != null && tut > 0 && /^\d{4}-\d{2}-\d{2}$/.test(tarih) && (!bitis || bitis >= tarih);
+    return (
+      <KfSheet baslik={k0 ? "Ödemeyi düzenle" : "Ödeme ekle"} kapat={() => setSheet(null)}>
+        <KfAlan etiket="Ödeme adı" deger={ad} onDeg={setAd} yer="Örn. Kira, maaşlar, tedarikçi" />
+        <KfPara etiket="Tutar (₺)" deger={tut} onDeg={setTut} />
+        <KfAlan etiket="İlk ödeme tarihi" tip="date" deger={tarih} onDeg={setTarih} />
+        <p style={{ margin: "0 0 5px", fontSize: 11, fontWeight: 600, color: (TEMA === "acik" ? "#1A2430" : "#A8C2DC") }}>Tekrar</p>
+        <KfSeg secenekler={[["yok", "Tek sefer"], ["haftalik", "Haftalık"], ["aylik", "Aylık"]]} deger={tekrar} onDeg={setTekrar} />
+        {tekrar !== "yok" && <KfAlan etiket="Bitiş tarihi (isteğe bağlı)" tip="date" deger={bitis} onDeg={setBitis} />}
+        <div className="press-card" onClick={() => { if (!gecerli) return; const yeni = { id: k0 ? k0.id : kfId(), ad: ad.trim(), tutar: tut as number, tarih, tekrar: tekrar === "yok" ? null : tekrar, bitis: tekrar !== "yok" && bitis ? bitis : null }; guncelle((v: any) => ({ ...v, odemeler: k0 ? v.odemeler.map((o: any) => (o.id === k0.id ? yeni : o)) : [...v.odemeler, yeni] })); setSheet(null); }} style={{ textAlign: "center", padding: "12px", borderRadius: 13, background: gecerli ? C.blue : WA(0.15), color: "#fff", fontSize: 15, fontWeight: 700, cursor: gecerli ? "pointer" : "default" }}>Kaydet</div>
+        {k0 && <div className="press-card" onClick={() => { if (silOnay !== k0.id) { setSilOnay(k0.id); return; } guncelle((v: any) => ({ ...v, odemeler: v.odemeler.filter((o: any) => o.id !== k0.id) })); setSilOnay(""); setSheet(null); }} style={{ textAlign: "center", padding: "12px", marginTop: 10, color: C.red, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{silOnay === k0.id ? "Silmek için tekrar dokun" : "Sil"}</div>}
+      </KfSheet>
+    );
+  };
+  const SheetCek = () => {
+    const k0 = sheet.kayit; const [yon, setYon] = useState(k0 ? k0.yon : "alacak"); const [tur, setTur] = useState(k0 ? k0.tur : "cek");
+    const [taraf, setTaraf] = useState(k0 ? k0.taraf : ""); const [tut, setTut] = useState<number | null>(k0 ? k0.tutar : null); const [vade, setVade] = useState(k0 ? k0.vade : KF.gunEkle(bugun, 30));
+    const [kars, setKars] = useState(k0 ? !!k0.karsiliksiz : false); const [kapandi, setKapandi] = useState(k0 ? !!k0.kapandi : false);
+    const gecerli = taraf.trim() && tut != null && tut > 0 && /^\d{4}-\d{2}-\d{2}$/.test(vade);
+    const lbl = { margin: "0 0 5px", fontSize: 11, fontWeight: 600, color: (TEMA === "acik" ? "#1A2430" : "#A8C2DC") } as any;
+    return (
+      <KfSheet baslik={k0 ? "Evrakı düzenle" : "Çek / senet ekle"} kapat={() => setSheet(null)}>
+        <p style={lbl}>Yön</p><KfSeg secenekler={[["alacak", "Alacak (bana)"], ["borc", "Borç (benden)"]]} deger={yon} onDeg={setYon} />
+        <p style={lbl}>Tür</p><KfSeg secenekler={[["cek", "Çek"], ["senet", "Senet"]]} deger={tur} onDeg={setTur} />
+        <KfAlan etiket={yon === "alacak" ? "Keşideci / borçlu" : "Lehtar / alacaklı"} deger={taraf} onDeg={setTaraf} yer="Örn. Atlas Market" />
+        <KfPara etiket="Tutar (₺)" deger={tut} onDeg={setTut} />
+        <KfAlan etiket="Vade tarihi" tip="date" deger={vade} onDeg={setVade} />
+        {yon === "alacak" && <><p style={lbl}>Karşılıksız çıktı mı?</p><KfSeg secenekler={[[false, "Hayır"], [true, "Evet"]]} deger={kars} onDeg={setKars} /></>}
+        {k0 && <><p style={lbl}>Durum</p><KfSeg secenekler={[[false, "Açık"], [true, "Kapandı (tahsil/ödendi)"]]} deger={kapandi} onDeg={setKapandi} /></>}
+        <div className="press-card" onClick={() => { if (!gecerli) return; const yeni = { id: k0 ? k0.id : kfId(), yon, tur, taraf: taraf.trim(), tutar: tut as number, vade, kapandi, karsiliksiz: yon === "alacak" && kars }; guncelle((v: any) => ({ ...v, cekSenet: k0 ? v.cekSenet.map((c: any) => (c.id === k0.id ? yeni : c)) : [...v.cekSenet, yeni] })); setSheet(null); }} style={{ textAlign: "center", padding: "12px", borderRadius: 13, background: gecerli ? C.blue : WA(0.15), color: "#fff", fontSize: 15, fontWeight: 700, cursor: gecerli ? "pointer" : "default" }}>Kaydet</div>
+        {k0 && <div className="press-card" onClick={() => { if (silOnay !== k0.id) { setSilOnay(k0.id); return; } guncelle((v: any) => ({ ...v, cekSenet: v.cekSenet.filter((c: any) => c.id !== k0.id) })); setSilOnay(""); setSheet(null); }} style={{ textAlign: "center", padding: "12px", marginTop: 10, color: C.red, fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{silOnay === k0.id ? "Silmek için tekrar dokun" : "Sil"}</div>}
+      </KfSheet>
+    );
+  };
+  const SheetNak = () => {
+    const [n, setN] = useState<number | null>(veri.isletme.nakit);
+    return (
+      <KfSheet baslik="Güncel nakit" kapat={() => setSheet(null)}>
+        <p style={{ margin: "0 0 12px", fontSize: 12.5, color: WA(0.65), lineHeight: 1.5 }}>Kasa ve banka hesaplarındaki toplam kullanılabilir nakdi gir. Eksi bakiye için başına "-" koy.</p>
+        <KfPara etiket="Nakit (₺)" deger={n} onDeg={setN} />
+        <div className="press-card" onClick={() => { if (n == null) return; guncelle((v: any) => ({ ...v, isletme: { ...v.isletme, nakit: n, nakitTarihi: bugun } })); setSheet(null); }} style={{ textAlign: "center", padding: "12px", borderRadius: 13, background: n != null ? C.blue : WA(0.15), color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>Kaydet</div>
+      </KfSheet>
+    );
+  };
+
+  return (
+    <div style={{ background: C.bg, padding: "12px 14px 92px", minHeight: "100%" }}>
+      <div style={{ display: "flex", background: WA(0.06), borderRadius: 12, padding: 3, marginBottom: 12, overflowX: "auto", WebkitOverflowScrolling: "touch" as any }}>
+        {sekmeler.map(([k2, ad]) => (
+          <div key={k2} onClick={() => setTab(k2)} style={{ flex: "1 0 auto", whiteSpace: "nowrap", textAlign: "center", padding: "9px 12px", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer", background: tab === k2 ? (TEMA === "acik" ? "#fff" : WA(0.14)) : "transparent", color: tab === k2 ? metin(0) : WA(0.6), boxShadow: tab === k2 && TEMA === "acik" ? "0 1px 3px rgba(0,0,0,0.12)" : "none" }}>{ad}</div>
+        ))}
+      </div>
+      {tab === "ana" && ANA()}
+      {tab === "tahsilat" && TAHSILAT()}
+      {tab === "odeme" && ODEME()}
+      {tab === "radar" && RADAR()}
+      {tab === "finansman" && FINANSMAN()}
+      {tab === "cek" && CEK()}
+      {tab === "senaryo" && SENARYO()}
+      {tab === "saglik" && SAGLIK()}
+      {tab === "rapor" && RAPOR()}
+      <p style={{ margin: "6px 6px 0", fontSize: 10.5, color: WA(0.6), textAlign: "center", lineHeight: 1.5 }}>{KF_NOT}</p>
+      <p style={{ margin: "6px 0 0", fontSize: 10.5, textAlign: "center", color: senk === "hata" ? C.red : WA(0.5) }}>{senk === "kayitli" ? "Kaydedildi · yalnızca hesabına bağlı" : senk === "bekliyor" ? "Kaydediliyor…" : "Buluta kaydedilemedi, otomatik tekrar denenecek"}</p>
+      {sheet && sheet.tur === "tahsilat" && <KfCalistir key={"t" + (sheet.kayit ? sheet.kayit.id : "yeni")} f={SheetTah} />}
+      {sheet && sheet.tur === "odeme" && <KfCalistir key={"o" + (sheet.kayit ? sheet.kayit.id : "yeni")} f={SheetOde} />}
+      {sheet && sheet.tur === "cek" && <KfCalistir key={"c" + (sheet.kayit ? sheet.kayit.id : "yeni")} f={SheetCek} />}
+      {sheet && sheet.tur === "nakit" && <KfCalistir key="nakit" f={SheetNak} />}
+    </div>
+  );
+}
+
+function KfIlkAcilis({ onKaydet }: { onKaydet: (ad: string, nakit: number) => void }) {
+  const [ad, setAd] = useState(""); const [n, setN] = useState<number | null>(null);
+  const ok = ad.trim().length > 1 && n != null;
+  return (
+    <div style={{ background: C.bg, padding: "12px 14px 92px", minHeight: "100%" }}>
+      <div style={{ ...KF_KART(), padding: "20px 16px" }}>
+        <p style={{ margin: 0, fontSize: 19, fontWeight: 800, color: (TEMA === "acik" ? C.label : "#fff") }}>İşletmeni tanıyalım</p>
+        <p style={{ margin: "8px 0 16px", fontSize: 12.5, color: WA(0.65), lineHeight: 1.55 }}>Yalnızca iki bilgiyle başlıyoruz. Ardından beklediğin tahsilatları ve planlanan ödemeleri ekleyerek nakit akışını görebilirsin.</p>
+        <KfAlan etiket="İşletme adı" deger={ad} onDeg={setAd} yer="Örn. Yıldız Gıda Ltd." />
+        <KfPara etiket="Mevcut nakit (₺)" deger={n} onDeg={setN} />
+        <div className="press-card" onClick={() => ok && onKaydet(ad.trim(), n as number)} style={{ textAlign: "center", padding: "12px", borderRadius: 13, background: ok ? C.blue : WA(0.15), color: "#fff", fontSize: 15, fontWeight: 700, cursor: ok ? "pointer" : "default" }}>Başla</div>
+      </div>
+      <p style={{ margin: "0 6px", fontSize: 10.5, color: WA(0.6), textAlign: "center", lineHeight: 1.5 }}>{KF_NOT} Verilerin yalnızca hesabına bağlı saklanır, başkalarıyla paylaşılmaz.</p>
+    </div>
+  );
+}
+
 // ── BİRİKİM HESAPLAYICI (2026-10-09) ────────────────────────────────────────
 // Hedef bazlı birikim planı: hedef tutar + vade + mevcut birikim + yıllık oran → aylık gereken tutar.
 // Veri yalnızca cihazda ve hesap senkronunda (kp_birikim_v1); sunucuya ayrıca bir şey gönderilmez.
@@ -35447,6 +36324,7 @@ const MENU = {
   hazineSenaryo:{title:"Kur Hareketi Senaryo",back:"hesaplaMenu"},
   hazineKurMakasi:{title:"Katılım Bankaları Kur İzleme",back:"hesaplaMenu"},
   hazineTcmbKur:{title:"TCMB Kur İzleme",back:"hesaplaMenu"},
+  isletmeFinans:{title:"İşletmem · Finans Asistanım",back:"araclarMenu"},
   piyasaHaberleri:{title:"Piyasa Haberleri",back:"home"},
   finansalGostergeler:{title:"Finansal Göstergeler",back:"piyasaMenu"},
   ayarlar:{title:"Ayarlar",back:"home"},
@@ -35469,7 +36347,7 @@ const TAB_OF_SCREEN:any = {
   hazineDoviz:"hesapla", hazineForward:"hesapla", hazineSwap:"hesapla",
   hazineBono:"hesapla", hazineSenaryo:"hesapla", hazineKurMakasi:"hesapla", hazineTcmbKur:"hesapla",
   piyasaHaberleri:"piyasa", finansalGostergeler:"piyasa",
-  araclarMenu:"araclar", sozluk:"araclar", egitim:"araclar", musteriPortfoyum:"araclar", vadeTakibi:"araclar", katilimBankalari:"araclar",  katilimSigorta:"araclar", kamuHaznedarligi:"araclar", kfkNedir:"araclar", zekatHesabi:"araclar", birikimHesaplayici:"araclar", erkenKapamaKarari:"hesapla", erkenKapamaKomisyonu:"hesapla", vadeFarkiKarari:"hesapla", teklifKarsilastirma:"hesapla", tlYpKarari:"hesapla", kiraSertifikasi:"araclar", getiriKarsilastirma:"araclar", haftalikOzet:"araclar", portfoyum:"araclar", fonDetay:"araclar",
+  araclarMenu:"araclar", sozluk:"araclar", egitim:"araclar", musteriPortfoyum:"araclar", isletmeFinans:"araclar", vadeTakibi:"araclar", katilimBankalari:"araclar",  katilimSigorta:"araclar", kamuHaznedarligi:"araclar", kfkNedir:"araclar", zekatHesabi:"araclar", birikimHesaplayici:"araclar", erkenKapamaKarari:"hesapla", erkenKapamaKomisyonu:"hesapla", vadeFarkiKarari:"hesapla", teklifKarsilastirma:"hesapla", tlYpKarari:"hesapla", kiraSertifikasi:"araclar", getiriKarsilastirma:"araclar", haftalikOzet:"araclar", portfoyum:"araclar", fonDetay:"araclar",
   asistan:"yapayzeka",
   profil:"profil",
 };
@@ -35486,6 +36364,7 @@ const SIDEBAR_GRUPLARI: {baslik:string; varsayilanAcik:boolean; ogeler:{key:stri
   {baslik:"PORTFÖY", varsayilanAcik:true, ogeler:[
     {key:"portfoyum",label:"Portföyüm"},
     {key:"musteriPortfoyum",label:"Müşteri Portföyüm"},
+    {key:"isletmeFinans",label:"İşletmem · Finans Asistanım"},
     {key:"birikimHesaplayici",label:"Birikim Hesaplayıcı"},
   ]},
   {baslik:"BİLGİ", varsayilanAcik:false, ogeler:[
@@ -35591,6 +36470,7 @@ const SCREEN_TO_PATH: Record<string,string> = {
   hazineSenaryo: "/kur-hareketi-senaryo",
   hazineKurMakasi: "/kur-makasi-marj",
   hazineTcmbKur: "/tcmb-kur-izleme",
+  isletmeFinans: "/isletmem-finans-asistanim",
   piyasaHaberleri: "/piyasa-haberleri",
   finansalGostergeler: "/finansal-gostergeler",
   // 2026-09-28: KVKK/Gizlilik sayfaları uygulama İÇİ ekran olduğundan adres
@@ -35709,6 +36589,7 @@ const MENU_ARAMA_LIST=[
   {key:"icazetBelgeleri",    label:"İcazet Belgeleri",                          icon:"📑", grup:"Araçlar", alt:["icazet","icazet belgesi","danışma komitesi","faizsiz","uygunluk","fetva","murabaha","katılma hesabı","belge"]},
   {key:"egitim",               label:"Eğitim",                                    icon:"🎓", grup:"Araçlar", alt:["eğitim","ders","sınav","quiz","puan","liderlik","öğren","katılım bankacılığı","ekonomi","finansal okuryazarlık","fon","yatırım"]},
   {key:"musteriPortfoyum",      label:"Müşteri Portföyüm",                         icon:"🗂️", grup:"Araçlar", alt:["müşteri","portföy","bankacı","görüşme","takip","hatırlatma","not","crm","aksiyon","telefon","arama"]},
+  {key:"isletmeFinans",       label:"İşletmem · Finans Asistanım",                icon:"🏢", grup:"Araçlar", alt:["işletme","kobi","nakit akış","nakit akışı","tahsilat","ödeme takvimi","nakit radarı","finans asistanı","finansman ihtiyacı","açık","alacak","borç","çek","senet"]},
   {key:"ekonomiSozluk",      label:"Ekonomi Sözlüğü",                           icon:"📚", grup:"Araçlar", alt:["ekonomi","terim","sözlük","enflasyon","gsyh","faiz","tanım","kavram","makro"]},
   {key:"birikimHesaplayici", label:"Birikim Hesaplayıcı", icon:"🎯", grup:"Araçlar", alt:["birikim","hedef","tasarruf","biriktir","aylık","umre","hac","ev","araba","peşinat","acil durum","enflasyon","reel","planla"]},
   {key:"zekatHesabi",        label:"Zekât Hesaplayıcı",                               icon:"🌙", grup:"Araçlar", alt:["zekat","zekât","nisap","nisab","kırkta bir","sadaka","altın nisabı","dini","ibadet","hesapla"]},
@@ -45876,6 +46757,12 @@ function App(){
     girisHedefIsteniyor.current=true;
     nav("hesapGiris");
   };
+  const isletmeFinansIcinHesapAc=(mod:"giris"|"kayit")=>{
+    setGirisBaslangicModu(mod);
+    girisSonrasiHedef.current="isletmeFinans";
+    girisHedefIsteniyor.current=true;
+    nav("hesapGiris");
+  };
   const proIcinHesapAc=(mod:"giris"|"kayit")=>{
     setGirisBaslangicModu(mod);
     girisSonrasiHedef.current="proSatinAl";
@@ -47927,6 +48814,7 @@ function App(){
               {key:"katilimSektoru", label:"Katılım Bankacılığı Sektörü", desc:"Sektör payı, fon büyüklükleri ve kârlılık — BDDK resmî verisiyle"},
               {key:"icazetBelgeleri", label:"İcazet Belgeleri", desc:"Banka ve ürün seç, bankanın kendi yayımladığı icazet belgesine git"},
               {key:"kfkNedir", label:"Katılım Finans Kefalet (KFK) Nedir?", desc:"9 kefalet paketi, size uygun olanı bulun — Katılım Finans Kefalet A.Ş."},
+              {key:"isletmeFinans", label:"İşletmem · Finans Asistanım", desc:"KOBİ nakit akış asistanı: tahsilat, ödeme ve 30-60-90 günlük nakit radarı. Banka entegrasyonu gerekmez; üyelik gerekir, veriler yalnızca hesabına bağlı saklanır", uyelik:true},
               {key:"musteriPortfoyum", label:"Müşteri Portföyüm", desc:"Bankacılar için müşteri, görüşme ve takip defteri. Bugün kimi arayacağını gör; üyelik gerekir, kayıtlar hesabına bağlı saklanır", uyelik:true},
             ]},
             {baslik:"ÖĞREN", items:[
@@ -48302,6 +49190,7 @@ function App(){
         {screen==="katilimSigorta"&&<KatilimSigorta/>}
         {screen==="icazetBelgeleri"&&<IcazetBelgeleri/>}
         {screen==="egitim"&&<Egitim kimlik={kimlik} nav={nav}/>}
+        {screen==="isletmeFinans"&&<IsletmeFinans kimlik={kimlik} nav={nav} girisAc={isletmeFinansIcinHesapAc} geri={back}/>}
         {screen==="musteriPortfoyum"&&<MusteriPortfoyumEkrani kimlik={kimlik} nav={nav} girisAc={musteriPortfoyuIcinHesapAc} geri={back}/>}
         {screen==="kfkNedir"&&<KfkNedir/>}
         {screen==="katilimSektoru"&&<KatilimSektoru/>}
