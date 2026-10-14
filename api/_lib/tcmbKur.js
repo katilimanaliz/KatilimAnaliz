@@ -265,8 +265,21 @@ async function guncelle(apiKey, zorla, teshis, aralikMs = KONTROL_ARALIK_MS) {
     if (!Object.keys(gozlem).length) { teshis.seri = "bulunamadi"; v.sonKontrol = simdi; await veriYaz(v); return v; }
     v.seri = harita; teshis.seri = "hazir";
     for (const [iso, g] of Object.entries(gozlem)) v.gunler[iso] = { ...(v.gunler[iso] || {}), ...g };
+    // Bülten tarihi = AÇIKLANMA günü (15:30); kur ertesi iş günü için geçerli (EVDS de geçerlilik gününe yazar).
+    // v2: ilk sürümün yanlış güne yazdığı bülten kayıtlarını temizle (EVDS değerleri o günleri yeniden doldurur)
+    if (v.xmlSurum !== 2) {
+      for (const i of Object.keys(v.xmlGun || {})) if (v.gunler[i]) { delete v.gunler[i].EURUSD; delete v.gunler[i].GBPUSD; }
+      v.xmlGun = {}; v.xmlSurum = 2;
+    }
     const xml = await tcmbBultenOku(teshis);
-    if (xml) { v.xmlGun = v.xmlGun || {}; v.xmlGun[xml.iso] = xml.g; v.bulten = { iso: xml.iso, no: xml.bulten }; }
+    if (xml) {
+      const yakin = (a, b) => Array.isArray(a) && Array.isArray(b) && Math.abs(a[0] - b[0]) < 0.00005 && Math.abs(a[1] - b[1]) < 0.00005;
+      let hedef = null;   // EVDS bu bülteni zaten yayımladıysa onun tarihini kullan
+      for (const [i, g] of Object.entries(gozlem)) if (yakin(g.USD, xml.g.USD) && yakin(g.EUR, xml.g.EUR) && yakin(g.GBP, xml.g.GBP)) hedef = i;
+      if (!hedef) { hedef = gunEkle(xml.iso, 1); while ([0, 6].includes(new Date(isoToUtc(hedef)).getUTCDay())) hedef = gunEkle(hedef, 1); }
+      teshis.xmlHedefGun = hedef;
+      v.xmlGun = v.xmlGun || {}; v.xmlGun[hedef] = xml.g; v.bulten = { iso: hedef, acik: xml.iso, no: xml.bulten };
+    }
     for (const [iso, g] of Object.entries(v.xmlGun || {})) v.gunler[iso] = { ...(v.gunler[iso] || {}), ...g };
     for (const iso of Object.keys(v.xmlGun || {})) if (iso < gunEkle(bit, -SAKLAMA_GUN)) delete v.xmlGun[iso];
 
