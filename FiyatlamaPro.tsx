@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useMemo, createContext, useContext, Fragment } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo, createContext, useContext, Fragment, Component } from "react";
 import {
   Zap, Building2, CalendarRange, Car, CreditCard, FileBadge, Globe, Ship, Gift,
   ArrowLeftRight, CalendarClock, RefreshCw, ScrollText, Wallet, Target, Percent,
@@ -31205,6 +31205,7 @@ const KF = (() => {
 // Veriler KULLANICI BEYANIDIR. Kesin nakit tahmini, kredi değerlendirmesi veya finansman onayı DEĞİLDİR.
 // Saklama: Firestore isletmeFinans/{uid} (yalnızca hesap sahibi; cihazda kalıcı kopya tutulmaz). Tutarlar tam sayı KURUŞ (bkz. KF).
 const KF_KOK = "isletmeFinans";
+const kfBugun = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }; // yerel tarih
 const KF_HAZIR = new Set(["radar", "tahsilat", "odeme", "finansman", "cek", "senaryo", "saglik", "rapor"]);
 const KF_HEDEF_AD: Record<string, string> = { radar: "Radar", tahsilat: "Tahsilat", odeme: "Ödemeler", finansman: "Finansman", cek: "Çek/Senet", senaryo: "Senaryo", saglik: "Sağlık", rapor: "Rapor" };
 const kfBos = (): any => ({ v: 1, isletme: { ad: "", nakit: 0, nakitTarihi: "" }, tahsilatlar: [], odemeler: [], cekSenet: [], ayar: { gecikmis: "haric" } });
@@ -31318,6 +31319,16 @@ const KF_KART: any = () => ({ background: (TEMA === "acik" ? "#E9EEF4" : WA(0.05
 const KF_ET: any = () => ({ margin: 0, fontSize: 11, fontWeight: 600, letterSpacing: 0.3, textTransform: "uppercase", color: (TEMA === "acik" ? "#1A2430" : "#A8C2DC") });
 const KF_NOT = "Veriler kullanıcı beyanına dayanır. Bu ekran kesin nakit tahmini, kredi değerlendirmesi veya finansman onayı değildir.";
 
+// Beklenmeyen bir hata tüm uygulamayı karartmasın: yalnızca bu ekran uyarı gösterir
+class KfHataSiniri extends Component<any, { hata: boolean }> {
+  state = { hata: false };
+  static getDerivedStateFromError() { return { hata: true }; }
+  componentDidCatch(e: any) { try { console.error("isletmeFinans:", e); } catch {} }
+  render() {
+    if (!this.state.hata) return this.props.children;
+    return <div style={{ background: C.bg, padding: "40px 14px", minHeight: "100%", textAlign: "center" }}><p style={{ color: C.red, fontWeight: 700, fontSize: 14, margin: 0 }}>Bu ekran açılamadı</p><p style={{ color: WA(0.6), fontSize: 12.5, lineHeight: 1.5 }}>Kayıtların silinmedi. Geri dönüp tekrar dene.</p></div>;
+  }
+}
 function IsletmeFinans({ kimlik, nav, girisAc, geri }: any) {
   const k = kimlik && kimlik.kullanici;
   if (!k) {
@@ -31337,11 +31348,11 @@ function IsletmeFinans({ kimlik, nav, girisAc, geri }: any) {
       </div>
     );
   }
-  return <IsletmeFinansHesapli key={k.uid} uid={k.uid} nav={nav} />;
+  return <KfHataSiniri><IsletmeFinansHesapli key={k.uid} uid={k.uid} nav={nav} /></KfHataSiniri>;
 }
 
 function IsletmeFinansHesapli({ uid, nav }: { uid: string; nav?: any }) {
-  const bugun = bugunISO();
+  const bugun = kfBugun();
   const [veri, setVeri] = useState<any>(null);
   const [faz, setFaz] = useState("yukleniyor"); // yukleniyor | hata | hazir
   const [senk, setSenk] = useState("kayitli");  // kayitli | bekliyor | hata
