@@ -28626,7 +28626,7 @@ function AnaSayfaHeroSerit({ git, selamlama, bugunMetni, kullaniciAdi, genisEkra
             <span style={{
               fontSize: genisEkran ? 12 : 11.5, fontWeight: 600,
               color: karsilama ? (acikTema ? "#46617A" : "#9DB4C6") : s.renk,
-            }}>{karsilama ? `${selamlama} · ${bugunMetni}` : TR(s.eyebrow)}</span>
+            }}>{karsilama ? bugunMetni : TR(s.eyebrow)}</span>
           </div>
 
           <div style={{
@@ -45805,7 +45805,9 @@ function App(){
     if(s>=18&&s<22) return "İyi akşamlar";
     return "İyi geceler";
   })();
-  const kisaTarihStr = saat.toLocaleDateString("tr-TR",{day:"numeric",month:"long"}).toUpperCase();
+  const kisaTarihStr = saat.toLocaleDateString("tr-TR",{day:"numeric",month:"long"}).toLocaleUpperCase("tr-TR");
+  // Ana sayfa karşılama şeridi üst satırı: tarih · gün · saat (selamlama kaldırıldı)
+  const anaTarihSaat = `${kisaTarihStr} · ${saat.toLocaleDateString("tr-TR",{weekday:"long"}).toLocaleUpperCase("tr-TR")} · ${saat.toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"})}`;
 
   // nav(ekran, geriHedefi?) — ikinci parametre verilirse, o ekrandan geri
   // basıldığında MENU'daki varsayılan yerine buraya dönülür (tek seferlik).
@@ -46541,7 +46543,7 @@ function App(){
                 (iki ayrı dal — biri değişirse diğeri etkilenmesin). */}
             {(()=>{
               const hero = (
-                <AnaSayfaHeroSerit selamlama={TR(selamlama)} bugunMetni={kisaTarihStr} kullaniciAdi={kullaniciAdi} genisEkran={genisEkran} tufeYillik={typeof evdsMakro?.TUFE_YILLIK?.deger === "number" ? evdsMakro.TUFE_YILLIK.deger : null} git={(hedef) => {
+                <AnaSayfaHeroSerit selamlama={TR(selamlama)} bugunMetni={anaTarihSaat} kullaniciAdi={kullaniciAdi} genisEkran={genisEkran} tufeYillik={typeof evdsMakro?.TUFE_YILLIK?.deger === "number" ? evdsMakro.TUFE_YILLIK.deger : null} git={(hedef) => {
                   if (hedef === "altin") { setPiyasaTabloFiltre("altin"); nav("piyasaMenu"); }
                   else if (hedef === "gostergeler") { setPiyasaTabloFiltre("gostergeler"); nav("piyasaMenu"); }
                   else if (hedef === "zekat") { nav("zekatHesabi"); }
