@@ -2126,7 +2126,7 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
     EGD("o12","Finansman maliyetini doğru okumak",5,[
       "Aylık taksit tek başına yeterli bilgi vermez. Toplam geri ödeme, vade, kâr payı veya faiz oranı, masraflar ve sigorta birlikte değerlendirilmelidir.",
       "İki teklifi karşılaştırırken, aynı tutar ve aynı vade için toplam geri ödemeyi yan yana yazmak en doğru yöntemdir.",
-      "Katılım finansmanında toplam bedel baştan bellidir. Farklı bankaların tekliflerini Hesapla bölümündeki araçlarla ve Taksit Karşılaştırma ekranıyla karşılaştırabilirsin."],
+      "Katılım finansmanında toplam bedel baştan bellidir. Farklı bankaların tekliflerini Hesapla bölümündeki araçlarla ve Banka Finansman Karşılaştırma ekranıyla karşılaştırabilirsin."],
       ["Taksit yerine toplam maliyete bak","Aynı tutar ve vadede karşılaştır","Masraf ve sigortayı unutma"],
       ["Düşük taksit pahalı olabilir","Mehmet aynı 600.000 TL maliyetli mal için iki teklif aldı. A: 36 ay, 19.000 TL/ay, dosya masrafı 6.000 TL. B: 48 ay, 16.500 TL/ay, dosya masrafı 3.000 TL.","A toplam = 19.000 × 36 + 6.000 = 690.000 TL. B toplam = 16.500 × 48 + 3.000 = 795.000 TL. B’nin taksiti 2.500 TL düşük ama toplamda 105.000 TL pahalı.","Karşılaştırma ölçütü toplam geri ödemedir (masraflar dahil). Aylık taksit düşük diye seçilen teklif daha pahalı olabilir."]),
     EGD("o13","Kredi kartı kullanımı",4,[
@@ -8662,6 +8662,7 @@ const EN_SOZLUK: Record<string, string> = {
   "Takip planlandı ·": "Follow-up scheduled ·",
   "Takip ve görüşmelerin": "Your follow-ups and conversations",
   "Taksit Karşılaştırma (Bankalar)": "Installment Comparison (Banks)",
+  "Banka Finansman Karşılaştırma": "Bank Financing Comparison",
   "Tarih *": "Date *",
   "Tarih:": "Date:",
   "Tebrikler, geçtin": "Congratulations, you passed",
@@ -12279,6 +12280,7 @@ const AR_SOZLUK: Record<string, string> = {
   "Takip planlandı ·": "جُدولت المتابعة ·",
   "Takip ve görüşmelerin": "متابعاتك ومحادثاتك",
   "Taksit Karşılaştırma (Bankalar)": "مقارنة الأقساط (البنوك)",
+  "Banka Finansman Karşılaştırma": "مقارنة تمويل البنوك",
   "Tarih *": "التاريخ *",
   "Tarih:": "التاريخ:",
   "Tebrikler, geçtin": "تهانينا، لقد اجتزت",
@@ -28417,7 +28419,7 @@ const ANASAYFA_HERO_SAYFALAR: { renk: string; eyebrow: string; baslik: string; s
     baslik: "Nisabın üzerinde misin?",
     sub: "Güncel altın fiyatıyla, Diyanet ölçütünde hesapla",
     cta: "Hesapla", hedef: "zekat", cizim: "zekat" },
-  { renk: "#4A8BC7", eyebrow: "Taksit Karşılaştırma",
+  { renk: "#4A8BC7", eyebrow: "Banka Finansman Karşılaştırma",
     baslik: "Hangi banka daha uygun?",
     sub: "7 katılım bankasının taksitini yan yana karşılaştır",
     cta: "Karşılaştır", hedef: "taksitKarsilastirma", cizim: "banka" },
@@ -36520,7 +36522,7 @@ const MENU = {
   tlYpKarari:{title:"TL mi, Döviz mi Borçlanmalıyım?",back:"hesaplaMenu"},
   kiraSertifikasi:{title:"Kira Sertifikası İhraçları",back:"araclarMenu"},
   kamuHaznedarligi:{title:"Kamu Haznedarlığı Getiri İzleme",back:"araclarMenu"},
-  taksitKarsilastirma:{title:"Taksit Karşılaştırma",back:"hesaplaMenu"},
+  taksitKarsilastirma:{title:"Banka Finansman Karşılaştırma",back:"hesaplaMenu"},
   portfoyum:{title:"Portföyüm",back:"araclarMenu"},
   fonDetay:{title:"Fon Detay",back:"portfoyum"},
   hazineDoviz:{title:"Döviz Dönüştürücü",back:"hesaplaMenu"},
@@ -36835,7 +36837,7 @@ const HESAPLA_ARAC_LISTESI = [
   {key:"kasaOranAnalizi",    icon:"🔄", label:"Basitten Bileşiğe Oran Hesaplama",             kat:"katilim"},
   {key:"verimlilikAnalizi",  icon:"📊", label:"Verimlilik Analizi",                   kat:"katilim"},
   // Bireysel Finansman
-  {key:"taksitKarsilastirma", icon:"⚖️", label:"Taksit Karşılaştırma (Bankalar)", kat:"bireysel"},
+  {key:"taksitKarsilastirma", icon:"⚖️", label:"Banka Finansman Karşılaştırma", kat:"bireysel"},
   {key:"konutFinansman",     icon:"🏠", label:"Konut Finansmanı Hesaplama",           kat:"bireysel"},
   {key:"erkenKapamaKarari",  icon:"⚡", label:"Krediyi Erken Kapatmalı mıyım?",       kat:"bireysel"},
   {key:"tasitFinansman",     icon:"🚗", label:"Taşıt Finansmanı Hesaplama",           kat:"bireysel"},
@@ -47238,7 +47240,7 @@ function App(){
             <img src={TEMA==="koyu"?KATILIM_LOGO_KOYU_B64:KATILIM_LOGO_B64} alt="" style={{height:38,width:"auto",display:"block",flexShrink:0}}/>
             <div style={{display:"flex",flexDirection:"column",minWidth:0}}>
               <span style={{fontSize:18,fontWeight:700,letterSpacing:"-0.01em",color:acik?"#16222E":"#EAF1FA"}}>Katılım <span style={{background:"linear-gradient(90deg,#1B9E7A,#2CCB9A)",WebkitBackgroundClip:"text",backgroundClip:"text",color:"transparent"}}>Plus</span></span>
-              <span style={{fontSize:11,fontWeight:600,color:soluk,marginTop:1,whiteSpace:"nowrap"}}>{CV("Katılım Finansının Akıllı Asistanı")}</span>
+              <span style={{fontSize:11,fontWeight:600,color:soluk,marginTop:1,lineHeight:"13px",whiteSpace:"normal",overflowWrap:"anywhere"}}>{CV("Katılım Finansının Akıllı Asistanı")}</span>
             </div>
           </div>
           {/* Kaydırılan orta bölüm: ana gezinme + gruplar */}
