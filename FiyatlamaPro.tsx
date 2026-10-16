@@ -96,12 +96,18 @@ async function olayGonder(ad: string, parametreler?: Record<string, any>){
 // büyük render olup üst kısmının (kapatma butonu) görünüm alanının dışına
 // taşmasına neden oluyordu. Çözüm: her tam ekran modalin kök elemanına, ata
 // zoom oranının tersini uygulayarak modali gerçek ekran boyutuna sabitliyoruz.
+// 2026-10-16 (kullanıcı isteği: laptopta sıkışık, büyük monitörde normal; "ekran genişliğine göre otomatik ayarlansın"):
+// Önceki sabit eşikler (>=1680 → 1.22, >=1360 → 1.12) laptop genişliğinde içeriği BÜYÜTÜP sıkıştırıyordu.
+// Artık ölçek genişliğe göre sürekli: ~1600px etkin içerik genişliği hedeflenir; alt sınır 0.82, üst sınır 1.22.
+function masaustuIcerikOlcek(w:number):number{
+  if(IS_NATIVE||w<1024) return 1;
+  return Math.min(1.22, Math.max(0.82, Math.round(w/1600*100)/100));
+}
 function ekranZoomTersi(){
   try{
     if(IS_NATIVE) return 1;
     const w=window.innerWidth;
-    const genis=w>=1024;
-    const olcek = w>=1680?1.22:(genis&&w>=1360?1.12:1);
+    const olcek = masaustuIcerikOlcek(w);
     return olcek!==1 ? 1/olcek : 1;
   }catch(e){ return 1; }
 }
@@ -14116,30 +14122,25 @@ function KarPayiKarsilastirmaGenis({ nav }: { nav: (sc: string) => void }) {
               const ao = s.en!.oran / 100, V = parseInt(s.vade);
               const pmt = T>0 ? (ao === 0 ? T / V : T * ao / (1 - Math.pow(1 + ao, -V))) : null;
               return (
-                <div key={s.etiket} style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",borderRadius:12,background:(TEMA==="acik"?"#F3F6FA":"#16222E"),border:`1px solid ${WA(0.07)}`}}>
-                  <div style={{minWidth:0,flexShrink:0}}>
-                    <div style={{fontSize:11,fontWeight:700,color:WA(0.6),textTransform:"uppercase",letterSpacing:0.3,marginBottom:4,whiteSpace:"nowrap"}}>{CV(s.etiket)} · {s.vade}</div>
-                    <div style={{fontSize:16,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"inherit",fontVariantNumeric:"tabular-nums"}}>{pmt!=null?fmtTL(pmt):"—"}</div>
-                    <div style={{fontSize:10,color:WA(0.6),marginTop:1}}>{TR("aylık taksit")}</div>
-                  </div>
-                  {/* ⚠️ 2026-09-21 (kullanıcı isteği: "ortadaki alana banka adı
-                      ve aylık oranını da gösterelim"): tutar/toplam bilgisi
-                      hangi bankanın/oranın karşılığı olduğunu göstermiyordu —
-                      yukarıdaki tabloda zaten hesaplanmış s.en!.ad/oran aynen
-                      kullanılıyor, ayrı bir veri kaynağına gerek yok. */}
-                  <div style={{flex:"1 1 auto",minWidth:0,textAlign:"center"}}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:5,marginBottom:3}}>
-                      <BankaLogoRozet ad={s.en!.ad} boyut={16}/>
-                      <span style={{fontSize:12,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.en!.ad}</span>
+                <div key={s.etiket} style={{padding:"12px 14px",borderRadius:12,background:(TEMA==="acik"?"#F3F6FA":"#16222E"),border:`1px solid ${WA(0.07)}`}}>
+                  {/* 2026-10-16 (kullanıcı raporu: laptopta dar sütunda banka adı/oran sıkışıp üst üste biniyordu): iki satırlı düzen — üstte taksit + toplamlar, altta banka ve oran; her genişlikte taşmaz. */}
+                  <div style={{display:"flex",justifyContent:"space-between",gap:10}}>
+                    <div style={{minWidth:0}}>
+                      <div style={{fontSize:11,fontWeight:700,color:WA(0.6),textTransform:"uppercase",letterSpacing:0.3,marginBottom:4,whiteSpace:"nowrap"}}>{CV(s.etiket)} · {s.vade}</div>
+                      <div style={{fontSize:16,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"inherit",fontVariantNumeric:"tabular-nums"}}>{pmt!=null?fmtTL(pmt):"—"}</div>
+                      <div style={{fontSize:10,color:WA(0.6),marginTop:1}}>{TR("aylık taksit")}</div>
                     </div>
-                    <div style={{fontSize:10,color:WA(0.6),marginBottom:2}}>{CV("Aylık Oran")}</div>
-                    <div style={{fontSize:13,fontWeight:700,color:C.green,fontFamily:"inherit",fontVariantNumeric:"tabular-nums"}}>%{s.en!.oran.toLocaleString("tr-TR",{minimumFractionDigits:2})}</div>
+                    <div style={{textAlign:"right",flexShrink:0}}>
+                      <div style={{fontSize:10,color:WA(0.6)}}>{TR("Toplam Geri Ödeme")}</div>
+                      <div style={{fontSize:13,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"inherit",fontVariantNumeric:"tabular-nums"}}>{pmt!=null?fmtTL(pmt*V):"—"}</div>
+                      <div style={{fontSize:10,color:WA(0.6),marginTop:4}}>{TR("Toplam Kâr Payı")}</div>
+                      <div style={{fontSize:13,fontWeight:700,color:C.green,fontFamily:"inherit",fontVariantNumeric:"tabular-nums"}}>{pmt!=null?fmtTL(pmt*V-T):"—"}</div>
+                    </div>
                   </div>
-                  <div style={{textAlign:"right",flexShrink:0}}>
-                    <div style={{fontSize:10,color:WA(0.6)}}>{TR("Toplam Geri Ödeme")}</div>
-                    <div style={{fontSize:13,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),fontFamily:"inherit",fontVariantNumeric:"tabular-nums"}}>{pmt!=null?fmtTL(pmt*V):"—"}</div>
-                    <div style={{fontSize:10,color:WA(0.6),marginTop:4}}>{TR("Toplam Kâr Payı")}</div>
-                    <div style={{fontSize:13,fontWeight:700,color:C.green,fontFamily:"inherit",fontVariantNumeric:"tabular-nums"}}>{pmt!=null?fmtTL(pmt*V-T):"—"}</div>
+                  <div style={{display:"flex",alignItems:"center",gap:6,marginTop:10,paddingTop:8,borderTop:`1px solid ${WA(0.08)}`,minWidth:0}}>
+                    <BankaLogoRozet ad={s.en!.ad} boyut={16}/>
+                    <span style={{flex:"1 1 auto",minWidth:0,fontSize:12,fontWeight:700,color:(TEMA==="acik"?C.label:"#fff"),whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.en!.ad}</span>
+                    <span style={{flexShrink:0,fontSize:11,color:WA(0.6)}}>{CV("Aylık Oran")} <b style={{fontSize:13,color:C.green,fontVariantNumeric:"tabular-nums"}}>%{s.en!.oran.toLocaleString("tr-TR",{minimumFractionDigits:2})}</b></span>
                   </div>
                 </div>
               );
@@ -45882,7 +45883,8 @@ function App(){
   // kolonu olarak sunuluyor. Alt bar masaüstünde gizlenir (yan menü onun
   // yerine geçer). Native uygulama ve mobil web hiç etkilenmez.
   const SIDEBAR_W=genisEkran?264:0;
-  const icerikOlcek=!IS_NATIVE&&ekranW>=1680?1.22:(genisEkran&&ekranW>=1360?1.12:1);
+  const icerikOlcek=masaustuIcerikOlcek(ekranW);
+  const anaKolonDar=genisEkran&&(ekranW/icerikOlcek)<1450;
   // İçerik genişliği sınırı MASAUSTU_TAM_GENISLIK_EKRANLARI DIŞINDAKİ ekranlara
   // uygulanır (Ana Sayfa/Piyasa/Hesapla menüleri + 4 geniş ekran tam genişlikte).
   const icerikSinirli=genisEkran && !MASAUSTU_TAM_GENISLIK_EKRANLARI.has(screen);
@@ -47808,7 +47810,7 @@ function App(){
                   ...(TEMA==="acik"
                     ? {background:"#E9EEF4",border:"1px solid rgba(22,34,46,0.08)"}
                     : {background:"#16222E",border:`1px solid ${WA(0.07)}`}),
-                  ...(genisEkran ? {display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))"} : {}),
+                  ...(genisEkran ? {display:"grid",gridTemplateColumns:`repeat(${anaKolonDar?2:3},minmax(0,1fr))`} : {}),
                 }}>
                   {[
                     {ad:"TCMB Politika Faizi", grup:"Referans oranlar", deger:ppkOranYazi(evdsMakro?.["PPK_FAIZ_SERI"]), tarih:`${ppkSonEtiket(evdsMakro?.["PPK_FAIZ_SERI"])} · PPK`, ikon:Landmark, renk:C.blue, seri:ppkKararlar(evdsMakro?.["PPK_FAIZ_SERI"]), seriAd:"TCMB Politika Faizi"},
@@ -47876,8 +47878,8 @@ function App(){
                            // 3 sütunlu ızgarada hücrenin satır/sütun konumu:
                            // ilk satırda üst çizgi, ilk sütunda sol çizgi YOK —
                            // kutunun kendi kenarlığıyla çakışmasın.
-                           borderTop:i<3?"none":`1px solid ${WA(0.07)}`,
-                           borderLeft:(i%3)===0?"none":`1px solid ${WA(0.07)}`}
+                           borderTop:i<(anaKolonDar?2:3)?"none":`1px solid ${WA(0.07)}`,
+                           borderLeft:(i%(anaKolonDar?2:3))===0?"none":`1px solid ${WA(0.07)}`}
                         : {borderTop:(i===0||grupBasi)?"none":`1px solid ${WA(0.07)}`})}}>
                       <div style={{width:32,height:32,borderRadius:9,background:`${g.renk}26`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                         <IkonBileseni size={16} color={g.renk} strokeWidth={2}/>
