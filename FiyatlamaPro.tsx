@@ -39455,7 +39455,7 @@ function OnboardingModal({ onClose, genisEkran }: { onClose: () => void; genisEk
         .kp-ob-dot-active{animation:kpObDotGrow .3s ease both;}
       `}</style>
 
-      <div style={{
+      <div data-nosnippet="true" style={{
         width: genisEkran ? 440 : "100%",
         height: genisEkran ? 600 : "100%",
         maxHeight: genisEkran ? "88vh" : "100%",
