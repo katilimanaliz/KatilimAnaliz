@@ -57,6 +57,12 @@ B = {
     "sukuk": ("Sukuk (kira sertifikası) nedir?", "sukuk-kira-sertifikasi-nedir"),
     "kredi-verir": ("Katılım bankası kredi verir mi?", "katilim-bankasi-kredi-verir-mi"),
     "guvence": ("Katılım hesabında güvence: TMSF limiti", "katilim-hesabi-guvence-tmsf"),
+    "erken": ("Krediyi erken kapatmak mantıklı mı?", "krediyi-erken-kapatmak-mantikli-mi"),
+    "kur-gosterge": ("TCMB gösterge kuru nedir, ne zaman açıklanır?", "tcmb-gosterge-kuru-nedir"),
+    "zk": ("Zorunlu karşılık nedir?", "zorunlu-karsilik-nedir-bankalari-nasil-etkiler"),
+    "teklif": ("Finansman teklifleri nasıl karşılaştırılır?", "banka-finansman-teklifleri-nasil-karsilastirilir"),
+    "khz": ("Kamu haznedarlığı getiri oranı nedir?", "kamu-haznedarligi-getiri-orani-nedir"),
+    "vade-farki": ("Vade farkı nedir? Peşin mi vadeli mi?", "vade-farki-nedir-pesin-mi-vadeli-mi"),
     "leasing": ("Finansal kiralama (leasing) nedir?", "finansal-kiralama-leasing-nedir"),
 }
 
@@ -91,7 +97,7 @@ SAYFALAR = [
             ("Alış ve satış kuru arasındaki fark nedir?", "Alış kuru bankanın sizden döviz alırken, satış kuru size döviz satarken kullandığı kurdur. İkisi arasındaki farka makas denir."),
             ("Bu kurlar bankaların işlem kuruyla aynı mı?", "Hayır. TCMB gösterge kurları referanstır; bankalar işlemde kendi kurlarını uygulayabilir."),
         ],
-        blog=["tlref", "enflasyon"],
+        blog=["kur-gosterge", "tlref", "enflasyon"],
     ),
     dict(
         slug="krediyi-erken-kapatmali-miyim", yol="/erken-kapama-karari", ad="Krediyi Erken Kapatmalı mıyım?", kisa="Erken kapama ve refinansman kararı",
@@ -117,7 +123,7 @@ SAYFALAR = [
             ("Refinansman her zaman avantajlı mı?", "Hayır. Yeni finansmanın oranı, vadesi ve masrafları eski finansmanın kalan ödemelerinin bugünkü değerinden düşükse avantajlıdır. Vade uzadıkça taksit düşer ama toplam ödeme artabilir."),
             ("Elimdeki parayı kapatmaya mı harcamalıyım?", "Kapama ücretini ve o parayı katılma hesabında değerlendirseydiniz kazanacağınız net getiriyi karşılaştırmak gerekir. Hesaplayıcı vade sonundaki net varlığı iki yol için de gösterir."),
         ],
-        blog=["komisyon", "getiri"],
+        blog=["erken", "teklif", "komisyon"],
     ),
     dict(
         slug="banka-finansman-karsilastirma", yol="/taksit-karsilastirma", ad="Banka Finansman Karşılaştırma", kisa="Katılım bankalarının taksitleri yan yana",
@@ -137,7 +143,7 @@ SAYFALAR = [
             ("Hangi katılım bankasının finansman oranı daha düşük?", "Oranlar sık değişir. Güncel sıralamayı kâr payı oranları sayfamızdan ve uygulamadaki karşılaştırma ekranından görebilirsiniz."),
             ("Taksit karşılaştırırken sadece oran yeterli mi?", "Hayır. Tahsis ücreti, sigorta ve ekspertiz gibi masraflar da toplam maliyeti etkiler. Teklifleri toplam geri ödeme üzerinden kıyaslamak daha doğrudur."),
         ],
-        blog=["konut", "tasit"], ek_link=[("/kar-payi-oranlari/", "Güncel kâr payı oranları tablosu")],
+        blog=["teklif", "zk", "konut", "tasit"], ek_link=[("/kar-payi-oranlari/", "Güncel kâr payı oranları tablosu")],
     ),
     dict(
         slug="katilma-hesabi-getiri-hesaplama", yol="/katilim-hesabi-getiri", ad="Katılma Hesabı Getiri Hesaplama", kisa="Vade sonu kâr payı ve net getiri",
@@ -167,10 +173,10 @@ SAYFALAR = [
         notu="Getiri oranları gösterge niteliğindedir; kesin oran için ilgili kurumun duyurusuna bakınız. Veriler genellikle haftalık güncellenir.",
         sss=[
             ("Kamu haznedarlığı getirisi nasıl belirlenir?", "Vade dilimine göre, TCMB'nin AOMF oranlarının belirli bir yüzdesi (katsayı) alınır. Örneğin gecelik için 1 aylık AOMF'nin %55'i uygulanır."),
-            ("AOMF nedir?", "Ağırlıklı Ortalama Faiz Oranı; TCMB'nin bankalardan topladığı verilerle hesapladığı ortalama mevduat faizidir."),
+            ("AOMF nedir?", "Mevduat ağırlıklı ortalama faizi; TCMB'nin haftalık yayımladığı, mevduat faizlerinin ağırlıklı ortalamasını gösteren orandır."),
             ("Oranlar ne sıklıkla güncellenir?", "Genellikle haftada bir güncellenir; ekranda son güncelleme tarihi gösterilir."),
         ],
-        blog=["tlref", "likidite"],
+        blog=["khz", "tlref", "likidite"],
     ),
     dict(
         slug="konut-finansmani-hesaplama", yol="/konut-finansmani", ad="Konut Finansmanı Hesaplama", kisa="Aylık taksit ve toplam ödeme",
@@ -265,7 +271,7 @@ SAYFALAR = [
             ("Vade farkı nedir?", "Vadeli satışta peşin fiyatın üzerine eklenen tutardır; fiilen bir finansman maliyetidir."),
             ("Peşin ödemek her zaman mantıklı mı?", "Vade farkının aylık oranı, parayı değerlendirebileceğiniz getiriden yüksekse peşin ödemek avantajlıdır."),
         ],
-        blog=["murabaha", "getiri"],
+        blog=["vade-farki", "murabaha", "getiri"],
     ),
     dict(
         slug="zekat-hesaplayici", yol="/zekat-hesaplayici", ad="Zekât Hesaplayıcı", kisa="Güncel altın fiyatıyla nisap ve zekât",
@@ -464,7 +470,7 @@ def index_guncelle():
     yol = os.path.join(KOK, "index.html")
     t = open(yol, encoding="utf-8").read()
     # JSON-LD (head sonuna)
-    t = re.sub(re.escape(LD_BAS) + r".*?" + re.escape(LD_SON) + r"\n?", "", t, flags=re.S)
+    t = re.sub(r"[ \t]*" + re.escape(LD_BAS) + r".*?" + re.escape(LD_SON) + r"\n?", "", t, flags=re.S)
     t = t.replace("    <style>\n      html, body", "    " + ana_sayfa_ld().replace("\n", "\n    ") + "\n    <style>\n      html, body", 1)
     assert LD_BAS in t, "index.html: JSON-LD yerlestirilemedi (beklenen <style> baslangici yok)"
     # Gövde içeriği (#root içinde; React bağlanınca yerini alır)
