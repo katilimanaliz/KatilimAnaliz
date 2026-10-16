@@ -14327,13 +14327,13 @@ function KarPayiOranlari({nav,kimlik}:{nav:any;kimlik:ReturnType<typeof useKpKim
             <table style={{borderCollapse:"collapse",width:"max-content",minWidth:"100%"}}>
               <thead>
                 <tr>
-                  <th style={{position:"sticky",left:0,zIndex:2,background:waSolid(0.05),textAlign:"left",fontSize:9,fontWeight:700,letterSpacing:0.3,color:C.sub,padding:"10px 10px",borderBottom:`1px solid ${C.border}`,boxShadow:"2px 0 4px rgba(0,0,0,0.15)"}}>{CV("Banka")}</th>
+                  <th style={{position:"sticky",left:0,zIndex:2,background:waSolid(0.05),textAlign:"left",fontSize:genisEkran?14:11,fontWeight:700,letterSpacing:0.3,color:C.sub,padding:genisEkran?"14px 14px":"10px 10px",borderBottom:`1px solid ${C.border}`,boxShadow:"2px 0 4px rgba(0,0,0,0.15)"}}>{CV("Banka")}</th>
                   {FIN_KOLONLAR.map(k=>{
                     const {grup,vade}=kolonBaslik(k);
                     const aktif=siralamaKolon===k;
                     return(
-                      <th key={k} onClick={()=>kolonTikla(k)} style={{textAlign:"right",fontSize:9,fontWeight:700,letterSpacing:0.3,color:aktif?C.blue:C.sub,padding:"10px 10px",borderBottom:`1px solid ${C.border}`,background:WA(0.05),cursor:"pointer",whiteSpace:"nowrap"}}>
-                        <span style={{display:"block",fontSize:9,opacity:0.75,marginBottom:1}}>{grup}</span>
+                      <th key={k} onClick={()=>kolonTikla(k)} style={{textAlign:"right",fontSize:genisEkran?15:12,fontWeight:700,letterSpacing:0.3,color:aktif?C.blue:C.sub,padding:genisEkran?"14px 16px":"10px 10px",borderBottom:`1px solid ${C.border}`,background:WA(0.05),cursor:"pointer",whiteSpace:"nowrap"}}>
+                        <span style={{display:"block",fontSize:genisEkran?13:10.5,opacity:0.8,marginBottom:2}}>{grup}</span>
                         {vade}{aktif?(siralamaYon==="asc"?" ▲":" ▼"):""}
                       </th>
                     );
@@ -30745,7 +30745,7 @@ function KamuHaznedarligi(){
                   <span style={{fontSize:13,fontWeight:700,color:baslikRenk,lineHeight:1.35}}>{gunSayi} günlük vade için<br/>tahmini getiri oranı</span>
                   <span style={{fontSize:26,fontWeight:800,color:"#34D399",fontVariantNumeric:"tabular-nums"}}>%{khzGosterim(eslesen.getiri)}</span>
                 </div>
-                <p style={{margin:"6px 0 0",fontSize:11,color:WA(0.6),lineHeight:1.45}}>{gunSayi} gün, <b>{eslesen.vade}</b> vade dilimine girer. Hesap: {KHZ_REF_AD[eslesen.ref]} AOMF {khzSayi(eslesen.tabanOran)} × %{eslesen.oran} = {(Math.round(eslesen.tabanOran*eslesen.oran*100)/10000).toLocaleString("tr-TR",{minimumFractionDigits:4,maximumFractionDigits:4})}</p>
+                <p style={{margin:"6px 0 0",fontSize:11,color:WA(0.6),lineHeight:1.45}}>{gunSayi} gün, <b>{eslesen.vade}</b> vade dilimine girer. Hesap: {KHZ_REF_AD[eslesen.ref]} AOMF {khzSayi(eslesen.tabanOran)} × %{eslesen.oran} = {(Math.round(eslesen.tabanOran*eslesen.oran*100)/10000).toLocaleString("tr-TR",{minimumFractionDigits:4,maximumFractionDigits:4})}{khzGosterim(eslesen.getiri)!==(Math.round(eslesen.tabanOran*eslesen.oran*100)/10000).toLocaleString("tr-TR",{minimumFractionDigits:4,maximumFractionDigits:4})&&<> → TCMB gösterimi %{khzGosterim(eslesen.getiri)} <span style={{opacity:0.8}}>(3. ondalık 5 veya üstüyse 2 ondalığa yuvarlanır)</span></>}</p>
               </>
             ):(
               <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:10}}>
