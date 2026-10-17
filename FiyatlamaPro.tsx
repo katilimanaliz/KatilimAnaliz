@@ -3947,7 +3947,7 @@ function SoruOdasi({ kimlik, nav }: { kimlik: any; nav: (e: string) => void }) {
   const uid: string | null = kimlik?.kullanici?.uid || null;
   const [veri, setVeri] = useState<SoVeri>(() => soVeriOku());
   const veriRef = useRef(veri); veriRef.current = veri;
-  const [gor, setGor] = useState<"ayar" | "oyun" | "sonuc" | "sira">("ayar");
+  const [gor, setGor] = useState<"ayar" | "oyun" | "sonuc" | "sira" | "oda">("ayar");
   const [oyun, setOyun] = useState<any>(null);
   const [sonuc, setSonuc] = useState<any>(null);
   const [siraKonu, setSiraKonu] = useState<string>(() => soVeriOku().ayar.konu);
@@ -4060,6 +4060,14 @@ function SoruOdasi({ kimlik, nav }: { kimlik: any; nav: (e: string) => void }) {
     </div>
   );
 
+  if (gor === "oda") {
+    const odaSec = (konu: string, n: number) => {
+      const { sorular, sifirla } = soSec(konu, n, veriRef.current.gor);
+      if (sifirla.length) { const g = { ...veriRef.current.gor }; sifirla.forEach(id => { g[id] = []; }); yaz({ ...veriRef.current, gor: g }); }
+      return sorular;
+    };
+    return <SoOda uid={uid} ad0={takmaAdGiris} nav={nav} onKapat={() => setGor("ayar")} onGoruldu={goruldu} onAd={ad => { setTakmaAdGiris(ad); yaz({ ...veriRef.current, takmaAd: veriRef.current.listede ? veriRef.current.takmaAd : ad }); }} sec={odaSec} />;
+  }
   if (gor === "oyun" && oyun) {
     return <SoOyun oyun={oyun} onBitti={bitti} onGoruldu={goruldu} onCik={() => { setGor("ayar"); setOyun(null); }} />;
   }
@@ -4137,7 +4145,12 @@ function SoruOdasi({ kimlik, nav }: { kimlik: any; nav: (e: string) => void }) {
         {grid("genel")}
         {etiket("FİNANS VE EĞİTİM")}
         {grid("finans")}
-        <p style={{ margin: "4px 2px 0", textAlign: "center", fontSize: 12, color: C.sub2 }}>{CV("Arkadaşlarla oda kurup yarışma: yakında")}</p>
+        <button className="eg-btn" onClick={() => { setHata(""); setGor("oda"); }}
+          style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, textAlign: "left", background: "linear-gradient(135deg,#0A1330,#1E2F6E)", border: "none", borderRadius: 16, padding: "13px 14px", marginTop: 4, cursor: "pointer", fontFamily: "inherit", color: "#fff", boxShadow: "0 6px 18px rgba(10,19,48,0.3)" }}>
+          <span style={{ fontSize: 30 }}>🎤</span>
+          <span style={{ flex: 1, minWidth: 0 }}><b style={{ display: "block", fontSize: 15 }}>{CV("Arkadaşlarla yarış")}</b><span style={{ fontSize: 12, opacity: 0.8 }}>{CV("Oda kur, kodu paylaş, canlı yarışın")}</span></span>
+          <span style={{ fontWeight: 800, color: "#F5B93A" }}>›</span>
+        </button>
       </div>
     );
   }
@@ -4282,6 +4295,557 @@ function SoruOdasi({ kimlik, nav }: { kimlik: any; nav: (e: string) => void }) {
   );
 }
 
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+// SORU ODASI — ARKADAŞLARLA YARIŞ (2026-10-17, 2. sürüm) — Firebase Realtime Database
+// • Oda: odalar/{4 haneli kod}. Oda sahibi (sahip) konuyu/soruları seçer ve akışı yönetir (host-authoritative);
+//   sahip ayrılırsa/bağlantısı kopsa kalan oyunculardan biri sahipliği devralır (RTDB kuralları buna izin verir).
+// • Herkes aynı soruyu aynı anda görür; süre sunucu saatine (serverTimeOffset) göre ortak hesaplanır.
+// • Puan: 500 + kalan süreye göre 500'e kadar (tek oyuncu moduyla aynı). Oda puanları sıralamaya yazılmaz.
+// • Yalnızca giriş yapmış kullanıcılar katılabilir; odada takma ad görünür (gerçek ad/e-posta yazılmaz).
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+const SO_RTDB_URL = "https://katilim-plus-default-rtdb.europe-west1.firebasedatabase.app";
+const SO_ODA_MAKS = 8;
+async function soDb(): Promise<{ db: any; m: any }> {
+  const app = await kpFirebaseWebApp();
+  const m: any = await import("firebase/database");
+  return { db: m.getDatabase(app, SO_RTDB_URL), m };
+}
+const SO_RENKLER = ["#2F6FEB", "#18A058", "#E8A317", "#8B5CF6"];
+const SO_AVATAR = ["#3B82F6", "#10B981", "#F59E0B", "#8B5CF6", "#EF4444", "#06B6D4", "#EC4899", "#84CC16"];
+function soAvatarRenk(uid: string): string { let x = 0; for (let i = 0; i < uid.length; i++) x = (x * 31 + uid.charCodeAt(i)) >>> 0; return SO_AVATAR[x % SO_AVATAR.length]; }
+
+function SoOda({ uid, ad0, nav, onKapat, onGoruldu, onAd, sec }: { uid: string | null; ad0: string; nav: (e: string) => void; onKapat: () => void; onGoruldu: (q: SoSoru) => void; onAd: (ad: string) => void; sec: (konu: string, n: number) => SoSoru[] }) {
+  const [kod, setKod] = useState("");
+  const [oda, setOda] = useState<any>(null);
+  const [hata, setHata] = useState("");
+  const [yuk, setYuk] = useState(false);
+  const [ad, setAd] = useState(ad0);
+  const [kodGiris, setKodGiris] = useState("");
+  const [kopya, setKopya] = useState(false);
+  const [cikisOnay, setCikisOnay] = useState(false);
+  const [, setTik] = useState(0);
+  const [yerel, setYerel] = useState<Record<number, number>>({});
+  const kodRef = useRef(""); kodRef.current = kod;
+  const odaRef = useRef<any>(null);
+  const dbRef = useRef<{ db: any; m: any } | null>(null);
+  const offRef = useRef(0);
+  const yazildiRef = useRef<Record<number, number>>({});
+  const guardRef = useRef("");
+  const goruRef = useRef(-1);
+  const bagliRef = useRef(0);
+  const adRef = useRef(ad); adRef.current = ad;
+  const onGoruldiRef = useRef(onGoruldu); onGoruldiRef.current = onGoruldu;
+  const simdi = () => Date.now() + offRef.current;
+
+  // Odaya abone ol
+  useEffect(() => {
+    if (!kod) return;
+    let iptal = false;
+    let kapat: (() => void)[] = [];
+    (async () => {
+      try {
+        const D = await soDb();
+        if (iptal) return;
+        dbRef.current = D;
+        const { db, m } = D;
+        const u1 = m.onValue(m.ref(db, ".info/serverTimeOffset"), (s: any) => { offRef.current = Number(s.val()) || 0; });
+        const u2 = m.onValue(m.ref(db, "odalar/" + kod), (s: any) => {
+          if (kodRef.current !== kod) return;
+          const v = s.val();
+          odaRef.current = v;
+          setOda(v);
+          if (!v) { setHata("Oda kapandı."); setKod(""); return; }
+          if (v.durum === "bekle") { yazildiRef.current = {}; goruRef.current = -1; setYerel({}); }
+        });
+        const u3 = m.onValue(m.ref(db, ".info/connected"), (s: any) => {
+          if (s.val() !== true) return;
+          const b = m.ref(db, "odalar/" + kod + "/oyuncular/" + uid + "/bagli");
+          m.onDisconnect(b).set(false).catch(() => {});
+        });
+        kapat = [u1, u2, u3];
+      } catch (e) { console.error("Oda bağlantısı kurulamadı:", e); setHata("Odaya bağlanılamadı. Biraz sonra tekrar dene."); setKod(""); }
+    })();
+    return () => { iptal = true; kapat.forEach(f => { try { f(); } catch {} }); };
+  }, [kod]);
+
+  // Çalışan saat: ekran yenileme + süre dolunca otomatik cevapsız kayıt + sahip akışı / sahiplik devri
+  useEffect(() => {
+    if (!kod || !uid) return;
+    const t = setInterval(() => {
+      setTik(x => x + 1);
+      const v = odaRef.current; const D = dbRef.current;
+      if (!v || !D) return;
+      const { db, m } = D;
+      const now = simdi();
+      const oy = v.oyuncular || {};
+      const aktif = Object.keys(oy).filter(k => oy[k].bagli !== false).sort();
+      const sahipOy = oy[v.sahip];
+      if (v.sahip !== uid && (!sahipOy || sahipOy.bagli === false) && aktif[0] === uid && oy[uid]) {
+        m.set(m.ref(db, "odalar/" + kod + "/sahip"), uid).catch(() => {});
+        return;
+      }
+      const a = v.adim;
+      // bağlantı geri geldiyse "bağlı" işaretini yenile
+      if (oy[uid] && oy[uid].bagli === false && now - bagliRef.current > 3000) { bagliRef.current = now; m.set(m.ref(db, "odalar/" + kod + "/oyuncular/" + uid + "/bagli"), true).catch(() => {}); }
+      // süre dolduysa kendi cevabımı "boş" yaz
+      if (v.durum === "oyun" && a && a.faz === "soru" && oy[uid] && !yazildiRef.current[a.i]) {
+        const t0 = typeof a.t0 === "number" ? a.t0 : now;
+        if (now - t0 >= v.ayar.sure * 1000) cevapla(-1);
+      }
+      if (v.sahip !== uid) return;
+      if (v.durum !== "oyun" || !a) { guardRef.current = ""; return; }
+      const anahtar = a.i + ":" + a.faz;
+      if (guardRef.current === anahtar) return;
+      const t0 = typeof a.t0 === "number" ? a.t0 : now;
+      const gec = now - t0;
+      const sure = v.ayar.sure * 1000;
+      const yaz = (yol: string, deger: any) => { guardRef.current = anahtar; m.set(m.ref(db, "odalar/" + kod + "/" + yol), deger).catch(() => { guardRef.current = ""; }); };
+      if (a.faz === "hazir" && gec >= 3200) yaz("adim", { i: a.i, faz: "soru", t0: m.serverTimestamp() });
+      else if (a.faz === "soru") {
+        const tum = aktif.length > 0 && aktif.every(k => oy[k].cvp && oy[k].cvp[a.i]);
+        if (tum || gec >= sure + 2500) yaz("adim", { i: a.i, faz: "gosterim", t0: m.serverTimestamp() });
+      } else if (a.faz === "gosterim" && gec >= 4500) {
+        if (a.i + 1 >= (v.sorular || []).length) yaz("durum", "bitti");
+        else yaz("adim", { i: a.i + 1, faz: "soru", t0: m.serverTimestamp() });
+      }
+    }, 300);
+    return () => clearInterval(t);
+  }, [kod, uid]);
+
+  // Yeni oyunda kendi puanımı sıfırla
+  useEffect(() => {
+    if (!kod || !uid || !oda || oda.durum !== "bekle") return;
+    const ben = oda.oyuncular?.[uid];
+    if (ben && (ben.puan > 0 || ben.dogru > 0 || ben.cvp) && dbRef.current) {
+      const { db, m } = dbRef.current;
+      m.update(m.ref(db, "odalar/" + kod + "/oyuncular/" + uid), { puan: 0, dogru: 0, cvp: null }).catch(() => {});
+    }
+  }, [oda?.durum, kod]);
+
+  // Soru gösterilince "görüldü" olarak işaretle (tekrar gelmesin)
+  useEffect(() => {
+    const a = oda?.adim;
+    if (!oda || oda.durum !== "oyun" || !a || a.faz !== "soru" || goruRef.current === a.i) return;
+    goruRef.current = a.i;
+    const q = oda.sorular?.[a.i];
+    if (q) onGoruldiRef.current({ s: q.s, sec: q.sec, d: q.d, kid: q.kid });
+  }, [oda?.adim?.i, oda?.adim?.faz]);
+
+  const cevapla = async (i: number) => {
+    const v = odaRef.current; const D = dbRef.current;
+    if (!v || !D || !uid || !v.adim || v.adim.faz !== "soru") return;
+    const idx = v.adim.i;
+    if (yazildiRef.current[idx]) return;
+    yazildiRef.current[idx] = 1;
+    const sure = v.ayar.sure * 1000;
+    const t0 = typeof v.adim.t0 === "number" ? v.adim.t0 : simdi();
+    const kal = Math.max(0, sure - (simdi() - t0));
+    if (i >= 0 && kal <= 0) i = -1;
+    const q = v.sorular[idx];
+    const dogru = i === q.d;
+    const k = dogru ? 500 + Math.round(500 * kal / sure) : 0;
+    setYerel(y => ({ ...y, [idx]: i }));
+    const { db, m } = D;
+    try {
+      await m.update(m.ref(db, "odalar/" + kod + "/oyuncular/" + uid), { ["cvp/" + idx]: { s: i, k }, puan: m.increment(k), dogru: m.increment(dogru ? 1 : 0) });
+    } catch (e) { console.error("Cevap yazılamadı:", e); yazildiRef.current[idx] = 0; }
+  };
+
+  const gecerliAd = () => {
+    const a = ad.trim();
+    if (!egitimTakmaAdGecerliMi(a)) { setHata("Takma ad 2-20 karakter olmalı; harf, rakam, boşluk, nokta, tire veya alt çizgi kullanılabilir."); return null; }
+    return a;
+  };
+  const odaKur = async () => {
+    if (!uid) return;
+    const a = gecerliAd(); if (!a) return;
+    setHata(""); setYuk(true);
+    try {
+      const D = await soDb(); dbRef.current = D;
+      const { db, m } = D;
+      for (let d = 0; d < 8; d++) {
+        const k = String(1000 + Math.floor(Math.random() * 9000));
+        const s = await m.get(m.ref(db, "odalar/" + k));
+        if (s.exists()) continue;
+        try {
+          await m.set(m.ref(db, "odalar/" + k), { sahip: uid, durum: "bekle", olusturma: m.serverTimestamp(), ayar: { konu: "karisik", n: 10, sure: 15 }, oyuncular: { [uid]: { ad: a, puan: 0, dogru: 0, bagli: true } } });
+          onAd(a); setOda(null); odaRef.current = null; kodRef.current = k; setKod(k); setYuk(false); return;
+        } catch { /* kod çakıştı; yenisini dene */ }
+      }
+      setHata("Oda kurulamadı. Biraz sonra tekrar dene.");
+    } catch (e) { console.error("Oda kurulamadı:", e); setHata("Oda kurulamadı. Biraz sonra tekrar dene."); }
+    setYuk(false);
+  };
+  const katil = async () => {
+    if (!uid) return;
+    const a = gecerliAd(); if (!a) return;
+    const k = kodGiris.replace(/\D/g, "").slice(0, 4);
+    if (k.length !== 4) { setHata("4 haneli oda kodunu gir."); return; }
+    setHata(""); setYuk(true);
+    try {
+      const D = await soDb(); dbRef.current = D;
+      const { db, m } = D;
+      const s = await m.get(m.ref(db, "odalar/" + k));
+      const v = s.val();
+      if (!v) { setHata("Oda bulunamadı. Kodu kontrol et."); setYuk(false); return; }
+      const var_ = !!v.oyuncular?.[uid];
+      if (!var_ && v.durum !== "bekle") { setHata("Bu odada oyun başlamış."); setYuk(false); return; }
+      if (!var_ && Object.keys(v.oyuncular || {}).length >= SO_ODA_MAKS) { setHata("Oda dolu."); setYuk(false); return; }
+      if (!var_) await m.set(m.ref(db, "odalar/" + k + "/oyuncular/" + uid), { ad: a, puan: 0, dogru: 0, bagli: true });
+      onAd(a); setOda(null); odaRef.current = null; kodRef.current = k; setKod(k);
+    } catch (e) { console.error("Odaya katılınamadı:", e); setHata("Odaya katılınamadı. Biraz sonra tekrar dene."); }
+    setYuk(false);
+  };
+  const ayrilIc = async () => {
+    const k = kodRef.current; const v = odaRef.current; const D = dbRef.current;
+    if (!k || !D || !uid) return;
+    kodRef.current = ""; odaRef.current = null;
+    const { db, m } = D;
+    try {
+      await m.onDisconnect(m.ref(db, "odalar/" + k + "/oyuncular/" + uid + "/bagli")).cancel();
+      const n = v ? Object.keys(v.oyuncular || {}).length : 0;
+      if (v && n <= 1 && v.sahip === uid) await m.remove(m.ref(db, "odalar/" + k));
+      else await m.remove(m.ref(db, "odalar/" + k + "/oyuncular/" + uid));
+    } catch (e) { console.error("Odadan ayrılınamadı:", e); }
+  };
+  useEffect(() => () => { ayrilIc(); }, []);
+  const ayril = async () => { setCikisOnay(false); await ayrilIc(); setOda(null); setKod(""); setHata(""); };
+
+  const ayarYaz = (p: any) => {
+    const D = dbRef.current; const v = odaRef.current;
+    if (!D || !v || v.sahip !== uid) return;
+    D.m.update(D.m.ref(D.db, "odalar/" + kod + "/ayar"), p).catch(() => {});
+  };
+  const baslat = async () => {
+    const D = dbRef.current; const v = odaRef.current;
+    if (!D || !v || v.sahip !== uid) return;
+    const sorular = sec(v.ayar.konu, v.ayar.n);
+    if (!sorular.length) return;
+    const liste = sorular.map(q => { const o: any = { s: q.s, sec: q.sec, d: q.d, kid: q.kid }; if (q.ac) o.ac = q.ac.slice(0, 480); return o; });
+    try {
+      await D.m.update(D.m.ref(D.db, "odalar/" + kod), { sorular: liste, durum: "oyun", adim: { i: 0, faz: "hazir", t0: D.m.serverTimestamp() } });
+    } catch (e) { console.error("Oyun başlatılamadı:", e); setHata("Oyun başlatılamadı. Biraz sonra tekrar dene."); }
+  };
+  const tekrar = () => {
+    const D = dbRef.current; const v = odaRef.current;
+    if (!D || !v || v.sahip !== uid) return;
+    D.m.update(D.m.ref(D.db, "odalar/" + kod), { durum: "bekle", sorular: null, adim: null }).catch(() => {});
+  };
+  const paylas = async () => {
+    const metin = "Katılım Plus Soru Odası'na gel! Oda kodu: " + kod;
+    try { if ((navigator as any).share) { await (navigator as any).share({ text: metin }); return; } } catch { return; }
+    try { await navigator.clipboard.writeText(metin); setKopya(true); setTimeout(() => setKopya(false), 1800); } catch {}
+  };
+
+  // ── Görünüm yardımcıları (koyu "stüdyo" teması, uygulama temasından bağımsız)
+  const S = { yazi: "#FFFFFF", alt: "rgba(255,255,255,0.68)", cam: "rgba(255,255,255,0.08)", cizgi: "rgba(255,255,255,0.14)", altin: "#F5B93A", yesil: "#22C55E", kirmizi: "#EF4444" };
+  const sahne = (cocuk: any, anahtar: string) => (
+    <div style={{ padding: "0 12px 26px" }}>
+      <style>{EGITIM_CSS}</style>
+      <div key={anahtar} className="eg-fade" style={{ position: "relative", overflow: "hidden", background: "linear-gradient(180deg,#0A1330 0%,#14235A 55%,#1E2F6E 100%)", color: S.yazi, borderRadius: 22, padding: "16px 14px 18px", boxShadow: "0 10px 30px rgba(10,19,48,0.35)" }}>
+        <div style={{ position: "absolute", left: "50%", top: -90, width: 320, height: 220, marginLeft: -160, background: "radial-gradient(ellipse at center,rgba(245,185,58,0.28),rgba(245,185,58,0) 70%)", pointerEvents: "none" }} />
+        <div style={{ position: "relative" }}>{cocuk}</div>
+      </div>
+    </div>
+  );
+  const bas = (a: string) => (String(a || "?").trim().charAt(0) || "?").toLocaleUpperCase("tr-TR");
+  const avatar = (u: string, a: string, boy = 34) => (
+    <div style={{ width: boy, height: boy, borderRadius: "50%", flexShrink: 0, background: soAvatarRenk(u), color: "#fff", fontWeight: 800, fontSize: boy * 0.45, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 6px rgba(0,0,0,0.3)" }}>{bas(a)}</div>
+  );
+  const dugme = (t: string, tikla: () => void, tur: "altin" | "cam" | "kirmizi" = "altin", pasif = false) => (
+    <button className="eg-btn" disabled={pasif} onClick={tikla}
+      style={{ width: "100%", padding: "14px 14px", borderRadius: 14, border: tur === "cam" ? `1px solid ${S.cizgi}` : "none", background: tur === "altin" ? "linear-gradient(180deg,#FBD36B,#F5B93A)" : tur === "kirmizi" ? "rgba(239,68,68,0.18)" : S.cam, color: tur === "altin" ? "#1A1A2E" : tur === "kirmizi" ? "#FCA5A5" : S.yazi, fontSize: 15.5, fontWeight: 800, fontFamily: "inherit", cursor: pasif ? "default" : "pointer", opacity: pasif ? 0.5 : 1, marginBottom: 9, boxShadow: tur === "altin" ? "0 4px 14px rgba(245,185,58,0.35)" : "none" }}>{CV(t)}</button>
+  );
+  const ustSerit = (baslik: string, sag?: any) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+      <button className="eg-btn" onClick={() => (kod ? setCikisOnay(true) : onKapat())} style={{ background: S.cam, border: `1px solid ${S.cizgi}`, color: S.yazi, borderRadius: 999, padding: "6px 12px", fontSize: 13, fontWeight: 700, fontFamily: "inherit", cursor: "pointer" }}>‹ {CV(kod ? "Çık" : "Geri")}</button>
+      <span style={{ fontSize: 15, fontWeight: 800, letterSpacing: 0.3 }}>{CV(baslik)}</span>
+      <span style={{ marginLeft: "auto" }}>{sag}</span>
+    </div>
+  );
+  const cikisKutu = () => cikisOnay && (
+    <div className="eg-acil" style={{ background: "rgba(239,68,68,0.14)", border: "1px solid rgba(239,68,68,0.4)", borderRadius: 14, padding: 12, marginBottom: 12, fontSize: 13, lineHeight: 1.5 }}>
+      {CV("Odadan çıkmak istediğine emin misin?")}
+      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+        <button className="eg-btn" onClick={ayril} style={{ flex: 1, padding: 10, borderRadius: 10, border: "none", background: S.kirmizi, color: "#fff", fontWeight: 800, fontFamily: "inherit", cursor: "pointer" }}>{CV("Evet, çık")}</button>
+        <button className="eg-btn" onClick={() => setCikisOnay(false)} style={{ flex: 1, padding: 10, borderRadius: 10, border: `1px solid ${S.cizgi}`, background: "transparent", color: S.yazi, fontWeight: 700, fontFamily: "inherit", cursor: "pointer" }}>{CV("Devam et")}</button>
+      </div>
+    </div>
+  );
+  const hataKutu = () => hata ? <p style={{ margin: "0 0 10px", fontSize: 12.5, color: "#FCA5A5", lineHeight: 1.45 }}>{CV(hata)}</p> : null;
+  const girdi: any = { width: "100%", boxSizing: "border-box", padding: "12px 13px", borderRadius: 12, border: `1px solid ${S.cizgi}`, background: "rgba(255,255,255,0.1)", color: S.yazi, fontSize: 15, fontFamily: "inherit", marginBottom: 10, outline: "none" };
+
+  // ══ 1) Giriş: oda kur / katıl
+  if (!kod || !oda) {
+    if (kod && !oda) return sahne(<div style={{ textAlign: "center", padding: "50px 0", fontSize: 14, color: S.alt }}>{CV("Odaya bağlanılıyor…")}</div>, "bagl");
+    return sahne(
+      <div>
+        {ustSerit("Arkadaşlarla Yarış")}
+        <div style={{ textAlign: "center", margin: "6px 0 16px" }}>
+          <div style={{ fontSize: 44 }}>🎤</div>
+          <div style={{ fontSize: 21, fontWeight: 800, marginTop: 2 }}>{CV("Bilgi Yarışması")}</div>
+          <div style={{ fontSize: 13, color: S.alt, marginTop: 3, lineHeight: 1.5 }}>{CV("Oda kur, kodu paylaş; herkes aynı soruyu aynı anda cevaplasın. 2–8 kişi.")}</div>
+        </div>
+        {!uid ? (
+          <div>
+            <p style={{ margin: "0 0 12px", fontSize: 13.5, lineHeight: 1.5, color: S.alt, textAlign: "center" }}>{CV("Oda kurmak veya odaya katılmak için giriş yapmalısın.")}</p>
+            {dugme("Giriş yap", () => nav("hesapGiris"))}
+          </div>
+        ) : (
+          <div>
+            <p style={{ margin: "0 2px 6px", fontSize: 11, fontWeight: 700, letterSpacing: 0.6, color: S.alt }}>{CV("TAKMA ADIN")}</p>
+            <input value={ad} onChange={e => { setAd(e.target.value); setHata(""); }} placeholder={CV("Takma ad")} maxLength={20} style={girdi} />
+            {hataKutu()}
+            {dugme("＋ Yeni oda kur", odaKur, "altin", yuk)}
+            <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "6px 0 12px", fontSize: 12, color: S.alt }}>
+              <span style={{ flex: 1, height: 1, background: S.cizgi }} />{CV("veya kodla katıl")}<span style={{ flex: 1, height: 1, background: S.cizgi }} />
+            </div>
+            <input value={kodGiris} onChange={e => { setKodGiris(e.target.value.replace(/\D/g, "").slice(0, 4)); setHata(""); }} inputMode="numeric" placeholder="• • • •" maxLength={4}
+              style={{ ...girdi, textAlign: "center", fontSize: 30, fontWeight: 800, letterSpacing: 12, padding: "12px 0 12px 12px" }} />
+            {dugme("Odaya katıl", katil, "cam", yuk || kodGiris.length !== 4)}
+          </div>
+        )}
+      </div>, "giris");
+  }
+
+  // ── Oda verisi
+  const v = oda;
+  const oy: Record<string, any> = v.oyuncular || {};
+  const sirali = Object.keys(oy).map(k => ({ uid: k, ...oy[k] })).sort((a: any, b: any) => (b.puan || 0) - (a.puan || 0) || String(a.ad).localeCompare(String(b.ad), "tr"));
+  const sahipMi = v.sahip === uid;
+  const kn = v.ayar.konu === "karisik" ? null : SO_KONULAR.find(k => k.id === v.ayar.konu);
+  const konuMetni = (kn ? kn.ikon : "🔀") + " " + CV(kn ? kn.ad : "Karışık");
+  const a = v.adim;
+
+  // ══ 2) Bekleme salonu
+  if (v.durum === "bekle") {
+    const oyuncular = Object.keys(oy).map(k => ({ uid: k, ...oy[k] })).sort((x: any, y: any) => (x.uid === v.sahip ? -1 : y.uid === v.sahip ? 1 : String(x.ad).localeCompare(String(y.ad), "tr")));
+    const segB = (secenekler: { v: any; t: string }[], secili: any, sec2: (x: any) => void) => (
+      <div style={{ display: "flex", background: "rgba(255,255,255,0.1)", borderRadius: 10, padding: 2 }}>
+        {secenekler.map(o => (
+          <button key={String(o.v)} className="eg-btn" onClick={() => sec2(o.v)}
+            style={{ flex: 1, padding: "8px 4px", borderRadius: 8, border: "none", background: secili === o.v ? S.altin : "transparent", color: secili === o.v ? "#1A1A2E" : S.yazi, fontWeight: secili === o.v ? 800 : 600, fontSize: 13, fontFamily: "inherit", cursor: "pointer" }}>{o.t}</button>
+        ))}
+      </div>
+    );
+    return sahne(
+      <div>
+        {ustSerit("Bekleme Salonu")}
+        {cikisKutu()}
+        <div style={{ textAlign: "center", background: S.cam, border: `1px solid ${S.cizgi}`, borderRadius: 18, padding: "12px 10px 12px", marginBottom: 12 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, color: S.alt }}>{CV("ODA KODU")}</div>
+          <div style={{ fontSize: 50, fontWeight: 900, letterSpacing: 14, paddingLeft: 14, color: S.altin, textShadow: "0 0 24px rgba(245,185,58,0.45)", fontVariantNumeric: "tabular-nums", lineHeight: 1.15 }}>{kod}</div>
+          <button className="eg-btn" onClick={paylas} style={{ marginTop: 6, background: "rgba(255,255,255,0.12)", border: "none", color: S.yazi, borderRadius: 999, padding: "8px 16px", fontSize: 13, fontWeight: 700, fontFamily: "inherit", cursor: "pointer" }}>{kopya ? "✓ " + CV("Kopyalandı") : "📤 " + CV("Kodu paylaş")}</button>
+        </div>
+        <p style={{ margin: "0 2px 7px", fontSize: 11, fontWeight: 700, letterSpacing: 0.6, color: S.alt }}>{CV("OYUNCULAR")} ({oyuncular.length}/{SO_ODA_MAKS})</p>
+        <div style={{ marginBottom: 12 }}>
+          {oyuncular.map((o: any) => (
+            <div key={o.uid} className="eg-ileri" style={{ display: "flex", alignItems: "center", gap: 10, background: S.cam, border: `1px solid ${S.cizgi}`, borderRadius: 14, padding: "9px 12px", marginBottom: 7, opacity: o.bagli === false ? 0.5 : 1 }}>
+              {avatar(o.uid, o.ad)}
+              <span style={{ flex: 1, minWidth: 0, fontWeight: 700, fontSize: 14.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{o.ad}{o.uid === uid ? " (" + CV("sen") + ")" : ""}</span>
+              {o.uid === v.sahip && <span style={{ fontSize: 11, fontWeight: 800, color: "#1A1A2E", background: S.altin, borderRadius: 999, padding: "3px 9px" }}>👑 {CV("Oda sahibi")}</span>}
+              {o.bagli === false && <span style={{ fontSize: 11, color: S.alt }}>{CV("bağlantı yok")}</span>}
+            </div>
+          ))}
+        </div>
+        <p style={{ margin: "0 2px 7px", fontSize: 11, fontWeight: 700, letterSpacing: 0.6, color: S.alt }}>{CV("YARIŞMA AYARLARI")}</p>
+        <div style={{ background: S.cam, border: `1px solid ${S.cizgi}`, borderRadius: 14, padding: 12, marginBottom: 12 }}>
+          {sahipMi ? (
+            <div>
+              <select value={v.ayar.konu} onChange={e => ayarYaz({ konu: e.target.value })}
+                style={{ width: "100%", padding: "11px 10px", borderRadius: 10, border: `1px solid ${S.cizgi}`, background: "#1B2A62", color: S.yazi, fontSize: 14, fontWeight: 700, fontFamily: "inherit", marginBottom: 10 }}>
+                <option value="karisik">🔀 {CV("Karışık")}</option>
+                <optgroup label={CV("GENEL")}>{SO_KONULAR.filter(k => k.grup === "genel").map(k => <option key={k.id} value={k.id}>{k.ikon} {CV(k.ad)}</option>)}</optgroup>
+                <optgroup label={CV("FİNANS VE EĞİTİM")}>{SO_KONULAR.filter(k => k.grup === "finans").map(k => <option key={k.id} value={k.id}>{k.ikon} {CV(k.ad)}</option>)}</optgroup>
+              </select>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                <span style={{ width: 38, fontSize: 12, fontWeight: 700, color: S.alt }}>{CV("Soru")}</span>
+                <div style={{ flex: 1 }}>{segB(SO_SORU_SAYILARI.map(n => ({ v: n, t: String(n) })), v.ayar.n, n => ayarYaz({ n }))}</div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ width: 38, fontSize: 12, fontWeight: 700, color: S.alt }}>{CV("Süre")}</span>
+                <div style={{ flex: 1 }}>{segB(SO_SURELER.map(s => ({ v: s, t: s + " " + CV("sn") })), v.ayar.sure, s => ayarYaz({ sure: s }))}</div>
+              </div>
+            </div>
+          ) : (
+            <div style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.6 }}>
+              {konuMetni}
+              <div style={{ fontSize: 12.5, fontWeight: 600, color: S.alt }}>{v.ayar.n} {CV("soru")} · {v.ayar.sure} {CV("sn")}</div>
+            </div>
+          )}
+        </div>
+        {hataKutu()}
+        {sahipMi
+          ? dugme("🚀 Yarışmayı başlat", baslat)
+          : <p style={{ margin: "4px 0 0", textAlign: "center", fontSize: 13.5, color: S.alt, lineHeight: 1.5 }}>{CV("Oda sahibinin yarışmayı başlatması bekleniyor…")}</p>}
+      </div>, "bekle");
+  }
+
+  // ══ 3) Hazır ol
+  if (v.durum === "oyun" && a && a.faz === "hazir") {
+    const t0 = typeof a.t0 === "number" ? a.t0 : simdi();
+    const kalan = Math.max(1, Math.ceil((3000 - (simdi() - t0)) / 1000));
+    return sahne(
+      <div style={{ textAlign: "center", padding: "38px 0 44px" }}>
+        <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: 1, color: S.alt }}>{CV("HAZIR OL")}</div>
+        <div key={kalan} className="eg-pop" style={{ fontSize: 120, fontWeight: 900, color: S.altin, lineHeight: 1.1, textShadow: "0 0 40px rgba(245,185,58,0.5)" }}>{Math.min(3, kalan)}</div>
+        <div style={{ fontSize: 15, fontWeight: 700, marginTop: 8 }}>{konuMetni}</div>
+        <div style={{ fontSize: 12.5, color: S.alt, marginTop: 4 }}>{v.ayar.n} {CV("soru")} · {v.ayar.sure} {CV("sn")} · {sirali.length} {CV("oyuncu")}</div>
+      </div>, "hazir");
+  }
+
+  // ══ 4) Soru ve 5) Cevap gösterimi
+  if (v.durum === "oyun" && a && (a.faz === "soru" || a.faz === "gosterim")) {
+    const q = v.sorular?.[a.i];
+    if (!q) return sahne(<div style={{ textAlign: "center", padding: "50px 0", color: S.alt }}>{CV("Yükleniyor…")}</div>, "yuk");
+    const n = v.sorular.length;
+    const sureMs = v.ayar.sure * 1000;
+    const t0 = typeof a.t0 === "number" ? a.t0 : simdi();
+    const gec = simdi() - t0;
+    const kalMs = a.faz === "soru" ? Math.max(0, sureMs - gec) : 0;
+    const sn = Math.ceil(kalMs / 1000);
+    const oran = Math.max(0, Math.min(1, kalMs / sureMs));
+    const ben = oy[uid as string];
+    const benCvp = ben?.cvp?.[a.i];
+    const secim = benCvp ? benCvp.s : (yerel[a.i] !== undefined ? yerel[a.i] : null);
+    const cevapladi = secim !== null && secim !== undefined;
+    const gosterim = a.faz === "gosterim";
+    const acil = sn <= 3 && !cevapladi && !gosterim;
+    const halka = acil ? S.kirmizi : S.altin;
+    const cvpSayi = sirali.filter((o: any) => o.bagli !== false && o.cvp && o.cvp[a.i]).length;
+    const aktifSayi = sirali.filter((o: any) => o.bagli !== false).length;
+    const kazanc = benCvp ? benCvp.k : 0;
+    const dogruMu = cevapladi && secim === q.d;
+    const siraNo = sirali.findIndex((o: any) => o.uid === uid) + 1;
+    const gosterilecek = gosterim ? sirali.slice(0, 5).concat(siraNo > 5 ? [sirali[siraNo - 1]] : []) : [];
+    return sahne(
+      <div>
+        {ustSerit(CV("Soru") + " " + (a.i + 1) + " / " + n, <span style={{ background: "rgba(245,185,58,0.18)", color: S.altin, fontWeight: 800, fontSize: 14, borderRadius: 999, padding: "6px 12px", fontVariantNumeric: "tabular-nums" }}>⭐ {soFmt(ben?.puan || 0)}</span>)}
+        {cikisKutu()}
+        <div style={{ display: "flex", gap: 4, marginBottom: 12 }}>
+          {Array.from({ length: n }).map((_, i) => <div key={i} style={{ flex: 1, height: 5, borderRadius: 3, background: i < a.i || (i === a.i && gosterim) ? S.altin : i === a.i ? "rgba(245,185,58,0.55)" : "rgba(255,255,255,0.16)" }} />)}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+          <div style={{ width: 58, height: 58, borderRadius: "50%", flexShrink: 0, background: `conic-gradient(${halka} 0 ${oran * 100}%, rgba(255,255,255,0.14) ${oran * 100}%)`, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: acil ? "0 0 18px rgba(239,68,68,0.55)" : "none" }}>
+            <div style={{ width: 46, height: 46, borderRadius: "50%", background: "#101C47", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 19, fontWeight: 800, color: halka, fontVariantNumeric: "tabular-nums" }}>{gosterim ? "✓" : sn}</div>
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: S.alt }}>{(SO_KONULAR.find(k => k.id === q.kid)?.ikon || "") + " " + CV(soKonuAdi(q.kid))}</div>
+            <div style={{ display: "flex", gap: 3, marginTop: 5, flexWrap: "wrap" }}>
+              {sirali.map((o: any) => <span key={o.uid} title={o.ad} style={{ width: 9, height: 9, borderRadius: "50%", background: o.cvp && o.cvp[a.i] ? S.yesil : "rgba(255,255,255,0.25)" }} />)}
+            </div>
+            <div style={{ fontSize: 11.5, color: S.alt, marginTop: 3 }}>{cvpSayi} / {aktifSayi} {CV("kişi cevapladı")}</div>
+          </div>
+        </div>
+        <div key={a.i} className="eg-ileri" style={{ background: "rgba(255,255,255,0.1)", border: `1px solid ${S.cizgi}`, borderRadius: 18, padding: "18px 16px", marginBottom: 12, minHeight: 74, display: "flex", alignItems: "center" }}>
+          <p style={{ margin: 0, fontSize: 18, fontWeight: 700, lineHeight: 1.4 }}>{q.s}</p>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+          {q.sec.map((metin: string, i: number) => {
+            const dogruSik = gosterim && i === q.d;
+            const yanlisSik = gosterim && secim === i && i !== q.d;
+            const secildi = !gosterim && secim === i;
+            const soluk = (gosterim && !dogruSik && !yanlisSik) || (!gosterim && cevapladi && !secildi);
+            const zemin = dogruSik ? "#16A34A" : yanlisSik ? "#DC2626" : SO_RENKLER[i];
+            return (
+              <button key={i} className="eg-btn" disabled={cevapladi || gosterim || kalMs <= 0} onClick={() => cevapla(i)}
+                style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, textAlign: "left", padding: "13px 12px", borderRadius: 14, border: secildi ? "2.5px solid #fff" : "2.5px solid transparent", background: zemin, color: "#fff", fontSize: 15, fontWeight: 700, lineHeight: 1.35, fontFamily: "inherit", cursor: cevapladi || gosterim ? "default" : "pointer", opacity: soluk ? 0.38 : 1, boxShadow: dogruSik ? "0 0 20px rgba(34,197,94,0.6)" : "0 3px 10px rgba(0,0,0,0.25)", transition: "opacity .2s" }}>
+                <span style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 14, background: "rgba(255,255,255,0.24)" }}>{String.fromCharCode(65 + i)}</span>
+                <span style={{ flex: 1, minWidth: 0 }}>{metin}</span>
+                {dogruSik && <span style={{ fontWeight: 800, fontSize: 18 }}>✓</span>}
+                {yanlisSik && <span style={{ fontWeight: 800, fontSize: 18 }}>✕</span>}
+              </button>
+            );
+          })}
+        </div>
+        {!gosterim && cevapladi && <p className="eg-acil" style={{ margin: "12px 0 0", textAlign: "center", fontSize: 13, color: S.alt }}>🔒 {CV("Cevabın kilitlendi. Diğer oyuncular bekleniyor…")}</p>}
+        {!gosterim && !cevapladi && kalMs <= 0 && <p className="eg-acil" style={{ margin: "12px 0 0", textAlign: "center", fontSize: 13, color: "#FCA5A5" }}>⏰ {CV("Süre doldu.")}</p>}
+        {gosterim && (
+          <div className="eg-acil" style={{ marginTop: 12 }}>
+            <div style={{ textAlign: "center", marginBottom: 10 }}>
+              <span style={{ display: "inline-block", fontWeight: 800, fontSize: 14, borderRadius: 999, padding: "6px 14px", background: dogruMu ? "rgba(34,197,94,0.2)" : "rgba(239,68,68,0.2)", color: dogruMu ? "#86EFAC" : "#FCA5A5" }}>
+                {dogruMu ? "✓ " + CV("Doğru") + "  +" + kazanc : secim === -1 || !cevapladi ? "⏰ " + CV("Süre doldu.") : "✕ " + CV("Yanlış")}
+              </span>
+            </div>
+            {q.ac && <p style={{ margin: "0 0 10px", fontSize: 12.5, lineHeight: 1.55, color: S.alt }}>{q.ac}</p>}
+            <p style={{ margin: "0 2px 6px", fontSize: 11, fontWeight: 700, letterSpacing: 0.6, color: S.alt }}>{CV("SIRALAMA")}</p>
+            {gosterilecek.map((o: any) => {
+              const sr = sirali.findIndex((x: any) => x.uid === o.uid) + 1;
+              const bu = o.cvp && o.cvp[a.i] ? o.cvp[a.i].k : 0;
+              return (
+                <div key={o.uid} style={{ display: "flex", alignItems: "center", gap: 9, background: o.uid === uid ? "rgba(245,185,58,0.16)" : S.cam, border: `1px solid ${o.uid === uid ? "rgba(245,185,58,0.5)" : S.cizgi}`, borderRadius: 12, padding: "7px 10px", marginBottom: 6 }}>
+                  <span style={{ width: 22, textAlign: "center", fontWeight: 800, fontSize: 13, color: sr <= 3 ? S.altin : S.alt }}>{sr}</span>
+                  {avatar(o.uid, o.ad, 28)}
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{o.ad}</span>
+                  {bu > 0 && <span style={{ fontSize: 11.5, fontWeight: 800, color: "#86EFAC" }}>+{bu}</span>}
+                  <span style={{ fontSize: 14, fontWeight: 800, fontVariantNumeric: "tabular-nums", minWidth: 48, textAlign: "right" }}>{soFmt(o.puan || 0)}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {!gosterim && sirali.length > 1 && (
+          <div style={{ display: "flex", gap: 6, marginTop: 14, overflow: "hidden" }}>
+            {sirali.slice(0, 3).map((o: any, i: number) => (
+              <div key={o.uid} style={{ flex: 1, minWidth: 0, background: o.uid === uid ? "rgba(245,185,58,0.16)" : S.cam, border: `1px solid ${S.cizgi}`, borderRadius: 10, padding: "6px 8px", textAlign: "center" }}>
+                <div style={{ fontSize: 11, color: S.alt, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{["🥇", "🥈", "🥉"][i]} {o.ad}</div>
+                <div style={{ fontSize: 13, fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{soFmt(o.puan || 0)}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>, "soru");
+  }
+
+  if (v.durum !== "bitti") return sahne(<div style={{ textAlign: "center", padding: "50px 0", color: S.alt }}>{CV("Yükleniyor…")}</div>, "yuk2");
+  // ══ 6) Final
+  const k1 = sirali[0];
+  const siraBen = sirali.findIndex((o: any) => o.uid === uid) + 1;
+  const kursu = (sirali.length >= 3 ? [1, 0, 2] : sirali.length === 2 ? [1, 0] : [0]).filter(i => sirali[i]);
+  const madalya = ["#E8B94A", "#A7B1BD", "#C98B5B"];
+  const yuk3 = [86, 64, 48];
+  const nSoru = (v.sorular || []).length || v.ayar.n;
+  return sahne(
+    <div>
+      {ustSerit("Sonuç")}
+      {cikisKutu()}
+      <div style={{ textAlign: "center", marginBottom: 6 }}>
+        <div className="eg-pop" style={{ fontSize: 46 }}>🏆</div>
+        <div style={{ fontSize: 20, fontWeight: 800 }}>{k1 ? k1.ad : ""} {CV("kazandı!")}</div>
+        <div style={{ fontSize: 12.5, color: S.alt, marginTop: 2 }}>{konuMetni} · {nSoru} {CV("soru")}</div>
+        {siraBen > 0 && <div style={{ display: "inline-block", marginTop: 8, background: "rgba(245,185,58,0.18)", color: S.altin, fontWeight: 800, fontSize: 13, borderRadius: 999, padding: "5px 14px" }}>{CV("Senin sıran")}: {siraBen}. · {soFmt(oy[uid as string]?.puan || 0)}</div>}
+      </div>
+      <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "center", gap: 8, margin: "14px 0 14px" }}>
+        {kursu.map(i => {
+          const x = sirali[i];
+          return (
+            <div key={x.uid} style={{ flex: 1, minWidth: 0, textAlign: "center" }}>
+              {i === 0 && <div style={{ fontSize: 18, marginBottom: -2 }}>👑</div>}
+              <div style={{ margin: "0 auto 5px", width: i === 0 ? 56 : 48 }}>{avatar(x.uid, x.ad, i === 0 ? 56 : 48)}</div>
+              <div style={{ fontSize: 12, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.ad}{x.uid === uid ? " (" + CV("sen") + ")" : ""}</div>
+              <div style={{ background: madalya[i], height: yuk3[i], borderRadius: "12px 12px 0 0", color: "#1A1A2E", fontWeight: 900, padding: "8px 4px", marginTop: 4 }}>{i + 1}<div style={{ fontSize: 11.5, fontWeight: 800 }}>{soFmt(x.puan || 0)}</div></div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ marginBottom: 12 }}>
+        {sirali.map((o: any, i: number) => (
+          <div key={o.uid} style={{ display: "flex", alignItems: "center", gap: 9, background: o.uid === uid ? "rgba(245,185,58,0.16)" : S.cam, border: `1px solid ${o.uid === uid ? "rgba(245,185,58,0.5)" : S.cizgi}`, borderRadius: 12, padding: "8px 10px", marginBottom: 6 }}>
+            <span style={{ width: 22, textAlign: "center", fontWeight: 800, fontSize: 13, color: i < 3 ? S.altin : S.alt }}>{i + 1}</span>
+            {avatar(o.uid, o.ad, 30)}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{o.ad}</div>
+              <div style={{ fontSize: 11.5, color: S.alt }}>{o.dogru || 0} / {nSoru} {CV("doğru")}</div>
+            </div>
+            <span style={{ fontSize: 15, fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{soFmt(o.puan || 0)}</span>
+          </div>
+        ))}
+      </div>
+      {sahipMi ? dugme("🔁 Aynı odada tekrar oyna", tekrar) : <p style={{ margin: "0 0 10px", textAlign: "center", fontSize: 13, color: S.alt }}>{CV("Oda sahibi yeniden başlatabilir.")}</p>}
+      {dugme("Odadan çık", ayril, "cam")}
+    </div>, "bitti");
+}
 // ═══════════════════════════════════════════════════════════════════════
 // MÜŞTERİ PORTFÖYÜM (2026-10-04) — bankacılar için müşteri / görüşme / takip defteri
 // • Banka entegrasyonu YOK: bakiye, kredi, hesap veya işlem verisi çekilmez; tüm kayıtlar kullanıcının elle girdiği notlardır.
@@ -6654,6 +7218,48 @@ const EN_SOZLUK: Record<string, string> = {
   "Senin sıran": "Your rank",
   "Rekorun": "Your best",
   "Doğru": "Correct",
+  "4 haneli oda kodunu gir.": "Enter the 4-digit room code.",
+  "Arkadaşlarla Yarış": "Compete with Friends",
+  "Arkadaşlarla yarış": "Compete with friends",
+  "Bekleme Salonu": "Waiting Lobby",
+  "Bilgi Yarışması": "Quiz Show",
+  "Bu odada oyun başlamış.": "The game in this room has already started.",
+  "Cevabın kilitlendi. Diğer oyuncular bekleniyor…": "Your answer is locked in. Waiting for other players…",
+  "HAZIR OL": "GET READY",
+  "Kodu paylaş": "Share code",
+  "Kopyalandı": "Copied",
+  "ODA KODU": "ROOM CODE",
+  "OYUNCULAR": "PLAYERS",
+  "Oda bulunamadı. Kodu kontrol et.": "Room not found. Check the code.",
+  "Oda dolu.": "The room is full.",
+  "Oda kapandı.": "The room was closed.",
+  "Oda kur, kodu paylaş, canlı yarışın": "Create a room, share the code, compete live",
+  "Oda kur, kodu paylaş; herkes aynı soruyu aynı anda cevaplasın. 2–8 kişi.": "Create a room and share the code; everyone answers the same question at the same time. 2–8 players.",
+  "Oda kurmak veya odaya katılmak için giriş yapmalısın.": "You need to sign in to create or join a room.",
+  "Oda kurulamadı. Biraz sonra tekrar dene.": "Could not create the room. Try again shortly.",
+  "Oda sahibi": "Host",
+  "Oda sahibi yeniden başlatabilir.": "The host can restart the game.",
+  "Oda sahibinin yarışmayı başlatması bekleniyor…": "Waiting for the host to start the game…",
+  "Odadan çık": "Leave room",
+  "Odadan çıkmak istediğine emin misin?": "Are you sure you want to leave the room?",
+  "Odaya bağlanılamadı. Biraz sonra tekrar dene.": "Could not connect to the room. Try again shortly.",
+  "Odaya bağlanılıyor…": "Connecting to the room…",
+  "Odaya katıl": "Join room",
+  "Odaya katılınamadı. Biraz sonra tekrar dene.": "Could not join the room. Try again shortly.",
+  "Oyun başlatılamadı. Biraz sonra tekrar dene.": "Could not start the game. Try again shortly.",
+  "SIRALAMA": "RANKING",
+  "TAKMA ADIN": "YOUR NICKNAME",
+  "YARIŞMA AYARLARI": "GAME SETTINGS",
+  "Yanlış": "Wrong",
+  "bağlantı yok": "offline",
+  "kazandı!": "wins!",
+  "kişi cevapladı": "answered",
+  "oyuncu": "players",
+  "sen": "you",
+  "veya kodla katıl": "or join with a code",
+  "＋ Yeni oda kur": "＋ Create new room",
+  "🔁 Aynı odada tekrar oyna": "🔁 Play again in the same room",
+  "🚀 Yarışmayı başlat": "🚀 Start the game",
   // ── Alt bar / yan menü / genel gezinme ──
   "Ana Sayfa": "Home",
   "Hesapla": "Calculate",
@@ -10347,6 +10953,48 @@ const AR_SOZLUK: Record<string, string> = {
   "Senin sıran": "ترتيبك",
   "Rekorun": "أفضل نتيجة لك",
   "Doğru": "صحيح",
+  "4 haneli oda kodunu gir.": "أدخل رمز الغرفة المكوّن من 4 أرقام.",
+  "Arkadaşlarla Yarış": "تسابق مع الأصدقاء",
+  "Arkadaşlarla yarış": "تسابق مع الأصدقاء",
+  "Bekleme Salonu": "قاعة الانتظار",
+  "Bilgi Yarışması": "مسابقة معلومات",
+  "Bu odada oyun başlamış.": "بدأت اللعبة في هذه الغرفة.",
+  "Cevabın kilitlendi. Diğer oyuncular bekleniyor…": "تم تثبيت إجابتك. بانتظار اللاعبين الآخرين…",
+  "HAZIR OL": "استعد",
+  "Kodu paylaş": "شارك الرمز",
+  "Kopyalandı": "تم النسخ",
+  "ODA KODU": "رمز الغرفة",
+  "OYUNCULAR": "اللاعبون",
+  "Oda bulunamadı. Kodu kontrol et.": "الغرفة غير موجودة. تحقق من الرمز.",
+  "Oda dolu.": "الغرفة ممتلئة.",
+  "Oda kapandı.": "أُغلقت الغرفة.",
+  "Oda kur, kodu paylaş, canlı yarışın": "أنشئ غرفة وشارك الرمز وتنافسوا مباشرة",
+  "Oda kur, kodu paylaş; herkes aynı soruyu aynı anda cevaplasın. 2–8 kişi.": "أنشئ غرفة وشارك الرمز؛ يجيب الجميع عن السؤال نفسه في الوقت نفسه. من 2 إلى 8 لاعبين.",
+  "Oda kurmak veya odaya katılmak için giriş yapmalısın.": "يجب تسجيل الدخول لإنشاء غرفة أو الانضمام إليها.",
+  "Oda kurulamadı. Biraz sonra tekrar dene.": "تعذّر إنشاء الغرفة. حاول مرة أخرى بعد قليل.",
+  "Oda sahibi": "المضيف",
+  "Oda sahibi yeniden başlatabilir.": "يمكن للمضيف إعادة بدء اللعبة.",
+  "Oda sahibinin yarışmayı başlatması bekleniyor…": "بانتظار المضيف لبدء المسابقة…",
+  "Odadan çık": "غادر الغرفة",
+  "Odadan çıkmak istediğine emin misin?": "هل أنت متأكد أنك تريد مغادرة الغرفة؟",
+  "Odaya bağlanılamadı. Biraz sonra tekrar dene.": "تعذّر الاتصال بالغرفة. حاول مرة أخرى بعد قليل.",
+  "Odaya bağlanılıyor…": "جارٍ الاتصال بالغرفة…",
+  "Odaya katıl": "انضم إلى الغرفة",
+  "Odaya katılınamadı. Biraz sonra tekrar dene.": "تعذّر الانضمام إلى الغرفة. حاول مرة أخرى بعد قليل.",
+  "Oyun başlatılamadı. Biraz sonra tekrar dene.": "تعذّر بدء اللعبة. حاول مرة أخرى بعد قليل.",
+  "SIRALAMA": "الترتيب",
+  "TAKMA ADIN": "اسمك المستعار",
+  "YARIŞMA AYARLARI": "إعدادات المسابقة",
+  "Yanlış": "خطأ",
+  "bağlantı yok": "غير متصل",
+  "kazandı!": "فاز!",
+  "kişi cevapladı": "أجابوا",
+  "oyuncu": "لاعبين",
+  "sen": "أنت",
+  "veya kodla katıl": "أو انضم بالرمز",
+  "＋ Yeni oda kur": "＋ إنشاء غرفة جديدة",
+  "🔁 Aynı odada tekrar oyna": "🔁 العب مرة أخرى في الغرفة نفسها",
+  "🚀 Yarışmayı başlat": "🚀 ابدأ المسابقة",
   "Ana Sayfa": "الرئيسية",
   "Asistan": "المساعد",
   "Katılım Finansının Akıllı Asistanı": "المساعد الذكي للتمويل بالمشاركة",
