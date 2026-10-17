@@ -15715,10 +15715,17 @@ function bankaLogoBul(ad: string): string | null {
 function BankaLogoRozet({ad, boyut=26}:{ad:string; boyut?:number}){
   const logo = bankaLogoBul(ad);
   if (!logo) return null;
-  return (
+  const _img = (
     <img src={logo} alt="" style={{
       width:boyut, height:boyut, objectFit:"contain", flexShrink:0,
     }}/>
+  );
+  if (TEMA !== "koyu") return _img;
+  return (
+    <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0,
+      background:"#FFFFFF",borderRadius:9,padding:4,boxSizing:"content-box"}}>
+      <img src={logo} alt="" style={{width:boyut,height:boyut,objectFit:"contain",flexShrink:0}}/>
+    </span>
   );
 }
 
