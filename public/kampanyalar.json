@@ -1,0 +1,505 @@
+{
+ "guncelleme": "2026-10-18",
+ "bankalar": [
+  {
+   "ad": "Kuveyt Türk",
+   "tumu": "https://www.kuveytturk.com.tr/en/campaigns/campaign-individual"
+  },
+  {
+   "ad": "Ziraat Katılım",
+   "tumu": "https://www.ziraatkatilim.com.tr/kart-kampanyalari"
+  },
+  {
+   "ad": "Albaraka Türk",
+   "tumu": "https://www.albaraka.com.tr/tr/kampanyalar"
+  },
+  {
+   "ad": "Vakıf Katılım",
+   "tumu": "https://www.vakifkatilim.com.tr/tr/kendim-icin/kampanyalar"
+  },
+  {
+   "ad": "Türkiye Finans",
+   "tumu": "https://www.turkiyefinans.com.tr/tr-tr/kampanyalar/sayfalar/dijital-bankacilik-kampanyalari.aspx"
+  },
+  {
+   "ad": "Dünya Katılım",
+   "tumu": "https://dunyakatilim.com.tr/kampanyalar"
+  },
+  {
+   "ad": "Emlak Katılım",
+   "tumu": "https://www.emlakkatilim.com.tr/tr/bireysel/kampanyalar"
+  }
+ ],
+ "kampanyalar": [
+  {
+   "id": "kt1",
+   "banka": "Kuveyt Türk",
+   "kat": "finansman",
+   "baslik": "Yeni üyelere %1,99 oranlı İhtiyaç Kart",
+   "ozet": "Yeni üyeler 100.000 TL’ye kadar, 12 aya kadar taksitle ve 2 ay ötelemeli kullanabiliyor.",
+   "sart": "Kampanya yeni üyelere özeldir; ayrıntılar bankanın sayfasında.",
+   "bitis": "2026-12-31",
+   "url": "https://www.kuveytturk.com.tr/en/campaigns/campaign-individual/financing-campaign/special-199-rate-opportunity-on-ihtiyac-card-for-new-members"
+  },
+  {
+   "id": "kt2",
+   "banka": "Kuveyt Türk",
+   "kat": "kart",
+   "baslik": "Yurt dışı restoran harcamalarında %15 indirim",
+   "ozet": "Miles&Smiles Kuveyt Türk Kredi Kartı ile yurt dışındaki restoran harcamalarında indirim.",
+   "sart": "Kampanya Miles&Smiles Kuveyt Türk Kredi Kartı için geçerlidir.",
+   "bitis": "2026-12-31",
+   "url": "https://www.kuveytturk.com.tr/en/campaigns/campaign-individual/card-campaign/get-15-off-your-restaurant-expenses-abroad-with-kuveyt-turk"
+  },
+  {
+   "id": "kt3",
+   "banka": "Kuveyt Türk",
+   "kat": "kart",
+   "baslik": "Eğitim ve sağlık harcamalarında 5 taksit",
+   "ozet": "Eğitim ve sağlık harcamalarında 5 aya kadar kâr paysız taksit imkânı.",
+   "sart": "Ayrıntılar ve kapsam bankanın sayfasında.",
+   "bitis": "2027-12-31",
+   "url": "https://www.kuveytturk.com.tr/en/campaigns/campaign-individual/card-campaign/5-installment-opportunity-for-your-education-and-health-expenses"
+  },
+  {
+   "id": "kt4",
+   "banka": "Kuveyt Türk",
+   "kat": "kart",
+   "baslik": "Vatan Bilgisayar’da vade farksız 3 taksit",
+   "ozet": "Kuveyt Türk bireysel kredi kartı ve ek kartlarıyla 3 aya kadar vade farksız taksit.",
+   "sart": "Taksit, ödeme anında seçilmelidir. Yemek, akaryakıt, fatura ve yurt dışı harcamalar kapsam dışıdır.",
+   "bitis": "2026-12-31",
+   "url": "https://saglamkart.kuveytturk.com.tr/kampanyalar/vatan-bilgisayar-ile-vade-farksiz-3-taksit-firsati-2598"
+  },
+  {
+   "id": "kt5",
+   "banka": "Kuveyt Türk",
+   "kat": "kart",
+   "baslik": "Halalbooking’de 9 aya kadar taksit",
+   "ozet": "Sağlam Kart ile tatil harcamalarında 9 aya kadar taksit; ilk kez kaydolana 1.000 TL indirim.",
+   "sart": "İlgili bağlantıdan e-postayla kayıt olup Sağlam Kart’ın ilk 6 hanesiyle Halalbooking’e kaydolmak gerekir.",
+   "bitis": "2026-12-31",
+   "url": "https://saglamkart.kuveytturk.com.tr/kampanyalar/saglam-kart-tatilde-de-yaninizda-2042"
+  },
+  {
+   "id": "kt6",
+   "banka": "Kuveyt Türk",
+   "kat": "kart",
+   "baslik": "Beymen’de vade farksız 4 aya kadar taksit",
+   "ozet": "Beymen’in resmî web sitesi ve uygulamasındaki alışverişlerde vade farksız taksit.",
+   "sart": "Miles & Smiles, Sağlam Kart ailesi ve Özel Bankacılık World Elite Kart ile geçerlidir; taksit seçeneği işaretlenmelidir.",
+   "bitis": "2026-12-31",
+   "url": "https://saglamkart.kuveytturk.com.tr/kampanyalar/beymende-vade-farksiz-4-aya-varan-taksit-firsati-3136"
+  },
+  {
+   "id": "kt7",
+   "banka": "Kuveyt Türk",
+   "kat": "diger",
+   "baslik": "Mobilden müşteri olana toplam 7.250 TL hediye",
+   "ozet": "Mobil uygulamadan hesap açanlara toplam 7.250 TL değerinde hediye.",
+   "sart": "Koşullar ve hediye dağılımı bankanın sayfasında.",
+   "bitis": "2026-12-31",
+   "url": "https://www.kuveytturk.com.tr/en/campaigns/campaign-individual/become-a-customer-campaign/total-of-try-7250-gift-for-those-who-become-kuveyt-turk-customers-via-mobile"
+  },
+  {
+   "id": "kt8",
+   "banka": "Kuveyt Türk",
+   "kat": "diger",
+   "baslik": "Pratik BES’e 2.000 TL hediye",
+   "ozet": "Mobilden Pratik BES planı başlatıp en az 2.000 TL katkı yapanlara hediye.",
+   "sart": "Mobil başvuru ve en az 2.000 TL katkı gerekir.",
+   "bitis": "2026-12-31",
+   "url": "https://www.kuveytturk.com.tr/en/campaigns/campaign-individual/become-a-customer-campaign/try-2000-gift-for-your-pratik-bes-plan-via-kuveyt-turk-mobilee"
+  },
+  {
+   "id": "zk1",
+   "banka": "Ziraat Katılım",
+   "kat": "kart",
+   "baslik": "TROY Kart ile market ve gıda alışverişinde indirim",
+   "ozet": "TROY Kart ile yapılan market ve gıda alışverişlerinde indirim.",
+   "sart": "Ayrıntılar kampanya sayfasında.",
+   "bitis": "2026-10-21",
+   "url": "https://www.ziraatkatilim.com.tr/kart-kampanyalari/troy-kartiniz-alisverislerinizde-indirim-getiriyor"
+  },
+  {
+   "id": "zk2",
+   "banka": "Ziraat Katılım",
+   "kat": "kart",
+   "baslik": "30’dan fazla markada taksit fırsatı",
+   "ozet": "Giyim, mobilya, beyaz eşya ve mağaza bazlı taksitler (örn. Teknosa, Koçtaş, Pazarama, N11, Setur, Tatilbudur); okul ödemelerinde 12 aya varan taksit.",
+   "sart": "Taksit sayısı markaya göre değişir; liste kampanya sayfasında.",
+   "bitis": "2026-10-31",
+   "url": "https://www.ziraatkatilim.com.tr/kart-kampanyalari"
+  },
+  {
+   "id": "zk3",
+   "banka": "Ziraat Katılım",
+   "kat": "kart",
+   "baslik": "Bankkart Lira kampanyaları",
+   "ozet": "Kategoriye göre Bankkart Lira: ilk Bankkart Kredi Kartı için 5.000 TL, market 1.500 TL, kafe ve restoran 450 TL, akaryakıt 400 TL gibi.",
+   "sart": "Her kategorinin koşulu ve tutarı ayrı; ayrıntılar kampanya sayfasında.",
+   "bitis": "2026-11-07",
+   "url": "https://www.ziraatkatilim.com.tr/kart-kampanyalari"
+  },
+  {
+   "id": "zk4",
+   "banka": "Ziraat Katılım",
+   "kat": "kart",
+   "baslik": "Galataport İstanbul deniz dolmuşlarında %50 indirim",
+   "ozet": "Galataport İstanbul deniz dolmuşlarında kartla indirim.",
+   "sart": "Ayrıntılar kampanya sayfasında.",
+   "bitis": "2026-12-31",
+   "url": "https://www.ziraatkatilim.com.tr/kart-kampanyalari/galataport-istanbul-deniz-dolmuslarinda-50-indirim"
+  },
+  {
+   "id": "tf1",
+   "banka": "Türkiye Finans",
+   "kat": "finansman",
+   "baslik": "Mobilden müşteri olana 50.000 TL’ye kadar kâr paysız ihtiyaç finansmanı",
+   "ozet": "Görüntülü görüşmeyle mobilden müşteri olup “Kampanyaya Katıl”a basanlara %0 kâr payıyla 3 ay vadeli, sigortalı ihtiyaç finansmanı.",
+   "sart": "Findeks kredi notu 1875 ve üzeri olmalıdır.",
+   "bitis": "2026-10-31",
+   "url": "https://www.turkiyefinans.com.tr/tr-tr/kampanyalar/Sayfalar/ihtiyac-finansmani-kampanyasi.aspx"
+  },
+  {
+   "id": "tf2",
+   "banka": "Türkiye Finans",
+   "kat": "kart",
+   "baslik": "Faturaları unutun, 4.000 TL’ye varan bonus",
+   "ozet": "Mobilden Happy Bonus kart başvurusu ve otomatik fatura talimatıyla: kart harcamasından 2.000 TL, fatura talimatından 2.000 TL’ye kadar bonus.",
+   "sart": "Fatura talimatları 6 ay bankada kalmalıdır; iptalde bonus geri alınır.",
+   "bitis": "2026-10-31",
+   "url": "https://www.turkiyefinans.com.tr/tr-tr/kampanyalar/Sayfalar/fatura-bonus-kampanyasi.aspx"
+  },
+  {
+   "id": "tf3",
+   "banka": "Türkiye Finans",
+   "kat": "diger",
+   "baslik": "Yakınını davet et, kişi başı 500 TL bonus",
+   "ozet": "Davet ettiğin yakının mobilden müşteri olup Happy Bonus kartıyla harcama yapması halinde kişi başı 500 TL, toplam 5.000 TL’ye kadar.",
+   "sart": "Davet edilen kişi müşteri olmalı ve en az bir harcama yapmalıdır.",
+   "bitis": "2026-12-31",
+   "url": "https://www.turkiyefinans.com.tr/tr-tr/kampanyalar/Sayfalar/yakininizi-davet-edin.aspx"
+  },
+  {
+   "id": "tf4",
+   "banka": "Türkiye Finans",
+   "kat": "diger",
+   "baslik": "Masrafsız bankacılık",
+   "ozet": "Mobil ve internet şubede hesap açma, EFT/havale, FAST ve ATM gibi temel işlemlerde masraf alınmaz; ücretsiz Paratik kart ve aidatsız Happy Bonus Zero kart.",
+   "sart": "Paratik ile Türkiye Finans ATM’lerinde günlük 10.000 TL’ye kadar çekim ücretsizdir.",
+   "bitis": null,
+   "url": "https://www.turkiyefinans.com.tr/tr-tr/kampanyalar/Sayfalar/masrafsiz-bankacilik.aspx"
+  },
+  {
+   "id": "dk1",
+   "banka": "Dünya Katılım",
+   "kat": "hesap",
+   "baslik": "Güneş Katılma Hesabı’na ilk 30 gün 90/10 kâr payı oranı",
+   "ozet": "İlk kez Güneş Katılma Hesabı açan bireysel müşterilere (yeni ve mevcut) ilk 30 gün 90/10 kâr paylaşım oranı.",
+   "sart": "Hesap tutarı 5.000 – 5.000.000 TL arasında olmalıdır. Başlangıç: 16 Ekim 2026.",
+   "bitis": "2026-12-31",
+   "url": "https://dunyakatilim.com.tr/kampanyalar/ilk-gunesim"
+  },
+  {
+   "id": "dk2",
+   "banka": "Dünya Katılım",
+   "kat": "kart",
+   "baslik": "Doğal gaz faturalarına vade farksız 3 taksit",
+   "ozet": "Enerya, Kargaz, Marmara Gaz, SürmeliGaz ve ÇorumGaz konut faturaları Dünya Katılım kredi kartıyla 3 taksit.",
+   "sart": "Ödemeden önce FATURA3 yazıp 6066’ya SMS göndermek gerekir.",
+   "bitis": "2027-03-31",
+   "url": "https://dunyakatilim.com.tr/kampanyalar/dogalgaz"
+  },
+  {
+   "id": "dk3",
+   "banka": "Dünya Katılım",
+   "kat": "hesap",
+   "baslik": "Fiziki altın alana hediye altın",
+   "ozet": "Yeni müşteriler Mobil veya İnternet Şube’den fiziki altın siparişi verince miktara göre hediye altın; kişi başı en çok 0,25 gram.",
+   "sart": "Sipariş Mobil veya İnternet Şube’den verilmelidir. Başlangıç: 1 Eylül 2026.",
+   "bitis": "2026-12-31",
+   "url": "https://dunyakatilim.com.tr/kampanyalar/altina-altin"
+  },
+  {
+   "id": "dk4",
+   "banka": "Dünya Katılım",
+   "kat": "diger",
+   "baslik": "Davet et, altın kazan",
+   "ozet": "Davet kodunla müşteri olup Paraf Kart başvurusu yapan her kişi için 0,1 gram altın; en çok 10 kişi, toplam 1 gram.",
+   "sart": "Davet eden ve edilen için Paraf Kart başvurusu gerekir.",
+   "bitis": null,
+   "url": "https://dunyakatilim.com.tr/kampanyalar/davetetkazan"
+  },
+  {
+   "id": "dk5",
+   "banka": "Dünya Katılım",
+   "kat": "kart",
+   "baslik": "Kart harcamasından altın biriktir",
+   "ozet": "DKart Debit, DKart Kredi, Paraf Kredi ve Paraf Platinum harcamalarından gram altın birikir; 1 grama ulaşınca fiziki altın istenebilir.",
+   "sart": "Takvim yılında en çok 5 gram kazanılabilir.",
+   "bitis": null,
+   "url": "https://dunyakatilim.com.tr/kampanyalar/altin-kesemTicari"
+  },
+  {
+   "id": "vk1",
+   "banka": "Vakıf Katılım",
+   "kat": "diger",
+   "baslik": "Vakıf Katılımlı olanlara tabii Premium üyelik",
+   "ozet": "Mobilden “TABİİ” davet koduyla müşteri olanlara 1 aylık tabii Premium üyelik.",
+   "sart": "İlk 1.000 kişiyle sınırlıdır.",
+   "bitis": "2026-11-30",
+   "url": "https://www.vakifkatilim.com.tr/tr/kendim-icin/kampanyalar/detay/vakif-katilimli-olanlara-tabiiden-premium-uyelik"
+  },
+  {
+   "id": "vk2",
+   "banka": "Vakıf Katılım",
+   "kat": "kart",
+   "baslik": "VClub ile her ay yenilenen indirimler",
+   "ozet": "Restoran, market, seyahat ve ulaşımda her ay yenilenen indirimler; Vakıf Katılım Mobil’in Kampanyalar bölümünden.",
+   "sart": "Aktif Vakıf Katılım kredi veya banka kartı gerekir.",
+   "bitis": "2026-12-31",
+   "url": "https://www.vakifkatilim.com.tr/tr/kendim-icin/kampanyalar/detay/vclub-dunyasi-artik-vakif-katilim-mobilde"
+  },
+  {
+   "id": "vk3",
+   "banka": "Vakıf Katılım",
+   "kat": "hesap",
+   "baslik": "Mobilde 6 kriteri tamamla, avantajları kazan",
+   "ozet": "TL katılma hesabında özel kâr paylaşım oranı, özel döviz ve kıymetli maden kuru, Espressolab hediye kahve ve tabii Premium.",
+   "sart": "Ayda en az 6 kriterin tamamlanması gerekir; kriterler her ay başında sıfırlanır.",
+   "bitis": "2029-12-31",
+   "url": "https://www.vakifkatilim.com.tr/tr/kendim-icin/kampanyalar/detay/tamamla-kazan"
+  },
+  {
+   "id": "ab1",
+   "banka": "Albaraka Türk",
+   "kat": "finansman",
+   "baslik": "Vade farksız 150.000 TL’ye varan destek",
+   "ozet": "Albaraka Mobil’den müşteri olanlara veya mevcut müşterilere: Umre finansmanında 50.000 TL’ye kadar 4 taksit, sağlık ve eğitim harcamalarında kredi kartıyla 100.000 TL’ye kadar 6 taksit.",
+   "sart": "Başvurular gelir ve kredi skoru gibi kriterlere göre tek tek değerlendirilir; olumsuz sonuçlanırsa kampanyadan yararlanılamaz.",
+   "bitis": "2026-12-31",
+   "url": "https://www.albaraka.com.tr/tr/kampanyalar/detay/vade-farksiz-kampanyasi"
+  },
+  {
+   "id": "ab2",
+   "banka": "Albaraka Türk",
+   "kat": "kart",
+   "baslik": "Yurt dışı çıkış harcını TROY kartla öde, 1.250 TL Worldpuan kazan",
+   "ozet": "Albaraka Mobil’den yeni müşteri olup yurt dışı çıkış harcını TROY kredi kartıyla ödeyenlere 1.250 TL Worldpuan.",
+   "sart": "Kampanya 1.000 kişiyle sınırlıdır; kampanya sayfasındaki “Hemen Katıl” butonuna basılmadan yapılan işlemler ödül kazandırmaz.",
+   "bitis": "2026-10-31",
+   "url": "https://www.albaraka.com.tr/tr/kampanyalar/detay/yurt-disi-cikis-harci-kampanyasi-1250-tl-worldpuan-4"
+  },
+  {
+   "id": "ab3",
+   "banka": "Albaraka Türk",
+   "kat": "kart",
+   "baslik": "Otomatik fatura talimatlarına toplam 2.000 TL Worldpuan",
+   "ozet": "Kredi kartıyla verilen yeni otomatik fatura ödeme talimatlarında talimat başına 200 TL’ye kadar Worldpuan; toplam en çok 2.000 TL.",
+   "sart": "Albaraka Mobil’deki “Hemen Katıl” butonuyla katılım gerekir.",
+   "bitis": "2026-10-31",
+   "url": "https://www.albaraka.com.tr/tr/kampanyalar/detay/otomatik-fatura-odeme-talimatlariniza-toplamda-2000-tl-worldpuan-14"
+  },
+  {
+   "id": "ab4",
+   "banka": "Albaraka Türk",
+   "kat": "kart",
+   "baslik": "Sağlık harcamalarında vade farksız 6 taksit",
+   "ozet": "TROY kredi kartıyla, kampanyaya katıldıktan sonra belirli sağlık kodlarındaki 1.000 – 100.000 TL tek çekim harcamalar, uygun ilk 5 işlem için 6 taksite bölünür.",
+   "sart": "Harcama tek çekim yapılmalı; katılım ve kişi başı kullanım sınırlıdır. Taksitlenen işlem sonradan iptal edilemez.",
+   "bitis": "2026-10-31",
+   "url": "https://www.albaraka.com.tr/tr/kampanyalar/detay/saglik-harcamalarina-vade-farksiz-6-taksit-kampanyasi-troy1"
+  },
+  {
+   "id": "ab5",
+   "banka": "Albaraka Türk",
+   "kat": "kart",
+   "baslik": "Eğitim harcamalarında vade farksız 6 taksit",
+   "ozet": "TROY kredi kartıyla 30.000 – 500.000 TL arası yurt içi eğitim harcamalarında, katılım sonrası ilk iki uygun işlem 6 taksite bölünür.",
+   "sart": "Önce Albaraka Mobil’den katılmak ve harcamayı tek çekim yapmak gerekir; ayda en çok 2, dönemde en çok 6 taksitlendirme hakkı vardır.",
+   "bitis": "2026-12-31",
+   "url": "https://www.albaraka.com.tr/tr/kampanyalar/detay/egitim-kampanyasi-2"
+  },
+  {
+   "id": "ab6",
+   "banka": "Albaraka Türk",
+   "kat": "kart",
+   "baslik": "Kırtasiye harcamalarında vade farksız 4 taksit",
+   "ozet": "TROY kredi kartıyla tek seferde yapılan 1.000 – 20.000 TL kırtasiye harcamalarında 4 taksit.",
+   "sart": "Albaraka Mobil’den katıldıktan sonra ve tek çekim yapılan harcamalar kapsanır.",
+   "bitis": "2026-12-31",
+   "url": "https://www.albaraka.com.tr/tr/kampanyalar/detay/kirtasiye-kampanyasi-troy"
+  },
+  {
+   "id": "ab7",
+   "banka": "Albaraka Türk",
+   "kat": "hesap",
+   "baslik": "Dijital Katılma Hesabı’na özel 98/2 paylaşım oranı",
+   "ozet": "Albaraka Mobil’den görüntülü görüşmeyle ilk kez müşteri olanlara TL Katılma Hesabı’nda 98/2 kâr paylaşım oranı; hesap en az 250 TL ile açılır.",
+   "sart": "Hesap mobilden, görüntülü görüşmeyle, TL cinsinden açılmalıdır; süre bitince oran standarda döner.",
+   "bitis": "2026-12-31",
+   "url": "https://www.albaraka.com.tr/tr/kampanyalar/detay/dijital-katilma-hesabina-ozel-paylasim-oranlari-10"
+  },
+  {
+   "id": "ab8",
+   "banka": "Albaraka Türk",
+   "kat": "diger",
+   "baslik": "Yakınını davet et, kişi başı 500 TL Worldpuan",
+   "ozet": "Davet ettiğin ve müşteri olan her yakın için 500 TL Worldpuan, toplam 5.000 TL’ye kadar; davet edilen de aynı tutarda ödül alır.",
+   "sart": "Davet edilen, görüntülü görüşmeyle müşteri olmalıdır; başka kanaldan olunursa ödül verilmez.",
+   "bitis": "2026-12-31",
+   "url": "https://www.albaraka.com.tr/tr/kampanyalar/detay/yakinini-davet-et-kampanyasi"
+  },
+  {
+   "id": "ab9",
+   "banka": "Albaraka Türk",
+   "kat": "diger",
+   "baslik": "Albarakalılara özel ücretsiz İSPARK",
+   "ozet": "Bireysel müşterilere İSPARK otoparklarında ayda en çok iki kez ücretsiz park; Albaraka Mobil’den alınan kod görevliye gösterilir.",
+   "sart": "Cari hesapta 10.000 TL ve üzeri bakiye gerekir.",
+   "bitis": "2026-12-31",
+   "url": "https://www.albaraka.com.tr/tr/kampanyalar/detay/albarakalilara-ozel-ucretsiz-ispark-kampanyasi-1"
+  },
+  {
+   "id": "ek1",
+   "banka": "Emlak Katılım",
+   "kat": "kart",
+   "baslik": "Paraf veya debit kartla market harcamalarında 2.000 TL hediye",
+   "ozet": "Emlak Katılım Paraf ve debit kartla yapılan market harcamalarında 2.000 TL hediye.",
+   "sart": "Ayrıntılar ve koşullar bankanın kampanya sayfasında.",
+   "bitis": "2026-10-31",
+   "url": "https://www.emlakkatilim.com.tr/tr/bireysel/kampanyalar/emlak-katilim-paraf-ve-emlak-katilim-debit-kart-ile-market-harcamalarinizda-2000-tl-hediye"
+  },
+  {
+   "id": "ek2",
+   "banka": "Emlak Katılım",
+   "kat": "kart",
+   "baslik": "Paraf ile doğum gününe özel kampanya",
+   "ozet": "Emlak Katılım Paraf kartla doğum gününe özel kampanya.",
+   "sart": "Ayrıntılar ve koşullar bankanın kampanya sayfasında.",
+   "bitis": "2026-10-31",
+   "url": "https://www.emlakkatilim.com.tr/tr/bireysel/kampanyalar/emlak-katilim-paraf-ile-dogum-gununuz-kutlu-olsun"
+  },
+  {
+   "id": "ek3",
+   "banka": "Emlak Katılım",
+   "kat": "kart",
+   "baslik": "TROY ile Getir’de 1.000 TL’ye varan indirim",
+   "ozet": "TROY kartla Getir alışverişlerinde 1.000 TL’ye varan indirim.",
+   "sart": "Ayrıntılar ve koşullar bankanın kampanya sayfasında.",
+   "bitis": "2026-10-21",
+   "url": "https://www.emlakkatilim.com.tr/tr/bireysel/kampanyalar/troy-ile-getirde-1000-tlye-varan-indirim"
+  },
+  {
+   "id": "ek4",
+   "banka": "Emlak Katılım",
+   "kat": "diger",
+   "baslik": "Enterprise araç kiralamalarında %35 indirim",
+   "ozet": "Enterprise araç kiralamalarında Emlak Katılım kartlarına özel %35 indirim.",
+   "sart": "Ayrıntılar ve koşullar bankanın kampanya sayfasında.",
+   "bitis": "2026-12-31",
+   "url": "https://www.emlakkatilim.com.tr/tr/bireysel/kampanyalar/enterprise-arac-kiralamalarinda-35-indirim-firsati"
+  },
+  {
+   "id": "ek5",
+   "banka": "Emlak Katılım",
+   "kat": "diger",
+   "baslik": "Biletinial’da %20 indirim",
+   "ozet": "Biletinial’da %20 indirim.",
+   "sart": "Ayrıntılar ve koşullar bankanın kampanya sayfasında.",
+   "bitis": "2026-12-31",
+   "url": "https://www.emlakkatilim.com.tr/tr/bireysel/kampanyalar/biletinialda-20-indirim"
+  },
+  {
+   "id": "ek6",
+   "banka": "Emlak Katılım",
+   "kat": "diger",
+   "baslik": "HediyeSepeti’nde Emlak Katılım kartlarına özel %20 indirim",
+   "ozet": "HediyeSepeti’nde Emlak Katılım kartlarına özel %20 indirim.",
+   "sart": "Ayrıntılar ve koşullar bankanın kampanya sayfasında.",
+   "bitis": "2026-12-31",
+   "url": "https://www.emlakkatilim.com.tr/tr/bireysel/kampanyalar/hediyesepetinde-emlak-katilim-kartlarina-ozel-20-indirim-firsati"
+  },
+  {
+   "id": "ek7",
+   "banka": "Emlak Katılım",
+   "kat": "diger",
+   "baslik": "Modanisa’da tüm indirimlere ek %15 indirim",
+   "ozet": "Modanisa’da mevcut indirimlere ek %15 indirim.",
+   "sart": "Ayrıntılar ve koşullar bankanın kampanya sayfasında.",
+   "bitis": "2026-12-31",
+   "url": "https://www.emlakkatilim.com.tr/tr/bireysel/kampanyalar/modanisada-tum-indirimlere-ek-15-indirim-firsati"
+  },
+  {
+   "id": "tf5",
+   "banka": "Türkiye Finans",
+   "kat": "finansman",
+   "baslik": "Kamu çalışanlarına özel ihtiyaç finansmanı",
+   "ozet": "Kamu çalışanlarına eşya, eğitim, sağlık, tadilat gibi harcamalar için 50.000 – 400.000 TL ihtiyaç finansmanı; ilk taksitte 3 aya kadar ödemesiz dönem.",
+   "sart": "Vade tutara göre: 125.000 TL’ye kadar 36 ay, 250.000 TL’ye kadar 24 ay, daha yüksek tutarda 12 ay.",
+   "bitis": null,
+   "url": "https://www.turkiyefinans.com.tr/tr-tr/kampanyalar/Sayfalar/kamu-calisanlarina-ozel-ihtiyac-finansmani.aspx"
+  },
+  {
+   "id": "tf6",
+   "banka": "Türkiye Finans",
+   "kat": "finansman",
+   "baslik": "Banka çalışanlarına özel ihtiyaç finansmanı",
+   "ozet": "Özel veya kamu bankası çalışanlarına 1.000 – 1.000.000 TL ihtiyaç finansmanı; ilk taksitte 3 aya kadar ödemesiz dönem.",
+   "sart": "Yalnızca özel veya kamu bankası çalışanları yararlanabilir. Vade: 125.000 TL’ye kadar 36 ay, 250.000 TL’ye kadar 24 ay, üzerinde 12 ay.",
+   "bitis": null,
+   "url": "https://www.turkiyefinans.com.tr/tr-tr/kampanyalar/Sayfalar/banka-calisanlarina-ozel-ihtiyac-finansmani.aspx"
+  },
+  {
+   "id": "tf7",
+   "banka": "Türkiye Finans",
+   "kat": "diger",
+   "baslik": "Maaşını taşıyan emeklilere 32.000 TL’ye varan promosyon",
+   "ozet": "Maaşını Türkiye Finans’a taşıyan emeklilere nakit promosyon, bonus ve ödül.",
+   "sart": "Oranlar, tutarlar ve koşullar bankanın kampanya sayfasında.",
+   "bitis": null,
+   "url": "https://www.turkiyefinans.com.tr/tr-tr/kampanyalar/Sayfalar/emeklilere-nakit-promosyon.aspx"
+  },
+  {
+   "id": "tf8",
+   "banka": "Türkiye Finans",
+   "kat": "diger",
+   "baslik": "BES’e kredi kartıyla 650 TL bonus",
+   "ozet": "Türkiye Finans kredi kartlarıyla satın alınan her yeni BES sözleşmesi için 650 TL bonus.",
+   "sart": "Kredi kartıyla satın alınan yeni BES sözleşmesi için geçerlidir; ayrıntılar bankanın sayfasında.",
+   "bitis": null,
+   "url": "https://www.turkiyefinans.com.tr/tr-tr/kampanyalar/Sayfalar/bes-ile-yarininiza-deger-katin.aspx"
+  },
+  {
+   "id": "tf9",
+   "banka": "Türkiye Finans",
+   "kat": "diger",
+   "baslik": "Yeni yatırım hesabında yurt içi hisse işlemlerinde sıfır komisyon",
+   "ozet": "Yatırım hesabı açan müşteriler yurt içi hisse senedi işlemlerinde komisyon ödemeden işlem yapabiliyor.",
+   "sart": "Oranlar, tutarlar ve koşullar bankanın kampanya sayfasında.",
+   "bitis": null,
+   "url": "https://www.turkiyefinans.com.tr/tr-tr/kampanyalar/Sayfalar/yeni-yatirim-hesabiniza-sifir-komisyon.aspx"
+  },
+  {
+   "id": "tf10",
+   "banka": "Türkiye Finans",
+   "kat": "hesap",
+   "baslik": "Katılım hesabı açana daha yüksek kâr payı oranları",
+   "ozet": "Katılım hesabı açarak daha yüksek kâr paylaşım oranlarından yararlanma fırsatı.",
+   "sart": "Oranlar, tutarlar ve koşullar bankanın kampanya sayfasında.",
+   "bitis": null,
+   "url": "https://www.turkiyefinans.com.tr/tr-tr/kampanyalar/Sayfalar/katilim-hesabi-kampanyasi.aspx"
+  },
+  {
+   "id": "tf11",
+   "banka": "Türkiye Finans",
+   "kat": "hesap",
+   "baslik": "Günlük Hesap ile vadeni bozma",
+   "ozet": "Günlük Hesap ile birikimleri vadeyi bozmadan avantajlı getiri oranlarıyla değerlendirme.",
+   "sart": "Oranlar, tutarlar ve koşullar bankanın kampanya sayfasında.",
+   "bitis": null,
+   "url": "https://www.turkiyefinans.com.tr/tr-tr/kampanyalar/Sayfalar/gunluk-hesap-vade-kampanyasi.aspx"
+  }
+ ]
+}

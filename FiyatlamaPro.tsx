@@ -7061,6 +7061,7 @@ const ICON_MAP: Record<string, any> = {
   kamuHaznedarligi: Landmark,
   hazineSukuk: Landmark,      // 2026-10-16: Hazine Kira Sertifikası Takibi
   soruOdasi: Trophy,          // 2026-10-17: Bilgi Arenası (bilgi yarışması)
+  kampanyalar: Percent,       // 2026-10-18: Banka Kampanyaları
   icazetBelgeleri: FileBadge,   // 2026-10-03: belge/sertifika ikonu; FileBadge zaten import edilmiş (yeni import riski yok). Bu harita yoksa Araçlar kartı ve sol menü İKONSUZ görünür.
   egitim: GraduationCap,   // 2026-10-04: Eğitim bölümü (Araçlar kartı + sol menü ikonu)
   musteriPortfoyum: Briefcase,   // 2026-10-04: Müşteri Portföyüm (Araçlar kartı + sol menü ikonu); Briefcase zaten import edilmiş
@@ -7074,6 +7075,7 @@ const ICON_MAP: Record<string, any> = {
   zekatHesabi: Gift,             // zekât = vermek; Gift zaten import edilmiş, yeni import riski alınmadı
   erkenKapamaKarari: Zap,        // zaten import; erken kapama modalında da ⚡ kullanılıyor
   vadeFarkiKarari: CalendarClock, // zaten import
+  kiraArtis: Home,
   teklifKarsilastirma: Scale,     // 2026-10-12: Teklif Karşılaştırma (Scale zaten import)
   erkenKapamaKomisyonu: Percent,  // zaten import (yeni import riski yok); bu harita yoksa Araçlar/Hesapla kartı ikonsuz kalır
   tlYpKarari: ArrowLeftRight,     // zaten import
@@ -7365,6 +7367,37 @@ const EN_SOZLUK: Record<string, string> = {
   "En Çok Düşen Fonlar": "Top Losing Funds",
   "📤 Sonucu paylaş (PDF)": "📤 Share result (PDF)",
   "Sonuç PDF'i oluşturulamadı. Biraz sonra tekrar dene.": "Could not create the result PDF. Try again shortly.",
+  "Kira Artış Hesaplayıcı": "Rent Increase Calculator",
+  "Mevcut Kira": "Current Rent",
+  "Aylık Kira": "Monthly Rent",
+  "Şu an ödediğin aylık kira": "The monthly rent you pay now",
+  "Resmî oran": "Official rate",
+  "Kendi oranım": "My own rate",
+  "Kira Yenileme Ayı": "Renewal Month",
+  "Artış Oranı": "Increase Rate",
+  "Örn. TÜİK'in 12 aylık ortalama TÜFE oranı": "E.g. TurkStat 12-month average CPI rate",
+  "Yeni kirayı görmek için mevcut kiranı gir.": "Enter your current rent to see the new rent.",
+  "Yeni kira · en çok": "New rent · maximum",
+  "Şimdiki kira": "Current rent",
+  "Yeni kira": "New rent",
+  "Yıllık ek yük": "Extra cost per year",
+  "Yıllık toplam kira": "Total rent per year",
+  "Uygulanan oran": "Rate applied",
+  "Ev Sahibi Ne İstiyor?": "What Does the Landlord Ask?",
+  "İstenen Yeni Kira": "Requested New Rent",
+  "İstersen ev sahibinin söylediği tutarı gir, sınırla kıyaslayalım": "Optionally enter the amount the landlord asks, and we'll compare it with the limit",
+  "Son Aylara Göre Yeni Kira": "New Rent by Recent Months",
+  "Kira artışı": "Rent increase",
+  "Kampanyalar": "Campaigns",
+  "Banka Kampanyaları": "Bank Campaigns",
+  "Hesap & Altın": "Accounts & Gold",
+  "Tüm bankalar": "All banks",
+  "kampanya": "campaigns",
+  "Bitişi yaklaşana göre": "Ending soonest first",
+  "Önemli koşul": "Key condition",
+  "kampanya sayfası": "campaigns page",
+  "tüm kampanyalar": "all campaigns",
+  "Katılım bankalarının güncel kampanyaları, bitiş tarihine göre": "Current campaigns of participation banks, by end date",
   // ── Alt bar / yan menü / genel gezinme ──
   "Ana Sayfa": "Home",
   "Hesapla": "Calculate",
@@ -11105,6 +11138,37 @@ const AR_SOZLUK: Record<string, string> = {
   "En Çok Düşen Fonlar": "الصناديق الأكثر انخفاضًا",
   "📤 Sonucu paylaş (PDF)": "📤 مشاركة النتيجة (PDF)",
   "Sonuç PDF'i oluşturulamadı. Biraz sonra tekrar dene.": "تعذّر إنشاء ملف PDF للنتيجة. حاول مرة أخرى بعد قليل.",
+  "Kira Artış Hesaplayıcı": "حاسبة زيادة الإيجار",
+  "Mevcut Kira": "الإيجار الحالي",
+  "Aylık Kira": "الإيجار الشهري",
+  "Şu an ödediğin aylık kira": "الإيجار الشهري الذي تدفعه حاليًا",
+  "Resmî oran": "النسبة الرسمية",
+  "Kendi oranım": "نسبتي الخاصة",
+  "Kira Yenileme Ayı": "شهر تجديد الإيجار",
+  "Artış Oranı": "نسبة الزيادة",
+  "Örn. TÜİK'in 12 aylık ortalama TÜFE oranı": "مثل: متوسط التضخم لـ12 شهرًا من TÜİK",
+  "Yeni kirayı görmek için mevcut kiranı gir.": "أدخل إيجارك الحالي لعرض الإيجار الجديد.",
+  "Yeni kira · en çok": "الإيجار الجديد · الحد الأقصى",
+  "Şimdiki kira": "الإيجار الحالي",
+  "Yeni kira": "الإيجار الجديد",
+  "Yıllık ek yük": "العبء السنوي الإضافي",
+  "Yıllık toplam kira": "إجمالي الإيجار السنوي",
+  "Uygulanan oran": "النسبة المطبقة",
+  "Ev Sahibi Ne İstiyor?": "ماذا يطلب المالك؟",
+  "İstenen Yeni Kira": "الإيجار الجديد المطلوب",
+  "İstersen ev sahibinin söylediği tutarı gir, sınırla kıyaslayalım": "يمكنك إدخال المبلغ الذي طلبه المالك لنقارنه بالحد الأقصى",
+  "Son Aylara Göre Yeni Kira": "الإيجار الجديد حسب الأشهر الأخيرة",
+  "Kira artışı": "زيادة الإيجار",
+  "Kampanyalar": "الحملات",
+  "Banka Kampanyaları": "حملات البنوك",
+  "Hesap & Altın": "الحسابات والذهب",
+  "Tüm bankalar": "كل البنوك",
+  "kampanya": "حملة",
+  "Bitişi yaklaşana göre": "الأقرب انتهاءً أولًا",
+  "Önemli koşul": "شرط مهم",
+  "kampanya sayfası": "صفحة الحملات",
+  "tüm kampanyalar": "كل الحملات",
+  "Katılım bankalarının güncel kampanyaları, bitiş tarihine göre": "الحملات الحالية للبنوك التشاركية حسب تاريخ الانتهاء",
   "Ana Sayfa": "الرئيسية",
   "Asistan": "المساعد",
   "Katılım Finansının Akıllı Asistanı": "المساعد الذكي للتمويل بالمشاركة",
@@ -15175,6 +15239,7 @@ const EKRAN_KATEGORI: Record<string,string> = {
   // Bireysel Finansman
   konutFinansman:"bireysel", tasitFinansman:"bireysel", yatirimFonuFinansman:"bireysel",
   erkenKapamaKarari:"bireysel",
+  kiraArtis:"bireysel",
   taksitKarsilastirma:"bireysel",
   toggFinansman:"bireysel", esnekOdemePlanlari:"bireysel", arsaIsyeri:"bireysel", taksitenKredi:"bireysel",
   // Tüzel Finansman
@@ -15187,7 +15252,7 @@ const EKRAN_KATEGORI: Record<string,string> = {
   // Piyasa & Veriler
   bistHisseTarayici:"piyasa", fonGetiriIzleme:"piyasa", karPayiOranlari:"piyasa", finansalGostergeler:"piyasa", piyasaHaberleri:"piyasa", fiyatAlarmlarim:"piyasa",
   // Araçlar / Hesaplama Araçları
-  finansalTakvim:"arac", vadeTakibi:"arac", katilimBankalari:"arac", katilimSigorta:"arac", kamuHaznedarligi:"arac", hazineSukuk:"arac", soruOdasi:"arac",
+  finansalTakvim:"arac", vadeTakibi:"arac", katilimBankalari:"arac", katilimSigorta:"arac", kamuHaznedarligi:"arac", hazineSukuk:"arac", soruOdasi:"arac", kampanyalar:"arac",
   hazineDoviz:"arac", hazineForward:"arac", hazineSwap:"arac", hazineBono:"arac", hazineSenaryo:"arac", hazineKurMakasi:"arac", hazineTcmbKur:"arac", isletmeFinans:"arac",
   asistan:"arac", sozluk:"arac", egitim:"arac", musteriPortfoyum:"arac",
 };
@@ -29159,6 +29224,7 @@ function SiteAltBilgi({onEkran}:{onEkran:(sc:string)=>void}){
           {ad:"Ekonomi Sözlüğü",       ekran:"ekonomiSozluk"},
           {ad:"Katılım Bankaları",     ekran:"katilimBankalari"},
           {ad:"Katılım Sigortacılığı", ekran:"katilimSigorta"},
+          {ad:"Kampanyalar",           ekran:"kampanyalar"},
           {ad:"Sektör Verileri",       ekran:"katilimSektoru"},
           {ad:"Kira Sertifikası",      ekran:"kiraSertifikasi"},
           {ad:"Kamu Haznedarlığı",     ekran:"kamuHaznedarligi"},
@@ -31917,6 +31983,426 @@ function TeklifKarsilastirma({ s, kimlik, nav }: { s?: any; kimlik?: any; nav?: 
         Toplam geri ödeme ve peşin kesintiler vergi (BSMV, KKDF vb.) dahil tutarlar olarak girilmelidir. Bilgilendirme amaçlıdır; bankanın sözleşmesi esastır. Taksitler aylık ve eşit tutarlı varsayılır; bankanın yazdığı oranla küçük fark çıkabilir.
       </p>
       {raporAcik && dolu.length >= 2 && <RaporModal baslik="Banka Teklif Karşılaştırma" satirlar={raporSatirlari()} tablo={raporTablosu()} plan={null} onClose={() => setRaporAcik(false)} showKdv={false} bsmvOran={0} kkdfOran={0} />}
+    </div>
+  );
+}
+
+// ── KAMPANYALAR (2026-10-18, kullanıcı isteği: "katılım bankaları kampanyaları,
+// hepsi gösterebileceğimiz bir alan") ──────────────────────────────────────────
+// Veri: public/kampanyalar.json (kar-payi.json ile AYNI yöntem — elle derlenir,
+// uygulama sürümü gerektirmeden güncellenir). Her kampanya bankanın KENDİ
+// sayfasına bağlanır; metin kısa özettir, görsel/telif içerik kopyalanmaz.
+// Bitiş tarihi geçen kampanya otomatik gizlenir; tarih yoksa "Süre belirtilmemiş".
+const KMP_KATEGORILER = [
+  { v: "hepsi", l: "Tümü" }, { v: "kart", l: "Kredi Kartı" }, { v: "finansman", l: "Finansman" },
+  { v: "hesap", l: "Hesap & Altın" }, { v: "diger", l: "Diğer" },
+];
+const KMP_KAT_ETIKET: Record<string, string> = { kart: "Kredi Kartı", finansman: "Finansman", hesap: "Hesap & Altın", diger: "Diğer" };
+function kmpGunKaldi(bitis: string | null | undefined): number | null {
+  if (!bitis) return null;
+  const m = String(bitis).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return null;
+  const bit = new Date(+m[1], +m[2] - 1, +m[3]).getTime();
+  const n = new Date(); const bug = new Date(n.getFullYear(), n.getMonth(), n.getDate()).getTime();
+  return Math.round((bit - bug) / 86400000);
+}
+function kmpTarihYaz(bitis: string): string {
+  const m = String(bitis).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return bitis;
+  return `${+m[3]} ${KRA_AY_ADLARI[+m[2] - 1]} ${m[1]}`;
+}
+function KampanyalarEkrani() {
+  const [veri, setVeri] = useState<any>(null);
+  const [durum, setDurum] = useState<"yukleniyor" | "hazir" | "hata">("yukleniyor");
+  const [kat, setKat] = useState("hepsi");
+  const [banka, setBanka] = useState("hepsi");
+  const [acik, setAcik] = useState<string | null>(null);
+  useEffect(() => {
+    let iptal = false;
+    fetch(`${API_BASE}/kampanyalar.json`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d) => { if (!iptal) { setVeri(d); setDurum("hazir"); } })
+      .catch(() => { if (!iptal) setDurum("hata"); });
+    return () => { iptal = true; };
+  }, []);
+
+  const bankalar: any[] = Array.isArray(veri?.bankalar) ? veri.bankalar : [];
+  const tumListe: any[] = useMemo(() => {
+    const l: any[] = Array.isArray(veri?.kampanyalar) ? veri.kampanyalar : [];
+    return l
+      .map((k) => ({ ...k, kalan: kmpGunKaldi(k.bitis) }))
+      .filter((k) => k.kalan === null || k.kalan >= 0)
+      .sort((a, b) => (a.kalan === null ? 1e9 : a.kalan) - (b.kalan === null ? 1e9 : b.kalan));
+  }, [veri]);
+  const liste = tumListe.filter((k) => (kat === "hepsi" || k.kat === kat) && (banka === "hepsi" || k.banka === banka));
+  const seciliBanka = bankalar.find((b) => b.ad === banka);
+  const bankaSayisi = (ad: string) => tumListe.filter((k) => k.banka === ad).length;
+
+  const kalanRenk = (g: number | null) => g === null ? { bg: WA(0.08), fg: C.sub }
+    : g <= 3 ? { bg: "rgba(239,68,68,0.14)", fg: C.red }
+    : g <= 14 ? { bg: "rgba(245,158,11,0.16)", fg: C.orange }
+    : { bg: "rgba(34,197,94,0.14)", fg: C.green };
+  const kalanYaz = (k: any) => {
+    const g = k.kalan as number | null;
+    if (g === null) return "Süre belirtilmemiş";
+    if (g === 0) return "Bugün bitiyor";
+    if (g === 1) return "Yarın bitiyor";
+    if (g <= 30) return `${g} gün kaldı`;
+    return `${kmpTarihYaz(k.bitis)}’e kadar`;
+  };
+
+  return (
+    <div style={{ padding: "14px 14px 90px" }}>
+      <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6, marginBottom: 8 }}>
+        {KMP_KATEGORILER.map((c) => (
+          <button key={c.v} onClick={() => setKat(c.v)} style={{
+            flexShrink: 0, padding: "8px 14px", borderRadius: 14, cursor: "pointer", fontSize: 12.5,
+            border: `1px solid ${kat === c.v ? C.blue : C.border}`,
+            background: kat === c.v ? C.blue : "transparent",
+            color: kat === c.v ? "#fff" : C.sub, fontWeight: kat === c.v ? 700 : 500,
+          }}>{CV(c.l)}</button>
+        ))}
+      </div>
+
+      {bankalar.length > 0 && (
+        <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 6, marginBottom: 10 }}>
+          <button onClick={() => setBanka("hepsi")} style={{
+            flexShrink: 0, height: 44, padding: "0 12px", borderRadius: 13, cursor: "pointer", fontSize: 12, fontWeight: 700,
+            border: `2px solid ${banka === "hepsi" ? C.blue : C.border}`, background: "transparent",
+            color: banka === "hepsi" ? C.blue : C.sub,
+          }}>{CV("Tüm bankalar")}</button>
+          {bankalar.map((b: any) => (
+            <button key={b.ad} onClick={() => setBanka(banka === b.ad ? "hepsi" : b.ad)} aria-label={b.ad} style={{
+              flexShrink: 0, width: 44, height: 44, borderRadius: 13, cursor: "pointer", padding: 0,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              border: `2px solid ${banka === b.ad ? C.blue : C.border}`, background: "transparent",
+              opacity: banka === "hepsi" || banka === b.ad ? 1 : 0.5,
+            }}><BankaLogoRozet ad={b.ad} boyut={26} /></button>
+          ))}
+        </div>
+      )}
+
+      {durum === "yukleniyor" && <Card><p style={{ margin: 0, fontSize: 13, color: C.sub, textAlign: "center" }}>Kampanyalar yükleniyor…</p></Card>}
+      {durum === "hata" && <Card><p style={{ margin: 0, fontSize: 13, color: C.sub, textAlign: "center", lineHeight: 1.6 }}>Kampanyalar şu an alınamadı. Biraz sonra tekrar dene.</p></Card>}
+
+      {durum === "hazir" && (
+        <>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", margin: "0 2px 8px" }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: C.sub }}>{CV("Bitişi yaklaşana göre")}</span>
+            <span style={{ fontSize: 11, color: C.sub }}>{liste.length} {CV("kampanya")}</span>
+          </div>
+
+          {liste.map((k: any) => {
+            const r = kalanRenk(k.kalan);
+            const ac = acik === k.id;
+            return (
+              <div key={k.id} onClick={() => setAcik(ac ? null : k.id)} style={{
+                display: "flex", gap: 12, background: C.card, border: `1px solid ${C.border}`,
+                borderRadius: 20, padding: 13, marginBottom: 10, cursor: "pointer",
+              }}>
+                <div style={{ flexShrink: 0, paddingTop: 2 }}><BankaLogoRozet ad={k.banka} boyut={34} /></div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 3 }}>
+                    <span style={{ fontSize: 11.5, fontWeight: 700, color: C.sub }}>{k.banka}</span>
+                    <span style={{ fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 999, background: "rgba(59,130,246,0.14)", color: C.blue, whiteSpace: "nowrap" }}>
+                      {CV(KMP_KAT_ETIKET[k.kat] || "Diğer")}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: C.label, lineHeight: 1.3, marginBottom: 3 }}>{k.baslik}</div>
+                  <div style={{ fontSize: 12, color: C.sub, lineHeight: 1.45, marginBottom: ac ? 8 : 9 }}>{k.ozet}</div>
+                  {ac && k.sart && (
+                    <div style={{ fontSize: 11.5, color: C.label, lineHeight: 1.5, background: WA(0.05), borderRadius: 10, padding: "8px 10px", marginBottom: 9 }}>
+                      <b>{CV("Önemli koşul")}:</b> {k.sart}
+                    </div>
+                  )}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 11.5, fontWeight: 700, padding: "4px 9px", borderRadius: 999, background: r.bg, color: r.fg }}>
+                      {kalanYaz(k)}
+                    </span>
+                    <a href={k.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{
+                      display: "inline-flex", alignItems: "center", gap: 4, padding: "7px 13px", borderRadius: 10,
+                      fontSize: 12, fontWeight: 700, textDecoration: "none", color: "#fff", background: C.blue, whiteSpace: "nowrap",
+                    }}>{CV("Detay")} <ExternalLink size={12} color="#fff" /></a>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          {liste.length === 0 && (
+            <Card>
+              <p style={{ margin: 0, fontSize: 13, color: C.sub, lineHeight: 1.6, textAlign: "center" }}>
+                {banka !== "hepsi" && seciliBanka && bankaSayisi(banka) === 0
+                  ? `${banka} kampanyalarını henüz listemize eklemedik.`
+                  : "Bu seçimde kampanya bulunamadı."}
+              </p>
+              {banka !== "hepsi" && seciliBanka?.tumu && (
+                <div style={{ textAlign: "center", marginTop: 10 }}>
+                  <a href={seciliBanka.tumu} target="_blank" rel="noopener noreferrer" style={{
+                    display: "inline-flex", alignItems: "center", gap: 4, padding: "8px 14px", borderRadius: 10,
+                    fontSize: 12.5, fontWeight: 700, textDecoration: "none", color: "#fff", background: C.blue,
+                  }}>{seciliBanka.ad} {CV("kampanya sayfası")} <ExternalLink size={12} color="#fff" /></a>
+                </div>
+              )}
+            </Card>
+          )}
+
+          {banka !== "hepsi" && seciliBanka?.tumu && liste.length > 0 && (
+            <div style={{ textAlign: "center", margin: "2px 0 12px" }}>
+              <a href={seciliBanka.tumu} target="_blank" rel="noopener noreferrer" style={{
+                fontSize: 12.5, fontWeight: 700, color: C.blue, textDecoration: "none",
+              }}>{seciliBanka.ad} {CV("tüm kampanyalar")} ›</a>
+            </div>
+          )}
+
+          <KararNot tur="uyari">
+            Kampanya bilgileri {veri?.guncelleme ? kmpTarihYaz(veri.guncelleme) + " tarihinde " : ""}bankaların kendi
+            sayfalarından kısaca derlenmiştir. Şartlar, tutarlar ve tarihler için mutlaka bankanın sayfasına bakınız;
+            kampanyalar bankalarca değiştirilebilir veya sona erdirilebilir. Katılım Plus kampanyaların tarafı değildir.
+          </KararNot>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── KİRA ARTIŞ HESAPLAYICI (2026-10-17, kullanıcı isteği: "kira artış hesaplayıcı
+// bireysel finansman araçlarına", "tutar ön planda olsun") ─────────────────────
+// Yasal üst sınır: TBK m.344 — yenilenen kira dönemlerinde artış, TÜİK'in
+// açıkladığı TÜFE'nin ON İKİ AYLIK ORTALAMALARA göre değişim oranını geçemez.
+// Veri: Finansal Göstergeler'deki "Kira Yenileme Referans Oranı" ile AYNI kaynak
+// (/api/evds-proxy → TUFE_12AY_ORTALAMA + TUFE_12AY_ORTALAMA_SERI) — yeni istek
+// türü yok. Uygulanacak oran, yenileme ayından BİR ÖNCEKİ ayın verisidir
+// (örn. Ekim yenilemesi → Eylül verisi). Seri yoksa kullanıcı oranı elle girer.
+const KRA_AY_ADLARI = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
+const KRA_AY_KISA = ["Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"];
+function kiraTarihAyrisTir(t: any): { y: number; m: number } | null {
+  const s = String(t ?? "");
+  let r = s.match(/(\d{4})[-./](\d{1,2})/);
+  if (r) { const y = +r[1], m = +r[2]; return m >= 1 && m <= 12 ? { y, m } : null; }
+  r = s.match(/(\d{1,2})[-./](\d{1,2})[-./](\d{4})/);
+  if (r) { const m = +r[2], y = +r[3]; return m >= 1 && m <= 12 ? { y, m } : null; }
+  r = s.match(/(\d{1,2})[-./](\d{4})/);
+  if (r) { const m = +r[1], y = +r[2]; return m >= 1 && m <= 12 ? { y, m } : null; }
+  return null;
+}
+function kiraTL2(n: number): string {
+  return "₺" + new Intl.NumberFormat("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+}
+function kiraTL0(n: number): string {
+  return "₺" + new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 0 }).format(Math.round(n));
+}
+function kiraYuzde(n: number): string {
+  return "%" + new Intl.NumberFormat("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+}
+function KiraArtisHesaplayici({ s }: { s?: any }) {
+  const [evds, setEvds] = useState<any>(null);
+  const [yukleniyor, setYukleniyor] = useState(true);
+  useEffect(() => {
+    let iptal = false;
+    fetch(`${API_BASE}/api/evds-proxy`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!iptal && d?.seriler) setEvds(d.seriler); })
+      .catch(() => {})
+      .finally(() => { if (!iptal) setYukleniyor(false); });
+    return () => { iptal = true; };
+  }, []);
+
+  // Veri ayı → kira yenileme ayı (bir sonraki ay). En yeni 6 ay.
+  const donemler = useMemo(() => {
+    const ham: any[] = Array.isArray(evds?.TUFE_12AY_ORTALAMA_SERI) ? evds.TUFE_12AY_ORTALAMA_SERI : [];
+    const liste = ham
+      .map((n: any) => ({ p: kiraTarihAyrisTir(n?.tarih), deger: Number(n?.deger) }))
+      .filter((n: any) => n.p && Number.isFinite(n.deger))
+      .sort((a: any, b: any) => (a.p.y * 12 + a.p.m) - (b.p.y * 12 + b.p.m));
+    // aynı ay iki kez gelirse sonuncuyu tut
+    const tekil: any[] = [];
+    for (const n of liste) {
+      const son = tekil[tekil.length - 1];
+      if (son && son.p.y === n.p.y && son.p.m === n.p.m) tekil[tekil.length - 1] = n; else tekil.push(n);
+    }
+    if (tekil.length === 0) {
+      const tek = evds?.TUFE_12AY_ORTALAMA;
+      const p = kiraTarihAyrisTir(tek?.tarih);
+      if (p && Number.isFinite(Number(tek?.deger))) tekil.push({ p, deger: Number(tek.deger) });
+    }
+    return tekil.slice(-6).reverse().map((n: any) => {
+      const yy = n.p.m === 12 ? n.p.y + 1 : n.p.y;
+      const ym = n.p.m === 12 ? 1 : n.p.m + 1;
+      return {
+        oran: n.deger as number,
+        veriAy: `${KRA_AY_ADLARI[n.p.m - 1]} ${n.p.y}`,
+        yenilemeKisa: `${KRA_AY_KISA[ym - 1]} ${String(yy).slice(2)}`,
+        yenilemeUzun: `${KRA_AY_ADLARI[ym - 1]} ${yy}`,
+      };
+    });
+  }, [evds]);
+
+  const [kiraS, setKiraS] = useState("");
+  const [secili, setSecili] = useState(0);
+  const [mod, setMod] = useState<"resmi" | "elle">("resmi");
+  const [elleS, setElleS] = useState("");
+  const [istenenS, setIstenenS] = useState("");
+
+  const veriVar = donemler.length > 0;
+  const elleMod = mod === "elle" || !veriVar;
+  const donem = veriVar ? donemler[Math.min(secili, donemler.length - 1)] : null;
+
+  const kira = sayiOku(kiraS);
+  const oran = elleMod ? sayiOku(elleS) : (donem ? donem.oran : 0);
+  const hazir = kira > 0 && oran > 0;
+  const yeniKira = kira * (1 + oran / 100);
+  const artis = yeniKira - kira;
+  const istenen = sayiOku(istenenS);
+  const fark = istenen - yeniKira;
+
+  return (
+    <div style={{ padding: "14px 14px 90px" }}>
+      <Card>
+        <SecTitle>Mevcut Kira</SecTitle>
+        <Field label="Aylık Kira" value={kiraS} onChange={setKiraS} suffix="₺" hint="Şu an ödediğin aylık kira" />
+
+        {veriVar && (
+          <>
+            <p style={{ margin: "2px 0 6px", fontSize: 12, fontWeight: 600, color: C.sub }}>Oran</p>
+            <Seg options={[{ v: "resmi", l: "Resmî oran" }, { v: "elle", l: "Kendi oranım" }]} value={mod} onChange={setMod} />
+          </>
+        )}
+
+        {!elleMod && donem && (
+          <>
+            <p style={{ margin: "2px 0 8px", fontSize: 12, fontWeight: 600, color: C.sub }}>Kira Yenileme Ayı</p>
+            <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4, marginBottom: 6 }}>
+              {donemler.map((d: any, i: number) => (
+                <button key={d.veriAy} onClick={() => setSecili(i)} style={{
+                  flexShrink: 0, padding: "8px 13px", borderRadius: 14, cursor: "pointer",
+                  border: `1px solid ${secili === i ? C.blue : C.border}`,
+                  background: secili === i ? C.blue : "transparent",
+                  color: secili === i ? "#fff" : C.sub,
+                  fontWeight: secili === i ? 700 : 500, fontSize: 12.5,
+                }}>{d.yenilemeKisa}</button>
+              ))}
+            </div>
+            <p style={{ margin: 0, fontSize: 11.5, color: C.sub, lineHeight: 1.5 }}>
+              {donem.yenilemeUzun} yenilemesinde {donem.veriAy} verisi (TÜFE 12 aylık ortalama) esas alınır.
+            </p>
+          </>
+        )}
+
+        {elleMod && (
+          <>
+            {!veriVar && !yukleniyor && (
+              <p style={{ margin: "0 0 10px", fontSize: 12, color: C.sub, lineHeight: 1.5 }}>
+                Güncel oran şu an alınamadı. TÜİK'in açıkladığı "TÜFE 12 aylık ortalama" oranını kendin girebilirsin.
+              </p>
+            )}
+            {!veriVar && yukleniyor && (
+              <p style={{ margin: "0 0 10px", fontSize: 12, color: C.sub }}>Güncel oran yükleniyor…</p>
+            )}
+            <Field label="Artış Oranı" value={elleS} onChange={setElleS} suffix="%" hint="Örn. TÜİK'in 12 aylık ortalama TÜFE oranı" />
+          </>
+        )}
+      </Card>
+
+      {!hazir ? (
+        <Card>
+          <p style={{ margin: 0, fontSize: 13, color: C.sub, lineHeight: 1.6, textAlign: "center" }}>
+            Yeni kirayı görmek için mevcut kiranı gir.
+          </p>
+        </Card>
+      ) : (
+        <>
+          <div style={{
+            borderRadius: 22, padding: "18px 18px 16px", marginBottom: 10,
+            background: "linear-gradient(145deg, rgba(34,197,94,0.16), rgba(59,130,246,0.10))",
+            border: "1px solid rgba(34,197,94,0.32)",
+          }}>
+            <div style={{ fontSize: 12.5, color: C.sub }}>Yeni kira · en çok</div>
+            <div style={{
+              fontSize: 36, fontWeight: 800, color: C.green, letterSpacing: -1, margin: "2px 0 10px",
+              fontVariantNumeric: "tabular-nums", lineHeight: 1.1,
+            }}>{kiraTL2(yeniKira)}</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 12, fontWeight: 700, padding: "5px 10px", borderRadius: 999, background: WA(0.07), color: C.green }}>
+                +{kiraTL2(artis)} / ay
+              </span>
+              <span style={{ fontSize: 12, fontWeight: 700, padding: "5px 10px", borderRadius: 999, background: WA(0.07), color: C.label }}>
+                {kiraYuzde(oran)} artış
+              </span>
+            </div>
+            <div style={{ marginTop: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, color: C.sub, marginBottom: 4 }}>
+                <span>Şimdiki kira</span><b style={{ color: C.label }}>{kiraTL0(kira)}</b>
+              </div>
+              <div style={{ height: 9, borderRadius: 9, background: WA(0.1), overflow: "hidden", marginBottom: 10 }}>
+                <div style={{ width: `${(kira / yeniKira) * 100}%`, height: "100%", borderRadius: 9, background: C.sub }} />
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, color: C.sub, marginBottom: 4 }}>
+                <span>Yeni kira</span><b style={{ color: C.label }}>{kiraTL0(yeniKira)}</b>
+              </div>
+              <div style={{ height: 9, borderRadius: 9, background: WA(0.1), overflow: "hidden" }}>
+                <div style={{ width: "100%", height: "100%", borderRadius: 9, background: C.green }} />
+              </div>
+            </div>
+          </div>
+
+          <Card>
+            <RRow label="Yıllık ek yük" value={kiraTL0(artis * 12)} />
+            <RRow label="Yıllık toplam kira" value={kiraTL0(yeniKira * 12)} />
+            <RRow label="Uygulanan oran" value={elleMod ? `${kiraYuzde(oran)} · senin girdiğin` : `${kiraYuzde(oran)} · ${donem?.veriAy}`} />
+          </Card>
+
+          <Card>
+            <SecTitle>Ev Sahibi Ne İstiyor?</SecTitle>
+            <Field label="İstenen Yeni Kira" value={istenenS} onChange={setIstenenS} suffix="₺" hint="İstersen ev sahibinin söylediği tutarı gir, sınırla kıyaslayalım" />
+            {istenen > 0 && (
+              <div style={{
+                borderRadius: 12, padding: "10px 12px", fontSize: 13, lineHeight: 1.5, fontWeight: 600,
+                background: fark > 0.5 ? "rgba(239,68,68,0.10)" : "rgba(34,197,94,0.10)",
+                color: fark > 0.5 ? C.red : C.green,
+              }}>
+                {fark > 0.5
+                  ? `İstenen tutar yasal sınırın ${kiraTL0(fark)} üzerinde (${kiraYuzde(((istenen / kira) - 1) * 100)} artış).`
+                  : `İstenen tutar yasal sınırın içinde (${kiraYuzde(((istenen / kira) - 1) * 100)} artış).`}
+              </div>
+            )}
+          </Card>
+        </>
+      )}
+
+      {veriVar && !elleMod && (
+        <Card>
+          <SecTitle>Son Aylara Göre Yeni Kira</SecTitle>
+          {kira > 0 ? donemler.map((d: any, i: number) => (
+            <div key={d.veriAy} onClick={() => setSecili(i)} style={{
+              display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer",
+              padding: "10px 0", borderTop: i > 0 ? `1px solid ${C.border}` : "none",
+            }}>
+              <span style={{ fontSize: 12.5, color: i === secili ? C.label : C.sub, fontWeight: i === secili ? 700 : 400 }}>
+                {d.yenilemeUzun} · {kiraYuzde(d.oran)}
+              </span>
+              <b style={{ fontSize: 13.5, color: i === secili ? C.green : C.label, fontVariantNumeric: "tabular-nums" }}>
+                {kiraTL0(kira * (1 + d.oran / 100))}
+              </b>
+            </div>
+          )) : donemler.map((d: any, i: number) => (
+            <div key={d.veriAy} onClick={() => setSecili(i)} style={{
+              display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer",
+              padding: "10px 0", borderTop: i > 0 ? `1px solid ${C.border}` : "none",
+            }}>
+              <span style={{ fontSize: 12.5, color: i === secili ? C.label : C.sub, fontWeight: i === secili ? 700 : 400 }}>{d.yenilemeUzun}</span>
+              <b style={{ fontSize: 13.5, color: C.label }}>{kiraYuzde(d.oran)}</b>
+            </div>
+          ))}
+        </Card>
+      )}
+
+      <KararNot tur="uyari">
+        Bu tutar yasal ÜST sınırdır; taraflar daha düşük bir artış belirleyebilir. Oran, TÜİK'in açıkladığı TÜFE
+        on iki aylık ortalamalara göre değişimidir (TBK m.344). Konut ve çatılı işyeri kiraları için geçerlidir;
+        yeni kiracıyla yapılan sözleşmelerde bu sınır uygulanmaz, 5 yıllık uzama dönemi sonrasında ise farklı
+        kurallar işler. Bilgilendirme amaçlıdır, hukuki tavsiye değildir.
+      </KararNot>
     </div>
   );
 }
@@ -38658,6 +39144,7 @@ const MENU = {
   haftalikOzet:{title:"Haftalık Piyasa Özeti",back:"home"},
   katilimBankalari:{title:"Katılım Bankaları",back:"araclarMenu"},
   katilimSigorta:{title:"Katılım Sigortacılığı",back:"araclarMenu"},
+  kampanyalar:{title:"Kampanyalar",back:"araclarMenu"},
   icazetBelgeleri:{title:"İcazet Belgeleri",back:"araclarMenu"},
   egitim:{title:"Eğitim",back:"araclarMenu"},
   soruOdasi:{title:"Bilgi Arenası",back:"araclarMenu"},
@@ -38668,6 +39155,7 @@ const MENU = {
   zekatHesabi:{title:"Zekât Hesaplayıcı",back:"araclarMenu"},
   birikimHesaplayici:{title:"Birikim Hesaplayıcı",back:"araclarMenu"},
   erkenKapamaKarari:{title:"Krediyi Erken Kapatmalı mıyım?",back:"hesaplaMenu"},
+  kiraArtis:{title:"Kira Artış Hesaplayıcı",back:"hesaplaMenu"},
   vadeFarkiKarari:{title:"Vade Farklı mı, Peşin Ödeme mi?",back:"hesaplaMenu"},
   teklifKarsilastirma:{title:"Banka Teklif Karşılaştırma",back:"hesaplaMenu"},
   erkenKapamaKomisyonu:{title:"Erken Kapama Komisyonu Hesaplama",back:"hesaplaMenu"},
@@ -38699,7 +39187,7 @@ const TAB_OF_SCREEN:any = {
   toggFinansman:"hesapla", arsaIsyeri:"hesapla",
   vadeliKatilim:"hesapla", getiridenAnapara:"hesapla", oranAnalizi:"hesapla", tahvilBono:"hesapla",
   kasaOranAnalizi:"hesapla", verimlilikAnalizi:"hesapla",
-  konutFinansman:"hesapla", tasitFinansman:"hesapla", yatirimFonuFinansman:"hesapla", taksitenKredi:"hesapla",
+  konutFinansman:"hesapla", tasitFinansman:"hesapla", yatirimFonuFinansman:"hesapla", taksitenKredi:"hesapla", kiraArtis:"hesapla",
   spotFinansman:"hesapla", taksitliTicari:"hesapla", leasing:"hesapla", posHesaplama:"hesapla",
   tmKomisyon:"hesapla", akreditifKomisyon:"hesapla", soikReeskont:"hesapla", katkiPayi:"hesapla",
   esnekOdemePlanlari:"hesapla", esitAnapara:"hesapla", araOdemeli:"hesapla", artanOdemeli:"hesapla",
@@ -38708,7 +39196,7 @@ const TAB_OF_SCREEN:any = {
   hazineDoviz:"hesapla", hazineForward:"hesapla", hazineSwap:"hesapla",
   hazineBono:"hesapla", hazineSenaryo:"hesapla", hazineKurMakasi:"hesapla", hazineTcmbKur:"hesapla",
   piyasaHaberleri:"piyasa", finansalGostergeler:"piyasa",
-  araclarMenu:"araclar", sozluk:"araclar", egitim:"araclar", soruOdasi:"araclar", musteriPortfoyum:"araclar", isletmeFinans:"araclar", vadeTakibi:"araclar", katilimBankalari:"araclar",  katilimSigorta:"araclar", kamuHaznedarligi:"araclar", hazineSukuk:"araclar", kfkNedir:"araclar", zekatHesabi:"araclar", birikimHesaplayici:"araclar", erkenKapamaKarari:"hesapla", erkenKapamaKomisyonu:"hesapla", vadeFarkiKarari:"hesapla", teklifKarsilastirma:"hesapla", tlYpKarari:"hesapla", kiraSertifikasi:"araclar", getiriKarsilastirma:"araclar", haftalikOzet:"araclar", portfoyum:"araclar", fonDetay:"araclar",
+  araclarMenu:"araclar", sozluk:"araclar", egitim:"araclar", soruOdasi:"araclar", musteriPortfoyum:"araclar", isletmeFinans:"araclar", vadeTakibi:"araclar", katilimBankalari:"araclar",  katilimSigorta:"araclar", kampanyalar:"araclar", kamuHaznedarligi:"araclar", hazineSukuk:"araclar", kfkNedir:"araclar", zekatHesabi:"araclar", birikimHesaplayici:"araclar", erkenKapamaKarari:"hesapla", erkenKapamaKomisyonu:"hesapla", vadeFarkiKarari:"hesapla", teklifKarsilastirma:"hesapla", tlYpKarari:"hesapla", kiraSertifikasi:"araclar", getiriKarsilastirma:"araclar", haftalikOzet:"araclar", portfoyum:"araclar", fonDetay:"araclar",
   asistan:"yapayzeka",
   profil:"profil",
 };
@@ -38736,6 +39224,7 @@ const SIDEBAR_GRUPLARI: {baslik:string; varsayilanAcik:boolean; ogeler:{key:stri
     {key:"hazineSukuk",label:"Hazine Kira Sertifikası Takibi"},
     {key:"katilimBankalari",label:"Katılım Bankaları"},
     {key:"katilimSigorta",label:"Katılım Sigortacılığı"},
+    {key:"kampanyalar",label:"Kampanyalar"},
     {key:"icazetBelgeleri",label:"İcazet Belgeleri"},
     {key:"kfkNedir",label:"Katılım Finans Kefalet (KFK) Nedir?"},
     {key:"katilimSektoru",label:"Katılım Bankacılığı Sektörü"},
@@ -38816,10 +39305,12 @@ const SCREEN_TO_PATH: Record<string,string> = {
   vadeTakibi: "/vade-takip",
   katilimBankalari: "/katilim-bankalari",
   katilimSigorta: "/katilim-sigortaciligi",
+  kampanyalar: "/kampanyalar",
   kfkNedir: "/kfk-nedir",
   zekatHesabi: "/zekat-hesaplayici",
   birikimHesaplayici: "/birikim-hesaplayici",
   erkenKapamaKarari: "/erken-kapama-karari",
+  kiraArtis: "/kira-artis-hesaplayici",
   vadeFarkiKarari: "/vade-farki-karari",
   teklifKarsilastirma: "/teklif-karsilastirma",
   erkenKapamaKomisyonu: "/erken-kapama-komisyonu",
@@ -38922,6 +39413,7 @@ const MENU_ARAMA_LIST=[
   {key:"kasaOranAnalizi",    label:"Basitten Bileşiğe Oran Hesaplama",             icon:"🏛️", grup:"Katılım Hesabı"},
   {key:"verimlilikAnalizi",  label:"Verimlilik Analizi",                   icon:"📊", grup:"Katılım Hesabı"},
   {key:"konutFinansman",     label:"Konut Finansmanı Hesaplama",           icon:"🏠", grup:"Bireysel Finansman"},
+  {key:"kiraArtis",          label:"Kira Artış Hesaplayıcı",               icon:"🏠", grup:"Bireysel Finansman", alt:["kira artis","kira zammi","kira yenileme","kira artis orani","kira artisi","kira hesaplama","ev kirasi","tufe 12 aylik","kiraci","ev sahibi","kira"]},
   {key:"erkenKapamaKarari",  label:"Krediyi Erken Kapatmalı mıyım?",       icon:"⚡", grup:"Bireysel Finansman", alt:["erken kapama","erken odeme","kapatayim mi","refinansman","krediyi kapat","yapilandirma","kapatmak","borc kapatma","yatirimda tut","tazminat","ceza","karar"]},
   {key:"tasitFinansman",     label:"Taşıt Finansmanı Hesaplama",           icon:"🚗", grup:"Bireysel Finansman"},
   {key:"yatirimFonuFinansman",label:"İhtiyaç Finansmanı Hesaplama",  icon:"📈", grup:"Bireysel Finansman"},
@@ -38948,6 +39440,7 @@ const MENU_ARAMA_LIST=[
   {key:"getiriKarsilastirma",label:"Getiri Karşılaştırma",                        icon:"📊", grup:"Araçlar", alt:["getiri","karşılaştırma","dolar","euro","altın","gümüş","bist","katılım endeksi","performans"]},
   {key:"haftalikOzet",       label:"Haftalık Piyasa Özeti",                       icon:"📰", grup:"Araçlar", alt:["haftalık","bülten","özet","piyasa","hafta"]},
   {key:"katilimBankalari",   label:"Katılım Bankaları",                          icon:"🏛️", grup:"Araçlar"},
+  {key:"kampanyalar",        label:"Kampanyalar",                                icon:"🎁", grup:"Araçlar", alt:["kampanya","banka kampanyalari","kredi karti kampanya","taksit kampanyasi","indirim","bonus","hediye","promosyon","cashback","vade farksiz"]},
   {key:"katilimSigorta",     label:"Katılım Sigortacılığı",                      icon:"🛡️", grup:"Araçlar", alt:["sigorta","tekafül","katılım sigorta","bereket","neova","hdi","emeklilik","bes"]},
   {key:"kfkNedir",           label:"Katılım Finans Kefalet (KFK) Nedir?",         icon:"🤝", grup:"Araçlar", alt:["kfk","kefalet","katılım finans kefalet","kgf","teminat","kobi"]},
   {key:"katilimSektoru",     label:"Katılım Bankacılığı Sektörü",               icon:"🏦", grup:"Araçlar", alt:["sektör","bddk","pay","aktif","toplanan fon","kullandırılan fon","katılma hesabı","özel cari","roe","kârlılık"]},
@@ -38999,6 +39492,7 @@ const HESAPLA_ARAC_LISTESI = [
   {key:"taksitKarsilastirma", icon:"⚖️", label:"Banka Finansman Karşılaştırma", kat:"bireysel"},
   {key:"konutFinansman",     icon:"🏠", label:"Konut Finansmanı Hesaplama",           kat:"bireysel"},
   {key:"erkenKapamaKarari",  icon:"⚡", label:"Krediyi Erken Kapatmalı mıyım?",       kat:"bireysel"},
+  {key:"kiraArtis",          icon:"🏠", label:"Kira Artış Hesaplayıcı",               kat:"bireysel"},
   {key:"tasitFinansman",     icon:"🚗", label:"Taşıt Finansmanı Hesaplama",           kat:"bireysel"},
   {key:"yatirimFonuFinansman",icon:"📦", label:"İhtiyaç Finansmanı Hesaplama",   kat:"bireysel"},
   {key:"toggFinansman",      icon:"⚡", label:"Togg Finansmanı Hesaplama",            kat:"bireysel"},
@@ -51180,6 +51674,7 @@ function App(){
             {baslik:"KATILIM BANKACILIĞI", items:[
               {key:"katilimBankalari", label:"Katılım Bankaları", desc:"Türkiye'deki katılım bankaları, kuruluş tarihleri ve bilgileri"},
               {key:"katilimSigorta", label:"Katılım Sigortacılığı", desc:"Katılım sigorta ve emeklilik şirketleri, ürünleri ve çalışma ilkeleri"},
+              {key:"kampanyalar", label:"Kampanyalar", desc:"Katılım bankalarının güncel kredi kartı, finansman ve hesap kampanyaları — bitiş tarihine göre"},
               {key:"katilimSektoru", label:"Katılım Bankacılığı Sektörü", desc:"Sektör payı, fon büyüklükleri ve kârlılık — BDDK resmî verisiyle"},
               {key:"icazetBelgeleri", label:"İcazet Belgeleri", desc:"Banka ve ürün seç, bankanın kendi yayımladığı icazet belgesine git"},
               {key:"kfkNedir", label:"Katılım Finans Kefalet (KFK) Nedir?", desc:"9 kefalet paketi, size uygun olanı bulun — Katılım Finans Kefalet A.Ş."},
@@ -51558,6 +52053,7 @@ function App(){
         {screen==="vadeTakibi"&&<VadeTakibi/>}
         {screen==="katilimBankalari"&&<KatilimBankalari/>}
         {screen==="katilimSigorta"&&<KatilimSigorta/>}
+        {screen==="kampanyalar"&&<KampanyalarEkrani/>}
         {screen==="icazetBelgeleri"&&<IcazetBelgeleri/>}
         {screen==="egitim"&&<Egitim kimlik={kimlik} nav={nav}/>}
         {screen==="soruOdasi"&&<SoruOdasi kimlik={kimlik} nav={nav}/>}
@@ -51569,6 +52065,7 @@ function App(){
         {screen==="zekatHesabi"&&<ZekatHesabi/>}
         {screen==="birikimHesaplayici"&&<BirikimHesaplayici/>}
         {screen==="erkenKapamaKarari"&&<ErkenKapamaKarari s={settings}/>}
+        {screen==="kiraArtis"&&<KiraArtisHesaplayici s={settings}/>}
         {screen==="vadeFarkiKarari"&&<VadeFarkiKarari s={settings}/>}
         {screen==="teklifKarsilastirma"&&<TeklifKarsilastirma s={settings} kimlik={kimlik} nav={nav}/>}
         {screen==="erkenKapamaKomisyonu"&&<ErkenKapamaKomisyonu s={settings} kimlik={kimlik} nav={nav}/>}
