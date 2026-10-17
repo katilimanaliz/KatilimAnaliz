@@ -502,7 +502,7 @@ async function kpKullaniciVerisiniSil(uid: string) {
       const sn = await getDocs(collection(db, "musteriPortfoyu", uid, "kayitlar"));
       for (const d of sn.docs) await deleteDoc(d.ref);
     } catch (e) { console.error("Müşteri Portföyüm kayıtları silinemedi:", e); }
-    try { await soSkorlariSil(uid); } catch (e) { console.error("Soru Odası kayıtları silinemedi:", e); }
+    try { await soSkorlariSil(uid); } catch (e) { console.error("Bilgi Arenası kayıtları silinemedi:", e); }
     for (const koleksiyon of ["musteriPortfoyu", "egitim", "liderlik", "portfoy", "ayarlar"]) {
       try { await deleteDoc(doc(db, koleksiyon, uid)); } catch (e) { console.error(koleksiyon + " dokümanı silinemedi:", e); }
     }
@@ -3797,7 +3797,7 @@ async function soSkorYaz(uid: string, kova: string, takmaAd: string, puan: numbe
     const { getFirestore, doc, setDoc } = await import("firebase/firestore");
     await setDoc(doc(getFirestore(app), "soruSkor", kova, "kayit", uid), { takmaAd, puan, dogru, guncelleme: new Date().toISOString() });
     return true;
-  } catch (e) { console.error("Soru Odası puanı yazılamadı:", e); return false; }
+  } catch (e) { console.error("Bilgi Arenası puanı yazılamadı:", e); return false; }
 }
 async function soSkorGetir(kova: string): Promise<{ uid: string; takmaAd: string; puan: number; dogru: number }[] | null> {
   try {
@@ -3805,7 +3805,7 @@ async function soSkorGetir(kova: string): Promise<{ uid: string; takmaAd: string
     const { getFirestore, collection, query, orderBy, limit, getDocs } = await import("firebase/firestore");
     const sn = await getDocs(query(collection(getFirestore(app), "soruSkor", kova, "kayit"), orderBy("puan", "desc"), limit(25)));
     return sn.docs.map((d: any) => { const x = d.data() || {}; return { uid: d.id, takmaAd: String(x.takmaAd || "—"), puan: typeof x.puan === "number" ? x.puan : 0, dogru: typeof x.dogru === "number" ? x.dogru : 0 }; });
-  } catch (e) { console.error("Soru Odası sıralaması okunamadı:", e); return null; }
+  } catch (e) { console.error("Bilgi Arenası sıralaması okunamadı:", e); return null; }
 }
 async function soSkorlariSil(uid: string): Promise<boolean> {
   try {
@@ -3814,7 +3814,7 @@ async function soSkorlariSil(uid: string): Promise<boolean> {
     const db = getFirestore(app);
     const sonuc = await Promise.all(soTumKovalar().map(async k => { try { await deleteDoc(doc(db, "soruSkor", k, "kayit", uid)); return true; } catch { return false; } }));
     return sonuc.every(Boolean);
-  } catch (e) { console.error("Soru Odası kayıtları silinemedi:", e); return false; }
+  } catch (e) { console.error("Bilgi Arenası kayıtları silinemedi:", e); return false; }
 }
 
 function SoOyun({ oyun, onBitti, onCik, onGoruldu }: { oyun: { sorular: SoSoru[]; sure: number; konu: string }; onBitti: (r: { puan: number; dogru: number; yanlislar: any[]; ortSn: number }) => void; onCik: () => void; onGoruldu: (q: SoSoru) => void }) {
@@ -4533,7 +4533,7 @@ function SoOda({ uid, ad0, nav, onKapat, onGoruldu, onAd, sec }: { uid: string |
     D.m.update(D.m.ref(D.db, "odalar/" + kod), { durum: "bekle", sorular: null, adim: null }).catch(() => {});
   };
   const paylas = async () => {
-    const metin = "Katılım Plus Soru Odası'na gel! Oda kodu: " + kod;
+    const metin = "Katılım Plus Bilgi Arenası'na gel! Oda kodu: " + kod;
     try { if ((navigator as any).share) { await (navigator as any).share({ text: metin }); return; } } catch { return; }
     try { await navigator.clipboard.writeText(metin); setKopya(true); setTimeout(() => setKopya(false), 1800); } catch {}
   };
@@ -6745,7 +6745,7 @@ function KvkkAydinlatma(){
       <YmBaslik>2. İşlenen Kişisel Veriler</YmBaslik>
       <YmP>Hesap oluşturduğunuzda: ad soyad, e-posta adresi ve şifreniz (Firebase Authentication tarafından şifrelenmiş biçimde saklanır, biz ham şifrenizi hiçbir zaman görmeyiz/saklamayız).</YmP>
       <YmP>Uygulamayı kullanırken: cihaz push bildirim jetonu (bildirim göndermek için), favori ve geçmiş hesaplama kayıtlarınız ile uygulama tercihleriniz (cihazınızda ve hesabınıza bağlı olarak bulutta).</YmP>
-      <YmP>Hesabınıza bağlı diğer bulut kayıtları: portföy kalemleriniz ve eğitim ilerlemeniz; liderlik tablosuna katılırsanız takma adınız ve toplam puanınız; Soru Odası sıralamasına katılırsanız takma adınız ve konu bazlı en yüksek puanlarınız (herkese açık). Fiyat alarmlarınız sunucumuzda tutulur.</YmP>
+      <YmP>Hesabınıza bağlı diğer bulut kayıtları: portföy kalemleriniz ve eğitim ilerlemeniz; liderlik tablosuna katılırsanız takma adınız ve toplam puanınız; Bilgi Arenası sıralamasına katılırsanız takma adınız ve konu bazlı en yüksek puanlarınız (herkese açık). Fiyat alarmlarınız sunucumuzda tutulur.</YmP>
       <YmP>Kimlik doğrulama sağlayıcı tercihinize göre: Google veya Apple hesabınızdan paylaşmayı seçtiğiniz ad ve e-posta bilgisi.</YmP>
       <YmP>Pro abonelik satın aldığınızda: hesap kimliğinize bağlı abonelik durumu, abonelik türü ve dönem bilgisi. Kredi kartı veya banka bilgisi tarafımızca toplanmaz; ödeme Apple veya Google tarafından alınır.</YmP>
       <YmP>Müşteri Portföyüm'ü kullanırsanız: sizin girdiğiniz müşteri adı, telefon, sektör ve görüşme/takip notları. Bu kayıtlarla ilgili bağlı olduğunuz kurumun politikalarına ve ilgili mevzuata uymak sizin sorumluluğunuzdadır.</YmP>
@@ -6778,7 +6778,7 @@ function GizlilikPolitikasi(){
       <YmBaslik>1. Topladığımız Veriler</YmBaslik>
       <YmP>• Hesap bilgileri: ad soyad, e-posta, şifre (Firebase Authentication ile şifrelenmiş) — hesap oluşturmanız hâlinde.</YmP>
       <YmP>• Cihaz bilgileri: push bildirim jetonu, platform (iOS/Android/web).</YmP>
-      <YmP>• Kullanım verileri: favori hesaplamalarınız, hesaplama geçmişiniz ve tercihleriniz (tema, dil, Piyasa Özeti seçimi, Zekât ve Vade Takibi kayıtları dahil) cihazınızda (localStorage) saklanır; hesabınız varsa cihaz değiştirdiğinizde de erişebilmeniz için hesabınıza bağlı olarak bulutta da saklanır. Ayrıca hesabınıza bağlı olarak bulutta saklananlar: portföy kalemleriniz (ürün, miktar, alış fiyatı ve tarihi) ve eğitim ilerlemeniz. Eğitim liderlik tablosuna katılırsanız takma adınız ve toplam puanınız, Soru Odası sıralamasına katılırsanız takma adınız ve konu bazlı en yüksek puanlarınız herkese açık görünür.</YmP>
+      <YmP>• Kullanım verileri: favori hesaplamalarınız, hesaplama geçmişiniz ve tercihleriniz (tema, dil, Piyasa Özeti seçimi, Zekât ve Vade Takibi kayıtları dahil) cihazınızda (localStorage) saklanır; hesabınız varsa cihaz değiştirdiğinizde de erişebilmeniz için hesabınıza bağlı olarak bulutta da saklanır. Ayrıca hesabınıza bağlı olarak bulutta saklananlar: portföy kalemleriniz (ürün, miktar, alış fiyatı ve tarihi) ve eğitim ilerlemeniz. Eğitim liderlik tablosuna katılırsanız takma adınız ve toplam puanınız, Bilgi Arenası sıralamasına katılırsanız takma adınız ve konu bazlı en yüksek puanlarınız herkese açık görünür.</YmP>
       <YmP>• Alarmlar ve bildirimler: Fiyat alarmlarınız ve bildirim jetonunuz sunucumuzda tutulur; hesabınız varsa hesabınıza bağlanır.</YmP>
       <YmP>• Müşteri Portföyüm (üye girişi gerektirir): kullanıcının elle girdiği müşteri adı, telefon, sektör ve görüşme/takip notları hesabınıza bağlı olarak bulut altyapımızda (Google Firebase) saklanır ve yalnızca hesabınız tarafından okunup yazılabilir. Banka sistemlerinden hiçbir veri alınmaz. Müşterilerinize ait kişisel verileri girerken bağlı olduğunuz kurumun politikalarına ve ilgili mevzuata uymak kullanıcının sorumluluğundadır; hesabınızı sildiğinizde bu kayıtlar da silinir.</YmP>
       <YmP>• Ödemeler: Pro abonelik satın alımı Apple App Store veya Google Play üzerinden yapılır. Uygulama kredi kartı veya banka hesap bilginizi görmez ve TOPLAMAZ. Abonelik durumunuzu doğrulamak için hesap kimliğiniz ve satın alma bilginiz (abonelik türü, başlangıç ve bitiş tarihi) abonelik altyapı sağlayıcımız RevenueCat'e iletilir. Uygulama üzerinden banka işlemi veya para transferi yapılmaz.</YmP>
@@ -6796,7 +6796,7 @@ function GizlilikPolitikasi(){
       <YmP>Şifreniz hiçbir zaman düz metin olarak saklanmaz — kimlik doğrulama tamamen Google Firebase Authentication altyapısı üzerinden, endüstri standardı şifreleme ile yürütülür.</YmP>
 
       <YmBaslik>6. Haklarınız</YmBaslik>
-      <YmP>Hesabınızı ve ilişkili verilerinizi istediğiniz zaman Profil → Hesabımı Sil yoluyla kalıcı olarak silebilirsiniz; hesap silme Müşteri Portföyüm kayıtlarınızı, portföyünüzü, eğitim ilerlemenizi, liderlik ve Soru Odası sıralama kayıtlarınızı ve hesabınızda saklanan ayarlarınızı (favoriler, geçmiş vb.) da siler. Bu politikanın tam metni katilimplus.com/gizlilik adresinde de yayımlanır. KVKK kapsamındaki detaylı haklarınız için KVKK Aydınlatma Metni'ne bakınız.</YmP>
+      <YmP>Hesabınızı ve ilişkili verilerinizi istediğiniz zaman Profil → Hesabımı Sil yoluyla kalıcı olarak silebilirsiniz; hesap silme Müşteri Portföyüm kayıtlarınızı, portföyünüzü, eğitim ilerlemenizi, liderlik ve Bilgi Arenası sıralama kayıtlarınızı ve hesabınızda saklanan ayarlarınızı (favoriler, geçmiş vb.) da siler. Bu politikanın tam metni katilimplus.com/gizlilik adresinde de yayımlanır. KVKK kapsamındaki detaylı haklarınız için KVKK Aydınlatma Metni'ne bakınız.</YmP>
 
       <YmBaslik>7. Çocukların Gizliliği</YmBaslik>
       <YmP>Uygulama, 18 yaş altı bireylere yönelik değildir ve bilerek 18 yaş altı kullanıcılardan veri toplamaz.</YmP>
@@ -6960,7 +6960,7 @@ const ICON_MAP: Record<string, any> = {
   katilimSigorta: ShieldCheck,
   kamuHaznedarligi: Landmark,
   hazineSukuk: Landmark,      // 2026-10-16: Hazine Kira Sertifikası Takibi
-  soruOdasi: Trophy,          // 2026-10-17: Soru Odası (bilgi yarışması)
+  soruOdasi: Trophy,          // 2026-10-17: Bilgi Arenası (bilgi yarışması)
   icazetBelgeleri: FileBadge,   // 2026-10-03: belge/sertifika ikonu; FileBadge zaten import edilmiş (yeni import riski yok). Bu harita yoksa Araçlar kartı ve sol menü İKONSUZ görünür.
   egitim: GraduationCap,   // 2026-10-04: Eğitim bölümü (Araçlar kartı + sol menü ikonu)
   musteriPortfoyum: Briefcase,   // 2026-10-04: Müşteri Portföyüm (Araçlar kartı + sol menü ikonu); Briefcase zaten import edilmiş
@@ -7146,7 +7146,7 @@ const temaDegistir = (t: "koyu" | "acik" | "sistem") => {
   }
 };
 const EN_SOZLUK: Record<string, string> = {
-  "Soru Odası": "Quiz Room",
+  "Bilgi Arenası": "Knowledge Arena",
   "Karışık": "Mixed",
   "Genel Kültür": "General Knowledge",
   "Coğrafya": "Geography",
@@ -10881,7 +10881,7 @@ const EN_SOZLUK: Record<string, string> = {
 // ── 2026-10-08: ARAPÇA SÖZLÜĞÜ (Türkçe metin → Arapça; anahtarlar EN_SOZLUK ile aynı küme) ──
 // Yerleşim SOLDAN-SAĞA kalır (ekranlar aynen korunur); Arapça metin tarayıcının çift yönlü (bidi) kuralıyla doğru okunur.
 const AR_SOZLUK: Record<string, string> = {
-  "Soru Odası": "غرفة الأسئلة",
+  "Bilgi Arenası": "ساحة المعرفة",
   "Karışık": "متنوع",
   "Genel Kültür": "ثقافة عامة",
   "Coğrafya": "الجغرافيا",
@@ -38528,7 +38528,7 @@ const MENU = {
   katilimSigorta:{title:"Katılım Sigortacılığı",back:"araclarMenu"},
   icazetBelgeleri:{title:"İcazet Belgeleri",back:"araclarMenu"},
   egitim:{title:"Eğitim",back:"araclarMenu"},
-  soruOdasi:{title:"Soru Odası",back:"araclarMenu"},
+  soruOdasi:{title:"Bilgi Arenası",back:"araclarMenu"},
   musteriPortfoyum:{title:"Müşteri Portföyüm",back:"araclarMenu"},
   kfkNedir:{title:"Katılım Finans Kefalet (KFK) Nedir?",back:"araclarMenu"},
   katilimSektoru:{title:"Katılım Bankacılığı Sektörü",back:"araclarMenu"},
@@ -38598,7 +38598,7 @@ const SIDEBAR_GRUPLARI: {baslik:string; varsayilanAcik:boolean; ogeler:{key:stri
   ]},
   {baslik:"BİLGİ", varsayilanAcik:false, ogeler:[
     {key:"egitim",label:"Eğitim"},
-    {key:"soruOdasi",label:"Soru Odası"},
+    {key:"soruOdasi",label:"Bilgi Arenası"},
     {key:"kiraSertifikasi",label:"Kira Sertifikası İhraçları"},
     {key:"kamuHaznedarligi",label:"Kamu Haznedarlığı Getiri İzleme"},
     {key:"hazineSukuk",label:"Hazine Kira Sertifikası Takibi"},
@@ -38821,7 +38821,7 @@ const MENU_ARAMA_LIST=[
   {key:"katilimSektoru",     label:"Katılım Bankacılığı Sektörü",               icon:"🏦", grup:"Araçlar", alt:["sektör","bddk","pay","aktif","toplanan fon","kullandırılan fon","katılma hesabı","özel cari","roe","kârlılık"]},
   {key:"icazetBelgeleri",    label:"İcazet Belgeleri",                          icon:"📑", grup:"Araçlar", alt:["icazet","icazet belgesi","danışma komitesi","faizsiz","uygunluk","fetva","murabaha","katılma hesabı","belge"]},
   {key:"egitim",               label:"Eğitim",                                    icon:"🎓", grup:"Araçlar", alt:["eğitim","ders","sınav","quiz","puan","liderlik","öğren","katılım bankacılığı","ekonomi","finansal okuryazarlık","fon","yatırım"]},
-  {key:"soruOdasi",             label:"Soru Odası",                                icon:"🏆", grup:"Araçlar", alt:["soru odası","bilgi yarışması","yarışma","quiz","oyun","soru","puan","sıralama","genel kültür","tarih","coğrafya","spor"]},
+  {key:"soruOdasi",             label:"Bilgi Arenası",                                icon:"🏆", grup:"Araçlar", alt:["soru odası","bilgi yarışması","yarışma","quiz","oyun","soru","puan","sıralama","genel kültür","tarih","coğrafya","spor"]},
   {key:"musteriPortfoyum",      label:"Müşteri Portföyüm",                         icon:"🗂️", grup:"Araçlar", alt:["müşteri","portföy","bankacı","görüşme","takip","hatırlatma","not","crm","aksiyon","telefon","arama"]},
   {key:"isletmeFinans",       label:"İşletmem · Finans Asistanım",                icon:"🏢", grup:"Araçlar", alt:["işletme","kobi","nakit akış","nakit akışı","tahsilat","ödeme takvimi","nakit radarı","finans asistanı","finansman ihtiyacı","açık","alacak","borç","çek","senet"]},
   {key:"ekonomiSozluk",      label:"Ekonomi Sözlüğü",                           icon:"📚", grup:"Araçlar", alt:["ekonomi","terim","sözlük","enflasyon","gsyh","faiz","tanım","kavram","makro"]},
@@ -51056,7 +51056,7 @@ function App(){
             ]},
             {baslik:"ÖĞREN", items:[
               {key:"egitim", label:"Eğitim", desc:"9 modül, 175 ders; örnek senaryolar, modül sınavı, puan ve liderlik tablosu"},
-              {key:"soruOdasi", label:"Soru Odası", desc:"Bilgi yarışması: 15 konu, puan ve sıralama"},
+              {key:"soruOdasi", label:"Bilgi Arenası", desc:"Bilgi yarışması: 15 konu, puan ve sıralama"},
               {key:"ekonomiSozluk", label:"Ekonomi Sözlüğü", desc:"196 ekonomi ve finans terimi — enflasyondan rezervlere, sade tanımlarla"},
               {key:"sozluk", label:"Katılım Bankacılığı Sözlüğü", desc:"Terim ve tanımları hızlıca ara"},
               {key:"katilimBlog", label:"Katılım Blog", desc:"Kâr payı, murabaha, TLREF ve daha fazlası — anlaşılır rehberler", harici:true},
