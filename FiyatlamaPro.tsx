@@ -7,7 +7,7 @@ import {
   ArrowRightLeft, FileSpreadsheet, TrendingUp, TrendingDown, ArrowUp, ArrowDown, Activity, Droplets, ShieldCheck,
   Search, Landmark, Gem, Package, Bell, ClipboardList, FileText, Star,
   Settings, Headphones, BookOpen, Bot, User, Clock, Briefcase,
-  Bitcoin, Banknote, Plus, Eye, EyeOff, Calendar, Tag, Info, Pencil, Trash2, Bookmark, CheckCircle2, ExternalLink, Mail, GraduationCap,
+  Bitcoin, Banknote, Plus, Eye, EyeOff, Calendar, Tag, Info, Pencil, Trash2, Bookmark, CheckCircle2, ExternalLink, Mail, GraduationCap, Trophy,
 } from "lucide-react";
 // NOT: @capacitor-firebase/messaging bilinçli olarak burada static import
 // EDİLMİYOR — modül, aşağıdaki push useEffect'i içinde dinamik import ile
@@ -502,6 +502,7 @@ async function kpKullaniciVerisiniSil(uid: string) {
       const sn = await getDocs(collection(db, "musteriPortfoyu", uid, "kayitlar"));
       for (const d of sn.docs) await deleteDoc(d.ref);
     } catch (e) { console.error("Müşteri Portföyüm kayıtları silinemedi:", e); }
+    try { await soSkorlariSil(uid); } catch (e) { console.error("Soru Odası kayıtları silinemedi:", e); }
     for (const koleksiyon of ["musteriPortfoyu", "egitim", "liderlik", "portfoy", "ayarlar"]) {
       try { await deleteDoc(doc(db, koleksiyon, uid)); } catch (e) { console.error(koleksiyon + " dokümanı silinemedi:", e); }
     }
@@ -1478,9 +1479,9 @@ function YmBaslik({children}:{children:React.ReactNode}){return <p style={{margi
 function YmP({children}:{children:React.ReactNode}){return <p style={{margin:"0 0 4px",fontSize:13,color:WA(0.7),lineHeight:1.6}}>{children}</p>;}
 
 // ═══════════════════════════════════════════════════════════════════════
-// EĞİTİM BÖLÜMÜ (2026-10-07, 4. sürüm: + Dış ticaret, Hazine işlemleri) — 6 modül · 28 ünite · 132 ders · öğretici örnek senaryolar (durum/çözüm/çıkarım) · Pro sınav · puan · seri · liderlik
+// EĞİTİM BÖLÜMÜ (2026-10-17, 5. sürüm: + Kıymetli evrak, Teminat ve ipotek, Muhasebe ve finansal tablolar) — 9 modül · 40 ünite · 175 ders · öğretici örnek senaryolar (durum/çözüm/çıkarım) · Pro sınav · puan · seri · liderlik
 // ═══════════════════════════════════════════════════════════════════════
-// ── EĞİTİM İÇERİĞİ (2026-10-04) — 6 modül · 28 ünite · 132 ders · 120 soru · her derste öğretici örnek senaryo (durum / çözüm / çıkarım). Çabuk eskiyen rakamlar bilerek yazılmadı.
+// ── EĞİTİM İÇERİĞİ (2026-10-04) — 9 modül · 40 ünite · 175 ders · 180 soru · her derste öğretici örnek senaryo (durum / çözüm / çıkarım). Çabuk eskiyen rakamlar bilerek yazılmadı.
 // ⚠️ Yayından önce alan uzmanınca gözden geçirilmeli.
 type EgitimDers = { id:string; baslik:string; dk:number; govde:string[]; ozet:string[]; sen:[string,string,string,string] };
 type EgitimUnite = { ad:string; ozet:string; dersler:EgitimDers[] };
@@ -1538,7 +1539,7 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Bu hesapta getiri “faiz” değil “kâr payı”dır. Sonuç, bankanın havuzundaki gerçekleşen kâra bağlıdır; bu yüzden vade sonunda ödenecek tutar önceden kesin olarak garanti edilemez.",
       "Vadeler genellikle bir aydan bir yıla kadar farklı seçeneklerle sunulur. Vade dolmadan hesap bozulursa kâr payı hesabı sözleşmeye göre yeniden yapılır."],
       ["Vadeli hesaptır; banka fonu kâr getiren işlerde kullanır","Getiri kâr payıdır, gerçekleşen sonuca bağlıdır","Vade bozulursa kâr payı yeniden hesaplanır"],
-      ["32 günlük hesapta ne beklemeli?","Elif 200.000 TL’yi 32 gün için katılma hesabına yatırmak istiyor. Banka ekranında tahmini yıllık kâr payı oranı %42 görünüyor.","Brüt tahmini kâr payı = 200.000 × 0,42 × 32 ÷ 365 ≈ 7.364,38 TL. Bu tutar tahmindir: vade sonunda gerçekleşen kâr payı bankanın havuz sonucuna göre farklı çıkabilir ve stopaj gibi vergi kesintileri bu tutardan düşülür.","Katılma hesabında rakam bir tahmindir. Planını tek bir tutara değil, makul bir aralığa göre yap."]),
+      ["32 günlük hesapta ne beklemeli?","Elif 200.000 TL’yi 32 gün için katılma hesabına yatırmak istiyor. Banka ekranında tahmini yıllık kâr payı oranı %42 görünüyor.","Brüt tahmini kâr payı = 200.000 × 0,42 × 32 ÷ 365 ≈ 7.364,38 TL. Bu tutar tahmindir: vade sonunda gerçekleşen kâr payı bankanın havuz sonucuna göre farklı çıkabilir ve stopaj gibi vergi kesintileri bu tutardan düşülür.","Katılma hesabında rakam bir tahmindir. Plan tek bir tutara değil, makul bir aralığa göre yapılmalıdır."]),
     EGD("k08","Kâr payı nasıl hesaplanır?",5,[
       "Basit hesap formülü: Kâr payı = Anapara × Yıllık kâr payı oranı × Gün sayısı ÷ 365. Banka ekranlarında gösterilen oran genellikle yıllık ve tahminidir.",
       "Örneğin 100.000 TL, yıllık %40 varsayımsal oranla 32 gün için yatırılırsa brüt kâr payı yaklaşık 100.000 × 0,40 × 32 ÷ 365 = 3.506,85 TL olur. Stopaj gibi vergi kesintileri bu tutardan düşülür.",
@@ -1553,16 +1554,16 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       ["80/20 ne demek?","Burak’ın hesabında kâr paylaşım oranı 80/20 yazıyor. Bunu “bana %80 getiri garantisi” diye anlıyor.","Oran kuralı gösterir, tutarı değil. Havuzdan hesabına düşen brüt kâr 1.000 TL ise Burak’a 800 TL, bankaya 200 TL gider. Dönem kötü geçip kâr 500 TL olursa Burak’a 400 TL gider. Oran aynı kalır, tutar değişir.","Paylaşım oranı bir paylaşım kuralıdır, getiri sözü değildir. Getiriyi havuzdaki gerçekleşen kâr belirler."]),
     EGD("k10","Altın ve döviz katılma hesapları",4,[
       "Katılma hesapları Türk lirasının yanında döviz ve altın cinsinden de açılabilir. Hesap hangi cinsten açılırsa kâr payı ve anapara o cins üzerinden izlenir.",
-      "Döviz ve altın hesaplarında kur ve altın fiyatındaki değişim, TL karşılığındaki değeri etkiler. Hesabın kendi cinsindeki kâr payı olsa bile TL’ye çevirdiğinde zarar görebilirsin.",
+      "Döviz ve altın hesaplarında kur ve altın fiyatındaki değişim, TL karşılığındaki değeri etkiler. Hesabın kendi cinsindeki kâr payı olsa bile TL’ye çevrildiğinde zarar görülebilir.",
       "Bu yüzden amaç, kısa vadeli kazanç değil, belirli bir ihtiyacı (ör. döviz borcu, altın birikimi) korumak olmalıdır."],
-      ["Hesap cinsi kâr payı ve anaparayı belirler","Kur ve altın fiyatı TL değerini etkiler","Amaç net değilse kur riskine dikkat"],
+      ["Hesap cinsi kâr payı ve anaparayı belirler","Kur ve altın fiyatı TL değerini etkiler","Amaç net değilse kur riskine dikkat edilmeli"],
       ["Euro hesabı mı, TL hesabı mı?","Ahmet bir yıl sonra 10.000 euro eğitim ücreti ödeyecek. Birikimini TL hesapta tutsa da yüksek görünen TL kâr payından yararlanabilir. Varsayımsal kur bugün 40 TL.","Bugün ihtiyaç 10.000 × 40 = 400.000 TL. Kur 46’ya çıkarsa ihtiyaç 460.000 TL olur: 60.000 TL’lik ek yük. Birikimi euro cinsi hesapta tutarsa ihtiyaç euro olarak karşılanır ve kur riski ortadan kalkar. Bedeli ise genellikle TL’ye kıyasla daha düşük kâr payıdır.","Gider hangi para birimindeyse birikimi o cinste tutmak kur riskini azaltır. Bu, getiri maksimizasyonu değil risk yönetimidir."]),
     EGD("k11","Güvence ve hesap seçimi",4,[
       "Katılım bankalarındaki özel cari ve katılma hesapları, mevduat sigortası sistemi (TMSF) kapsamındadır. Sigorta limiti mevzuata göre belirlenir ve zaman zaman güncellenir; güncel tutar için resmî duyurulara bakılmalıdır.",
       "Hesap seçerken vade, para cinsi, beklenen getiri, erken bozma koşulları ve paranın ne zaman gerekeceği birlikte düşünülmelidir.",
       "Birden fazla bankada hesap açmak, limit aşılan tutarlar için güvenceyi artırabilir; ancak her hesabın şartı ve maliyeti ayrıca incelenmelidir."],
       ["Hesaplar mevduat sigortası kapsamındadır","Limit mevzuata göre değişir","Vade, para cinsi ve erken bozma koşulları birlikte değerlendirilir"],
-      ["Güvence limitini aşıyor muyum?","Selin tek bir katılım bankasında büyük bir tutar tutuyor. Güvencenin “tamamen” kapsadığını düşünüyor.","Güvence her mevduat sahibi için her banka başına ayrı bir limitle sınırlıdır. Güncel limiti resmî duyurudan öğrenir. Limit varsayımsal olarak 1.000.000 TL ve hesabı 1.500.000 TL ise aşan 500.000 TL güvence dışında kalır. Çözüm olarak aşan kısmı başka bir bankaya aktarır.","Güvence banka ve kişi başınadır. Limit aşılıyorsa tutarı bankalara yaymak riski azaltır. Güncel tutar için her zaman resmî duyuruya bak."]),
+      ["Güvence limitini aşıyor muyum?","Selin tek bir katılım bankasında büyük bir tutar tutuyor. Güvencenin “tamamen” kapsadığını düşünüyor.","Güvence her mevduat sahibi için her banka başına ayrı bir limitle sınırlıdır. Güncel limiti resmî duyurudan öğrenir. Limit varsayımsal olarak 1.000.000 TL ve hesabı 1.500.000 TL ise aşan 500.000 TL güvence dışında kalır. Çözüm olarak aşan kısmı başka bir bankaya aktarır.","Güvence banka ve kişi başınadır. Limit aşılıyorsa tutarı bankalara yaymak riski azaltır. Güncel tutar için her zaman resmî duyuruya başvurulmalıdır."]),
   ]},
   { ad:"Finansman yöntemleri", ozet:"Murabaha, mudarebe, müşareke ve icara", dersler:[
     EGD("k12","Murabaha: maliyet artı kâr satışı",5,[
@@ -1570,7 +1571,7 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Önemli olan, bankanın malı gerçekten satın alması ve satış anında toplam bedelin (maliyet artı kâr payı) önceden bilinmesidir. Böylece taksit tutarı ve vade baştan nettir.",
       "Kâr payı oranı satış anında sabitlenir ve vade boyunca değişmez. Faizsiz bankacılık ilkesine göre gecikme halinde borca ek kâr payı işletilmez."],
       ["Banka malı alır, maliyet + bilinen kâr payıyla vadeli satar","Toplam bedel ve taksitler baştan bellidir","Kâr payı oranı vade boyunca değişmez"],
-      ["Aylık taksit doğru mu?","Hakan, 500.000 TL maliyetli bir mal için 36 ay vadeli murabaha teklifi aldı. Teklifte toplam satış bedeli 680.000 TL yazıyor.","Kâr payı tutarı = 680.000 − 500.000 = 180.000 TL. Aylık eşit taksit = 680.000 ÷ 36 ≈ 18.888,89 TL. Murabahada bu tutar vade boyunca değişmez, çünkü toplam bedel satış anında sabitlenmiştir.","Murabahada üç rakam baştan sabittir: maliyet, kâr payı ve toplam bedel. Taksiti kendin doğrulayabilirsin."]),
+      ["Aylık taksit doğru mu?","Hakan, 500.000 TL maliyetli bir mal için 36 ay vadeli murabaha teklifi aldı. Teklifte toplam satış bedeli 680.000 TL yazıyor.","Kâr payı tutarı = 680.000 − 500.000 = 180.000 TL. Aylık eşit taksit = 680.000 ÷ 36 ≈ 18.888,89 TL. Murabahada bu tutar vade boyunca değişmez, çünkü toplam bedel satış anında sabitlenmiştir.","Murabahada üç rakam baştan sabittir: maliyet, kâr payı ve toplam bedel. Taksit tutarı bu rakamlardan doğrulanabilir."]),
     EGD("k13","Murabahada işlem adımları",5,[
       "Tipik bir murabaha işleminde müşteri önce finansman talebinde bulunur. Banka, malı satıcıdan satın alır; bunu çoğu zaman müşteriyi vekil tayin ederek yaptırır, ödemeyi ise doğrudan satıcıya yapar.",
       "Mal bankanın mülkiyetine geçtikten sonra banka malı müşteriye maliyet artı kâr payıyla satar. Vekâletle yapılan alımda bile alım bankanın hesabına yapılır; mal bankanın mülkiyetine geçmeden müşteriye satış yapılamaz.",
@@ -1582,7 +1583,7 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Zarar oluşursa ve mudarip kusurlu değilse, parasal zararı sermaye sahibi üstlenir; mudarip emeğini kaybeder. Katılma hesaplarının dayanağı mudarebe ilkesidir.",
       "Mudarebede sermaye sahibi, işin yönetimine karışmaz; mudarip ise sermayeyi sözleşmeye uygun şekilde kullanmakla yükümlüdür."],
       ["Bir tarafta sermaye, diğer tarafta emek vardır","Kusur yoksa parasal zararı sermaye sahibi taşır","Katılma hesaplarının dayanağıdır"],
-      ["Zarar olursa kim ne kaybeder?","Kemal 100.000 TL sermaye koydu, Seda emek veriyor. Kâr paylaşımı Kemal %60, Seda %40 olarak yazıldı.","Kâr 50.000 TL ise Kemal 30.000 TL, Seda 20.000 TL alır. İş 20.000 TL zararla kapanırsa ve Seda kusurlu değilse, parasal zararı Kemal üstlenir (sermayesi 80.000 TL’ye düşer); Seda emeğini kaybeder ama cebinden ödeme yapmaz. Seda ihmal veya kusur yapmışsa zarardan sorumlu olur.","Mudarebede kâr oranla bölüşülür; kusur yoksa zarar sermaye sahibine aittir. Katılma hesabında getirinin garanti edilememesinin sebebi budur."]),
+      ["Zarar olursa kim ne kaybeder?","Kemal 100.000 TL sermaye koydu, Seda emek veriyor. Kâr paylaşımı Kemal %60, Seda %40 olarak yazıldı.","Kâr 50.000 TL ise Kemal 30.000 TL, Seda 20.000 TL alır. İş 20.000 TL zararla kapanırsa ve Seda kusurlu değilse, parasal zararı Kemal üstlenir (sermayesi 80.000 TL’ye düşer); Seda emeğini kaybeder ancak ayrıca ödeme yapmaz. Seda ihmal veya kusur yapmışsa zarardan sorumlu olur.","Mudarebede kâr oranla bölüşülür; kusur yoksa zarar sermaye sahibine aittir. Katılma hesabında getirinin garanti edilememesinin sebebi budur."]),
     EGD("k15","Müşareke ve azalan müşareke",5,[
       "Müşareke, tarafların her ikisinin de sermaye koyduğu ortaklıktır. Kâr, önceden anlaşılan oranlarda; zarar ise sermaye payları oranında paylaşılır.",
       "Azalan müşareke, banka ile müşterinin bir malı (ör. konut) ortak alması ve bankanın payını zamanla müşteriye devretmesi yöntemidir. Müşteri bir yandan ortaklık payı için kira öder, bir yandan da bankanın payını kademeli satın alır.",
@@ -1594,7 +1595,7 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Finansal kiralama (leasing) ve bazı kira sertifikası yapıları bu mantığa dayanır. Kira dönemi sonunda varlığın kiracıya satılması veya devredilmesi de mümkündür.",
       "Kiralamada varlığın bakım ve sigorta gibi yükümlülüklerinin kime ait olduğu sözleşmede açıkça belirlenmelidir."],
       ["Mülkiyet kiraya verende, kullanım kiracıdadır","Leasing ve sukuk yapılarında kullanılır","Bakım ve sigorta sorumluluğu sözleşmeyle belirlenir"],
-      ["Makineyi kiralamak mı, almak mı?","Bir üretici 600.000 TL’lik makineyi 24 ay kiralamayı düşünüyor. Aylık kira 30.000 TL, dönem sonunda satın alma bedeli 60.000 TL.","Toplam maliyet = 30.000 × 24 + 60.000 = 780.000 TL. Peşin alsaydı 600.000 TL öderdi; 180.000 TL’lik fark, ödemeleri 24 aya yaymanın finansman bedelidir. Üretici ayrıca bakım ve sigorta yükümlülüğünün kimde olduğunu sözleşmeden kontrol eder.","Kiralamada toplam maliyeti (kira + dönem sonu bedel) peşin fiyatla kıyasla. Bakım ve sigorta yükümlülüğü sözleşmede açıkça yazmalıdır."]),
+      ["Makineyi kiralamak mı, almak mı?","Bir üretici 600.000 TL’lik makineyi 24 ay kiralamayı düşünüyor. Aylık kira 30.000 TL, dönem sonunda satın alma bedeli 60.000 TL.","Toplam maliyet = 30.000 × 24 + 60.000 = 780.000 TL. Peşin alsaydı 600.000 TL öderdi; 180.000 TL’lik fark, ödemeleri 24 aya yaymanın finansman bedelidir. Üretici ayrıca bakım ve sigorta yükümlülüğünün kimde olduğunu sözleşmeden kontrol eder.","Kiralamada toplam maliyet (kira + dönem sonu bedel) peşin fiyatla kıyaslanmalıdır. Bakım ve sigorta yükümlülüğü sözleşmede açıkça yazılmalıdır."]),
   ]},
   { ad:"Ürünler", ozet:"Konut, taşıt, ihtiyaç ve ticari finansman", dersler:[
     EGD("k17","Konut finansmanı",5,[
@@ -1608,13 +1609,13 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "İhtiyaç finansmanı da bir alım satıma dayanır: banka bir malı alır ve müşteriye vadeli satar. İşlem adımları bankanın icazetli ürün yapısına göre değişebilir.",
       "Her iki üründe de vade, peşinat, toplam bedel ve sigorta gibi giderler başvurudan önce karşılaştırılmalıdır."],
       ["Taşıtta araç tescilinde rehin olabilir","İhtiyaç finansmanı da mal alım satımına dayanır","Vade, peşinat ve ek giderler karşılaştırılmalı"],
-      ["Peşinat arttırınca ne olur?","Gül 600.000 TL’lik araç alacak. Seçenek A: %20 peşinat, B: %40 peşinat. Vade 36 ay; toplam kâr payı finanse edilen tutarın %45’i (varsayımsal).","A: peşinat 120.000, finanse 480.000; toplam borç 480.000 × 1,45 = 696.000, taksit 19.333,33; toplam çıkış 816.000 TL. B: peşinat 240.000, finanse 360.000; toplam borç 522.000, taksit 14.500; toplam çıkış 762.000 TL. Fark 54.000 TL.","Peşinat arttıkça finanse tutar ve toplam kâr payı düşer. Ama peşinat için ayırdığın nakit acil durum fonundan gelmemelidir."]),
+      ["Peşinat arttırınca ne olur?","Gül 600.000 TL’lik araç alacak. Seçenek A: %20 peşinat, B: %40 peşinat. Vade 36 ay; toplam kâr payı finanse edilen tutarın %45’i (varsayımsal).","A: peşinat 120.000, finanse 480.000; toplam borç 480.000 × 1,45 = 696.000, taksit 19.333,33; toplam çıkış 816.000 TL. B: peşinat 240.000, finanse 360.000; toplam borç 522.000, taksit 14.500; toplam çıkış 762.000 TL. Fark 54.000 TL.","Peşinat arttıkça finanse tutar ve toplam kâr payı düşer. Ancak peşinat için ayrılan nakit, acil durum fonundan karşılanmamalıdır."]),
     EGD("k19","Ticari finansman",5,[
       "Ticari finansman, işletmelerin mal alımı, ekipman, işletme sermayesi ve dış ticaret ihtiyaçları için sunulan finansman çeşitlerini kapsar. Spot finansman, taksitli ticari finansman, çek arkası finansman ve leasing bunlardan bazılarıdır.",
       "Bu ürünler de gerçek bir alım satım veya kiralamaya dayanır. İşletmenin ihtiyacı olan mal banka tarafından alınır ve vadeli satılır ya da kiralanır.",
       "İşletmeler için erken kapama, vade farkı, kur riski ve TL/YP seçimi gibi konular maliyeti belirler; bu yüzden teklifler toplam maliyete göre karşılaştırılmalıdır."],
       ["İşletme ihtiyaçları için murabaha ve kiralama kullanılır","Spot, taksitli, çek arkası ve leasing yaygın ürünlerdir","Toplam maliyet, kur ve vade birlikte değerlendirilir"],
-      ["TL mi, döviz mi?","Bir toptancı 1.000.000 TL’lik hammadde için 12 ay vadeli iki teklif aldı. TL teklifi toplam 1.250.000 TL. Dövizli teklif 25.000 USD finansman için toplam 27.500 USD (kur varsayımsal 40). Gelirleri TL.","Bugünkü kurla dövizli teklif 27.500 × 40 = 1.100.000 TL, yani daha ucuz görünür. Ama kur 48’e çıkarsa 27.500 × 48 = 1.320.000 TL olur ve TL teklifinden 70.000 TL pahalıya gelir. Başabaş kur = 1.250.000 ÷ 27.500 ≈ 45,45’tir.","Gelirin TL ise dövizli teklif bir kur bahsidir. Başabaş kuru hesaplayıp o kura ne kadar yakın olduğunu değerlendirerek karar ver."]),
+      ["TL mi, döviz mi?","Bir toptancı 1.000.000 TL’lik hammadde için 12 ay vadeli iki teklif aldı. TL teklifi toplam 1.250.000 TL. Dövizli teklif 25.000 USD finansman için toplam 27.500 USD (kur varsayımsal 40). Gelirleri TL.","Bugünkü kurla dövizli teklif 27.500 × 40 = 1.100.000 TL, yani daha ucuz görünür. Ama kur 48’e çıkarsa 27.500 × 48 = 1.320.000 TL olur ve TL teklifinden 70.000 TL pahalıya gelir. Başabaş kur = 1.250.000 ÷ 27.500 ≈ 45,45’tir.","Gelir TL ise dövizli teklif kur riski taşır. Başabaş kuru hesaplanıp güncel kurun bu seviyeye ne kadar yakın olduğu değerlendirilerek karar verilmelidir."]),
     EGD("k20","Toplam maliyet ve erken kapama",5,[
       "Bir finansmanın gerçek maliyeti yalnızca kâr payı oranı değildir. Dosya masrafı, sigorta, ekspertiz ve diğer giderler de toplam maliyete eklenir. Taksit yerine toplam geri ödemeye bakmak daha doğru bir kıyas sağlar.",
       "Erken kapamada, kalan borç peşin ödenir. Erken kapama koşulları sözleşmede ve mevzuatta düzenlenir; bankanın alabileceği ücret mevzuatla sınırlandırılmıştır ve kalan borç tutarı yeniden hesaplanır.",
@@ -1626,13 +1627,13 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
     EGD("k21","Kira sertifikası (sukuk)",5,[
       "Kira sertifikası (sukuk), gelir getiren bir varlığa veya varlık grubuna dayalı, sahibine o varlıktan elde edilen gelirden pay veren bir menkul kıymettir. Faizli tahvilden farkı, getirinin bir varlığa dayanmasıdır.",
       "Türkiye’de Hazine ve Maliye Bakanlığı ile çeşitli kurumlar kira sertifikası ihraç eder. İhraç edilen sertifikaların vadesi, getirisi ve türü ihraççıya göre değişir.",
-      "Bu ihraçları uygulamadaki Kira Sertifikası İhraçları ekranından izleyebilirsin."],
+      "Bu ihraçlar uygulamadaki Kira Sertifikası İhraçları ekranından izlenebilir."],
       ["Sukuk, varlığa dayalı bir menkul kıymettir","Getiri, dayanak varlığın kira veya kâr gelirinden gelir","Hazine ve özel sektör ihraç edebilir"],
       ["İhraç duyurusunu okumak","Burcu, 100.000 TL nominal 2 yıl vadeli bir kira sertifikası duyurusu görüyor: 6 ayda bir sabit kira ödemesi, yıllık %36 getiri.","Dönemlik kira = 100.000 × 0,36 ÷ 2 = 18.000 TL. 2 yılda 4 ödeme = 72.000 TL. Vade sonunda anapara 100.000 TL de ödenir; toplam 172.000 TL. Burcu ayrıca dayanak varlığın ne olduğunu, ihraççıyı ve getirinin sabit mi değişken mi olduğunu kontrol eder.","Sukukta ödemeler dayanak varlığın kira gelirine bağlıdır. Dayanak varlık, ihraççı, vade ve getiri tipi sorgulanmadan karar verilmez."]),
     EGD("k22","Danışma kurulu ve icazet belgesi",4,[
       "Katılım bankalarında ürünlerin faizsiz esaslara uygunluğunu denetleyen bir danışma kurulu (danışma komitesi) bulunur. Kurul yeni ürünleri ve sözleşmeleri inceler.",
       "Kurulun ürün için verdiği onay belgesine icazet belgesi denir. Bankalar ürünlerinin icazet belgelerini kendi internet sitelerinde yayımlar.",
-      "Bir ürünün icazetli olup olmadığını merak ediyorsan, uygulamadaki İcazet Belgeleri ekranından bankayı ve ürünü seçip bankanın yayımladığı belgeye gidebilirsin."],
+      "Bir ürünün icazetli olup olmadığını öğrenmek için uygulamadaki İcazet Belgeleri ekranından banka ve ürün seçilerek bankanın yayımladığı belgeye ulaşılabilir."],
       ["Danışma kurulu ürün uygunluğunu denetler","Onay belgesine icazet belgesi denir","Bankalar belgeleri kendi sitesinde yayımlar"],
       ["İcazet belgesi nasıl okunur?","Ali, kullanmayı düşündüğü finansman ürününün icazet belgesini bankanın internet sitesinde buldu. Belgede ne arayacağını bilmiyor.","Dört kontrol yapar: (1) belgedeki ürün adı kendi ürününle birebir aynı mı, (2) belge tarihi güncel mi, (3) danışma kurulu üyelerinin adları ve kararı yazılı mı, (4) belge bankanın resmî sitesinden mi alındı? Uygulamadaki İcazet Belgeleri ekranı doğrudan bankanın sayfasına yönlendirir.","Belge ürünle eşleşmeli ve bankanın resmî sitesinden alınmalıdır. Katılım Plus belgeleri üretmez, yalnızca bankanın sayfasına yönlendirir."]),
     EGD("k23","Katılım endeksi ve hisse seçimi",5,[
@@ -1640,7 +1641,7 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Konvansiyonel bankalar, sigorta şirketleri ile alkol ve kumar gibi alanlarda çalışan şirketler bu endekslerin dışında kalır. Şirketlerin borçlanma ve faiz geliri oranları da değerlendirilir.",
       "Endeks bileşimi dönemsel olarak güncellenir, bu yüzden bir hissenin uygunluğu zaman içinde değişebilir."],
       ["Faaliyet alanı ve finansal oranlar belirleyicidir","Bankalar ve sigorta şirketleri dışarıda kalır","Bileşim dönemsel olarak güncellenir"],
-      ["Portföydeki hisse uygun mu?","Berk’in portföyünde 5 hisse var. Hangilerinin katılım endeksinde olduğunu bilmiyor.","Güncel endeks bileşenlerini kontrol eder: 4 hisse listede, 1’i yok. Listede olmayan hissenin neden dışarıda olduğunu araştırır: faaliyet alanı uygun mu, borç ve faiz geliri oranları eşikleri aşıyor mu? Endeks dönemsel güncellendiği için bir önceki dönemde uygun olan hisse bu dönem çıkmış olabilir.","Uygunluk sabit değildir. Endeks güncellemelerinden sonra portföydeki hisseleri yeniden kontrol et."]),
+      ["Portföydeki hisse uygun mu?","Berk’in portföyünde 5 hisse var. Hangilerinin katılım endeksinde olduğunu bilmiyor.","Güncel endeks bileşenlerini kontrol eder: 4 hisse listede, 1’i yok. Listede olmayan hissenin neden dışarıda olduğunu araştırır: faaliyet alanı uygun mu, borç ve faiz geliri oranları eşikleri aşıyor mu? Endeks dönemsel güncellendiği için bir önceki dönemde uygun olan hisse bu dönem çıkmış olabilir.","Uygunluk sabit değildir. Endeks güncellemelerinden sonra portföydeki hisseler yeniden kontrol edilmelidir."]),
     EGD("k24","Zekât ve katılım finans",4,[
       "Zekât, belirli bir varlığa (nisap) ulaşan ve üzerinden bir yıl geçen mal sahiplerinin, malın belirli bir kısmını (kırkta bir, yani %2,5) ihtiyaç sahiplerine vermesidir. Nisap miktarı genellikle yaklaşık 80 gram altın değeriyle ifade edilir.",
       "Zekâta tabi varlıklar arasında nakit, altın, döviz, katılma hesabındaki birikimler ve ticaret malları sayılır. Hesaplama yapılırken borçlar da dikkate alınır.",
@@ -1656,7 +1657,7 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
   ]},
   ],
   sorular:[
-    EGQ("Murabaha işleminde banka ne yapar?",["Parayı faizle ödünç verir","Malı satın alıp bilinen kâr payıyla vadeli satar","Müşterinin parasını borsada işletir","Yalnızca garantör olur"],1,"Murabahada banka malı satın alır, maliyetini ve kâr payını açıkça belirterek müşteriye vadeli satar."),
+    EGQ("Murabaha işleminde bankanın rolü nedir?",["Parayı faizle ödünç verir","Malı satın alıp bilinen kâr payıyla vadeli satar","Müşterinin parasını borsada işletir","Yalnızca garantör olur"],1,"Murabahada banka malı satın alır, maliyetini ve kâr payını açıkça belirterek müşteriye vadeli satar."),
     EGQ("Getirisi olmayan ve paranın istenildiğinde çekilebildiği hesap hangisidir?",["Katılma hesabı","Özel cari hesap","Altın katılma hesabı","Kira sertifikası"],1,"Özel cari hesapta getiri vaat edilmez; para istenildiği zaman çekilebilir."),
     EGQ("Katılma hesabının dayandığı temel ilke hangisidir?",["Mudarebe","Faiz","Kefalet","Rehin"],0,"Katılma hesapları, sermaye ile emeğin ortaklığı olan mudarebe ilkesine dayanır."),
     EGQ("Türkiye’de katılım bankaları hangi kanunla “katılım bankası” adını almıştır?",["4054 sayılı Kanun","5411 sayılı Bankacılık Kanunu","6502 sayılı Kanun","5464 sayılı Kanun"],1,"2005 tarihli 5411 sayılı Bankacılık Kanunu özel finans kurumlarını katılım bankası olarak düzenlemiştir."),
@@ -1688,31 +1689,31 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Vazgeçilen en iyi alternatifin değerine fırsat maliyeti denir. Örneğin bir akşamı çalışarak geçirmek, o akşam dinlenmekten veya ders çalışmaktan vazgeçmek demektir.",
       "Bireyler, şirketler ve devletler bu tercihleri sürekli yapar. Ekonomiyi anlamak, bu tercihlerin nasıl yapıldığını ve sonuçlarını görebilmektir."],
       ["Kaynaklar sınırlı, ihtiyaçlar sınırsızdır","Her seçimin bir fırsat maliyeti vardır","Ekonomi, tercihlerin ve sonuçlarının incelenmesidir"],
-      ["Tatilin gerçek bedeli","Ece’nin 10.000 TL’lik birikimi var. Ya tatile gidecek ya da yıllık %40 getirili bir hesaba koyacak.","Tatil seçilirse görünen bedel 10.000 TL’dir. Hesabı seçseydi 12 ay sonra yaklaşık 10.000 × 0,40 = 4.000 TL brüt getiri elde ederdi. Tatilin gerçek bedeli, harcanan para ve vazgeçilen getirinin toplamıdır: 10.000 + 4.000 = 14.000 TL.","Fırsat maliyeti, vazgeçilen en iyi alternatifin değeridir. Her harcamanın görünen ve görünmeyen bir bedeli vardır."]),
+      ["Tatilin fırsat maliyeti","Ece’nin 10.000 TL’lik birikimi var. Ya tatile gidecek ya da yıllık %40 getirili bir hesaba koyacak.","Tatil seçilirse görünen bedel 10.000 TL’dir. Hesabı seçseydi 12 ay sonra yaklaşık 10.000 × 0,40 = 4.000 TL brüt getiri elde ederdi. Tatilin gerçek bedeli, harcanan para ve vazgeçilen getirinin toplamıdır: 10.000 + 4.000 = 14.000 TL.","Fırsat maliyeti, vazgeçilen en iyi alternatifin değeridir. Her harcamanın görünen ve görünmeyen bir bedeli vardır."]),
     EGD("e02","Arz ve talep",4,[
       "Talep, tüketicilerin belirli bir fiyattan satın almak istediği miktardır. Arz ise üreticilerin belirli bir fiyattan satmaya razı olduğu miktar. Fiyat yükseldikçe talep genellikle düşer, arz ise artar.",
       "Arz ve talebin kesiştiği noktada denge fiyatı oluşur. Talep artarsa fiyat yükselir; arz artarsa fiyat düşer. Mevsim, gelir, moda ve beklentiler bu eğrileri kaydırır.",
       "Bu temel mantık; kur, hisse, altın ve konut fiyatları gibi pek çok piyasada geçerlidir."],
       ["Fiyat arttıkça talep düşer, arz artar","Denge fiyatı arz ve talebin kesiştiği noktadadır","Gelir ve beklentiler eğrileri kaydırır"],
-      ["Domates fiyatı neden arttı?","Don nedeniyle domates rekoltesi düştü. Kilosu 20 TL’den 28 TL’ye çıktı.","Adımlar: (1) arz azaldı, arz eğrisi sola kaydı, (2) talep aynı kaldı, (3) eski fiyatta talep arzdan fazla oldu, (4) fiyat yükselince bazı tüketiciler vazgeçti ve denge yeni fiyatta kuruldu. Yeni rekolte geldiğinde arz normale döner ve fiyat geriler; bu yüzden etki geçicidir.","Fiyat artışında önce arz mı talep mi değişti diye sor. Geçici bir arz şoku fiyatı geçici olarak yükseltir."]),
+      ["Domates fiyatı neden arttı?","Don nedeniyle domates rekoltesi düştü. Kilosu 20 TL’den 28 TL’ye çıktı.","Adımlar: (1) arz azaldı, arz eğrisi sola kaydı, (2) talep aynı kaldı, (3) eski fiyatta talep arzdan fazla oldu, (4) fiyat yükselince bazı tüketiciler vazgeçti ve denge yeni fiyatta kuruldu. Yeni rekolte geldiğinde arz normale döner ve fiyat geriler; bu yüzden etki geçicidir.","Fiyat artışında önce arzın mı talebin mi değiştiği sorgulanmalıdır. Geçici bir arz şoku fiyatı geçici olarak yükseltir."]),
     EGD("e03","Piyasa türleri ve fiyat oluşumu",4,[
       "Tam rekabet piyasasında çok sayıda alıcı ve satıcı vardır; hiçbiri tek başına fiyatı belirleyemez. Tekelde tek bir satıcı, oligopolde ise birkaç büyük satıcı fiyat üzerinde etkilidir.",
       "Rekabetin azaldığı piyasalarda fiyatlar yükselebilir ve kalite düşebilir. Bu yüzden rekabet kurumları bu piyasaları denetler.",
       "Finansal piyasalarda ise fiyat, çok sayıda alıcı ve satıcının emirleriyle sürekli oluşur; likidite ve bilgi akışı fiyatın niteliğini belirler."],
       ["Rekabet fiyat üzerinde baskı kurar","Tekel ve oligopolde fiyat gücü yüksektir","Finansal piyasada fiyat sürekli emirlerle oluşur"],
-      ["Tek market, iki market","Bir ilçede tek market var; ürün maliyeti 70 TL, satış fiyatı 100 TL. Sonra ikinci bir market açılıyor ve satış fiyatı 85 TL’ye iniyor.","Birinci durumda kâr marjı 100 − 70 = 30 TL. Rekabet gelince fiyat 85 TL olur, marj 15 TL’ye düşer. Tüketici her üründe 15 TL (%15) tasarruf eder. Rekabet olmasaydı satıcı fiyatı düşürmek zorunda kalmazdı.","Satıcı sayısı arttıkça fiyat maliyete yaklaşır. Rekabet kurumları bu yüzden tekelleşmeyi ve karteli denetler."]),
+      ["Rekabetin fiyata etkisi","Bir ilçede tek market var; ürün maliyeti 70 TL, satış fiyatı 100 TL. Sonra ikinci bir market açılıyor ve satış fiyatı 85 TL’ye iniyor.","Birinci durumda kâr marjı 100 − 70 = 30 TL. Rekabet gelince fiyat 85 TL olur, marj 15 TL’ye düşer. Tüketici her üründe 15 TL (%15) tasarruf eder. Rekabet olmasaydı satıcı fiyatı düşürmek zorunda kalmazdı.","Satıcı sayısı arttıkça fiyat maliyete yaklaşır. Rekabet kurumları bu yüzden tekelleşmeyi ve karteli denetler."]),
     EGD("e04","Mikro ve makro ekonomi",3,[
       "Mikroekonomi, tek tek hanehalkı, şirket ve piyasaların davranışlarını inceler: bir ürünün fiyatı, bir şirketin üretim kararı gibi.",
       "Makroekonomi ise ekonominin bütününü inceler: büyüme, enflasyon, işsizlik, faiz ve kur gibi göstergeler bu alanın konusudur.",
       "İkisi birbirini etkiler: milyonlarca küçük karar makro göstergeleri oluşturur, makro koşullar da bireylerin kararlarını değiştirir."],
       ["Mikro: birey ve şirket kararları","Makro: büyüme, enflasyon, işsizlik, faiz, kur","İkisi birbirini etkiler"],
-      ["Kira artışı iki gözle","Ayşe’nin kirası 20.000 TL’den 28.000 TL’ye çıktı (%40 artış). Aynı yıl ülkedeki kiralar da ortalama %40 arttı. Varsayımsal olarak TÜFE sepetinde kiranın ağırlığı %7.","Mikro bakış: Ayşe’nin aylık yükü 8.000 TL, yıllık 96.000 TL arttı; bütçesini yeniden düzenlemesi gerekir. Makro bakış: kiranın TÜFE’ye katkısı yaklaşık ağırlık × artış = 0,07 × 40 = 2,8 puandır.","Aynı olay mikroda bir bütçe sorunu, makroda enflasyona katkıdır. Katkı ≈ sepet ağırlığı × fiyat artışı."]),
+      ["Kira artışına mikro ve makro bakış","Ayşe’nin kirası 20.000 TL’den 28.000 TL’ye çıktı (%40 artış). Aynı yıl ülkedeki kiralar da ortalama %40 arttı. Varsayımsal olarak TÜFE sepetinde kiranın ağırlığı %7.","Mikro bakış: Ayşe’nin aylık yükü 8.000 TL, yıllık 96.000 TL arttı; bütçesini yeniden düzenlemesi gerekir. Makro bakış: kiranın TÜFE’ye katkısı yaklaşık ağırlık × artış = 0,07 × 40 = 2,8 puandır.","Aynı olay mikroda bir bütçe sorunu, makroda enflasyona katkıdır. Katkı ≈ sepet ağırlığı × fiyat artışı."]),
     EGD("e05","Para ve işlevleri",4,[
       "Para üç temel işlev görür: değişim aracıdır, değer ölçüsüdür ve değer saklama aracıdır. Para sayesinde takas yerine alışveriş kolaylaşır.",
       "Enflasyon yüksekse paranın değer saklama işlevi zayıflar; çünkü aynı tutarla zamanla daha az mal alınır.",
       "Para arzını, merkez bankası ve bankacılık sistemi birlikte belirler. Dijital ödemeler yaygınlaştıkça parayı elde bulundurma ihtiyacı azalır ama işlevleri değişmez."],
       ["Değişim aracı, değer ölçüsü, değer saklama aracı","Yüksek enflasyonda değer saklama zayıflar","Para arzı merkez bankası ve bankalarca belirlenir"],
-      ["Yastık altındaki 10.000 TL","Hasan 10.000 TL’yi bir yıl yastık altında sakladı. Yıllık enflasyon %50 oldu.","Başlangıçta 10.000 TL ile alınan sepet bir yıl sonra 15.000 TL’ye çıktı. Hasan’ın nakdi hâlâ 10.000 TL. Satın alma gücü 10.000 ÷ 1,5 ≈ 6.667 TL’ye düştü; yani yaklaşık 3.333 TL (%33) değer kaybetti.","Enflasyon %50 iken nakdin satın alma gücü yılda yaklaşık üçte bir erir. Değer saklama işlevi enflasyonla zayıflar."]),
+      ["Nakit tutmanın reel maliyeti","Hasan 10.000 TL’yi bir yıl yastık altında sakladı. Yıllık enflasyon %50 oldu.","Başlangıçta 10.000 TL ile alınan sepet bir yıl sonra 15.000 TL’ye çıktı. Hasan’ın nakdi hâlâ 10.000 TL. Satın alma gücü 10.000 ÷ 1,5 ≈ 6.667 TL’ye düştü; yani yaklaşık 3.333 TL (%33) değer kaybetti.","Enflasyon %50 iken nakdin satın alma gücü yılda yaklaşık üçte bir erir. Değer saklama işlevi enflasyonla zayıflar."]),
   ]},
   { ad:"Makro göstergeler", ozet:"GSYH, enflasyon, işsizlik, cari denge ve bütçe", dersler:[
     EGD("e06","GSYH ve büyüme",5,[
@@ -1720,19 +1721,19 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Nominal GSYH enflasyondan etkilenir. Gerçek büyümeyi görmek için fiyat etkisinden arındırılmış reel büyümeye bakılır.",
       "Kişi başına GSYH, toplam üretimin nüfusa bölünmesiyle bulunur ve ortalama refah düzeyi hakkında fikir verir; ancak gelir dağılımını göstermez."],
       ["GSYH: üretilen nihai mal ve hizmetlerin değeri","Büyüme reel (fiyattan arındırılmış) ölçülür","Kişi başına GSYH gelir dağılımını göstermez"],
-      ["Nominal büyüme mi, reel büyüme mi?","Bir haber “ekonomi %60 büyüdü” diyor. Aynı dönemde fiyat artışı (GSYH deflatörü) %50.","Reel büyüme = (1 + nominal) ÷ (1 + enflasyon) − 1 = 1,60 ÷ 1,50 − 1 ≈ %6,7. Üretimin gerçek miktarı yalnızca %6,7 artmıştır; geri kalanı fiyat artışıdır.","Başlıktaki nominal büyüme çoğu zaman yanıltır. Gerçek büyüme için fiyat etkisinden arındırılmış (reel) rakama bak."]),
+      ["Nominal büyüme mi, reel büyüme mi?","Bir haber “ekonomi %60 büyüdü” diyor. Aynı dönemde fiyat artışı (GSYH deflatörü) %50.","Reel büyüme = (1 + nominal) ÷ (1 + enflasyon) − 1 = 1,60 ÷ 1,50 − 1 ≈ %6,7. Üretimin gerçek miktarı yalnızca %6,7 artmıştır; geri kalanı fiyat artışıdır.","Başlıktaki nominal büyüme çoğu zaman yanıltır. Gerçek büyüme için fiyat etkisinden arındırılmış (reel) rakama bakılmalıdır."]),
     EGD("e07","Enflasyon ve TÜFE",5,[
       "Enflasyon, mal ve hizmet fiyatlarının genel düzeyindeki sürekli artıştır. Paranın satın alma gücü azalır.",
       "Tüketici enflasyonu, Tüketici Fiyat Endeksi (TÜFE) ile ölçülür ve TÜİK her ay yayımlar. ÜFE ise üreticinin satış fiyatlarındaki değişimi gösterir ve çoğunlukla tüketici fiyatlarının öncü göstergesi sayılır.",
       "Enflasyon sepetinin bileşimi herkes için aynı değildir. Gıda, barınma ve ulaşım gibi harcama gruplarının ağırlığı kişiden kişiye değişir; bu yüzden kişisel enflasyon resmi oranından farklı olabilir."],
       ["TÜFE tüketici fiyatlarını ölçer","ÜFE üretici fiyatlarını ölçer","Kişisel enflasyon resmî orandan farklı olabilir"],
-      ["Kişisel enflasyon","Deniz’in harcamaları: kira %50, gıda %30, diğer %20. Bir yıllık fiyat artışları: kira %60, gıda %45, diğer %30. Resmî yıllık enflasyon %45.","Kişisel enflasyon = 0,50 × 60 + 0,30 × 45 + 0,20 × 30 = 30 + 13,5 + 6 = %49,5. Deniz’in yaşadığı enflasyon, resmî orandan 4,5 puan yüksek çıktı; çünkü harcamasının yarısı hızlı artan kira kalemindeydi.","Kişisel enflasyon, harcama ağırlığı ile kalem artışlarının çarpımlarının toplamıdır. Sepetin farklıysa oranın da farklı olur."]),
+      ["Kişisel enflasyon","Deniz’in harcamaları: kira %50, gıda %30, diğer %20. Bir yıllık fiyat artışları: kira %60, gıda %45, diğer %30. Resmî yıllık enflasyon %45.","Kişisel enflasyon = 0,50 × 60 + 0,30 × 45 + 0,20 × 30 = 30 + 13,5 + 6 = %49,5. Deniz’in yaşadığı enflasyon, resmî orandan 4,5 puan yüksek çıktı; çünkü harcamasının yarısı hızlı artan kira kalemindeydi.","Kişisel enflasyon, harcama ağırlığı ile kalem artışlarının çarpımlarının toplamıdır. Sepet farklıysa oran da farklı olur."]),
     EGD("e08","İşsizlik ve istihdam",4,[
       "İşsizlik oranı, işgücüne katılan ve iş arayan kişilerin işgücüne oranıdır. Türkiye’de TÜİK, Hanehalkı İşgücü Araştırması ile bu oranı aylık olarak yayımlar.",
       "Geniş tanımlı işsizlik (atıl işgücü), iş aramayı bırakmış ama çalışmaya hazır olanları ve daha fazla çalışmak isteyen yarı zamanlı çalışanları da kapsar; bu nedenle resmî oranın üzerinde çıkar.",
       "İstihdam ve işgücüne katılım oranı, ekonomik sağlığın en önemli göstergelerindendir."],
       ["İşsizlik oranı = işsizler ÷ işgücü","Geniş tanımlı işsizlik daha kapsamlıdır","İstihdam ve işgücüne katılım birlikte izlenir"],
-      ["İşsizlik oranı düştü, iyileşme gerçek mi?","İşgücü 32 milyon, işsiz 3,2 milyon: oran %10. Bir ay sonra 0,6 milyon kişi iş aramayı bırakıp işgücünün dışına çıkıyor; kimse iş bulmuyor.","Yeni işsiz sayısı 2,6 milyon, yeni işgücü 31,4 milyon. Oran = 2,6 ÷ 31,4 ≈ %8,3. İşsizlik oranı %10’dan %8,3’e düştü ama tek bir kişi bile iş bulmadı: işgücüne katılım düştü.","İşsizlik oranını işgücüne katılım ve geniş tanımlı işsizlikle birlikte oku; oran düşerken katılım da düşüyorsa iyileşme gerçek olmayabilir."]),
+      ["İşsizlik oranı düştü, iyileşme gerçek mi?","İşgücü 32 milyon, işsiz 3,2 milyon: oran %10. Bir ay sonra 0,6 milyon kişi iş aramayı bırakıp işgücünün dışına çıkıyor; kimse iş bulmuyor.","Yeni işsiz sayısı 2,6 milyon, yeni işgücü 31,4 milyon. Oran = 2,6 ÷ 31,4 ≈ %8,3. İşsizlik oranı %10’dan %8,3’e düştü ama tek bir kişi bile iş bulmadı: işgücüne katılım düştü.","İşsizlik oranı, işgücüne katılım ve geniş tanımlı işsizlikle birlikte değerlendirilmelidir; oran düşerken katılım da düşüyorsa iyileşme gerçek olmayabilir."]),
     EGD("e09","Cari denge ve ödemeler dengesi",5,[
       "Ödemeler dengesi, bir ülkenin dünyanın geri kalanıyla yaptığı tüm ekonomik işlemleri kaydeder. Cari işlemler hesabı bunun en çok izlenen parçasıdır.",
       "Cari işlemler hesabı; dış ticaret dengesini, turizm gibi hizmet gelirlerini ve yurt dışına yapılan gelir ödemelerini içerir. Girenden çok çıkan döviz varsa cari açık oluşur.",
@@ -1744,7 +1745,7 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Devlet açığı, Hazine’nin iç ve dış borçlanmasıyla finanse eder. İç borçlanmada devlet iç borçlanma senetleri (DİBS) ihraç edilir: bono (kısa vadeli) ve tahvil (uzun vadeli).",
       "Hazine, kâr payı ödeyen kira sertifikası da ihraç ederek faizsiz esaslara uygun bir borçlanma yolu sunar. Kamu borcunun GSYH’ye oranı, sürdürülebilirliğin önemli bir göstergesidir."],
       ["Gider > gelir ise bütçe açığı","DİBS: bono (kısa), tahvil (uzun vadeli)","Borç/GSYH oranı sürdürülebilirliği gösterir"],
-      ["Büyüme borç oranını nasıl düşürür?","Varsayımsal bir ülkede GSYH 800, kamu borç stoku 400 (borç/GSYH %50). Bütçe açığı 20 ve borçlanmayla kapatılıyor.","Borç 420’ye çıkar. GSYH aynı kalsaydı oran 420 ÷ 800 = %52,5 olurdu. Ama GSYH %5 büyüyüp 840 olursa oran 420 ÷ 840 = %50’de kalır: borç arttığı halde oran yükselmedi.","Borç/GSYH oranı yalnızca borçla değil büyümeyle de belirlenir. Hem paya hem paydaya bak."]),
+      ["Büyüme borç oranını nasıl düşürür?","Varsayımsal bir ülkede GSYH 800, kamu borç stoku 400 (borç/GSYH %50). Bütçe açığı 20 ve borçlanmayla kapatılıyor.","Borç 420’ye çıkar. GSYH aynı kalsaydı oran 420 ÷ 800 = %52,5 olurdu. Ama GSYH %5 büyüyüp 840 olursa oran 420 ÷ 840 = %50’de kalır: borç arttığı halde oran yükselmedi.","Borç/GSYH oranı yalnızca borçla değil büyümeyle de belirlenir. Hem paya hem paydaya bakılmalıdır."]),
   ]},
   { ad:"Para politikası ve faiz", ozet:"Merkez bankası, politika faizi, kredi ve reel faiz", dersler:[
     EGD("e11","Merkez bankası ve görevleri",4,[
@@ -1776,7 +1777,7 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Yaklaşık olarak reel getiri, nominal getirinin enflasyondan düşülmesiyle bulunur. Daha kesin hesapta (1 + nominal) ÷ (1 + enflasyon) − 1 formülü kullanılır.",
       "Yıllık %40 kazanıp enflasyon %45 ise, satın alma gücü azalmıştır; yani reel getiri negatiftir."],
       ["Reel getiri enflasyondan arındırılmıştır","Kesin formül: (1+nominal) ÷ (1+enflasyon) − 1","Negatif reel getiri satın alma gücü kaybıdır"],
-      ["Nominal kazanç, reel kayıp","Pınar 100.000 TL’yi yıllık %40 getirili bir hesaba yatırdı. Aynı yıl enflasyon %45 oldu.","Nominal olarak hesabı 140.000 TL oldu. Ama aynı sepet 145.000 TL’ye çıktı. Reel getiri = 1,40 ÷ 1,45 − 1 ≈ −%3,4. Başlangıç fiyatlarıyla bugünkü gücü: 140.000 ÷ 1,45 ≈ 96.552 TL; yani 3.448 TL’lik reel kayıp.","Nominal kazanç olsa bile reel getiri negatif olabilir. Getiriyi her zaman enflasyonla kıyasla."]),
+      ["Nominal kazanç, reel kayıp","Pınar 100.000 TL’yi yıllık %40 getirili bir hesaba yatırdı. Aynı yıl enflasyon %45 oldu.","Nominal olarak hesabı 140.000 TL oldu. Ama aynı sepet 145.000 TL’ye çıktı. Reel getiri = 1,40 ÷ 1,45 − 1 ≈ −%3,4. Başlangıç fiyatlarıyla bugünkü gücü: 140.000 ÷ 1,45 ≈ 96.552 TL; yani 3.448 TL’lik reel kayıp.","Nominal kazanç olsa bile reel getiri negatif olabilir. Getiri her zaman enflasyonla kıyaslanmalıdır."]),
   ]},
   { ad:"Döviz ve dış denge", ozet:"Kur, rezerv, dış ticaret ve sermaye akımları", dersler:[
     EGD("e16","Döviz kuru",4,[
@@ -1832,14 +1833,14 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
     EGD("e24","Ekonomik takvimi okumak",4,[
       "Ekonomik takvim, enflasyon, büyüme, işsizlik, faiz kararı gibi önemli verilerin ne zaman açıklanacağını gösterir. Piyasalar bu açıklamalara büyük tepki verebilir.",
       "Piyasada asıl önemli olan sonucun kendisinden çok, beklentiden ne kadar saptığıdır. Beklentiye yakın veri çoğu zaman büyük hareket yaratmaz.",
-      "Uygulamadaki Finansal Takvim ekranından yaklaşan PPK, Fed ve enflasyon açıklamalarını izleyebilirsin."],
-      ["Takvim önemli açıklamaların zamanını gösterir","Beklentiden sapma, tepkiyi belirler","Finansal Takvim’den yaklaşan olayları izle"],
+      "Yaklaşan PPK, Fed ve enflasyon açıklamaları uygulamadaki Finansal Takvim ekranından izlenebilir."],
+      ["Takvim önemli açıklamaların zamanını gösterir","Beklentiden sapma, tepkiyi belirler","Finansal Takvim’den yaklaşan olaylar izlenmeli"],
       ["Sapma tepkiyi belirler","Aylık enflasyon beklentisi %3,0. Senaryo A: açıklanan %3,1. Senaryo B: açıklanan %3,8.","A’da sapma 0,1 puandır: küçük olduğu için piyasa tepkisi sınırlı kalır. B’de sapma 0,8 puandır: faiz beklentileri değişir, bono faizleri ve kur sert tepki verebilir. Kerem takvimde beklenti ve sonuç yan yana gelince sapmayı hesaplar. Beklentilere TCMB Piyasa Katılımcıları Anketi gibi kaynaklardan bakılır.","Piyasa sonucu değil, sapmayı fiyatlar. 0,1 puanlık fark sönük, 0,8 puanlık fark sert hareket yaratır."]),
     EGD("e25","Ekonomik haberi yorumlamak",5,[
       "Bir ekonomik haberi okurken önce neyin açıklandığına, hangi dönemi kapsadığına ve beklentiden farkına bakmak gerekir. Başlık yerine veriye ve karşılaştırma dönemine dikkat edilmelidir.",
       "Haberin kaynağı ve verinin birincil kaynağı önemlidir; TÜİK, TCMB, BDDK ve Hazine gibi resmî kaynaklar öncelikli olmalıdır.",
       "Bir haberi kendi durumuna uyarlamak için sorular sorulabilir: bu gelirimi, borcumu, birikimimi veya harcamalarımı nasıl etkiler?"],
-      ["Veri, dönem ve beklentiye bak","Birincil resmî kaynakları tercih et","Haberi kendi bütçenle ilişkilendir"],
+      ["Veri, dönem ve beklentiye bakılmalı","Birincil resmî kaynaklar tercih edilmeli","Haber kişisel bütçeyle ilişkilendirilmeli"],
       ["“Enflasyon düştü” başlığı","Bir başlık “Enflasyon düştü” diyor. Yıllık enflasyon %65’ten %60’a indi. Aylin’in maaşı bir yılda %40 arttı.","Yıllık enflasyonun %60 olması, bir yılda 100 TL’lik sepetin 160 TL olması demektir; fiyatlar düşmedi, artış yavaşladı. Aylin’in maaşı %40 arttığı için reel değişim = 1,40 ÷ 1,60 − 1 = −%12,5: satın alma gücü yine kaybediyor.","“Enflasyon düştü” fiyatların düştüğü anlamına gelmez, artışın yavaşladığı anlamına gelir. Maaş artışı enflasyonun altındaysa reel kayıp sürer."]),
   ]},
   ],
@@ -1882,18 +1883,18 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Düşük riskli araçlar (para piyasası, kısa vadeli borçlanma) daha istikrarlı ama sınırlı getiri sunar. Hisse senetleri uzun vadede daha yüksek getiri potansiyeli taşır ama kısa vadede sert dalgalanabilir.",
       "Her yatırımcının riske tahammülü farklıdır; önemli olan zarar gördüğünde panikle karar vermeyecek bir risk seviyesi seçmektir."],
       ["Yüksek getiri beklentisi daha yüksek risk taşır","Düşük risk istikrarlı ama sınırlı getiri demektir","Riske tahammül kişiye göre değişir"],
-      ["Kaldırabileceğin kayıptan geriye doğru","Ela’nın 100.000 TL’lik portföyünün %80’i hisse. Hisseler zor bir dönemde %25 düşebilir.","Portföy kaybı ≈ hisse payı × hisse düşüşü = 80.000 × %25 = 20.000 TL (portföyün %20’si). Bu kaybı kaldıramıyorsa hisse payını %40’a indirir: 40.000 × %25 = 10.000 TL (%10). Hisse payını, katlanabileceği en büyük kayıptan geriye doğru belirler.","Portföy kaybı yaklaşık hisse payı × hisse düşüşüdür. Kaldıramayacağın kayıp seviyesinden geriye doğru hisse payını belirle."]),
+      ["Katlanılabilir kayıptan geriye doğru","Ela’nın 100.000 TL’lik portföyünün %80’i hisse. Hisseler zor bir dönemde %25 düşebilir.","Portföy kaybı ≈ hisse payı × hisse düşüşü = 80.000 × %25 = 20.000 TL (portföyün %20’si). Bu kaybı kaldıramıyorsa hisse payını %40’a indirir: 40.000 × %25 = 10.000 TL (%10). Hisse payını, katlanabileceği en büyük kayıptan geriye doğru belirler.","Portföy kaybı yaklaşık hisse payı × hisse düşüşüdür. Katlanılamayacak kayıp seviyesinden geriye doğru hisse payı belirlenmelidir."]),
     EGD("f03","Likidite ve vade",4,[
       "Likidite, bir varlığın değer kaybetmeden ne kadar hızlı nakde çevrilebildiğidir. Vadesiz hesap en likit, gayrimenkul daha az likit varlıklardandır.",
       "Vade, yatırımın ne kadar süre tutulacağıdır. Kısa vadeli ihtiyaç için uzun vadeli ve oynak bir varlık seçmek riskli olabilir.",
       "Paranın ne zaman gerekeceği belli ise, yatırım aracı da vadeyi buna göre seçilmelidir."],
-      ["Likidite: değer kaybetmeden hızlı nakde dönebilme","Vade, ihtiyacın zamanıyla uyumlu olmalı","Kısa vadeli ihtiyaca oynak varlık uygun değildir"],
-      ["Vade, ihtiyaç tarihine uymalı","Mert 6 ay sonra ödeyeceği 200.000 TL’lik vergi için biriktiriyor. Hisse fonu ya da para piyasası fonu arasında kalıyor.","Hisse fonu 6 ayda %20 düşerse 160.000 TL kalır ve 40.000 TL açık oluşur; bu tarih ertelenemez. Para piyasası fonu ya da vadesi 6 aya denk gelen katılma hesabında anapara dalgalanması çok düşüktür. Mert para ihtiyaç tarihinde lazım olduğu için ikinci seçeneği seçer.","Paranın gerekeceği tarihe göre araç seç. Kısa vadeli ihtiyaca oynak varlık koymak, kayıp riskini zamanlamaya bağlar."]),
+      ["Likidite: değer kaybetmeden hızlı nakde dönebilme","Vade, ihtiyaç zamanıyla uyumlu olmalı","Kısa vadeli ihtiyaca oynak varlık uygun değildir"],
+      ["Vade, ihtiyaç tarihine uymalı","Mert 6 ay sonra ödeyeceği 200.000 TL’lik vergi için biriktiriyor. Hisse fonu ya da para piyasası fonu arasında kalıyor.","Hisse fonu 6 ayda %20 düşerse 160.000 TL kalır ve 40.000 TL açık oluşur; bu tarih ertelenemez. Para piyasası fonu ya da vadesi 6 aya denk gelen katılma hesabında anapara dalgalanması çok düşüktür. Mert para ihtiyaç tarihinde lazım olduğu için ikinci seçeneği seçer.","Araç, paranın gerekeceği tarihe göre seçilmelidir. Kısa vadeli ihtiyaca oynak varlık koymak, kayıp riskini zamanlamaya bağlar."]),
     EGD("f04","Çeşitlendirme",4,[
       "Çeşitlendirme, tüm parayı tek bir varlığa yatırmak yerine farklı varlıklara dağıtmaktır. Bir varlık düşerken diğeri düşmeyebilir ve toplam dalgalanma azalır.",
       "Etkili çeşitlendirme için varlıkların birbirinden farklı davranması gerekir. Aynı sektörden beş hisse almak, gerçek bir çeşitlendirme sağlamaz.",
       "Fonlar, tek bir ürünle çok sayıda varlığa erişim sağladığı için çeşitlendirmenin pratik bir yoludur."],
-      ["Farklı varlıklara dağıt","Birbirinden farklı davranan varlıklar seç","Fonlar kolay çeşitlendirme sağlar"],
+      ["Farklı varlıklara dağıtım yapılmalı","Birbirinden farklı davranan varlıklar seçilmeli","Fonlar kolay çeşitlendirme sağlar"],
       ["Aynı sektör, tek varlık","Kaan beş farklı perakende hissesi aldı. Sektör zor bir dönem yaşıyor ve hepsi %30 düşüyor. Alternatif olarak üç farklı varlığa eşit dağıtsaydı sonuçlar: −%30, %0 ve +%10 olacaktı.","Beş perakende hissesi birlikte hareket ettiği için portföy −%30 olur. Üç farklı varlıkta ortalama = (−30 + 0 + 10) ÷ 3 ≈ −%6,7. Çeşitlendirme, kaybı −%30’dan −%6,7’ye indirdi.","Aynı sektördeki hisseler tek varlık gibi hareket eder. Farklı davranan varlıklarla dağıtmak zararın etkisini azaltır."]),
     EGD("f05","Yatırımcı profili ve hedef",4,[
       "Yatırım hedefi; ne için, ne kadar sürede ve ne kadar tutarda birikim yapılacağını belirler: ev peşinatı, çocuk eğitimi, emeklilik gibi.",
@@ -1914,11 +1915,11 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Değişken ve karma fonlar, yönetici esnekliğiyle farklı varlıklar arasında dağılım yapabilir. Fon sepeti fonları ise başka fonlara yatırım yapar. Serbest fonlar daha esnek stratejiler izleyebilir ve daha yüksek risk taşıyabilir.",
       "Fonun adı, strateji ve risk seviyesi hakkında ipucu verir; ancak karar vermeden önce izahname ve fon bilgi formuna da bakılmalıdır."],
       ["Para piyasası: kısa vade, düşük risk","Hisse fonu: ağırlıklı hisse, yüksek dalgalanma","Değişken, karma ve serbest fonlar esnektir"],
-      ["En kötü senaryoyu karşılıyor mu?","Cem 2 yıl sonra 300.000 TL’ye ihtiyaç duyuyor. Hisse fonu zor bir dönemde %25 düşebilir.","Hepsini hisse fonuna koyarsa en kötü durumda 225.000 TL’ye düşer ve 75.000 TL açık verir. %70 borçlanma araçları fonu, %30 hisse fonu dağıtırsa en kötü durumda kayıp 90.000 × %25 = 22.500 TL olur ve 277.500 TL kalır. Cem hedefe yakın kalması için bu dağılımı seçer.","Hedef tarihte ihtiyaç duyulan tutarı en kötü senaryoda bile karşılamayan türden kaçın. Vade kısaldıkça düşük riskli türlere yönel."]),
+      ["En kötü senaryoyu karşılıyor mu?","Cem 2 yıl sonra 300.000 TL’ye ihtiyaç duyuyor. Hisse fonu zor bir dönemde %25 düşebilir.","Hepsini hisse fonuna koyarsa en kötü durumda 225.000 TL’ye düşer ve 75.000 TL açık verir. %70 borçlanma araçları fonu, %30 hisse fonu dağıtırsa en kötü durumda kayıp 90.000 × %25 = 22.500 TL olur ve 277.500 TL kalır. Cem hedefe yakın kalması için bu dağılımı seçer.","Hedef tarihte ihtiyaç duyulan tutarı en kötü senaryoda bile karşılamayan fon türünden kaçınılmalıdır. Vade kısaldıkça düşük riskli türlere yönelinmelidir."]),
     EGD("f08","Katılım fonları",4,[
       "Katılım fonları, yatırım stratejisi faizsiz esaslara uygun olacak şekilde tasarlanmış, uygunluğu bir kurulca denetlenen fonlardır. Faizli araçlar yerine kira sertifikası, katılma hesabı ve katılım endeksine uygun hisse gibi araçlar tercih edilir.",
       "Fonun kurucusu, uygunluk ilkelerini izahnamede belirtir. Bir fonun katılım fonu olup olmadığı, fon bilgi formundan ve fonun kategorisinden anlaşılabilir.",
-      "Uygulamadaki Fon Getiri İzleme ekranında Katılıma Uygun Fonlar ve Tüm Fonlar görünümlerini karşılaştırabilirsin."],
+      "Uygulamadaki Fon Getiri İzleme ekranında Katılıma Uygun Fonlar ve Tüm Fonlar görünümleri karşılaştırılabilir."],
       ["Strateji faizsiz esaslara uygundur","Uygunluk bir kurulca denetlenir","Fon Getiri İzleme’de ayrı görünüm vardır"],
       ["Katılım fonunu üç yerden doğrula","Ali bir fonun katılım fonu olduğunu doğrulamak istiyor.","Üç kaynağı birbiriyle karşılaştırır: (1) izahnamenin yatırım stratejisi bölümünde faizsiz esaslara uygunluk yazıyor mu, (2) uygunluğu denetleyen kurulun adı ve görevi belirtiliyor mu, (3) uygulamadaki Fon Getiri İzleme ekranında “Katılıma Uygun Fonlar” filtresinde fon görünüyor mu?","Üç kaynak birbirini teyit etmeli: strateji metni, denetim kurulu bilgisi ve uygulamadaki katılıma uygun filtre."]),
     EGD("f09","TEFAS ve fon alım satımı",4,[
@@ -1926,13 +1927,13 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Fon işlemlerinde fiyat, işlem anında değil, belirlenen fiyat açıklama zamanındaki pay fiyatı üzerinden gerçekleşir. Alım ve satım için işlem saatleri, valör (paranın hesaba geçiş süresi) ve minimum tutar fon türüne göre değişir.",
       "Bu yüzden bir fona girmeden önce işlem saatlerini ve paranın ne zaman nakde dönüşeceğini öğrenmek önemlidir."],
       ["TEFAS fon alım satım platformudur","Fiyat, açıklanan pay fiyatıyla belirlenir","Valör ve saat fon türüne göre değişir"],
-      ["Para ne zaman ulaşır?","Nur Cuma 14:00’te bir fonu satmak istiyor. Fonun işlem kesim saati 13:30, valörü bir iş günü (T+1, varsayımsal). Para Salı sabahı lazım.","Emir kesim saatinden sonra verildiği için bir sonraki iş günü fiyatıyla (Pazartesi) işlem görür. Valör T+1 olduğundan para Salı günü hesaba geçer. Salı sabahı lazımsa gecikme riski var; Nur satış emrini Perşembe vererek bu riski ortadan kaldırır.","Kesim saati ve valör, paranın ne zaman ulaşacağını belirler. İhtiyaç gününden en az 2 iş günü önce sat."]),
+      ["Para ne zaman ulaşır?","Nur Cuma 14:00’te bir fonu satmak istiyor. Fonun işlem kesim saati 13:30, valörü bir iş günü (T+1, varsayımsal). Para Salı sabahı lazım.","Emir kesim saatinden sonra verildiği için bir sonraki iş günü fiyatıyla (Pazartesi) işlem görür. Valör T+1 olduğundan para Salı günü hesaba geçer. Salı sabahı lazımsa gecikme riski var; Nur satış emrini Perşembe vererek bu riski ortadan kaldırır.","Kesim saati ve valör, paranın ne zaman ulaşacağını belirler. İhtiyaç gününden en az 2 iş günü önce satış emri verilmelidir."]),
     EGD("f10","Fon getirisini ve riskini okumak",5,[
       "Fon performansı yalnızca bir dönemlik getiriyle değerlendirilmez. Günlük, haftalık, aylık, yıllık getiriler birlikte incelenmeli, aynı kategorideki fonlarla karşılaştırılmalıdır.",
       "Getiri yanında risk göstergelerine bakmak gerekir: dalgalanma (standart sapma), fon büyüklüğü ve yatırımcı sayısı fonun istikrarı hakkında fikir verir.",
       "Geçmiş getiri, gelecek getirinin garantisi değildir. Son dönemde çok yükselen bir fon, ileride aynı performansı göstermeyebilir."],
-      ["Farklı dönemlerin getirilerini birlikte oku","Risk ve büyüklük de önemlidir","Geçmiş getiri garanti değildir"],
-      ["Tek dönem getirisi yanıltır","Zeynep iki fonu karşılaştırıyor. Fon A: son 1 ay +%8, yıllık +%20, yıllık dalgalanma %25. Fon B: son 1 ay +%2, yıllık +%35, yıllık dalgalanma %10 (varsayımsal).","Yalnızca son aya bakarsa A seçilir. Yıllık getiri ve dalgalanmayı birlikte kullanırsa getiri ÷ dalgalanma: A için 20 ÷ 25 = 0,8; B için 35 ÷ 10 = 3,5. B birim risk başına çok daha fazla getiri sağlamıştır. Ayrıca iki fonun aynı kategoride olduğunu da doğrular.","Tek dönem getirisi yanıltır. Yıllık getiriyi dalgalanmayla birlikte oku ve aynı kategorideki fonlarla karşılaştır."]),
+      ["Farklı dönemlerin getirileri birlikte değerlendirilmeli","Risk ve büyüklük de önemlidir","Geçmiş getiri garanti değildir"],
+      ["Tek dönem getirisi yanıltır","Zeynep iki fonu karşılaştırıyor. Fon A: son 1 ay +%8, yıllık +%20, yıllık dalgalanma %25. Fon B: son 1 ay +%2, yıllık +%35, yıllık dalgalanma %10 (varsayımsal).","Yalnızca son aya bakarsa A seçilir. Yıllık getiri ve dalgalanmayı birlikte kullanırsa getiri ÷ dalgalanma: A için 20 ÷ 25 = 0,8; B için 35 ÷ 10 = 3,5. B birim risk başına çok daha fazla getiri sağlamıştır. Ayrıca iki fonun aynı kategoride olduğunu da doğrular.","Tek dönem getirisi yanıltır. Yıllık getiri dalgalanmayla birlikte değerlendirilmeli ve aynı kategorideki fonlarla karşılaştırılmalıdır."]),
   ]},
   { ad:"Maliyet, vergi ve seçim", ozet:"Ücretler, vergi, para piyasası, BYF ve altın fonları", dersler:[
     EGD("f11","Fon maliyetleri",4,[
@@ -1940,13 +1941,13 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Bazı fonlarda giriş veya çıkış komisyonu, performans ücreti bulunabilir. Aynı kategorideki iki fonun getirisi benzerse, ücreti düşük olanın uzun vadede avantajı vardır.",
       "Maliyet bilgisi fon bilgi formunda yer alır; yatırımdan önce bu bölümü kontrol etmek gerekir."],
       ["Giderler fon fiyatına yansır","Komisyon ve performans ücreti olabilir","Ücret bilgisi bilgi formunda yazar"],
-      ["Küçük ücret farkının 10 yıllık etkisi","İki fon aynı yıllık %20 brüt getiri sağlıyor. A’nın yıllık gideri %1, B’nin %2,5. 100.000 TL 10 yıl yatırılacak (getiri sabit varsayımıyla).","A net %19: 100.000 × 1,19^10 ≈ 569.468 TL. B net %17,5: 100.000 × 1,175^10 ≈ 501.624 TL. Fark yaklaşık 67.844 TL. Yıllık yalnızca 1,5 puanlık gider farkı 10 yılda bu kadar büyüdü.","Küçük görünen ücret farkı bileşik etkiyle büyür. Aynı kategorideki fonlarda gider oranını mutlaka karşılaştır."]),
+      ["Küçük ücret farkının 10 yıllık etkisi","İki fon aynı yıllık %20 brüt getiri sağlıyor. A’nın yıllık gideri %1, B’nin %2,5. 100.000 TL 10 yıl yatırılacak (getiri sabit varsayımıyla).","A net %19: 100.000 × 1,19^10 ≈ 569.468 TL. B net %17,5: 100.000 × 1,175^10 ≈ 501.624 TL. Fark yaklaşık 67.844 TL. Yıllık yalnızca 1,5 puanlık gider farkı 10 yılda bu kadar büyüdü.","Küçük görünen ücret farkı bileşik etkiyle büyür. Aynı kategorideki fonlarda gider oranı mutlaka karşılaştırılmalıdır."]),
     EGD("f12","Fon kazançlarının vergilendirilmesi",3,[
       "Fon kazançları vergiye tabidir. Vergi çoğunlukla stopaj yoluyla kaynağında kesilir. Stopaj oranları fon türüne, elde tutma süresine ve kişinin gerçek veya tüzel olmasına göre değişir.",
       "Oranlar zaman zaman değiştiği için, güncel oranı resmî mevzuattan veya aracı kurumun duyurularından öğrenmek gerekir.",
       "Net getiri hesaplanırken vergi etkisi de hesaba katılmalıdır; brüt getiri ile net getiri farklıdır."],
       ["Vergi çoğunlukla stopajla kesilir","Oran fon türü ve süreye göre değişir","Net getiri = brüt getiri − vergi"],
-      ["Net getiri üzerinden karşılaştırma","Fatma iki yatırımı karşılaştırıyor. A: brüt %40 getiri, stopaj %10. B’nin stopajı %17,5. (Oranlar varsayımsaldır; gerçek oranlar mevzuata göre değişir.)","A net = 40 × (1 − 0,10) = %36. B’nin aynı net getiriyi vermesi için brüt getirisi 36 ÷ (1 − 0,175) ≈ %43,6 olmalı. B brüt %42 verseydi net 42 × 0,825 = %34,65 olurdu ve A daha kârlı çıkardı.","Karşılaştırmayı vergi sonrası net getiri üzerinden yap. Stopaj farkı, brüt getirideki farkı tamamen yok edebilir."]),
+      ["Net getiri üzerinden karşılaştırma","Fatma iki yatırımı karşılaştırıyor. A: brüt %40 getiri, stopaj %10. B’nin stopajı %17,5. (Oranlar varsayımsaldır; gerçek oranlar mevzuata göre değişir.)","A net = 40 × (1 − 0,10) = %36. B’nin aynı net getiriyi vermesi için brüt getirisi 36 ÷ (1 − 0,175) ≈ %43,6 olmalı. B brüt %42 verseydi net 42 × 0,825 = %34,65 olurdu ve A daha kârlı çıkardı.","Karşılaştırma vergi sonrası net getiri üzerinden yapılmalıdır. Stopaj farkı, brüt getirideki farkı tamamen yok edebilir."]),
     EGD("f13","Para piyasası fonları",4,[
       "Para piyasası fonları, kısa vadeli ve düşük riskli araçlara (repo, vadeli mevduat, kısa vadeli borçlanma gibi) yatırım yapar. Günlük getirisi genellikle istikrarlıdır.",
       "Bu fonlar, kısa vadeli birikimin değerlendirilmesi için kullanılır. Dalgalanma düşük olsa da getiri garanti değildir; faiz ortamı değişince getiri de değişir.",
@@ -1976,14 +1977,14 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
     EGD("f17","Endeksler ve BIST",4,[
       "Endeks, bir grup hissenin ortak performansını gösterir. BIST 100, Borsa İstanbul’daki büyük hisselerden oluşan ve en çok izlenen endekstir; BIST 30 ise en büyük ve en likit 30 hisseyi içerir.",
       "Endeksler piyasanın genel yönünü gösterir. Bir hisse endeksten farklı hareket edebilir.",
-      "Katılım endeksleri faizsiz finans ilkelerine uygun şirketleri içerir. Uygulamadaki BİST Hisse Veri İzleme ekranında BİST ve katılım endeksi görünümlerini izleyebilirsin."],
+      "Katılım endeksleri faizsiz finans ilkelerine uygun şirketleri içerir. Uygulamadaki BİST Hisse Veri İzleme ekranında BİST ve katılım endeksi görünümleri izlenebilir."],
       ["Endeks, hisse grubunun ortak performansıdır","BIST 100 en çok izlenen endekstir","Hisse endeksten farklı hareket edebilir"],
-      ["Hisse hareketini üç katmanda oku","Aylin’in hissesi bir ayda %3 düştü. Aynı dönemde BIST 100 %2 yükseldi, hissenin sektör endeksi %4 düştü.","Üç katmana bakar: piyasa +%2, sektör −%4, hisse −%3. Hisse endeksin 5 puan altında kalmış ama kendi sektörüne göre 1 puan daha iyi: düşüşün büyük kısmı sektör kaynaklıdır. Aylin bu yüzden şirkete özel bir sorun aramak yerine sektör haberlerine bakar.","Hisse hareketini piyasa, sektör ve şirket olarak ayır. Bu örnekte düşüşün büyük kısmı sektör kaynaklıdır."]),
+      ["Hisse hareketinin üç katmanda incelenmesi","Aylin’in hissesi bir ayda %3 düştü. Aynı dönemde BIST 100 %2 yükseldi, hissenin sektör endeksi %4 düştü.","Üç katmana bakar: piyasa +%2, sektör −%4, hisse −%3. Hisse endeksin 5 puan altında kalmış ama kendi sektörüne göre 1 puan daha iyi: düşüşün büyük kısmı sektör kaynaklıdır. Aylin bu yüzden şirkete özel bir sorun aramak yerine sektör haberlerine bakar.","Hisse hareketi piyasa, sektör ve şirket olarak ayrıştırılmalıdır. Bu örnekte düşüşün büyük kısmı sektör kaynaklıdır."]),
     EGD("f18","Temettü, bedelsiz ve bedelli",5,[
       "Temettü, şirketin kârından hissedarlara dağıttığı paydır. Temettü verimi, hisse başına temettünün hisse fiyatına oranıdır.",
       "Bedelsiz sermaye artırımında şirket, mevcut hissedarlara karşılıksız yeni pay verir; hisse sayısı artar ama toplam değer değişmez, fiyat düzeltilir. Bedelli artırımda ise hissedar yeni pay almak için ödeme yapar.",
       "Bu işlemler fiyat grafiğinde ani değişiklik gibi görünebilir; bu yüzden düzeltilmiş fiyatlara bakmak gerekir."],
-      ["Temettü kâr payıdır","Bedelsizde ödeme yok, bedellide ödeme vardır","Fiyat düzeltmesine dikkat"],
+      ["Temettü kâr payıdır","Bedelsizde ödeme yok, bedellide ödeme vardır","Fiyat düzeltmesine dikkat edilmeli"],
       ["Bedelsiz zarar mı?","Kaan’ın 1.000 hissesi var, fiyat 100 TL (portföy 100.000 TL). Şirket %100 bedelsiz sermaye artırımı yaptı. Hisse başına 5 TL temettü açıkladı.","Bedelsiz sonrası Kaan’ın 2.000 hissesi olur ve fiyat 50 TL’ye düşer: 2.000 × 50 = 100.000 TL, değişmez. Temettü de bölünmeye göre düzelir: hisse başına 2,50 TL, 2.000 × 2,50 = 5.000 TL; önceki hesapla (1.000 × 5) aynı.","Bedelsiz bölünmede pay sayısı artar, fiyat düşer; toplam değer ve toplam temettü değişmez. Zarar değildir."]),
     EGD("f19","Temel analiz: F/K ve PD/DD",5,[
       "Temel analiz, şirketin finansal tablolarını ve değerini inceleyerek hissenin pahalı mı ucuz mu olduğunu değerlendirmeyi amaçlar.",
@@ -1992,10 +1993,10 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       ["F/K: fiyat ÷ hisse başına kâr","PD/DD: piyasa değeri ÷ defter değeri","Oranlar sektörle birlikte yorumlanır"],
       ["F/K ucuz mu diyor?","Deniz’in baktığı şirketin hisse fiyatı 50 TL, hisse başına kârı 5 TL, hisse başına defter değeri 40 TL. Sektörün ortalama F/K’sı 14.","F/K = 50 ÷ 5 = 10. PD/DD = 50 ÷ 40 = 1,25. Sektör ortalamasına göre F/K yaklaşık (14 − 10) ÷ 14 ≈ %29 daha düşük: ucuz görünüyor. Ama Deniz kârın tek seferlik mi sürekli mi olduğunu ve şirketin büyüme beklentisini de kontrol eder.","F/K tek başına ucuz demek değildir. Sektör ortalaması ve kârın sürdürülebilirliğiyle birlikte yorumlanır."]),
     EGD("f20","Emir türleri ve işlem mantığı",4,[
-      "Piyasa emri, mevcut en iyi fiyattan hemen işlem yapmayı sağlar. Limit emri ise belirlediğin fiyat veya daha iyi bir fiyattan işlem yapılmasını ister; fiyat o seviyeye gelmezse işlem gerçekleşmez.",
+      "Piyasa emri, mevcut en iyi fiyattan hemen işlem yapmayı sağlar. Limit emri ise belirlenen fiyattan veya daha iyi bir fiyattan işlem yapılmasını ister; fiyat o seviyeye gelmezse işlem gerçekleşmez.",
       "Alış ve satış arasındaki farka makas denir. Likiditesi düşük hisselerde makas geniş olabilir.",
       "Her işlemde komisyon ve vergiler maliyet oluşturur. Sık işlem yapmak bu maliyetleri artırır."],
-      ["Piyasa emri hemen gerçekleşir","Limit emri belirlediğin fiyatı bekler","Makas ve komisyon maliyettir"],
+      ["Piyasa emri hemen gerçekleşir","Limit emri belirlenen fiyatı bekler","Makas ve komisyon maliyettir"],
       ["Piyasa emri mi, limit emri mi?","Seda’nın almak istediği hissede alış-satış fiyatları 101,90 / 102,00 TL. 1.000 adet almak istiyor ve 100 TL’yi hedefliyor.","Piyasa emriyle anında 102,00 TL’den alır: 102.000 TL. 100 TL limit emri verirse fiyat 100’e inerse 100.000 TL öder (2.000 TL daha ucuz), ama fiyat o seviyeye hiç inmezse işlem gerçekleşmez. Seda bunu bilerek limit emrini seçer.","Piyasa emri kesinlik, limit emri fiyat kontrolü sağlar. İkisi arasındaki takas: gerçekleşme garantisi mi, fiyat garantisi mi?"]),
   ]},
   { ad:"Sabit getirili araçlar ve strateji", ozet:"Tahvil, sukuk, altın-döviz, portföy ve davranış", dersler:[
@@ -2016,7 +2017,7 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Kur ve altın fiyatları kısa vadede sert dalgalanabilir. Uzun vadede enflasyonu yakalamayı garanti etmez.",
       "Bu yüzden bu araçlar tek başına değil, portföyün bir parçası olarak ele alınmalıdır."],
       ["Kazanç yalnızca fiyat artışından gelir","Kısa vadede sert dalgalanabilir","Portföyün bir parçası olmalıdır"],
-      ["Tek araç yerine üçe bölmek","Ahmet 100.000 TL’sini yalnızca dolara yatırdı; dolar %5 düştü. Alternatif olarak üçe bölseydi: dolar −%5, altın +%8 (TL), katılma hesabı +%3 olacaktı.","Yalnızca dolarda sonuç −%5 (−5.000 TL). Üçe bölünmüş portföyde ortalama = (−5 + 8 + 3) ÷ 3 = +%2 (+2.000 TL). Ahmet dalgalanmayı azaltmanın sonucu garantilemediğini, yalnızca riski yaydığını not alır.","Tek araçta −%5 olan sonuç, üç araca bölününce +%2 olabilir. Dağıtım dalgalanmayı azaltır ama getiriyi garanti etmez."]),
+      ["Tek araç yerine üç araca dağıtım","Ahmet 100.000 TL’sini yalnızca dolara yatırdı; dolar %5 düştü. Alternatif olarak üçe bölseydi: dolar −%5, altın +%8 (TL), katılma hesabı +%3 olacaktı.","Yalnızca dolarda sonuç −%5 (−5.000 TL). Üçe bölünmüş portföyde ortalama = (−5 + 8 + 3) ÷ 3 = +%2 (+2.000 TL). Ahmet dalgalanmayı azaltmanın sonucu garantilemediğini, yalnızca riski yaydığını not alır.","Tek araçta −%5 olan sonuç, üç araca bölününce +%2 olabilir. Dağıtım dalgalanmayı azaltır ama getiriyi garanti etmez."]),
     EGD("f24","Portföy oluşturma ve yeniden dengeleme",5,[
       "Portföy, sahip olunan tüm yatırım araçlarının toplamıdır. Varlık dağılımı, hangi varlıkta ne kadar bulunduğunu gösterir ve getirinin büyük bölümünü bu dağılım belirler.",
       "Zamanla bazı varlıklar değer kazanır, bazıları kaybeder ve dağılım hedeften sapar. Yeniden dengeleme, portföyü belirlenen hedef dağılıma geri döndürmektir.",
@@ -2028,7 +2029,7 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Kayıptan kaçınma, kaybeden bir yatırımı “yeniden yükselir” umuduyla elde tutmak ve kazanan yatırımı erken satmaktır. Aşırı güven ise yeterli araştırma yapmadan büyük pozisyon almaktır.",
       "Bu hataları azaltmak için yazılı bir yatırım planı yapmak, düzenli ve küçük tutarlarla yatırım yapmak, duygusal kararlardan kaçınmak ve aşırı işlemden uzak durmak yardımcı olur."],
       ["Sürü davranışı zirveden almaya yol açar","Kayıptan kaçınma ve aşırı güven yaygındır","Yazılı plan ve düzenli yatırım yardımcı olur"],
-      ["Plansız işlem, panik ve plan","Kerem sosyal medyada bir hisse için “yükseliyor” gördü, 100 TL’den aldı. Fiyat 85 TL’ye inince panikle sattı; sonra fiyat 130 TL’ye çıktı.","Gerçekleşen kayıp hisse başına 15 TL, kaçırılan kazanç 45 TL. Plan yapsaydı yazılı kural olurdu: giriş 100, hedef 130, zarar kes 90 ve pozisyon boyutu portföyün %5’i. Zarar kes 90’da çalışırsa kayıp −%10 × %5 = portföyün %0,5’i olurdu.","Plan önceden yazılır: giriş, hedef, zarar kes ve pozisyon boyutu. Panik yerine kural işler; burada en kötü durumda portföy kaybı %0,5’tir."]),
+      ["Plansız işlem ile planlı işlem","Kerem sosyal medyada bir hisse için “yükseliyor” gördü, 100 TL’den aldı. Fiyat 85 TL’ye inince panikle sattı; sonra fiyat 130 TL’ye çıktı.","Gerçekleşen kayıp hisse başına 15 TL, kaçırılan kazanç 45 TL. Plan yapsaydı yazılı kural olurdu: giriş 100, hedef 130, zarar kes 90 ve pozisyon boyutu portföyün %5’i. Zarar kes 90’da çalışırsa kayıp −%10 × %5 = portföyün %0,5’i olurdu.","Plan önceden yazılır: giriş, hedef, zarar kes ve pozisyon boyutu. Panik yerine kural işler; burada en kötü durumda portföy kaybı %0,5’tir."]),
   ]},
   ],
   sorular:[
@@ -2045,8 +2046,8 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
     EGQ("Likidite ne demektir?",["Değer kaybetmeden hızlı nakde çevrilebilme","Yüksek getiri","Vergisiz olma","Uzun vade"],0,"Likidite, bir varlığın değer kaybetmeden ne kadar hızlı nakde dönebildiğidir."),
     EGQ("Faizler yükselirse mevcut tahvillerin fiyatı genellikle ne olur?",["Düşer","Yükselir","Değişmez","Sıfırlanır"],0,"Faiz ve tahvil fiyatı ters yönde hareket eder."),
     EGQ("Fiyatı 50 TL, hisse başına kârı 5 TL olan hissenin F/K oranı kaçtır?",["5","10","50","250"],1,"F/K = 50 ÷ 5 = 10."),
-    EGQ("Bedelsiz sermaye artırımında hissedar ne yapar?",["Ek ödeme yapar","Karşılıksız yeni pay alır","Hissesini satmak zorunda kalır","Temettü öder"],1,"Bedelsiz artırımda mevcut hissedarlara karşılıksız yeni pay verilir."),
-    EGQ("Limit emrinin özelliği nedir?",["Belirlenen fiyat veya daha iyisinden işlem yapılır","Her zaman anında gerçekleşir","Komisyon almaz","Sadece fonlarda geçerlidir"],0,"Limit emri, belirlediğin fiyat veya daha iyi bir fiyattan işlem yapılmasını ister; fiyat gelmezse gerçekleşmez."),
+    EGQ("Bedelsiz sermaye artırımında hissedar açısından sonuç hangisidir?",["Ek ödeme yapar","Karşılıksız yeni pay alır","Hissesini satmak zorunda kalır","Temettü öder"],1,"Bedelsiz artırımda mevcut hissedarlara karşılıksız yeni pay verilir."),
+    EGQ("Limit emrinin özelliği nedir?",["Belirlenen fiyat veya daha iyisinden işlem yapılır","Her zaman anında gerçekleşir","Komisyon almaz","Sadece fonlarda geçerlidir"],0,"Limit emri, belirlenen fiyattan veya daha iyi bir fiyattan işlem yapılmasını ister; fiyat gelmezse gerçekleşmez."),
     EGQ("BYF’nin normal fonlardan farkı nedir?",["Borsada gün içinde işlem görür","Vergisizdir","Yönetici yoktur","Sadece yabancılara satılır"],0,"BYF payları borsada hisse gibi alınıp satılır."),
     EGQ("Yeniden dengelemenin amacı nedir?",["Portföyü hedef dağılıma döndürmek","Tüm varlıkları satmak","Vergi ödememek","Getiriyi garanti etmek"],0,"Yeniden dengeleme, sapmış portföyü hedef varlık dağılımına geri döndürür."),
     EGQ("Sürü davranışı genellikle neye yol açar?",["Zirveden alıp dipte satmaya","Düşük maliyete","Çeşitlendirmeye","Vergi avantajına"],0,"Herkes alıyor diye almak ve satıyor diye satmak, zirveden alıp dipte satmaya yol açabilir."),
@@ -2068,20 +2069,20 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
     EGD("o02","Bütçe yöntemleri",4,[
       "50/30/20 yönteminde gelirin %50’si zorunlu giderlere, %30’u isteklere, %20’si tasarruf ve borç ödemesine ayrılır. Oranlar kişisel durumlara göre değiştirilebilir.",
       "Sıfır tabanlı bütçede gelirin her lirası bir kategoriye atanır; gelir eksi tüm ayırmalar sıfır olur. Zarf yönteminde ise her kategori için nakit veya sanal zarf belirlenir.",
-      "Doğru yöntem, sürdürebildiğin yöntemdir. Basit bir yöntem, karmaşık ama bırakılan bir yöntemden iyidir."],
+      "Doğru yöntem, sürdürülebilen yöntemdir. Basit bir yöntem, karmaşık ama bırakılan bir yöntemden iyidir."],
       ["50/30/20 başlangıç için pratik bir kuraldır","Sıfır tabanlı bütçede her lira atanır","Sürdürülebilir yöntem en iyisidir"],
-      ["Oranı kendine uyarlamak","Burak’ın geliri 60.000 TL. Zorunlu giderleri 36.000 TL (%60). 50/30/20 kuralını uygulamak istiyor.","50/30/20 ile zorunlu gider 30.000 TL olmalıydı; Burak’ta 36.000 TL. Oranı 60/20/20’ye uyarlar: 36.000 zorunlu, 12.000 istek, 12.000 tasarruf. Tasarruf payını sıfırlamak yerine isteklerden keser.","50/30/20 bir başlangıçtır. Zorunlu giderler yüksekse oranı uyarla ama tasarruf payını sıfırlama."]),
+      ["Oranı kişisel duruma uyarlamak","Burak’ın geliri 60.000 TL. Zorunlu giderleri 36.000 TL (%60). 50/30/20 kuralını uygulamak istiyor.","50/30/20 ile zorunlu gider 30.000 TL olmalıydı; Burak’ta 36.000 TL. Oranı 60/20/20’ye uyarlar: 36.000 zorunlu, 12.000 istek, 12.000 tasarruf. Tasarruf payını sıfırlamak yerine isteklerden keser.","50/30/20 bir başlangıçtır. Zorunlu giderler yüksekse oran uyarlanabilir; ancak tasarruf payı sıfırlanmamalıdır."]),
     EGD("o03","İhtiyaç, istek ve dürtüsel harcama",4,[
       "İhtiyaç, yaşamı sürdürmek için gerekli olan harcamalardır: barınma, gıda, ulaşım, sağlık. İstek ise yaşamı kolaylaştıran ama zorunlu olmayan harcamalardır.",
       "Dürtüsel harcama, planlanmadan, anlık bir duyguyla yapılan alışverişlerdir. İndirimler, reklamlar ve taksit imkânı bu harcamayı kolaylaştırır.",
-      "Büyük harcamalarda 24-48 saat bekleme kuralı, dürtüsel kararları azaltmaya yardımcı olur. Bekledikten sonra hâlâ istiyorsan, bunu bütçene yerleştirebilirsin."],
+      "Büyük harcamalarda 24-48 saat bekleme kuralı, dürtüsel kararları azaltmaya yardımcı olur. Bekledikten sonra ihtiyaç hâlâ sürüyorsa harcama bütçeye yerleştirilebilir."],
       ["İhtiyaç zorunlu, istek isteğe bağlıdır","Dürtüsel harcama plansızdır","24-48 saat bekleme kuralı yardımcı olur"],
       ["Üç soru testi","Seda’nın telefonu çalışıyor ama 40.000 TL’lik yeni bir modelin indiriminden etkilendi.","Üç soru sorar: (1) ihtiyaç mı, istek mi? (2) nakit karşılığı var mı, yoksa taksitle mi alacak? (3) 48 saat sonra hâlâ istiyor mu? Ayrıca kullanım başına maliyete bakar: 3 yıl kullanırsa 40.000 ÷ 36 ≈ 1.111 TL/ay. Mevcut telefonunu değiştirmenin faydası bu tutara değer mi?","Büyük alımlarda üç soru: ihtiyaç mı? Nakitle mi? 48 saat sonra hâlâ istiyor muyum?"]),
     EGD("o04","Tasarruf alışkanlığı",4,[
       "“Önce kendine öde” ilkesi, gelir geldiğinde birikimi ilk olarak ayırmak ve geri kalanı harcamak demektir. Kalan parayı biriktirmeyi beklemek çoğu zaman sonuç vermez.",
       "Otomatik transfer, bu alışkanlığı kolaylaştırır: maaş gününde belirli bir tutar otomatik olarak birikim hesabına aktarılır.",
       "Küçük ama düzenli tutarlar, zamanla büyük birikimlere dönüşür. Tutarı artırmak için gelir artışlarının bir kısmını tasarrufa ayırmak etkilidir."],
-      ["Önce birikimi ayır, kalanı harca","Otomatik transfer alışkanlığı kolaylaştırır","Gelir artışının bir kısmını birikime ayır"],
+      ["Önce birikim ayrılmalı, kalan harcanmalı","Otomatik transfer alışkanlığı kolaylaştırır","Gelir artışının bir kısmı birikime ayrılmalı"],
       ["Önce kendine öde","Can’ın maaşı 50.000 TL. Maaş gününde %10’unu otomatik birikime aktarıyor. Bir yıl sonra maaşı %30 artıyor.","Aylık birikim 5.000 TL, yılda 60.000 TL. Zamlı maaş 65.000 TL: artış 15.000 TL. Artışın yarısını (7.500 TL) birikime ekler: aylık birikim 12.500 TL (maaşın %19,2’si) olur ve yaşam standardı da artışın diğer yarısıyla yükselir.","Otomatik %10 ile yılda 60.000 TL birikir. Zamlarda artışın bir kısmını da ayırmak tasarruf oranını sessizce yükseltir."]),
     EGD("o05","Hedef belirleme",4,[
       "Finansal hedefler; kısa (1 yıldan az), orta (1–5 yıl) ve uzun vadeli (5 yıldan fazla) olarak ayrılır. Her hedef için tutar ve tarih belirlenmelidir.",
@@ -2101,57 +2102,57 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Enflasyon, birikimin satın alma gücünü zamanla azaltır. Bu yüzden yalnızca nakit olarak tutulan birikim, değer kaybeder.",
       "Birikimi enflasyona karşı korumak için getirisi enflasyonu yakalayabilecek araçlar değerlendirilir; ancak bu araçların riski de vardır ve getiri garanti değildir.",
       "Önemli olan, enflasyon karşısındaki reel getiriyi izlemek ve birikimi tek bir araca bağımlı bırakmamaktır."],
-      ["Enflasyon satın alma gücünü azaltır","Reel getiriyi izle","Tek araca bağımlı kalma"],
+      ["Enflasyon satın alma gücünü azaltır","Reel getiri izlenmeli","Tek araca bağımlı kalınmamalı"],
       ["Nakit mi, getirili hesap mı?","Tuna’nın 100.000 TL’si var. Yıllık enflasyon %45. Seçenek A: nakit; B: yıllık %42 getirili katılma hesabı.","A: 100.000 ÷ 1,45 ≈ 68.966 TL satın alma gücü (−%31). B: 100.000 × 1,42 = 142.000 TL, satın alma gücü 142.000 ÷ 1,45 ≈ 97.931 TL (−%2,1). B kaybı azalttı ama sıfırlamadı: reel getiri hâlâ hafif negatif.","Nakit tutmak büyük reel kayba yol açar. Getirili araç kaybı azaltır; yine de reel getiriyi enflasyonla kıyaslamak gerekir."]),
     EGD("o08","Bileşik getiri ve 72 kuralı",5,[
       "Bileşik getiri, kazancın da kazanç getirmesidir. Her dönemin getirisi anaparaya eklenir ve sonraki dönem bu toplam üzerinden hesaplanır.",
       "Formül: Gelecek değer = Anapara × (1 + dönemlik oran) ^ dönem sayısı. Süre uzadıkça etki hızla büyür.",
-      "72 kuralı: 72’yi yıllık getiri yüzdesine bölersen paranın kaç yılda ikiye katlanacağını yaklaşık bulursun. Örneğin %12 getiriyle yaklaşık 6 yıl. Bu kural sabit getiri varsayar ve yaklaşık bir tahmindir."],
+      "72 kuralı: 72’yi yıllık getiri yüzdesine bölerek paranın kaç yılda ikiye katlanacağı yaklaşık bulunur. Örneğin %12 getiriyle yaklaşık 6 yıl. Bu kural sabit getiri varsayar ve yaklaşık bir tahmindir."],
       ["Bileşik getiri: kazancın da kazanç getirmesi","FV = P × (1 + r) ^ n","72 kuralı yaklaşık bir tahmindir"],
       ["Zamanın etkisi","Pınar 10.000 TL’yi yıllık %10 getiriyle 10 yıl değerlendirecek. Basit ve bileşik yöntemlerin farkını görmek istiyor.","Basit: 10.000 + 10 × 1.000 = 20.000 TL. Bileşik: 10.000 × 1,1^10 ≈ 25.937 TL. Fark 5.937 TL. 72 kuralı: 72 ÷ 10 = 7,2 yılda para yaklaşık ikiye katlanır; gerçekten 7,3 yılda 20.000 TL’yi geçer.","Bileşik getiri zamanla büyür: 10 yılda 25.937 TL, basitte 20.000 TL. 72 kuralı kaba bir ikiye katlanma tahmini verir."]),
     EGD("o09","Basit ve bileşik hesaplama, kâr payı",4,[
       "Basit getiride kazanç, sadece ana para üzerinden hesaplanır. Bileşikte ise kazanç anaparaya eklenir. Kısa vadeli hesaplarda fark küçüktür; uzun vadede büyür.",
       "Katılma hesaplarında kâr payı vade sonunda ödenir; kâr payı anaparaya eklenip yeniden vadeye konursa bileşik etki oluşur.",
       "Getiri karşılaştırırken aynı baz üzerinden (yıllık basit veya yıllık bileşik) kıyaslamak gerekir; aksi halde yanlış sonuç çıkar."],
-      ["Basit: yalnızca anaparaya","Bileşik: kazanç anaparaya eklenir","Aynı baz üzerinden kıyasla"],
+      ["Basit: yalnızca anaparaya","Bileşik: kazanç anaparaya eklenir","Aynı baz üzerinden kıyaslanmalı"],
       ["Aynı baza çevirmek","İki hesap var. A: yıllık basit %40. B: aylık %3,2 kâr payı ödüyor ve her ay anaparaya ekleniyor.","B’nin aylık %3,2’si yıllık basit 12 × 3,2 = %38,4 gibi görünür, ama aylık bileşiklendiği için gerçek yıllık getiri 1,032^12 − 1 ≈ %45,9’dur. A’nın %40’ı ile aynı baza (yıllık bileşik) çevirince B daha yüksek çıkar.","Farklı sıklıktaki oranlar aynı baza çevrilmeden karşılaştırılmaz. Uygulamadaki Hesapla araçları bu dönüşümü yapar."]),
     EGD("o10","Bireysel emeklilik ve uzun vadeli birikim",5,[
       "Bireysel Emeklilik Sistemi (BES), uzun vadeli, gönüllü bir birikim sistemidir. Katkı payları emeklilik yatırım fonlarında değerlendirilir ve devlet katkısı gibi teşvikler uygulanabilir.",
       "Birikim, belirli şartlar sağlandığında (süre ve yaş) emeklilik hakkıyla birlikte alınabilir. Erken çıkışta devlet katkısı ve getirisi gibi kısımlarda kayıplar olabilir; kurallar mevzuata göre değişir.",
       "Katılım ilkelerine uygun emeklilik fonları da bulunur. Sözleşmeden önce giderleri, fon seçeneklerini ve çıkış koşullarını incelemek gerekir."],
       ["BES uzun vadeli gönüllü birikim sistemidir","Devlet katkısı gibi teşvikler olabilir","Erken çıkış ve giderler incelenmelidir"],
-      ["Gider farkı 20 yılda ne yapar?","Hakan yıllık 36.000 TL BES katkısı yapacak (20 yıl). Fon A yıllık %2, fon B %1,2 gider alıyor. Brüt getiri %15 (sabit, varsayımsal).","A net %13: gelecek değer ≈ 2.914.086 TL. B net %13,8: ≈ 3.200.665 TL. Fark yaklaşık 286.579 TL. Hakan ayrıca devlet katkısı gibi teşvikleri, erken çıkış koşullarını ve fon seçeneklerini sözleşmeden karşılaştırır.","Gider farkı küçük görünse de 20 yılda yüz binlerce lira fark yaratır. Sözleşmeden önce gider, fon ve çıkış koşullarını karşılaştır."]),
+      ["Gider farkının 20 yıllık etkisi","Hakan yıllık 36.000 TL BES katkısı yapacak (20 yıl). Fon A yıllık %2, fon B %1,2 gider alıyor. Brüt getiri %15 (sabit, varsayımsal).","A net %13: gelecek değer ≈ 2.914.086 TL. B net %13,8: ≈ 3.200.665 TL. Fark yaklaşık 286.579 TL. Hakan ayrıca devlet katkısı gibi teşvikleri, erken çıkış koşullarını ve fon seçeneklerini sözleşmeden karşılaştırır.","Gider farkı küçük görünse de 20 yılda yüz binlerce lira fark yaratır. Sözleşmeden önce gider, fon ve çıkış koşulları karşılaştırılmalıdır."]),
   ]},
   { ad:"Borç ve kredi", ozet:"Borç türleri, finansman maliyeti, kredi kartı ve kredi notu", dersler:[
     EGD("o11","Borç türleri ve ne zaman borçlanmalı?",4,[
       "Borç, geleceğin gelirini bugüne taşımaktır. Gelir getiren veya değer kazanan bir varlık için (ör. eğitim, konut, işletme) borçlanmak, tüketim için borçlanmaktan farklı değerlendirilir.",
       "Borçlanmadan önce şu sorular sorulmalıdır: Bu borcu ödeyebilecek miyim? Gelirim düşerse ne olur? Alternatif var mı?",
       "Aylık borç ödemelerinin gelire oranı yükseldikçe finansal baskı artar. Bu oranı düşük tutmak, beklenmedik durumlara karşı koruma sağlar."],
-      ["Borç gelecekteki geliri bugüne taşır","Borçlanmadan önce ödeme gücünü sorgula","Borç/gelir oranı düşük tutulmalıdır"],
-      ["Yeni borçtan önce oran","Ece’nin geliri 60.000 TL, mevcut borç ödemeleri 30.000 TL. Yeni bir 6.000 TL’lik aylık taksit düşünüyor.","Mevcut oran = 30.000 ÷ 60.000 = %50. Yeni taksitle (30.000 + 6.000) ÷ 60.000 = %60. Pratik bir uyarı eşiği olarak %35-40 sık kullanılır (kesin kural değildir). Ece mevcut oranın zaten yüksek olduğunu görüp yeni borcu erteler.","Yeni borçtan önce hesapla: (mevcut + yeni ödeme) ÷ gelir. Pratik uyarı eşiği %35-40 civarıdır."]),
+      ["Borç gelecekteki geliri bugüne taşır","Borçlanmadan önce ödeme gücü sorgulanmalı","Borç/gelir oranı düşük tutulmalıdır"],
+      ["Yeni borçtan önce oran","Ece’nin geliri 60.000 TL, mevcut borç ödemeleri 30.000 TL. Yeni bir 6.000 TL’lik aylık taksit düşünüyor.","Mevcut oran = 30.000 ÷ 60.000 = %50. Yeni taksitle (30.000 + 6.000) ÷ 60.000 = %60. Pratik bir uyarı eşiği olarak %35-40 sık kullanılır (kesin kural değildir). Ece mevcut oranın zaten yüksek olduğunu görüp yeni borcu erteler.","Yeni borçtan önce şu oran hesaplanmalıdır: (mevcut + yeni ödeme) ÷ gelir. Pratik uyarı eşiği %35-40 civarıdır."]),
     EGD("o12","Finansman maliyetini doğru okumak",5,[
       "Aylık taksit tek başına yeterli bilgi vermez. Toplam geri ödeme, vade, kâr payı veya faiz oranı, masraflar ve sigorta birlikte değerlendirilmelidir.",
       "İki teklifi karşılaştırırken, aynı tutar ve aynı vade için toplam geri ödemeyi yan yana yazmak en doğru yöntemdir.",
-      "Katılım finansmanında toplam bedel baştan bellidir. Farklı bankaların tekliflerini Hesapla bölümündeki araçlarla ve Banka Finansman Karşılaştırma ekranıyla karşılaştırabilirsin."],
-      ["Taksit yerine toplam maliyete bak","Aynı tutar ve vadede karşılaştır","Masraf ve sigortayı unutma"],
+      "Katılım finansmanında toplam bedel baştan bellidir. Farklı bankaların teklifleri Hesapla bölümündeki araçlarla ve Banka Finansman Karşılaştırma ekranıyla karşılaştırılabilir."],
+      ["Taksit yerine toplam maliyete bakılmalı","Aynı tutar ve vadede karşılaştırılmalı","Masraf ve sigorta hesaba katılmalı"],
       ["Düşük taksit pahalı olabilir","Mehmet aynı 600.000 TL maliyetli mal için iki teklif aldı. A: 36 ay, 19.000 TL/ay, dosya masrafı 6.000 TL. B: 48 ay, 16.500 TL/ay, dosya masrafı 3.000 TL.","A toplam = 19.000 × 36 + 6.000 = 690.000 TL. B toplam = 16.500 × 48 + 3.000 = 795.000 TL. B’nin taksiti 2.500 TL düşük ama toplamda 105.000 TL pahalı.","Karşılaştırma ölçütü toplam geri ödemedir (masraflar dahil). Aylık taksit düşük diye seçilen teklif daha pahalı olabilir."]),
     EGD("o13","Kredi kartı kullanımı",4,[
       "Kredi kartı, harcamayı ileri bir tarihe erteleyen bir araçtır. Hesap özeti borcunun tamamı son ödeme gününe kadar ödenirse ek maliyet oluşmaz.",
       "Yalnızca asgari tutarı ödemek, kalan borca yüksek maliyet işletilmesine neden olur ve borç büyür. Limiti gelir olarak görmemek ve harcamayı bütçeye göre yapmak gerekir.",
       "Taksitli harcamalar ileriki ayların gelirini bağlar; birden fazla taksit üst üste bindiğinde bütçe zorlanabilir."],
       ["Borcun tamamını ödemek ek maliyeti önler","Asgari ödeme borcu büyütür","Limit gelir değildir"],
-      ["Asgari ödemenin maliyeti","Gül’ün hesap özeti borcu 30.000 TL. Asgari ödeme 6.000 TL; kalan 24.000 TL’ye aylık %4 maliyet işleniyor (varsayımsal). Ayrıca 12’şer taksitlik üç alışverişin aylık taksit toplamı 22.500 TL, maaşı 45.000 TL.","Borcun tamamını ödeseydi ek maliyet 0 olurdu. Asgari ödemede ilk ay maliyet = 24.000 × %4 = 960 TL ve kalan borç büyür. Taksit yükü: 22.500 ÷ 45.000 = %50; maaşın yarısı. Gül yeni taksit almadan önce bunu kendine sınır koyar.","Borcun tamamını ödemek ek maliyeti önler. Asgari ödeme borcu büyütür; taksit yükünü gelire oranla izle."]),
+      ["Asgari ödemenin maliyeti","Gül’ün hesap özeti borcu 30.000 TL. Asgari ödeme 6.000 TL; kalan 24.000 TL’ye aylık %4 maliyet işleniyor (varsayımsal). Ayrıca 12’şer taksitlik üç alışverişin aylık taksit toplamı 22.500 TL, maaşı 45.000 TL.","Borcun tamamını ödeseydi ek maliyet 0 olurdu. Asgari ödemede ilk ay maliyet = 24.000 × %4 = 960 TL ve kalan borç büyür. Taksit yükü: 22.500 ÷ 45.000 = %50; maaşın yarısı. Gül yeni taksit almadan önce bunu kendine sınır koyar.","Borcun tamamını ödemek ek maliyeti önler. Asgari ödeme borcu büyütür; taksit yükü gelire oranla izlenmelidir."]),
     EGD("o14","Kredi notu ve Findeks",4,[
       "Kredi notu, bir kişinin borç ödeme geçmişini ve riskini özetleyen bir göstergedir. Türkiye’de Kredi Kayıt Bürosu (KKB) Findeks raporu ve notunu hazırlar.",
       "Ödemeleri zamanında yapmak, kart limitinin çoğunu kullanmamak ve gereksiz sık başvuru yapmamak notu olumlu etkiler. Gecikmeler ve ödenmeyen borçlar notu düşürür.",
       "Finansman başvurusu öncesinde kendi raporunu kontrol etmek, hataları fark etmeyi ve başvurularını daha bilinçli yapmayı sağlar."],
-      ["Not, ödeme geçmişini özetler","Zamanında ödeme notu artırır","Başvuru öncesi raporu kontrol et"],
+      ["Not, ödeme geçmişini özetler","Zamanında ödeme notu artırır","Başvuru öncesi rapor kontrol edilmeli"],
       ["Raporda ne kontrol edilir?","Nilay konut finansmanından önce Findeks raporunu açtı. Toplam kart limiti 100.000 TL, toplam borç 40.000 TL. Kapattığı 25.000 TL’lik bir kredi hâlâ borçlu görünüyor.","Dört kontrol yapar: hesap listesi doğru mu, ödeme gecikmeleri var mı, sorgu sayısı, limit kullanım oranı (40.000 ÷ 100.000 = %40; düşük olması tercih edilir). Kapatılmış krediyi borçlu gösteren kayıt hatalıdır; KKB’ye ve ilgili bankaya itiraz eder.","Raporda dört kontrol: hesap listesi, gecikmeler, sorgu sayısı ve limit kullanım oranı. Hata varsa KKB ve bankaya itiraz edilir."]),
     EGD("o15","Borç yönetimi stratejileri",5,[
       "Birden fazla borcu olanlar için iki yaygın yöntem vardır: kartopu yönteminde en küçük borç önce kapatılır, motivasyon artar. Çığ yönteminde ise en yüksek maliyetli borç önce kapatılır, toplam maliyet azalır.",
       "Hangisi seçilirse seçilsin, tüm borçlar için asgari ödemeler zamanında yapılmalı ve ek ödeme tek bir borca yönlendirilmelidir.",
       "Ödeme güçlüğünde bankayla konuşmak, yeniden yapılandırma imkânlarını öğrenmek gecikmeden daha iyi bir yoldur."],
-      ["Kartopu: küçük borç önce","Çığ: maliyetli borç önce","Zorlanınca bankayla erken konuş"],
+      ["Kartopu: küçük borç önce","Çığ: maliyetli borç önce","Zorlanıldığında bankayla erken görüşülmeli"],
       ["Kartopu mu, çığ mı?","Kerem’in iki borcu var: A: 40.000 TL, aylık %4; B: 10.000 TL, aylık %3. Fazladan 5.000 TL ayırabiliyor.","Çığ: fazladan 5.000 TL A’ya gider: A’nın sonraki ay faizi (40.000 − 5.000) × %4 = 1.400 TL (1.600 yerine). Kartopu: B’ye gider: (10.000 − 5.000) × %3 = 150 TL (300 yerine). Çığ ilk ay 200 TL, kartopu 150 TL tasarruf sağlar; ama kartopu B’yi 2 ayda kapatarak motivasyon kazandırır.","Çığ (en pahalı borç önce) matematiksel olarak ucuzdur, kartopu psikolojik olarak kolaydır. İkisinde de asgari ödemeler aksatılmaz."]),
   ]},
   { ad:"Koruma, vergi ve haklar", ozet:"Sigorta, tekafül, vergi ve tüketici hakları", dersler:[
@@ -2160,7 +2161,7 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Poliçe, kapsamı, istisnaları, teminat tutarını ve muafiyetleri gösterir. Sadece prime bakmak yerine neyin kapsam dışı kaldığına bakmak önemlidir.",
       "Zorunlu sigortalar (ör. trafik sigortası, DASK) yasa gereği yaptırılır; diğerleri ihtiyaca göre seçilir."],
       ["Sigorta riskin maddi kaybını devreder","Kapsam ve istisnalar önemlidir","Bazı sigortalar zorunludur"],
-      ["Prim farkı mı, kapsam farkı mı?","Ece iki konut sigortası teklifi aldı. A: yıllık prim 3.000 TL, sel kapsam dışı. B: prim 4.500 TL, sel dahil, %5 muafiyet. Evinde 200.000 TL’lik sel hasarı oldu.","A’da sel kapsam dışı: 200.000 TL kendi cebinden. B’de muafiyet 200.000 × %5 = 10.000 TL; 190.000 TL tazminat alır. Prim farkı yalnızca 1.500 TL idi; ama kapsam farkı 190.000 TL’lik koruma sağladı.","Yalnızca primi değil, prim ve kapsam dışı riski birlikte kıyasla. 1.500 TL’lik prim farkı büyük bir hasarda çok değerli olabilir."]),
+      ["Prim farkı mı, kapsam farkı mı?","Ece iki konut sigortası teklifi aldı. A: yıllık prim 3.000 TL, sel kapsam dışı. B: prim 4.500 TL, sel dahil, %5 muafiyet. Evinde 200.000 TL’lik sel hasarı oldu.","A’da sel kapsam dışı: 200.000 TL kendi cebinden. B’de muafiyet 200.000 × %5 = 10.000 TL; 190.000 TL tazminat alır. Prim farkı yalnızca 1.500 TL idi; ama kapsam farkı 190.000 TL’lik koruma sağladı.","Yalnızca prim değil, prim ve kapsam dışı risk birlikte kıyaslanmalıdır. 1.500 TL’lik prim farkı büyük bir hasarda çok değerli olabilir."]),
     EGD("o17","Katılım sigortacılığı (tekafül)",4,[
       "Katılım sigortacılığı (tekafül), sigortanın faiz, belirsizlik ve kumar unsurlarından arındırılmış hâlidir. Katılımcılar bir havuza katkı yapar ve zarar gören üyeler bu havuzdan karşılanır; yani karşılıklı yardımlaşma esastır.",
       "Havuz yönetimi, uygunluğu denetleyen danışma kurulu ve faizsiz yatırım ilkeleriyle yürütülür. Türkiye’de katılım sigorta ve katılım emeklilik ürünleri bulunur.",
@@ -2172,51 +2173,51 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Bir ürünün fiyatında KDV genellikle dahildir; fatura üzerinden ayrıca görünür. Maaş gelirinden vergi işverence kesilir.",
       "Vergi oranları ve istisnalar sık değişebilir; bu yüzden güncel bilgi için Gelir İdaresi Başkanlığı’nın resmî kaynaklarına veya bir mali müşavire başvurulmalıdır."],
       ["Gelir vergisi, KDV ve stopaj temel türlerdir","Maaştan vergiyi işveren keser","Güncel oran için resmî kaynağa bakılmalıdır"],
-      ["KDV ve stopaj hesabı","Fatma 12.000 TL KDV dahil fiyatlı bir ürün aldı. KDV oranı %20 varsayımsal. Ayrıca bir hesabından 10.000 TL brüt kâr payı elde etti; stopaj %5 varsayımsal.","KDV hariç fiyat = 12.000 ÷ 1,20 = 10.000 TL; KDV = 2.000 TL. Net kâr payı = 10.000 − (10.000 × %5) = 9.500 TL. Oranlar zaman zaman değiştiği için Fatma güncel değerleri Gelir İdaresi Başkanlığı’nın sayfasından kontrol eder.","KDV dahil fiyat ÷ (1 + oran) = KDV hariç fiyat. Net getiri = brüt − stopaj; oranlar değişebilir, güncel olanı resmî kaynaktan öğren."]),
+      ["KDV ve stopaj hesabı","Fatma 12.000 TL KDV dahil fiyatlı bir ürün aldı. KDV oranı %20 varsayımsal. Ayrıca bir hesabından 10.000 TL brüt kâr payı elde etti; stopaj %5 varsayımsal.","KDV hariç fiyat = 12.000 ÷ 1,20 = 10.000 TL; KDV = 2.000 TL. Net kâr payı = 10.000 − (10.000 × %5) = 9.500 TL. Oranlar zaman zaman değiştiği için Fatma güncel değerleri Gelir İdaresi Başkanlığı’nın sayfasından kontrol eder.","KDV dahil fiyat ÷ (1 + oran) = KDV hariç fiyat. Net getiri = brüt − stopaj; oranlar değişebilir, güncel oran resmî kaynaktan öğrenilmelidir."]),
     EGD("o19","Tüketici hakları",5,[
       "6502 sayılı Tüketicinin Korunması Hakkında Kanun, tüketicinin ayıplı mal, aldatıcı reklam ve haksız şartlara karşı haklarını düzenler.",
       "Mesafeli satışlarda (internetten alışveriş gibi) tüketici, genellikle 14 gün içinde sebep göstermeden cayma hakkına sahiptir. İstisna ürünler vardır; ürün sayfasındaki ve sözleşmedeki şartlar okunmalıdır.",
       "Sorun yaşandığında önce satıcıyla yazılı iletişim kurulur, çözülmezse Tüketici Hakem Heyeti veya Tüketici Mahkemesi’ne başvurulabilir."],
       ["6502 sayılı Kanun tüketiciyi korur","Mesafeli satışlarda genellikle 14 gün cayma hakkı vardır","Başvuru yolu: satıcı, hakem heyeti, mahkeme"],
-      ["Cayma süresi nasıl işler?","Elif 18 Eylül’de internetten ayakkabı sipariş etti, 22 Eylül’de teslim aldı. Ayakkabı uymadı.","Cayma süresi teslimden itibaren 14 gündür: 22 Eylül + 14 gün = 6 Ekim. Elif cayma bildirimini 4 Ekim’de yaptı; süre içinde. Ürünü bildirimden itibaren 10 gün içinde göndermelidir; satıcı da bedeli 14 gün içinde iade eder. İstisna ürünler (kişiye özel, hijyen vb.) için ürün sayfasındaki şartlara bakar.","Süre teslimden başlar. Cayma bildirimini süre içinde yap, malı 10 gün içinde gönder; satıcı bedeli 14 gün içinde iade eder."]),
+      ["Cayma süresi nasıl işler?","Elif 18 Eylül’de internetten ayakkabı sipariş etti, 22 Eylül’de teslim aldı. Ayakkabı uymadı.","Cayma süresi teslimden itibaren 14 gündür: 22 Eylül + 14 gün = 6 Ekim. Elif cayma bildirimini 4 Ekim’de yaptı; süre içinde. Ürünü bildirimden itibaren 10 gün içinde göndermelidir; satıcı da bedeli 14 gün içinde iade eder. İstisna ürünler (kişiye özel, hijyen vb.) için ürün sayfasındaki şartlara bakar.","Süre teslimden başlar. Cayma bildirimi süre içinde yapılır, mal 10 gün içinde gönderilir; satıcı bedeli 14 gün içinde iade eder."]),
     EGD("o20","Taksitli alışveriş ve ayıplı mal",4,[
       "Taksitli alışverişte toplam bedel peşin fiyattan farklı olabilir. Taksit sayısı arttıkça toplam ödeme tutarı genellikle artar. Bu yüzden peşin ve taksitli fiyat yan yana yazılmalıdır.",
       "Ayıplı mal, satıldığı anda sözleşmeye veya özelliklerine uygun olmayan üründür. Tüketici ücretsiz onarım, değişim, bedel iadesi veya bedel indirimi gibi haklardan yararlanabilir.",
       "Garanti belgesi, fatura ve ürün kutusu gibi belgeleri saklamak, hak talebinde kolaylık sağlar."],
       ["Taksit toplam ödemeyi artırabilir","Ayıplı malda onarım, değişim, iade veya indirim hakkı vardır","Fatura ve garanti belgesi saklanmalıdır"],
-      ["Taksidin gerçek bedeli","Cem’in alacağı buzdolabı peşin 40.000 TL. 6 taksitle 7.500 TL (toplam 45.000 TL), 12 taksitle 4.200 TL (toplam 50.400 TL). Üç ay sonra buzdolabı arızalanıyor.","6 taksit peşin fiyattan %12,5 (45.000 ÷ 40.000), 12 taksit %26 (50.400 ÷ 40.000) daha pahalı. Arıza için ayıplı mal hakları devreye girer: ücretsiz onarım, değişim, bedel indirimi veya iade seçeneklerinden uygun olanı; fatura ve garanti belgesiyle servise başvurur.","Taksit toplam bedeli artırır; peşin ve taksitli fiyatı yan yana yaz. Ayıplı malda seçimlik haklar vardır; belgeleri sakla."]),
+      ["Taksidin gerçek bedeli","Cem’in alacağı buzdolabı peşin 40.000 TL. 6 taksitle 7.500 TL (toplam 45.000 TL), 12 taksitle 4.200 TL (toplam 50.400 TL). Üç ay sonra buzdolabı arızalanıyor.","6 taksit peşin fiyattan %12,5 (45.000 ÷ 40.000), 12 taksit %26 (50.400 ÷ 40.000) daha pahalı. Arıza için ayıplı mal hakları devreye girer: ücretsiz onarım, değişim, bedel indirimi veya iade seçeneklerinden uygun olanı; fatura ve garanti belgesiyle servise başvurur.","Taksit toplam bedeli artırır; peşin ve taksitli fiyat yan yana yazılmalıdır. Ayıplı malda seçimlik haklar vardır; belgeler saklanmalıdır."]),
   ]},
   { ad:"Dijital güvenlik ve plan", ozet:"Dolandırıcılık, güvenlik, riskli ürünler ve kişisel plan", dersler:[
     EGD("o21","Dolandırıcılık türleri",5,[
       "Oltalama (phishing), sahte site, SMS veya e-posta ile kişisel bilgileri ele geçirmeye çalışmaktır. Sahte banka çalışanı, telefonla tek kullanımlık şifre, kart bilgisi veya uzaktan erişim uygulaması yükletmeyi ister.",
       "Gerçek bir banka hiçbir zaman telefonla tek kullanımlık şifreni, kart şifreni veya CVV kodunu istemez. Acele ettiren, tehdit eden veya fırsat vaat eden mesajlar uyarı işaretidir.",
       "Şüpheli bir arama veya mesajda bağlantıya tıklama; aramayı kapat ve bankayı kendi uygulamasından ya da resmî numarasından ara."],
-      ["Banka OTP, kart şifresi ve CVV istemez","Acele ve tehdit uyarı işaretidir","Resmî kanaldan kendin ara"],
-      ["Üç kırmızı bayrak","Mina’yı bir kişi arıyor: “hesabınızda şüpheli işlem var, size gelen SMS şifresini söyleyin, hemen uzaktan erişim uygulaması yükleyin.”","Üç kırmızı bayrak var: (1) acele ettiriyor, (2) tek kullanımlık şifre istiyor, (3) uygulama yüklemesini istiyor. Mina aramayı kapatır, bankanın uygulamasından hesap hareketlerine bakar ve bankayı resmî numarasından arar: böyle bir işlem yok.","Acele, şifre/CVV talebi ve uygulama yükletme isteği üç kırmızı bayraktır. Biri bile varsa kapat ve resmî kanaldan kendin ara."]),
+      ["Banka OTP, kart şifresi ve CVV istemez","Acele ve tehdit uyarı işaretidir","Banka yalnızca resmî kanaldan aranmalı"],
+      ["Üç uyarı işareti","Mina’yı bir kişi arıyor: “hesabınızda şüpheli işlem var, size gelen SMS şifresini söyleyin, hemen uzaktan erişim uygulaması yükleyin.”","Üç kırmızı bayrak var: (1) acele ettiriyor, (2) tek kullanımlık şifre istiyor, (3) uygulama yüklemesini istiyor. Mina aramayı kapatır, bankanın uygulamasından hesap hareketlerine bakar ve bankayı resmî numarasından arar: böyle bir işlem yok.","Acele, şifre/CVV talebi ve uygulama yükletme isteği üç uyarı işaretidir. Biri bile varsa görüşme sonlandırılmalı ve banka resmî kanaldan aranmalıdır."]),
     EGD("o22","Dijital güvenlik alışkanlıkları",4,[
       "Güçlü ve her hesap için farklı şifre kullanmak, bir hesabın ele geçirilmesinin diğerlerini etkilemesini önler. Şifre yöneticisi bu konuda kolaylık sağlar.",
       "İki adımlı doğrulama, şifre ele geçirilse bile hesabın korunmasını sağlar. Uygulamaları yalnızca resmî mağazalardan indir, telefonunu güncel tut ve açık Wi-Fi ağlarında bankacılık işlemi yapmaktan kaçın.",
-      "Şüpheli bir işlem fark edersen kartı hemen kapat, şifreleri değiştir ve bankanı bilgilendir."],
-      ["Her hesap için farklı güçlü şifre","İki adımlı doğrulamayı aç","Şüphede kartı kapat ve bankayı ara"],
-      ["Sızıntı sonrası sıra","Ahmet birçok hesapta aynı şifreyi kullanıyordu. Kullandığı bir sitenin veri sızıntısı yaşadığını öğrendi.","Sıra: (1) önce e-posta şifresini değiştirir, çünkü tüm şifre sıfırlamaları oradan geçer, (2) sonra bankacılık ve ödeme hesapları, (3) her hesap için farklı şifre ve şifre yöneticisi, (4) iki adımlı doğrulamayı açar, (5) hesap hareketlerini kontrol eder.","Önce e-postayı koru, sonra bankacılığı. Her hesap için farklı şifre ve iki adımlı doğrulama kullan."]),
+      "Şüpheli bir işlem fark edilirse kart hemen kapatılmalı, şifreler değiştirilmeli ve banka bilgilendirilmelidir."],
+      ["Her hesap için farklı güçlü şifre","İki adımlı doğrulama açılmalı","Şüphe halinde kart kapatılmalı ve banka aranmalı"],
+      ["Veri sızıntısı sonrası izlenecek sıra","Ahmet birçok hesapta aynı şifreyi kullanıyordu. Kullandığı bir sitenin veri sızıntısı yaşadığını öğrendi.","Sıra: (1) önce e-posta şifresini değiştirir, çünkü tüm şifre sıfırlamaları oradan geçer, (2) sonra bankacılık ve ödeme hesapları, (3) her hesap için farklı şifre ve şifre yöneticisi, (4) iki adımlı doğrulamayı açar, (5) hesap hareketlerini kontrol eder.","Önce e-posta hesabı, sonra bankacılık korunmalıdır. Her hesap için farklı şifre ve iki adımlı doğrulama kullanılmalıdır."]),
     EGD("o23","Kripto ve spekülatif ürünler",5,[
       "Kripto varlıklar, merkezî bir otoritesi olmayan, değeri çok kısa sürede sert dalgalanabilen dijital varlıklardır. Yüksek getiri potansiyeli kadar yüksek kayıp riski de taşırlar.",
       "Kaldıraçlı işlemler, vadeli ve opsiyon gibi ürünler yatırılan tutardan fazla kayba yol açabilir. Sosyal medyada “kesin kazanç” vaat eden sinyal grupları genellikle risk taşır.",
-      "Kaybetmeyi göze alamayacağın parayı spekülatif ürünlere yatırma. Böyle ürünlere ayrılacak payı, toplam portföyün küçük bir bölümüyle sınırlı tut."],
-      ["Fiyatlar kısa sürede sert dalgalanabilir","Kaldıraç kaybı büyütebilir","Kaybı göze alabileceğin kadar pay ayır"],
+      "Kaybı göze alınamayacak para spekülatif ürünlere yatırılmamalıdır. Bu ürünlere ayrılacak pay, toplam portföyün küçük bir bölümüyle sınırlı tutulmalıdır."],
+      ["Fiyatlar kısa sürede sert dalgalanabilir","Kaldıraç kaybı büyütebilir","Kaybı göze alınabilecek kadar pay ayrılmalı"],
       ["Pay sınırı kaybı sınırlar","Berk’in 500.000 TL’lik birikimi var. Kripto ve benzeri riskli ürünlere %5 ayırıyor. Fiyatlar %60 düşüyor.","Riskli ürün tutarı 500.000 × %5 = 25.000 TL. %60 düşüşte kayıp 25.000 × %60 = 15.000 TL: portföyün yalnızca %3’ü. Aynı ürünü 10 kat kaldıraçla alsaydı, yalnızca %10’luk ters hareket pozisyonu sıfırlardı.","Pay sınırı kaybı sınırlar: %5 pay, −%60 düşüşte portföyün %3’ü. Kaldıraç ise küçük bir ters harekette tüm tutarı silebilir."]),
     EGD("o24","Lisanslı kurum kontrolü",4,[
       "Yatırım hizmeti veren kurumların lisanslı ve yetkili olması gerekir. Aracı kurumlar SPK, bankalar BDDK tarafından düzenlenir ve denetlenir.",
-      "Bir kurumun yetkili olup olmadığını SPK ve BDDK’nın resmî sayfalarındaki listelerden kontrol edebilirsin. SPK’nın Finansal Okuryazarlık Platformu da ücretsiz eğitim içerikleri sunar.",
+      "Bir kurumun yetkili olup olmadığını SPK ve BDDK’nın resmî sayfalarındaki listelerden kontrol edilebilir. SPK’nın Finansal Okuryazarlık Platformu da ücretsiz eğitim içerikleri sunar.",
       "“Garantili yüksek getiri” vaat eden, acele ettiren ve ödemeyi kişisel hesaba isteyen teklifler dolandırıcılık işaretidir."],
       ["Aracı kurum SPK, banka BDDK denetimindedir","Yetki resmî listelerden kontrol edilir","Garantili yüksek getiri vaadi uyarıdır"],
       ["Gerçekçi olmayan vaat","Gül’e sosyal medyada bir şirket “ayda %20 garantili getiri” vaat ediyor.","Aylık %20 yıllık bileşik 1,2^12 − 1 ≈ %792 eder; yani 100.000 TL bir yılda yaklaşık 892.000 TL olur. Böyle bir getiri mümkün değildir. Gül ayrıca şirketin SPK ve BDDK’nın resmî listelerinde olmadığını görür.","“Ayda %20 garantili” yıllık bileşik yaklaşık %792 eder. Gerçekçi olmayan vaat ve lisanssız kurum, dolandırıcılık işaretidir."]),
     EGD("o25","Kişisel finansal plan oluşturmak",5,[
       "Kişisel finansal plan; hedefler, gelir-gider dengesi, acil durum fonu, borç yönetimi, birikim ve yatırım ile korumayı (sigorta) bir araya getirir.",
-      "Plan şu adımlarla yapılır: durumunu gör (gelir, gider, borç, birikim), hedeflerini belirle, öncelik sırasına koy (acil durum fonu, borç, birikim, yatırım), aylık tutarlara böl ve düzenli gözden geçir.",
+      "Plan şu adımlarla yapılır: mevcut durum görülür (gelir, gider, borç, birikim), hedefler belirlenir, öncelik sırası oluşturulur (acil durum fonu, borç, birikim, yatırım), aylık tutarlara bölünür ve düzenli gözden geçirilir.",
       "Plan, hayat koşulları değiştikçe güncellenmelidir. Küçük başlamak ve devam etmek, mükemmel bir plan yapıp uygulamamaktan daha değerlidir."],
       ["Durum, hedef, öncelik, aylık tutar, gözden geçirme","Acil durum fonu ve borç önceliklidir","Plan düzenli güncellenmelidir"],
-      ["Bir sayfalık plan","Zeynep’in aylık geliri 55.000 TL, zorunlu giderleri 30.000 TL. 24.000 TL kart borcu var ve 4 aylık acil durum fonu (120.000 TL) hedefliyor.","Aylık serbest tutar 25.000 TL. İlk 2 ay: 12.000 TL borca, 13.000 TL acil fona (toplam 24.000 borç kapanır, 26.000 fon). Sonraki aylar: 25.000 TL fona; kalan 94.000 ÷ 25.000 ≈ 3,76 → 4 ay. Toplam 6 ayda iki hedef de tamamlanır. Zeynep çeyrekte bir planı gözden geçirmeyi takvimine yazar.","Sıra: pahalı borç, acil durum fonu, yatırım. Bu varsayımla iki hedef 6 ayda tamamlanır."]),
+      ["Tek sayfalık finansal plan","Zeynep’in aylık geliri 55.000 TL, zorunlu giderleri 30.000 TL. 24.000 TL kart borcu var ve 4 aylık acil durum fonu (120.000 TL) hedefliyor.","Aylık serbest tutar 25.000 TL. İlk 2 ay: 12.000 TL borca, 13.000 TL acil fona (toplam 24.000 borç kapanır, 26.000 fon). Sonraki aylar: 25.000 TL fona; kalan 94.000 ÷ 25.000 ≈ 3,76 → 4 ay. Toplam 6 ayda iki hedef de tamamlanır. Zeynep çeyrekte bir planı gözden geçirmeyi takvimine yazar.","Sıra: pahalı borç, acil durum fonu, yatırım. Bu varsayımla iki hedef 6 ayda tamamlanır."]),
   ]},
   ],
   sorular:[
@@ -2250,7 +2251,7 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
     EGD("dt01","İhracat, ithalat ve dış ticaret dengesi",4,[
       "İhracat, mal veya hizmetin yurt dışına satılmasıdır; ithalat ise yurt dışından satın alınmasıdır. İhracat bir ülkeye döviz kazandırır, ithalat döviz çıkışına yol açar.",
       "Dış ticaret dengesi, ihracat ile ithalat arasındaki farktır. İthalat ihracattan büyükse dış ticaret açığı, küçükse fazla oluşur. Cari işlemler dengesi ise mal ticaretine ek olarak hizmetleri (örneğin turizm), gelirleri ve cari transferleri de kapsar.",
-      "Türkiye’de aylık dış ticaret verileri Ticaret Bakanlığı ve TÜİK tarafından yayımlanır. Rakamlar çabuk değiştiği için bu derste güncel tutar verilmemiştir; güncel veriye uygulamanın Dış Ticaret sekmesinden ulaşabilirsin."],
+      "Türkiye’de aylık dış ticaret verileri Ticaret Bakanlığı ve TÜİK tarafından yayımlanır. Rakamlar çabuk değiştiği için bu derste güncel tutar verilmemiştir; güncel veriye uygulamanın Dış Ticaret sekmesinden ulaşılabilir."],
       ["İhracat döviz getirir, ithalat döviz çıkışı doğurur","Denge = ihracat − ithalat","Cari denge, mal ticaretinden daha geniştir"],
       ["Açığı doğru okumak","Bir ay için ihracat 22 milyar $, ithalat 30 milyar $ olarak açıklanıyor (varsayımsal). Haberde sadece “açık büyüdü” deniyor.","Denge = 22 − 30 = −8 milyar $ (açık). İhracatın ithalatı karşılama oranı 22 ÷ 30 ≈ %73,3’tür. Oran bir önceki aya göre yükseldiyse açık büyüse bile kapsama iyileşmiş olabilir.","Tutarla birlikte karşılama oranına ve açığın nasıl finanse edildiğine bakmak gerekir."]),
     EGD("dt02","Neden dış ticaret yapılır? Kurun etkisi",4,[
@@ -2290,7 +2291,7 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Akreditif belgelerle çalışır, malla değil. Banka, belgelerin akreditif şartlarına tam uyup uymadığına bakar. Kurallar ICC’nin UCP 600 düzenlemesinde yer alır.",
       "Teyitli akreditifte ihracatçı tarafındaki banka da ödeme taahhüdü verir; bu, açan bankanın veya ülkenin riskini azaltır. Akreditif komisyon karşılığı sunulan bir hizmettir."],
       ["Banka belgelere bakar, mala değil","Belgeler akreditif şartlarına tam uymalıdır","Teyit, ek bir bankanın taahhüdünü getirir"],
-      ["Bir gün gecikmenin bedeli","Akreditifte son yükleme tarihi 30 Kasım. İhracatçının konşimentosunda yükleme tarihi 2 Aralık görünüyor (varsayımsal).","Belge şarta uymadığı için uyumsuzluk (discrepancy) doğar ve banka ödemeyi reddedebilir. İhracatçı akreditif geldiğinde şartları hemen kontrol edip uygun olmayanlar için değişiklik ister; belgeleri ibraz öncesi bankasına ön kontrol ettirir.","Akreditifte ödeme, belgelerin şartlarla birebir uyumuna bağlıdır; kontrol erken yapılmalıdır."]),
+      ["Bir günlük gecikmenin akreditife etkisi","Akreditifte son yükleme tarihi 30 Kasım. İhracatçının konşimentosunda yükleme tarihi 2 Aralık görünüyor (varsayımsal).","Belge şarta uymadığı için uyumsuzluk (discrepancy) doğar ve banka ödemeyi reddedebilir. İhracatçı akreditif geldiğinde şartları hemen kontrol edip uygun olmayanlar için değişiklik ister; belgeleri ibraz öncesi bankasına ön kontrol ettirir.","Akreditifte ödeme, belgelerin şartlarla birebir uyumuna bağlıdır; kontrol erken yapılmalıdır."]),
     EGD("dt08","Teminat mektubu",4,[
       "Teminat mektubu, bankanın müşterisi adına lehtara verdiği yazılı taahhüttür: müşteri yükümlülüğünü yerine getirmezse banka, mektup tutarını ödemeyi taahhüt eder.",
       "Başlıca türleri: geçici teminat mektubu (ihaleye katılırken), kesin teminat mektubu (sözleşmenin yerine getirilmesi için) ve avans teminat mektubu (alınan avansın güvencesi). Dış ticarette stand-by akreditif de benzer amaçla kullanılır.",
@@ -2316,7 +2317,7 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Türkiye ile AB arasındaki gümrük birliğinde sanayi ürünleri A.TR dolaşım belgesiyle serbest dolaşımda sayılır ve gümrük vergisi ödenmez. Serbest ticaret anlaşması olan ülkelerde ise anlaşmaya göre EUR.1 gibi menşe ispat belgeleri istenir.",
       "Belge eksik veya yanlışsa tercihli vergi oranı uygulanmaz ve alıcı tam gümrük vergisi öder. Bu da ihracatçının rekabet gücünü doğrudan etkiler."],
       ["Menşe vergi ve rejimi belirler","A.TR, AB ile sanayi ürünlerinde kullanılır","Doğru belge, tercihli vergi avantajı sağlar"],
-      ["Belgenin parası var","Bir ihracatçı, serbest ticaret anlaşması olan bir ülkeye 100.000 € değerinde mal yolluyor. Normal gümrük vergisi %10, anlaşmalı oran %0 (varsayımsal). Menşe belgesini sunamıyor.","Belge sunulursa vergi 0 €, sunulmazsa 100.000 × %10 = 10.000 € olur. Alıcı bu farkı fiyat indirimi olarak talep eder ya da başka tedarikçiye yönelir.","Doğru menşe belgesi, doğrudan fiyat avantajıdır; yükleme öncesinde hazırlanmalıdır."]),
+      ["Belgenin parasal karşılığı","Bir ihracatçı, serbest ticaret anlaşması olan bir ülkeye 100.000 € değerinde mal yolluyor. Normal gümrük vergisi %10, anlaşmalı oran %0 (varsayımsal). Menşe belgesini sunamıyor.","Belge sunulursa vergi 0 €, sunulmazsa 100.000 × %10 = 10.000 € olur. Alıcı bu farkı fiyat indirimi olarak talep eder ya da başka tedarikçiye yönelir.","Doğru menşe belgesi, doğrudan fiyat avantajıdır; yükleme öncesinde hazırlanmalıdır."]),
     EGD("dt12","Gümrük beyannamesi ve ithalat vergileri",5,[
       "Mal, gümrükte beyanname ile bildirilir. Beyannamede mal tanımı, miktar, değer, menşe ve GTİP (Gümrük Tarife İstatistik Pozisyonu) yer alır. GTİP, malın hangi vergi oranına tabi olduğunu belirler; yanlış GTİP cezaya yol açabilir.",
       "İthalatta ödenebilecek başlıca vergiler: gümrük vergisi (matrah, malın CIF değeri), gerekirse ek vergiler ve ÖTV, ve KDV. KDV matrahı, CIF değere gümrük vergisi ve diğer vergilerin eklenmesiyle bulunur.",
@@ -2330,12 +2331,12 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Risk, işlem ile ödeme arasındaki sürede doğar. Vade uzadıkça ve kur oynaklığı arttıkça risk büyür.",
       "Riski görmek için işlemin TL karşılığı hesaplanıp kurun farklı seviyeleri için senaryo yapılır. Böylece korunmanın gerekip gerekmediğine karar verilir."],
       ["Kur riski işlem ile ödeme arasında doğar","İthalatçı kur artışından, ihracatçı düşüşten zarar eder","Senaryo hesabı riski görünür kılar"],
-      ["Kur 60 günde nereye gider?","Bir ithalatçı 60 gün sonra 50.000 $ ödeyecek. Bugün kur 40, ödeme günü kur 43 oluyor (varsayımsal).","Bugünkü maliyet 50.000 × 40 = 2.000.000 TL, ödeme günü 50.000 × 43 = 2.150.000 TL. Fark 150.000 TL, yani %7,5’lik ek maliyettir. Kar marjı bunu karşılamıyorsa risk yönetilmelidir.","Kur riski, marjı eritebilecek bir maliyet kalemidir ve önceden hesaplanmalıdır."]),
+      ["60 günlük kur riski","Bir ithalatçı 60 gün sonra 50.000 $ ödeyecek. Bugün kur 40, ödeme günü kur 43 oluyor (varsayımsal).","Bugünkü maliyet 50.000 × 40 = 2.000.000 TL, ödeme günü 50.000 × 43 = 2.150.000 TL. Fark 150.000 TL, yani %7,5’lik ek maliyettir. Kar marjı bunu karşılamıyorsa risk yönetilmelidir.","Kur riski, marjı eritebilecek bir maliyet kalemidir ve önceden hesaplanmalıdır."]),
     EGD("dt14","Doğal korunma ve forward",5,[
       "Doğal korunma, aynı para biriminde gelir ve gideri eşleştirmektir. Örneğin dolar gelir elde eden bir ihracatçı, dolarla ithal girdi alırsa kurdaki hareket iki tarafı da etkiler ve net risk azalır.",
       "Geriye kalan net açık pozisyon için forward gibi araçlarla kur bugünden sabitlenebilir. Forward, kuru ve tarihi önceden belirler; kurun nereye gideceğini tahmin etmez.",
       "Katılım bankalarında vadeli döviz işlemleri, danışma kurulunun uygun gördüğü yapılarla sunulur; ürünün uygunluğu için bankanın icazet belgesine ve ürün şartlarına bakılır."],
-      ["Önce gelir ve gideri eşleştir, sonra kalanı koru","Forward kuru bugünden sabitler","Uygunluk için icazet belgesi ve ürün şartları kontrol edilir"],
+      ["Önce gelir ve gider eşleştirilmeli, sonra kalan korunmalı","Forward kuru bugünden sabitler","Uygunluk için icazet belgesi ve ürün şartları kontrol edilir"],
       ["Sadece net açığı korumak","Bir ihracatçının 6 ay içinde 200.000 $ geliri ve 120.000 $ ithal girdi ödemesi var (varsayımsal).","Net döviz akışı 200.000 − 120.000 = 80.000 $’dır. Kur riskinin asıl taşıyıcısı bu tutardır. İhracatçı yalnızca 80.000 $ için korunma yapar; 120.000 $ zaten dolar girdisiyle dengelenmiştir.","Korunma brüt tutara değil net pozisyona göre kurulursa maliyet de azalır."]),
     EGD("dt15","Dış ticaret finansmanı ve katılım bankası",5,[
       "İthalatçı ve ihracatçının finansman ihtiyacı farklıdır. İthalatçı malı almak, ihracatçı ise üretmek ve tahsilata kadar beklemek için nakde ihtiyaç duyar.",
@@ -2379,9 +2380,9 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
   aciklama:"Döviz, forward, swap, kira sertifikası ve bankada hazine biriminin işleyişi",
   uniteler:[
   { ad:"Hazine birimi ve piyasalar", ozet:"Bankada hazine, para piyasası, kur makası ve çapraz kur", dersler:[
-    EGD("h01","Bankada hazine birimi ne yapar?",4,[
+    EGD("h01","Bankada hazine biriminin işlevi nedir?",4,[
       "Bankanın hazine birimi, bankanın likiditesini, döviz pozisyonunu ve fonlamasını yönetir. Ayrıca müşterilere döviz, kıymetli maden ve vadeli ürünlerde fiyat verir.",
-      "Şubede gördüğün döviz kuru, genellikle hazinenin verdiği fiyata şube marjının eklenmiş halidir. Büyük tutarlı işlemlerde müşteri, doğrudan hazine masasıyla (kurumsal masa) fiyat konuşabilir.",
+      "Şubede görülen döviz kuru, genellikle hazinenin verdiği fiyata şube marjının eklenmiş halidir. Büyük tutarlı işlemlerde müşteri, doğrudan hazine masasıyla (kurumsal masa) fiyat konuşabilir.",
       "Burada ‘hazine’ kelimesi bankanın kendi birimini anlatır. Hazine ve Maliye Bakanlığı’nın devlet borçlanması ise ayrı bir konudur ve bu modülün üçüncü ünitesinde işlenir."],
       ["Hazine; likidite, pozisyon ve fiyatlamayı yönetir","Şube kuru, hazine fiyatı artı marjdır","Büyük tutarlarda fiyat pazarlığı yapılabilir"],
       ["Büyük tutarda fiyat sormak","Bir şirket 500.000 $ bozdurmak istiyor. Şubede dolar alış kuru 40,33; hazine masası 40,40 veriyor (varsayımsal).","Fark 40,40 − 40,33 = 0,07 TL, 500.000 × 0,07 = 35.000 TL eder. Şirket, tutar büyüdüğünde doğrudan hazine masasından fiyat ister ve farkı karşılaştırır.","Büyük tutarlarda tek bir kura razı olmak yerine fiyat sorulmalı ve karşılaştırılmalıdır."]),
@@ -2402,7 +2403,7 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Valör, işlemin fiilen gerçekleşip paraların hesaplara geçtiği tarihtir. Spot döviz işlemlerinde standart genellikle iki iş günüdür (T+2); bankalar müşteri için aynı gün (T+0) veya ertesi gün (T+1) valör de sunabilir.",
       "Bir bankanın EUR/TRY fiyatı, hesaplanan çapraz kurdan farklıysa fark makas ve marjdan gelir. Fiyat sorarken hangi valörle işlem yapıldığı da sorulmalıdır."],
       ["EUR/TRY = EUR/USD × USD/TRY","Valör, işlemin hesaplara yansıdığı tarihtir","Fiyat ile valör birlikte sorulmalıdır"],
-      ["Euro kuru neden farklı?","EUR/USD 1,08 ve USD/TRY 40,00 iken bir banka bir müşteriye EUR/TRY 43,60’tan satış yapıyor (varsayımsal).","Çapraz kur = 1,08 × 40 = 43,20. Banka 43,60 verdiğinde fark 0,40 TL’dir; 10.000 € için 4.000 TL eder. Bu fark makas ve marjdan gelir; müşteri başka bankalarla karşılaştırarak daha iyi fiyat arayabilir.","Çapraz kuru kendin hesaplayarak banka fiyatını yorumlayabilirsin."]),
+      ["Euro kuru neden farklı?","EUR/USD 1,08 ve USD/TRY 40,00 iken bir banka bir müşteriye EUR/TRY 43,60’tan satış yapıyor (varsayımsal).","Çapraz kur = 1,08 × 40 = 43,20. Banka 43,60 verdiğinde fark 0,40 TL’dir; 10.000 € için 4.000 TL eder. Bu fark makas ve marjdan gelir; müşteri başka bankalarla karşılaştırarak daha iyi fiyat arayabilir.","Çapraz kur hesaplanarak banka fiyatı yorumlanabilir."]),
   ]},
   { ad:"Spot ve vadeli döviz", ozet:"Pozisyon, forward, swap ve opsiyon", dersler:[
     EGD("h05","Döviz pozisyonu",4,[
@@ -2410,11 +2411,11 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Önemli olan brüt tutar değil net pozisyondur. Döviz alacağı ve borcu birbirini karşılayan şirket, yalnızca farkın kur riskini taşır.",
       "Bankalar için de net döviz pozisyonu düzenleyici sınırlarla izlenir. Bu yüzden hazine birimi pozisyonunu sürekli takip eder."],
       ["Pozisyon = döviz varlık − döviz yükümlülük","Uzun pozisyon dövizin düşmesinden, kısa pozisyon artmasından zarar eder","Önemli olan net pozisyondur"],
-      ["Net pozisyon ne kadar?","Bir şirketin 1.000.000 € alacağı ve 800.000 € borcu var; kur 45 (varsayımsal). Euro %5 değer kaybederse ne olur?","Net pozisyon 200.000 € uzundur ve TL karşılığı 200.000 × 45 = 9.000.000 TL’dir. %5 düşüşte kayıp 9.000.000 × 0,05 = 450.000 TL olur. Brüt alacak olan 1.000.000 €’nun tamamı değil, yalnız net fark risk taşır.","Riski brüt tutardan değil net pozisyondan hesapla."]),
+      ["Net pozisyon ne kadar?","Bir şirketin 1.000.000 € alacağı ve 800.000 € borcu var; kur 45 (varsayımsal). Euro %5 değer kaybederse ne olur?","Net pozisyon 200.000 € uzundur ve TL karşılığı 200.000 × 45 = 9.000.000 TL’dir. %5 düşüşte kayıp 9.000.000 × 0,05 = 450.000 TL olur. Brüt alacak olan 1.000.000 €’nun tamamı değil, yalnız net fark risk taşır.","Risk, brüt tutardan değil net pozisyondan hesaplanmalıdır."]),
     EGD("h06","Forward (vadeli döviz) işlemi",5,[
       "Forward, bugünden belirlenen bir kurla, ileri bir tarihte döviz alım veya satımı yapmayı bağlayan sözleşmedir. Kur ve tarih baştan sabittir.",
       "Forward kuru, kurun gelecekte nereye gideceğine dair bir tahmin değildir. Spot kur ile iki para birimi arasındaki getiri farkı üzerinden hesaplanır: Forward ≈ Spot × (1 + TL oranı × gün ÷ 365) ÷ (1 + döviz oranı × gün ÷ 365).",
-      "Katılım bankalarında vadeli işlemler, danışma kurulunun uygun gördüğü yapılarla (örneğin karşılıklı vaat sözleşmeleri) sunulabilir. Uygulamadaki Forward Hesaplama aracıyla varsayımlarını deneyebilirsin."],
+      "Katılım bankalarında vadeli işlemler, danışma kurulunun uygun gördüğü yapılarla (örneğin karşılıklı vaat sözleşmeleri) sunulabilir. Uygulamadaki Forward Hesaplama aracıyla varsayımlar denenebilir."],
       ["Forward kuru ve tarihi bugünden sabitler","Forward kuru getiri farkına dayanır, tahmin değildir","Kesinlik sağlar, kâr garantisi vermez"],
       ["Forward ile kesinlik","Bir ithalatçı 3 ay (90 gün) sonra 100.000 $ ödeyecek. Spot 40, TL oranı %45, dolar oranı %4,5 (varsayımsal).","Forward ≈ 40 × (1 + 0,45 × 90 ÷ 365) ÷ (1 + 0,045 × 90 ÷ 365) ≈ 43,95. Maliyet 100.000 × 43,95 = 4.395.000 TL’de sabitlenir. Vade günü spot 46 olursa 205.000 TL kazanç, spot 43 olursa 95.000 TL fırsat kaybı olur.","Forward kuru güvence altına alır; vade günü kur lehine de aleyhine de olabilir."]),
     EGD("h07","Döviz swap",5,[
@@ -2422,13 +2423,13 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "Spot ile vadeli kur arasındaki fark (swap puanı), bir para biriminin diğerine göre kullanım maliyetini gösterir. Bu fark, iki para birimi arasındaki getiri farkından doğar.",
       "Bankalar swap ile TL ve döviz likiditesini dengeler; şirketler de TL nakit ihtiyacını dövizden karşılayabilir. Swap yapılarının faizsiz esaslara uygunluğu bankanın kurulunca ayrıca değerlendirilir."],
       ["Spot ve vadeli işlem birlikte yapılır","Swap puanı, para birimlerinin kullanım maliyetini gösterir","Uygunluk kurul kararına bağlıdır"],
-      ["TL ihtiyacını dövizden çevirmek","Bir şirket 1.000.000 $’ı spot 40’tan satıp 90 gün sonra 43,95’ten geri alacak şekilde swap yapıyor (varsayımsal).","Bugün 40.000.000 TL alır, vadede 43.950.000 TL öder. Fark 3.950.000 TL’dir; 90 günde %9,875, yıllıklandırınca yaklaşık %40,05’e denk gelir. Şirket bu oranı alternatif TL finansman maliyetiyle karşılaştırır.","Swap puanını yıllıklandırarak diğer finansman seçenekleriyle kıyaslayabilirsin."]),
+      ["TL ihtiyacını dövizden çevirmek","Bir şirket 1.000.000 $’ı spot 40’tan satıp 90 gün sonra 43,95’ten geri alacak şekilde swap yapıyor (varsayımsal).","Bugün 40.000.000 TL alır, vadede 43.950.000 TL öder. Fark 3.950.000 TL’dir; 90 günde %9,875, yıllıklandırınca yaklaşık %40,05’e denk gelir. Şirket bu oranı alternatif TL finansman maliyetiyle karşılaştırır.","Swap puanı yıllıklandırılarak diğer finansman seçenekleriyle kıyaslanabilir."]),
     EGD("h08","Opsiyon ve vadeli işlem borsası",4,[
       "Opsiyon, sahibine belirli bir fiyattan (kullanım fiyatı) belirli bir tarihte alma (call) veya satma (put) hakkı veren, yükümlülük getirmeyen sözleşmedir. Bu hak için prim ödenir.",
       "Alıcının maksimum kaybı ödediği primdir. Satıcı ise prim karşılığında yükümlülük üstlenir ve riski daha yüksektir. Borsa İstanbul’daki VİOP’ta standart kontratlar, teminat ve günlük uzlaşma ile işlem yapılır.",
       "Opsiyon ve vadeli işlem sözleşmelerinin faizsiz finans ilkelerine uygunluğu, kurul görüşlerine ve ürün yapısına göre değişir; bu işlemlerden önce uygunluk ayrıca kontrol edilmelidir."],
       ["Opsiyon hak verir, yükümlülük getirmez","Alıcının maksimum kaybı primdir","Uygunluk ürün yapısına ve kurul görüşüne bağlıdır"],
-      ["Kur için sigorta gibi prim","Bir ithalatçı 100.000 $ için kullanım fiyatı 44 olan call opsiyon alıyor ve dolar başına 0,80 TL prim ödüyor (varsayımsal).","Toplam prim 100.000 × 0,80 = 80.000 TL’dir. Vadede kur 47 olursa 44’ten alır; etkin maliyet 44,80’dir. Kur 42 olursa hakkını kullanmaz, piyasadan 42’den alır ve kaybı yalnızca 80.000 TL prim olur.","Opsiyonda alıcının kaybı bellidir; bu güvencenin bedeli primdir."]),
+      ["Kur riski için sigorta niteliğinde prim","Bir ithalatçı 100.000 $ için kullanım fiyatı 44 olan call opsiyon alıyor ve dolar başına 0,80 TL prim ödüyor (varsayımsal).","Toplam prim 100.000 × 0,80 = 80.000 TL’dir. Vadede kur 47 olursa 44’ten alır; etkin maliyet 44,80’dir. Kur 42 olursa hakkını kullanmaz, piyasadan 42’den alır ve kaybı yalnızca 80.000 TL prim olur.","Opsiyonda alıcının kaybı bellidir; bu güvencenin bedeli primdir."]),
   ]},
   { ad:"Borçlanma araçları", ozet:"DİBS, kira sertifikası, fiyat-getiri ilişkisi ve altın", dersler:[
     EGD("h09","Devlet iç borçlanma senetleri (DİBS)",4,[
@@ -2436,7 +2437,7 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
       "İskontolu senetlerde faiz ödemesi yapılmaz; senet nominal değerinden daha düşük bir fiyatla satılır ve vadede nominal değer ödenir. Kuponlu senetlerde ise dönemsel ödemeler yapılır; kuponlar sabit ya da değişken olabilir.",
       "Senetlerin getirisi, ihale sonuçlarındaki oran ve vadeye göre değişir. Güncel oranlar için Hazine’nin ihale duyurularına bakılır."],
       ["Bono kısa, tahvil daha uzun vadelidir","İskontolu senet nominalin altında satılır","Güncel oran ihale duyurularından izlenir"],
-      ["İskontolu bonoda fiyat","Nominal 100 TL, 91 gün vadeli iskontolu bono; yıllık basit getiri %40 (varsayımsal).","Fiyat = 100 ÷ (1 + 0,40 × 91 ÷ 365) ≈ 90,93 TL. 91 gün sonra 100 TL ödenir; fark yaklaşık 9,07 TL’dir.","Bono fiyatı ile getiri birbirine bağlıdır; birini bilince diğerini hesaplayabilirsin."]),
+      ["İskontolu bonoda fiyat","Nominal 100 TL, 91 gün vadeli iskontolu bono; yıllık basit getiri %40 (varsayımsal).","Fiyat = 100 ÷ (1 + 0,40 × 91 ÷ 365) ≈ 90,93 TL. 91 gün sonra 100 TL ödenir; fark yaklaşık 9,07 TL’dir.","Bono fiyatı ile getiri birbirine bağlıdır; biri bilindiğinde diğeri hesaplanabilir."]),
     EGD("h10","Kira sertifikası (sukuk)",5,[
       "Kira sertifikası, bir varlığın kira geliri veya kullanım hakkı karşılığında ihraç edilen varlığa dayalı güvenlik belgesidir. Yatırımcı borç vermez, varlığın kira gelirinden pay alır.",
       "Hazine adına ihraç yapan şirket Hazine Müsteşarlığı Varlık Kiralama A.Ş.’dir. Kamu varlıkları kiralanır; yatırımcıya dönemsel kira ödemesi yapılır ve vade sonunda varlık satış bedeli ödenir.",
@@ -2504,6 +2505,372 @@ const EGITIM_HAM: Omit<EgitimModul,"dersler">[] = [
     EGQ("Aynı getiri artışında hangi kâğıt daha çok fiyat kaybeder?",["Kısa vadeli","Uzun vadeli","İkisi aynı","Vadesiz"],1,"Vade uzadıkça fiyatın getiriye duyarlılığı artar."),
     EGQ("Gram altın fiyatı yaklaşık nasıl hesaplanır?",["Ons × kur ÷ 31,1035","Ons ÷ kur","Kur × 31,1035","Ons + kur"],0,"Gram altın ≈ ons fiyatı × USD/TRY ÷ 31,1035."),
     EGQ("Katılım bankalarında hazine ürünlerinin uygunluğuna kim karar verir?",["Müşteri","Danışma kurulu","Vergi dairesi","Borsa"],1,"Ürünlerin faizsiz ilkelere uygunluğu danışma kurulunca değerlendirilir."),
+  ],
+},
+{
+  id:"kiymetli", ad:"Kıymetli evrak", kisa:"Kıymetli evrak", renk:"#FB923C", ikon:"📄", seviye:"Temel → Orta",
+  aciklama:"Çek, bono, poliçe, ciro, aval, protesto ve çek-senet işlemlerinde dikkat edilecek noktalar",
+  uniteler:[
+  { ad:"Temel kavramlar", ozet:"Kıymetli evrak, kambiyo senetleri, ciro ve aval", dersler:[
+    EGD("ke01","Kıymetli evrak nedir?",4,[
+      "Kıymetli evrak, içerdiği hakkın senetle birlikte var olduğu, hakkın kullanılması ve devredilmesi için senedin elde bulundurulmasının gerektiği belgelerdir. Çek, bono, poliçe, hisse senedi ve konşimento bu gruba girer.",
+      "Adi bir borç senedinde alacak, senet kaybolsa bile başka delillerle ispat edilebilir. Kıymetli evrakta ise senet olmadan hak ileri sürülemez; bu nedenle senedin saklanması ve doğru kişiye devredilmesi önem taşır.",
+      "Ticari hayatta kıymetli evrak ödeme aracı, kredi aracı ve teminat olarak kullanılır. Bu modülde bankacılıkta sık karşılaşılan çek, bono (emre muharrer senet) ve poliçe üzerinde durulur."],
+      ["Hak, senede bağlıdır; senet olmadan ileri sürülemez","Çek, bono ve poliçe en yaygın kambiyo senetleridir","Kıymetli evrak ödeme, kredi ve teminat aracı olabilir"],
+      ["Senedin kaybolmasının sonucu","Selim, alacağı için aldığı senedi taşınma sırasında kaybetti. Borçlu, senet elinde olmadığı için ödeme yapmak istemiyor.","Kıymetli evrakta hak senede bağlı olduğundan, senet ele geçirilmeden ödeme talep etmek güçtür. Selim’in, kayıp senet için mahkemeden iptal (zayi) kararı almak gibi hukuki yollara başvurması gerekir; bu da zaman ve masraf demektir. Senedin kopyasının alınması ve güvenli saklanması riski azaltır.","Kıymetli evrak değerli bir belge gibi korunmalıdır; kaybı hakkın kullanılmasını zorlaştırır."]),
+    EGD("ke02","Kambiyo senetleri: çek, bono, poliçe",5,[
+      "Çek, bono ve poliçeye birlikte kambiyo senetleri denir. Bu senetler kanundaki şekil şartlarını taşıdığında, ödeme emri veya vaadi kayıtsız ve şartsız olduğundan hızlı tahsil imkânı tanır.",
+      "Çekte keşideci bankaya ödeme emri verir ve çek görüldüğünde ödenir. Bonoda borçlu, vadede belirli bir parayı ödemeyi doğrudan kendisi vaat eder. Poliçede ise keşideci, muhatap adlı üçüncü kişiye ödeme emri verir; muhatap kabul ederse borçlu olur.",
+      "Şekil şartlarından biri eksikse senet kambiyo senedi niteliğini kaybedebilir; bu durumda adi senet gibi değerlendirilir ve tahsil süreci uzayabilir. Bu nedenle zorunlu unsurların eksiksiz doldurulması gerekir."],
+      ["Çek, bankaya verilen ve görüldüğünde ödenen bir emirdir","Bono ödeme vaadi, poliçe ödeme emridir","Şekil eksikliği kambiyo senedi niteliğini zedeler"],
+      ["Üç senedi ayırt etmek","Bir tedarikçi şu belgeleri aldı: A) bankaya hitaben yazılmış, görüldüğünde ödenecek bir belge; B) “… tarihinde … TL ödeyeceğim” yazılı bir belge; C) başka bir firmaya hitaben “… tarihinde … TL ödeyiniz” yazılı bir belge.","A çektir (bankaya ödeme emri). B bonodur (borçlunun kendi ödeme vaadi). C poliçedir (üçüncü kişiye ödeme emri; muhatap kabul edince borçlu olur). Üçü de şekil şartlarını taşıyorsa kambiyo senedidir.","Çek ve poliçe emir, bono vaat içerir; kimin kime hitap ettiğine bakmak senedin türünü belirler."]),
+    EGD("ke03","Ciro, aval ve senedin devri",5,[
+      "Kambiyo senetleri ciro ile devredilebilir. Ciro, senedin arkasına imza atarak hakkın başka birine geçirilmesidir. Ciranta olan kişi, senedin ödenmemesi halinde kural olarak sorumluluk üstlenir.",
+      "Ciro türleri arasında kişi adı yazılan tam ciro, yalnızca imzadan oluşan beyaz ciro, tahsil amaçlı ciro ve rehin cirosu bulunur. Beyaz ciro ile devredilen senet elden ele geçebileceğinden kaybolması riski artırır.",
+      "Aval, senet borcunu bir başkasının ödemesini garanti eden imzadır. Avalist, aval verdiği borçlu ile aynı şekilde sorumlu olur. Bu nedenle aval vermeden önce borçlunun ödeme gücünün ve senedin tutarının dikkatle değerlendirilmesi gerekir."],
+      ["Ciro ile senet devredilir; ciranta sorumluluk taşır","Beyaz ciro kayıp riskini artırır","Avalist, borçlu gibi sorumlu olur"],
+      ["Ciranta olmanın riski","Deniz Ltd., aldığı 200.000 TL’lik bir çeki tedarikçisine ciro etti. Çek ibrazda karşılıksız çıktı.","Çek hamili, çeki ciro eden Deniz Ltd.’ye de başvurabilir; çünkü ciranta olarak ödenmeme riskine karşı sorumluluk üstlenmiştir. Deniz Ltd. ödemeyi yaparsa keşideciye rücu edebilir. Bu risk, ciro etmeden önce keşidecinin ve çekin karşılığının durumunun araştırılmasını gerektirir.","Ciro bir devirdir ama sorumluluk da devredilir; ciro eden, senet ödenmezse borçlulardan biri olabilir."]),
+  ]},
+  { ad:"Çek", ozet:"Çek hesabı, çek türleri, ibraz, karşılıksız çek ve güvenlik", dersler:[
+    EGD("ke04","Çek hesabı ve çek karnesi",4,[
+      "Çek, yalnızca bankada açılmış çek hesabına dayanılarak ve bankanın verdiği çek yaprağına yazılarak düzenlenebilir. Bankalar çek hesabı açarken müşterinin kredibilitesini ve çek düzenleme yasağı olup olmadığını inceler.",
+      "Çek yaprağında çek numarası, banka ve şube bilgisi, hesap numarası ve keşideci bilgileri baskılıdır. Keşideci tutarı, düzenleme yerini ve tarihini, lehtarı yazar ve imzalar. Çekin ödenebilmesi için hesapta yeterli karşılık bulunmalıdır.",
+      "Bankalar, müşterinin geçmişine göre verilecek çek yaprağı sayısını sınırlandırabilir. Çek yapraklarının güvenli saklanması gerekir; boş veya imzalı yapraklar kötüye kullanılabilir."],
+      ["Çek, bankadaki çek hesabına dayanır","Çek yaprağı bankadan alınır; keşideci doldurur ve imzalar","Yaprakların saklanması keşidecinin sorumluluğundadır"],
+      ["Çek yaprağının güvenliği","Melis, çek karnesinin bir yaprağını işyerinde açıkta bıraktı. Yaprak kaybolunca kimin eline geçtiğini bilmiyor.","Boş veya imzalı bir yaprak kötüye kullanılabilir; bu nedenle durum derhal bankaya bildirilmeli ve gerekirse mahkemeden ödeme yasağı kararı alınmalıdır. Kayıp yaprakların numaraları bankaya bildirilerek riskin büyümesi önlenir.","Çek karnesi, imzalı olsun olmasın, para gibi saklanmalıdır; kayıp halinde bankaya derhal haber verilmelidir."]),
+    EGD("ke05","Çek türleri ve çizgili çek",4,[
+      "Çek, lehtarın yazılış biçimine göre farklı özellikler taşır. Lehtar bir kişi adıyla belirtilmişse çek yalnızca o kişiye veya onun emrine ödenir; lehtar belirtilmemişse (hamiline) çeki elinde bulunduran kişi ödeme alabilir.",
+      "Çizgili çek, ön yüzüne çizilen iki paralel çizgiyle belirlenir ve yalnızca bir bankaya veya bankanın müşterisine ödenebilir. Böylece çekin yanlış kişi tarafından nakde çevrilmesi zorlaşır. “Hesaba geçirilecektir” ibaresi taşıyan çek ise nakit ödenmez; yalnızca lehtarın hesabına aktarılır.",
+      "Güvenlik açısından çizgili ve hesaba geçirilecek çek tercih edilir. Hamiline yazılı veya çizgisiz çeklerin kaybolması halinde risk sahibine ait olduğundan bu çeklerin dikkatle saklanması gerekir."],
+      ["Lehtarın yazılış biçimi çekin kime ödeneceğini belirler","Çizgili çek yalnızca banka yoluyla ödenir","Hesaba geçirilecek çek nakit ödenmez"],
+      ["Daha güvenli çek hangisi?","Bir firma, tedarikçiye gönderilecek çek için üç seçenek düşünüyor: hamiline çizgisiz, lehtarlı çizgili, lehtarlı çizgili ve “hesaba geçirilecektir” ibaresi taşıyan.","Hamiline çizgisiz çek, kaybolursa bulan kişi tarafından nakde çevrilebilir. Lehtarlı çizgili çek yalnızca banka yoluyla tahsil edilebilir. “Hesaba geçirilecektir” ibaresi, tutarın nakit ödenmesini engelleyerek yalnızca lehtarın hesabına geçmesini sağlar; en güvenli seçenek budur.","Çekin güvenliği; lehtarın yazılışına, çizgiye ve “hesaba geçirilecek” ibaresine bağlıdır."]),
+    EGD("ke06","İbraz, karşılıksız çek ve sonuçları",5,[
+      "Çek, bankaya ibraz edildiğinde ödenir. Çek, kanunda belirlenen ibraz süresi içinde bankaya sunulmalıdır; bu süre kısadır ve düzenleme ile ödeme yerinin aynı olup olmamasına göre değişir. Süre aşılırsa hamilin bazı başvuru hakları zayıflayabilir.",
+      "İbraz sırasında hesapta karşılık yoksa veya yetersizse çek karşılıksız çıkar. Banka bu durumu çek üzerine veya ayrı bir belgeyle yazarak bildirir; hamil bu belgeyle hukuki yollara başvurabilir.",
+      "Karşılıksız çek düzenleyen kişi hakkında adli para cezası, çek düzenleme yasağı ve icra takibi gibi yaptırımlar uygulanabilir. Bu yaptırımların ayrıntıları ve tutarları zamanla değişebildiğinden güncel mevzuat veya hukuk danışmanı esas alınmalıdır."],
+      ["Çek, kanundaki süre içinde bankaya ibraz edilmelidir","Karşılık yoksa çek karşılıksız çıkar","Karşılıksız çekte hukuki ve cezai yaptırımlar doğabilir"],
+      ["Karşılıksız çıkan çek","Ece, tedarikçiden aldığı 150.000 TL’lik çeki süresi içinde bankaya ibraz etti. Banka, hesapta karşılık bulunmadığını bildirdi.","Ece, bankadan karşılıksızlık belgesini alır; bu belge hukuki takip için önemli bir delildir. Süre kaçırılmadığı için ciranta ve keşideciye başvuru hakkı korunur. Ece hukuki yola gitmeden önce keşideciyle görüşüp bir ödeme planı da değerlendirebilir.","Çek zamanında ibraz edilmeli, karşılıksız çıkarsa bankadan alınan belgeyle hak aranmalıdır."]),
+    EGD("ke07","Çekte sahtecilik ve doğrulama",4,[
+      "Çek sahteciliği; çekin tamamen taklit edilmesi, tutarın değiştirilmesi veya imzanın taklit edilmesi şeklinde görülebilir. Bankalar imza ve yaprak kontrolü yapar; ancak çeki alan kişinin de temel kontrolleri çek kabul etmeden önce yapması gerekir.",
+      "Çek alırken keşidecinin kimliği, çekin ait olduğu banka ve şube, yaprak numarası, rakam ve yazıyla yazılmış tutarın uyumu ile silinti veya kazıntı bulunup bulunmadığı kontrol edilmelidir. Bankalar, çek yaprağının durumunu sorgulama hizmeti de sunabilir.",
+      "Çek karşılığında mal teslim etmeden önce, tutarın büyüklüğüne göre çekin bankadan teyit edilmesi ve keşidecinin ticari geçmişinin araştırılması riski azaltır. Şüpheli bir durumda çek kabul edilmemeli, banka ile görüşülmelidir."],
+      ["Tutar, imza ve yaprak numarası kontrol edilmelidir","Silinti ve kazıntı sahtecilik işareti olabilir","Büyük tutarlarda bankadan teyit alınmalıdır"],
+      ["Çek alırken kontrol","Bir esnaf, ürünü teslim etmeden önce müşterinin verdiği 90.000 TL’lik çeki inceliyor. Rakamla yazılan tutar ile yazıyla yazılan tutar farklı görünüyor ve tarihin üzerinde kazıntı var.","Rakam ve yazı tutarı uyuşmuyorsa ve kazıntı varsa çek hatalı veya sahte olabilir; çek kabul edilmemeli ve mal teslim edilmemelidir. Esnaf çekin bankadan teyidini isteyebilir; teyit alınamıyorsa başka bir ödeme yöntemi talep edilmelidir.","Silinti, kazıntı ve tutar uyumsuzluğu uyarı işaretidir; teslimattan önce çek kontrol edilmelidir."]),
+  ]},
+  { ad:"Bono ve poliçe", ozet:"Bono unsurları, poliçe ve kabul, vade, protesto ve zamanaşımı", dersler:[
+    EGD("ke08","Bono (emre muharrer senet)",4,[
+      "Bono, borçlunun belirli bir parayı belirli bir vadede ödemeyi kayıtsız şartsız vaat ettiği kambiyo senedidir. Senette “bono” veya “emre muharrer senet” ibaresi, ödeme vaadi, vade, ödeme yeri, lehtar, düzenleme tarihi ve yeri ile borçlunun imzası bulunmalıdır.",
+      "Bonoda borçlu ve lehtar olmak üzere iki taraf vardır. Lehtar, senedi vadeye kadar saklayabilir, ciro ile devredebilir veya bankaya tahsil için verebilir. Vade belirtilmezse bono görüldüğünde ödenecek sayılır.",
+      "Bono, ticari satışlarda vadeli ödeme aracı olarak ve banka kredilerinde teminat olarak sık kullanılır. Senedin doğru doldurulması ve boş yer bırakılmaması ileride uyuşmazlık yaşanmasını önler."],
+      ["Bono, borçlunun ödeme vaadini içeren senettir","Zorunlu unsurların eksiksiz olması gerekir","Boş bırakılan alanlar uyuşmazlık riski doğurur"],
+      ["Eksik bono","Kerem, tedarikçiye verdiği bonoda lehtarın adını yazmayı unuttu; tutar ve vade eksiksiz. Tedarikçi bonoyu bankaya tahsile verdi.","Lehtarın adı bono için zorunlu unsurlardandır; eksikse senet bono olarak kabul edilmeyebilir ve adi senet gibi değerlendirilebilir. Bu durumda hızlı tahsil imkânı zayıflar. Kerem’in bonoyu geri alıp eksiksiz yeniden düzenlemesi riski ortadan kaldırır.","Bono doldurulurken tüm zorunlu unsurlar eksiksiz yazılmalı, boş alan bırakılmamalıdır."]),
+    EGD("ke09","Poliçe ve kabul",4,[
+      "Poliçede keşideci, muhatap adlı bir kişiye belirli bir parayı lehtara ödemesi için emir verir. Üç taraf vardır: keşideci, muhatap ve lehtar. Muhatap, poliçeyi imzalayarak kabul etmedikçe borçlu olmaz.",
+      "Kabul, muhatabın poliçeyi imzalayarak ödeme yükümlülüğünü üstlenmesidir. Kabul edilen poliçede muhatap asıl borçlu haline gelir. Kabul edilmezse hamil, keşideciye ve cirantalara başvurabilir.",
+      "Poliçe Türkiye’de çek ve bonoya göre daha az kullanılır; ancak dış ticarette ve bazı ticari uygulamalarda karşımıza çıkar. Kabul şartlarının ve vadenin dikkatle kontrol edilmesi gerekir."],
+      ["Poliçede üç taraf vardır: keşideci, muhatap, lehtar","Muhatap kabul edince asıl borçlu olur","Kabul edilmezse keşideci ve cirantaların sorumluluğu sürer"],
+      ["Kabulün önemi","Lehtar olan Kuzey Ltd., bir poliçeyi muhataba kabul için sundu. Muhatap kabul imzası atmadı.","Kabul olmadığı için muhatap borçlu değildir. Kuzey Ltd., poliçe nedeniyle keşideciye ve varsa cirantalara başvurabilir. Bu nedenle poliçe alırken muhatabın kabul imzası aranmalıdır.","Poliçede muhatabın kabul imzası, asıl borçlunun belirlenmesi açısından belirleyicidir."]),
+    EGD("ke10","Vade, protesto ve zamanaşımı",5,[
+      "Vade, senedin ödeneceği tarihtir. Vadeli senetler vade gününde veya izleyen kısa süre içinde ödeme için ibraz edilmelidir. Ödeme yapılmazsa, hamilin cirantalara başvurabilmesi için genellikle protesto veya eşdeğer bir işlem gerekir.",
+      "Protesto, senedin ödenmediğinin noter aracılığıyla resmen tespit edilmesidir. Protesto için kanundaki süreler kısadır; geç kalınırsa cirantalara başvuru hakkı kaybedilebilir.",
+      "Kambiyo senetlerinde zamanaşımı süreleri kanunda belirlidir ve senedin türüne ve borçluya göre değişir. Süre dolduktan sonra alacak dava yoluyla tahsil edilemeyebilir. Bu nedenle vadeli senetlerin takvime işlenmesi ve süreler dolmadan işlem yapılması gerekir."],
+      ["Vade günü, ödeme için ibrazın kritik tarihidir","Protesto, ödenmemenin noterce tespitidir","Zamanaşımı süresi dolarsa hak kaybı doğabilir"],
+      ["Vade takvimi","Bir firma, farklı vadelere sahip 12 senedi aynı klasörde tutuyor ve vadeleri takip etmiyor. Bir senedin vadesinin üzerinden 40 gün geçmiş.","Vadeli senetler; vade, ibraz ve protesto süreleri açısından takvime bağlanmalıdır. Geçen süre protesto süresini aşıyorsa cirantalara başvuru hakkı zayıflamış olabilir. Firma senetleri vadeye göre sıralamalı, hatırlatıcı koymalı ve kaçan süre için hukuk danışmanına başvurmalıdır.","Senet takibi vade tarihine bağlı bir takvim işidir; süre kaçırılırsa hak zayıflar."]),
+  ]},
+  { ad:"Bankacılıkta kullanım", ozet:"Tahsil, iskonto, teminat senedi ve kontrol listesi", dersler:[
+    EGD("ke11","Tahsile verme ve tahsil cirosu",4,[
+      "Alacaklı, elindeki çek veya senedi vadesinde tahsil etmesi için bankaya verebilir. Bu işleme tahsile verme denir ve genellikle senet “tahsil cirosu” ile bankaya devredilir. Banka tahsilatı yapar ve alacaklının hesabına aktarır.",
+      "Bankanın tahsil hizmeti karşılığında komisyon alınabilir. Tahsile verilen senet ödenirse tutar alacaklının hesabına geçer; ödenmezse banka senedi iade eder veya protesto işlemlerini yürütebilir.",
+      "Tahsile verme, parayı vadeyi bekleyerek almak demektir; bankadan senet karşılığı erken nakit kullanmak (iskonto) ise ayrı bir finansman işlemidir. İki işlemin maliyeti ve riski farklıdır."],
+      ["Tahsile verme, senedin banka aracılığıyla tahsil edilmesidir","Tahsil karşılığında komisyon alınabilir","Tahsil ile iskonto aynı işlem değildir"],
+      ["Tahsile verilen senet","Murat, vadesine 10 gün kalan 300.000 TL’lik bir senedi bankaya tahsile verdi.","Banka senedi vadesinde borçludan tahsil eder ve tutarı Murat’ın hesabına aktarır; tahsil komisyonu uygulanabilir. Murat paraya vadeden önce ihtiyaç duyarsa iskonto veya benzeri bir finansman ürününü ayrıca değerlendirebilir; bu durumda bir maliyet doğar.","Tahsile verme parayı beklemek, iskonto ise erken almak demektir; ikincisinin maliyeti vardır."]),
+    EGD("ke12","Çek ve senet iskontosu; katılım bankasında uygulama",5,[
+      "İskonto, vadesi gelmemiş bir senedin bankaya devredilerek vadeden önce nakde çevrilmesidir. Banka, senet tutarından vadeye kalan süre için bir bedel keserek geri kalanı öder. Vade sonunda tahsilat bankaya yapılır.",
+      "Basit iskonto bedeli yaklaşık olarak senet tutarı × yıllık oran × vadeye kalan gün ÷ 365 formülüyle hesaplanır. Bankaya göre gün bazı 360 veya 365 alınabilir; ayrıca komisyon ve vergi gibi ek kalemler maliyeti artırır.",
+      "Katılım bankalarında faizli iskonto yerine, alacağın devri veya satışı gibi faizsiz yöntemlerle benzer bir ihtiyaç karşılanır. Yöntem ve maliyet bankaya göre değişir; ayrıntılar ürün sözleşmesinde ve bankanın icazet belgesinde yer alır."],
+      ["İskonto, vadeden önce nakde çevirme işlemidir","Maliyet; oran, gün sayısı ve ek kalemlere bağlıdır","Katılım bankalarında benzer finansman faizsiz yapılarla sağlanır"],
+      ["İskonto maliyeti","Bir firma, 90 gün sonra vadesi gelecek 500.000 TL’lik senedi yıllık %48 oranla iskonto ettirmek istiyor (varsayımsal; gün bazı 365).","İskonto bedeli ≈ 500.000 × 0,48 × 90 ÷ 365 ≈ 59.178 TL’dir. Firma yaklaşık 440.822 TL alır. Komisyon ve vergi gibi ek kalemler varsa maliyet bunun üzerine çıkar. Katılım bankasında benzer finansman faizsiz bir yapıyla sunulur; toplam maliyet sözleşmedeki rakamlardan karşılaştırılmalıdır.","İskonto bedeli tutar × oran × gün ÷ 365 ile tahmin edilir; ek kalemler toplam maliyete eklenir."]),
+    EGD("ke13","Teminat olarak çek ve senet",4,[
+      "Bankalar ve firmalar kredi veya ticari ilişkilerde teminat olarak çek veya senet alabilir. Teminat senedi, asıl borcun ödenmemesi halinde kullanılmak üzere düzenlenir ve asıl borç ödendiğinde iade edilmesi beklenir.",
+      "Teminat amacıyla verilen senet kanuni şartları taşıyorsa takibe konulabilir veya üçüncü kişiye devredilebilir; bu durumda borçlunun savunma imkânları sınırlanabilir. Bu nedenle senedin teminat amacıyla verildiğinin sözleşme veya yazılı bir kayıtla belgelenmesi önemlidir.",
+      "Borç ödendiğinde teminat senedinin iadesi veya imhası için yazılı tutanak düzenlenmelidir. İade alınmayan senet ileride yeniden kullanılabilir ve haksız takibe yol açabilir."],
+      ["Teminat senedi asıl borca bağlı olarak verilir","Teminat amacı yazılı belgelenmelidir","Borç bitince senet iade alınmalı ve tutanak tutulmalıdır"],
+      ["Borç bitti, senet kaldı","Ayşe, işletme kredisi için verdiği teminat senedini krediyi kapattıktan sonra geri almadı. İki yıl sonra senet için icra takibi başlatıldı.","Teminat senedi kanuni şartları taşıdığı için takibe konulabilir; Ayşe’nin itiraz imkânı sınırlı olabilir. Ayşe, kredinin ödendiğini ve senedin teminat amacıyla verildiğini gösteren belgelerle itiraz edebilir ve gerekirse dava yoluna gidebilir. Bu duruma düşmemek için kredi kapanışında senet iade alınmalı ve tutanak imzalanmalıdır.","Borç bittiğinde iade alınmayan teminat senedi risk olmaya devam eder."]),
+    EGD("ke14","Kıymetli evrakta kontrol listesi",4,[
+      "Bir kıymetli evrak alınmadan veya verilmeden önce şunlar kontrol edilmelidir: keşideci ve borçlunun kimliği, senedin türü ve şekil şartları, tutar ile vade, lehtar bilgileri, ciro silsilesinin kesintisizliği, tarih ve imzaların eksiksizliği.",
+      "Ödeme gücü de ayrı bir kontrol konusudur. Keşidecinin ticari geçmişi, çek karnesi ve hesabındaki hareketler, önceki karşılıksız çek kayıtları gibi bilgiler risk hakkında fikir verir. Büyük tutarlarda teminat veya ek güvence istenmesi makuldür.",
+      "Senet alındıktan sonra vade takvimi, tahsil kanalı ve süre sonları takip edilmelidir. Sorun çıkarsa süreler dolmadan hukuki destek alınmalıdır."],
+      ["Şekil, tutar, vade ve imzalar kontrol edilmeli","Keşidecinin ödeme gücü araştırılmalı","Vade ve süreler takvimle takip edilmeli"],
+      ["Beş dakikalık kontrol","Bir firma, yeni bir müşteriden vadeli çek ve senet alarak ürün satacak. Müşteriyi daha önce hiç tanımıyor.","Firma; müşterinin kimlik ve ticari bilgilerini, çek ve senedin şekil şartlarını, ciro silsilesini, tutar ve vade bilgilerini kontrol eder. Büyük tutar için bankadan teyit veya ek teminat ister, vadeleri takvime yazar. Şüpheli bir durumda satışı peşin veya teminatlı yapar.","Kıymetli evrak, ödeme tahsil edilene kadar riskli bir alacaktır; önceden kontrol bu riski azaltır."]),
+  ]},
+  ],
+  sorular:[
+    EGQ("Aşağıdakilerden hangisi bir kıymetli evrak örneğidir?",["Fatura","Çek","Banka dekontu","Kimlik kartı"],1,"Çek, hakkın senede bağlı olduğu kıymetli evraktır; fatura ve dekont ispat belgesidir."),
+    EGQ("Çek, bono ve poliçeye birlikte ne ad verilir?",["Kambiyo senetleri","Menkul kıymetler","Adi senetler","Banka kartları"],0,"Şekil şartlarını taşıyan çek, bono ve poliçe kambiyo senedi olarak adlandırılır."),
+    EGQ("Bono ile poliçe arasındaki temel fark hangisidir?",["Bono ödeme emri, poliçe ödeme vaadidir","İkisi aynı niteliktedir","Bono ödeme vaadi içerir, poliçe üçüncü kişiye ödeme emridir","Poliçede vade bulunmaz"],2,"Bonoda borçlu ödemeyi kendisi vaat eder; poliçede keşideci muhataba ödeme emri verir."),
+    EGQ("Senedin arkasına imza atılarak başka birine devredilmesine ne denir?",["Aval","Protesto","İbraz","Ciro"],3,"Ciro, senedin arkasına imza atılarak hakkın devridir."),
+    EGQ("Aval nedir?",["Senedin devri","Senedin iptali","Senet borcunun bir başkası tarafından garanti edilmesi","Tahsil komisyonu"],2,"Aval, senet borcunu garanti eden imzadır; avalist borçlu gibi sorumlu olur."),
+    EGQ("Çek hangi hesaba dayanılarak düzenlenir?",["Çek hesabı","Vadeli mevduat hesabı","Kredi kartı hesabı","Yatırım hesabı"],0,"Çek, bankadaki çek hesabına dayanılarak bankanın verdiği yaprakla düzenlenir."),
+    EGQ("Çizgili çek kime ödenebilir?",["Elinde bulunduran herkese nakit olarak","Yalnızca bir bankaya veya bankanın müşterisine","Yalnızca noterde","Yalnızca keşideciye"],1,"Çizgili çek yalnızca banka veya banka müşterisine ödenebilir."),
+    EGQ("“Hesaba geçirilecektir” ibaresi taşıyan çek nasıl ödenir?",["Peşin nakit olarak","Kapıda teslimle","Üçüncü kişiye ciroyla","Nakit değil, yalnızca hesaba aktarılarak"],3,"Bu ibare çekin nakit ödenmesini engeller; tutar yalnızca hesaba geçirilir."),
+    EGQ("Karşılıksız çekte temel sorun nedir?",["İbraz anında hesapta yeterli karşılık bulunmaması","Çekin eski olması","Çekin renginin farklı olması","Keşidecinin adresinin değişmesi"],0,"Karşılıksız çek, ibrazda hesapta yeterli karşılık olmayan çektir."),
+    EGQ("Aşağıdakilerden hangisi çek sahteciliğine işaret edebilir?",["Çekin yeni olması","Banka adının yazılı olması","Rakam ve yazıyla yazılan tutarın farklı olması veya kazıntı bulunması","Çekin imzalı olması"],2,"Tutar uyumsuzluğu ve kazıntı sahtecilik veya hata işaretidir."),
+    EGQ("Bonoda vade belirtilmemişse ne olur?",["Bono geçersizdir","Bono görüldüğünde ödenecek sayılır","Bono bir yıl sonra ödenir","Bono ödenmez"],1,"Vadesi yazılmayan bono görüldüğünde ödenecek sayılır."),
+    EGQ("Poliçede muhatap ne zaman asıl borçlu olur?",["Poliçe düzenlendiğinde","Lehtar imzaladığında","Keşideci istediğinde","Kabul imzası attığında"],3,"Muhatap poliçeyi kabul imzasıyla ödeme yükümlülüğü üstlenir."),
+    EGQ("Protesto nedir?",["Senedin ciro edilmesi","Ödenmemenin noterce resmen tespit edilmesi","Senedin iptali","Senedin yenilenmesi"],1,"Protesto, senedin ödenmediğinin noter aracılığıyla tespitidir."),
+    EGQ("Tahsile verme ile iskonto arasındaki fark hangisidir?",["Tahsilde vade beklenir, iskontoda vadeden önce nakit alınır","İkisi aynıdır","İskontoda hiç maliyet yoktur","Tahsilde senet iptal olur"],0,"İskonto erken nakit sağlar ve maliyeti vardır; tahsilde vade beklenir."),
+    EGQ("100.000 TL’lik senet, 73 gün, yıllık %36 oranla (gün bazı 365) iskonto edilirse iskonto bedeli yaklaşık kaç TL’dir?",["3.600 TL","5.400 TL","7.200 TL","36.000 TL"],2,"100.000 × 0,36 × 73 ÷ 365 = 7.200 TL."),
+    EGQ("Teminat amaçlı verilen senetle ilgili en doğru uygulama hangisidir?",["Borç bitince iade istememek","Teminat amacını yazılı belgelemek ve borç bitince senedi iade almak","Senedi boş bırakmak","Senedin kopyasını da saklamamak"],1,"Teminat amacı belgelenmeli ve borç bitince senet iade alınmalıdır."),
+    EGQ("Bir senedi ciro eden kişi senet ödenmezse ne olur?",["Sorumluluğu biter","Hiç başvurulmaz","Yalnızca keşideci sorumludur","Hamil ona da başvurabilir"],3,"Ciranta, senedin ödenmemesi riskine karşı sorumluluk üstlenir."),
+    EGQ("Aşağıdakilerden hangisi kıymetli evrak alırken yapılacak kontrollerdendir?",["Tutar, vade, imza ve ciro silsilesinin kontrolü","Senedin rengine bakmak","Yalnızca fiyata bakmak","Hiçbir şey kontrol etmemek"],0,"Şekil, tutar, vade, imza ve ciro silsilesi kontrol edilmelidir."),
+    EGQ("Çek karnesinin bir yaprağı kaybolursa ilk yapılması gereken nedir?",["Beklemek","Yeni karne istemek","Durumu derhal bankaya bildirmek","Yaprağı unutmak"],2,"Kayıp yaprak kötüye kullanılabileceğinden bankaya derhal bildirilmelidir."),
+    EGQ("Zorunlu şekil şartlarından biri eksik olan senet nasıl değerlendirilebilir?",["Daha güçlü olur","Adi senet gibi değerlendirilebilir","Otomatik olarak silinir","Banka kefalet verir"],1,"Şekil eksikliği, kambiyo senedi niteliğini zayıflatır; senet adi senet sayılabilir."),
+  ],
+},
+{
+  id:"teminat", ad:"Teminat ve ipotek", kisa:"Teminat", renk:"#818CF8", ikon:"🔐", seviye:"Temel → Orta",
+  aciklama:"Şahsi ve ayni teminat, rehin, ipotek, kefalet, KGF ve teminat yönetimi",
+  uniteler:[
+  { ad:"Teminatın temelleri", ozet:"Teminat türleri, değerleme ve teminat oranı", dersler:[
+    EGD("tm01","Teminat nedir, neden istenir?",4,[
+      "Teminat, bir borcun ödenmemesi riskine karşı alacaklıya sağlanan ek güvencedir. Banka veya alacaklı, borçlunun ödeme gücüne ek olarak ödenmeme halinde başvurabileceği bir kaynak ister.",
+      "Teminat, borçlunun yerine borcu ödemez; ancak borç ödenmediğinde alacaklının zararını azaltır. Teminatın değeri, borcun tutarını ve olası ek maliyetleri karşılayacak düzeyde olmalıdır.",
+      "Finansman verirken teminat istenmesi, maliyeti ve limit tutarını da etkileyebilir. Teminatı güçlü olan borçlu genellikle daha uygun koşullar alabilir; ancak teminat riski sıfırlamaz."],
+      ["Teminat, ödenmeme riskine karşı ek güvencedir","Teminat değeri borcu ve masrafları karşılamalıdır","Güçlü teminat koşulları iyileştirebilir ama riski sıfırlamaz"],
+      ["Teminat neden istenir?","Bir banka, 1.000.000 TL’lik işletme finansmanı talep eden firmadan taşınmaz teminatı istiyor. Firma yöneticisi bunu gereksiz buluyor.","Teminat, firmanın ödeme gücü zayıfladığında bankanın alacağını geri alabileceği bir yol sağlar. Teminat varsa banka daha yüksek limit verebilir veya şartları gevşetebilir. Yöneticinin, teminatın sağladığı finansman avantajını teminatın maliyetiyle (ipotek masrafları, mal üzerindeki kısıtlama) karşılaştırması gerekir.","Teminat, borç ödenmediğinde alacaklıya ikinci bir yol açar; karşılığında borçlu da bir yük üstlenir."]),
+    EGD("tm02","Şahsi ve ayni teminat",4,[
+      "Şahsi teminatlarda bir kişi borçtan sorumlu olmayı taahhüt eder; kefalet buna örnektir. Alacaklı, kefilin tüm malvarlığına başvurabilir; belirli bir mal üzerinde hak yoktur.",
+      "Ayni teminatlarda ise belirli bir mal borcun güvencesi olarak ayrılır. İpotek taşınmaz üzerinde, rehin ise taşınır mal veya hak üzerinde kurulur. Borç ödenmezse alacaklı o malın satışından alacağını tahsil eder.",
+      "Şahsi teminatın değeri kefilin ödeme gücüne bağlıdır ve zamanla değişebilir. Ayni teminatta ise malın değeri ve piyasa koşulları belirleyicidir. Hangi teminatın seçileceği borcun tutarına, vadesine ve tarafların tercihine bağlıdır."],
+      ["Şahsi teminat kişinin sorumluluğuna dayanır (ör. kefalet)","Ayni teminat belirli mal üzerinde hak doğurur (ipotek, rehin)","Her ikisinin değeri zamanla değişebilir"],
+      ["Kefil mi, ipotek mi?","Bir girişimci, banka kredisi için akrabasını kefil göstermeyi veya evini ipotek etmeyi düşünüyor.","Kefalette akrabasının tüm malvarlığı borcun güvencesi olur ve akrabası borçtan sorumlu hale gelir. İpotekte yalnızca ipotekli ev güvencedir; borç ödenmezse o ev satılabilir. Girişimci kendi riskini ve akrabasının riskini dikkate alarak karar vermeli, hangisi seçilirse seçilsin gerçekçi bir ödeme planı yapmalıdır.","Şahsi teminat kişiyi, ayni teminat malı bağlar; ikisinde de risk ve sorumluluk farklıdır."]),
+    EGD("tm03","Teminat değerleme ve teminat oranı",5,[
+      "Banka, teminatı piyasa değerinin tamamıyla değil, belirli bir oranıyla dikkate alır. Bu orana teminat oranı veya kredi/değer oranı denir. Değerleme, yetkili bir değerleme kuruluşunca yapılır.",
+      "Örneğin değeri 2.000.000 TL olan bir taşınmaza %70 oranında kredi verilirse en fazla 1.400.000 TL kullandırılabilir. Oran, teminatın değer kaybı ve satış maliyeti riskini karşılamak için kullanılır.",
+      "Teminat değeri düşerse banka ek teminat isteyebilir veya limiti düşürebilir. Borçlu açısından değerleme raporunu okumak ve değerin dayandığı varsayımları anlamak önemlidir."],
+      ["Banka teminatı değerinin belli bir oranıyla dikkate alır","Değerleme yetkili kuruluşça yapılır","Değer düşerse ek teminat istenebilir"],
+      ["Teminat oranı hesabı","Değeri 3.000.000 TL olan bir iş yeri için banka %60 teminat oranı uyguluyor. Firma 2.000.000 TL finansman talep ediyor.","Kullandırılabilecek azami tutar = 3.000.000 × 0,60 = 1.800.000 TL’dir. Talep edilen tutar bunu 200.000 TL aşar. Firma ya talebi düşürür ya da 200.000 TL’lik ek teminat (başka bir mal veya kefalet) gösterir.","Teminat oranı finansman tutarını teminat değerinin altında tutar; aşan kısım için ek teminat gerekir."]),
+  ]},
+  { ad:"Rehin ve ipotek", ozet:"Rehin, ipotek, derece, fek ve ekspertiz", dersler:[
+    EGD("tm04","Rehin: taşınır mal, hak ve ticari işletme",5,[
+      "Rehin, taşınır mal veya hak üzerinde kurulan ayni teminattır. Klasik rehinde mal alacaklıya teslim edilir; borç ödenmezse mal satılarak alacak tahsil edilir. Mevduat, hisse veya alacak gibi haklar üzerinde de rehin kurulabilir.",
+      "Ticari işletme rehni, işletmeye ait taşınırlar üzerinde malın teslimi gerekmeden kurulabilen bir rehin türüdür. Böylece işletme, makine ve stoklarını kullanmaya devam ederken teminat gösterebilir. Rehin, sicile kaydedilerek üçüncü kişilere karşı geçerli hale getirilir.",
+      "Bankacılıkta nakit blokajı, vadeli mevduat rehni ve hisse rehni sık görülür. Teminat olarak gösterilen varlığın değeri değişebiliyorsa banka, belirli oranlarda ek teminat veya teminat tamamlama talep edebilir."],
+      ["Rehin taşınır mal veya hak üzerinde kurulur","Ticari işletme rehninde mal teslim edilmez, sicile kaydedilir","Değeri değişen teminatta ek teminat istenebilir"],
+      ["Mevduat blokajı","Bir firma, 500.000 TL’lik vadeli mevduatını teminat göstererek bankadan işletme finansmanı kullanmak istiyor.","Mevduat üzerine rehin veya blokaj konur; firma o tutarı finansman borcu bitene kadar çekemez. Mevduat teminat olduğundan banka daha düşük riskle finansman sağlar ve koşullar genellikle daha uygun olabilir. Firma, blokajın hangi tarihte kalkacağını sözleşmeden doğrulamalıdır.","Rehinde teminat olan varlık bağlanır; sözleşmede blokajın kapsamı ve kalkış koşulları açıkça yazılmalıdır."]),
+    EGD("tm05","İpotek nedir?",5,[
+      "İpotek, taşınmaz üzerinde kurulan ve borç ödenmediğinde taşınmazın satılarak alacağın tahsil edilmesini sağlayan ayni teminattır. İpotek, resmî şekilde tapu müdürlüğünde tapu siciline kaydedilerek kurulur.",
+      "İpotekli taşınmazın mülkiyeti borçluda kalır; borçlu taşınmazı kullanmaya devam eder. Ancak taşınmaz satılsa bile ipotek yeni malik üzerinde de devam eder. Bu nedenle ipotekli taşınmaz alırken tapu kaydı mutlaka incelenmelidir.",
+      "Bankalar konut ve ticari finansmanda ipotek ister. Borç tamamen ödendiğinde ipotek, alacaklının onayıyla tapu kaydından kaldırılır; buna ipoteğin fekki denir."],
+      ["İpotek taşınmaz üzerinde ve tapuda kurulur","Mülkiyet borçluda kalır; ipotek taşınmazla birlikte devam eder","Borç bitince ipotek fek edilir"],
+      ["İpotekli ev almak","Burak, ipotekli bir daireyi satın almak istiyor. Satıcı, “borç ödenince kalkar, sorun yok” diyor.","Burak, tapu kaydında ipoteğin tutarını ve alacaklısını inceler. İpotek taşınmazla birlikte devam ettiğinden alacaklı, borç ödenmezse daireyi satışa çıkarabilir. Güvenli yol, borcun satıştan önce kapatılıp ipoteğin fekkedilmesi veya satış bedelinin bankaya ödenmesinin sözleşmeyle güvenceye alınmasıdır.","İpotekli taşınmaz alırken tapu kaydı incelenmeli, ipotek satıştan önce kaldırılmalıdır."]),
+    EGD("tm06","İpotek derecesi ve üst sınır ipoteği",5,[
+      "Aynı taşınmaz üzerinde birden fazla ipotek kurulabilir. Bunların sırasına derece denir. Birinci derece ipotek, satış gelirinden alacağını ilk alır; sonraki dereceler kalan tutardan paylarını alır.",
+      "Üst sınır ipoteği, belirli bir tutara kadar olmak üzere, ileride doğabilecek ve henüz belirli olmayan alacakları güvence altına alır. Ticari finansmanda ve limit sözleşmelerinde sık kullanılır; borcun kesin tutarı belli olmasa da ipoteğin üst sınırı bellidir.",
+      "İpotek sözleşmesinde hangi borçların güvence altına alındığı dikkatle okunmalıdır. Kapsam geniş yazılmışsa ilk borç kapansa bile ipotek başka borçlar için de devam edebilir."],
+      ["İpotek derecesi öncelik sırasını belirler","Üst sınır ipoteği ileride doğacak borçları da güvenceler","Sözleşmede kapsam ve tutar dikkatle okunmalıdır"],
+      ["Derecenin etkisi","Bir taşınmaz 2.000.000 TL’ye satılabiliyor. Birinci derece ipotek alacağı 1.500.000 TL, ikinci derece ipotek alacağı 800.000 TL.","Satış bedeli önce birinci dereceye gider: 1.500.000 TL. Kalan 500.000 TL ikinci dereceye ödenir; ikinci derece alacaklının 300.000 TL’si karşılanmaz (satış masrafları ihmal edilmiştir). Bu nedenle ikinci derece ipotek alan taraf, taşınmazın değerini ve öndeki ipotekleri dikkatle değerlendirmelidir.","İpotekte sıra önemlidir; satış bedeli önce üst dereceye gider."]),
+    EGD("tm07","İpoteğin paraya çevrilmesi ve fekki",4,[
+      "Borç ödenmediğinde alacaklı, ipotekli taşınmazın satışı için ipoteğin paraya çevrilmesi yoluyla takip başlatabilir. Taşınmaz icra yoluyla satılır; satış bedelinden önce masraflar, sonra alacaklılar derecelerine göre ödenir.",
+      "Satış bedeli borcu karşılamazsa kalan borç için borçlu sorumlu olmaya devam eder. Satış bedeli borcu aşarsa fazla kısım sonraki derece alacaklılara veya malike ödenir.",
+      "Borç tamamen ödendiğinde alacaklı, ipoteğin kaldırılması (fekki) için gerekli belgeyi verir; işlem tapu müdürlüğünde yapılır. Fek işlemi yapılmazsa tapu kaydındaki ipotek görünmeye devam eder; bu nedenle fekkin takibi gerekir."],
+      ["Ödenmeyen borçta taşınmaz icra yoluyla satılabilir","Satış bedeli borcu karşılamazsa kalan borç devam eder","Borç bitince fek işlemi takip edilmelidir"],
+      ["Fek işlemini unutmak","Hande, konut finansmanını bitirdi ama ipoteğin kaldırılması için tapuya gitmedi. Üç yıl sonra evini satmak istiyor.","Tapu kaydında ipotek görünmeye devam ettiği için alıcı satın almaktan çekinebilir veya satış gecikebilir. Hande, bankadan fek belgesini alarak tapu müdürlüğünde ipoteği kaldırtır. Finansman bitişinde fek işleminin hemen yapılması zaman ve stres kaybını önler.","Finansman bitince ipoteğin fekki ayrıca yapılmalıdır; tapu kaydı temiz tutulmalıdır."]),
+    EGD("tm08","Gayrimenkul değerleme ve ekspertiz",4,[
+      "Taşınmaz teminatı alınmadan önce banka, yetkili bir değerleme kuruluşuna ekspertiz raporu hazırlatır. Rapor taşınmazın konumunu, niteliğini, imar durumunu ve piyasa değerini içerir.",
+      "Ekspertiz değeri satış fiyatından farklı çıkabilir. Banka finansman tutarını ekspertiz değerine göre belirler; satış fiyatı ekspertiz değerinden yüksekse aradaki fark alıcı tarafından peşin karşılanır.",
+      "Rapor imar, iskân, kat mülkiyeti ve kullanım durumunu da gösterir. İskânsız veya imar sorunu olan taşınmaz teminat olarak kabul edilmeyebilir ya da düşük değerlenebilir."],
+      ["Ekspertiz yetkili kuruluşça hazırlanır","Finansman, ekspertiz değerine göre belirlenir","İmar ve iskân durumu teminat kabulünü etkiler"],
+      ["Ekspertiz farkı","Bir daire 4.000.000 TL’ye satılıyor, ekspertiz değeri ise 3.500.000 TL çıkıyor. Banka ekspertiz değerinin %80’ine kadar finansman veriyor.","Azami finansman = 3.500.000 × 0,80 = 2.800.000 TL. Alıcının karşılaması gereken peşinat = 4.000.000 − 2.800.000 = 1.200.000 TL’dir. Ekspertiz satış fiyatından düşük çıktığı için peşinat beklenenden yüksek olur; alıcı bunu önceden hesaplamalıdır.","Finansman satış fiyatına değil ekspertiz değerine göre hesaplanır; fark peşin ödenir."]),
+  ]},
+  { ad:"Kefalet ve KGF", ozet:"Kefalet, kefilin hak ve riskleri, Kredi Garanti Fonu", dersler:[
+    EGD("tm09","Kefalet",5,[
+      "Kefalet, kefilin asıl borçlunun borcunu ödememesi halinde alacaklıya karşı sorumluluk üstlendiği sözleşmedir. Kefaletin geçerli olması için yazılı yapılması, kefilin sorumlu olacağı azami tutarın ve kefalet tarihinin kefilin el yazısıyla belirtilmesi gerekir.",
+      "Evli kişilerin kefil olabilmesi için kural olarak eşin yazılı rızası gerekir; aksi halde kefalet geçersiz olabilir. Müteselsil kefalette alacaklı, asıl borçluya başvurmadan doğrudan kefile başvurabilir.",
+      "Kefalet, sözleşmede yazılı azami tutarla sınırlıdır. Kefil borcu öderse asıl borçluya rücu edebilir. Kefil olmadan önce borcun tutarı, vadesi, borçlunun ödeme gücü ve kefalet metni dikkatle okunmalıdır."],
+      ["Kefalet yazılı ve belirli şekil şartlarıyla yapılır","Evli kişide eş rızası kural olarak gerekir","Müteselsil kefile doğrudan başvurulabilir"],
+      ["Kefil olmadan önce","Emre, arkadaşının 400.000 TL’lik finansmanına müteselsil kefil olmayı düşünüyor. Banka, imza için şubeye çağırdı.","Emre kefalet metninde azami tutarı, tarihi ve müteselsil kefil ibaresini el yazısıyla yazar; evliyse eşinin yazılı rızası gerekir. Müteselsil kefalette banka, arkadaşına başvurmadan doğrudan Emre’ye gidebilir. Emre, bu riski üstlenmeden önce arkadaşının ödeme gücünü ve ödeme planını incelemelidir.","Kefalet ciddi bir sorumluluktur; imza öncesinde tutar, süre ve ödeme gücü değerlendirilmelidir."]),
+    EGD("tm10","Kefilin hakları ve riskleri",4,[
+      "Kefil, borcu ödediğinde ödediği tutar için asıl borçluya rücu edebilir. Ancak asıl borçlunun ödeme gücü zayıfsa bu hak pratikte tahsil edilemeyebilir. Bu nedenle kefil, ödemek zorunda kalma ihtimalini baştan hesaba katmalıdır.",
+      "Kefil, asıl borçlunun ödeme durumu hakkında bankadan bilgi isteyebilir. Borç ertelenir veya yapılandırılırsa kefilin sorumluluğunun sürüp sürmediği sözleşmedeki şartlara bağlıdır. Kefil, şartları imzalamadan önce okumalı ve soru sormalıdır.",
+      "Kefalet çoğu zaman uzun süreli bir yük getirir. Kefil olunan borç ödenmezse kefilin kendi finansmanına erişimi de olumsuz etkilenebilir."],
+      ["Kefil ödediği tutar için borçluya rücu edebilir","Borçlunun ödeme gücü zayıfsa rücu zor olabilir","Kefalet kefilin kredi geçmişini etkileyebilir"],
+      ["Kefilin ödeme yükü","Kemal, arkadaşının finansmanına kefil oldu. Arkadaşı iki taksiti ödemedi ve banka Kemal’i arıyor.","Banka, müteselsil kefil olan Kemal’e başvurabilir. Kemal borcu öderse arkadaşına rücu hakkı kazanır; ancak arkadaşı ödeyemiyorsa bu hakkı kullanmak zor olabilir. Kemal, ödeme yapmadan önce bankadan borç dökümünü ister ve arkadaşıyla ödeme planı yapmaya çalışır.","Kefil, borçlunun ödememe riskini üstlenir; erken iletişim ve borç dökümü almak önemlidir."]),
+    EGD("tm11","Kredi Garanti Fonu (KGF) kefaleti",4,[
+      "Kredi Garanti Fonu (KGF), teminatı yetersiz olan KOBİ’lere bankalardan finansman kullanabilmeleri için kefalet veren kurumdur. Fon, finansmanın belirli bir bölümüne kefil olur; böylece banka daha az teminatla finansman sağlayabilir.",
+      "KGF kefaleti borcu ortadan kaldırmaz. Borç ödenmezse KGF bankaya öder ve daha sonra borçludan tahsil eder. Kefalet için genellikle KGF’ye komisyon ödenir ve kefalet kapsamı programa göre değişir.",
+      "KGF desteği, firmaların teminat sorunu nedeniyle finansmana erişememesi durumunda önemli bir seçenektir. Başvuru banka üzerinden yapılır; koşullar ve kapsamlar zamanla değiştiğinden güncel bilgi bankadan teyit edilmelidir."],
+      ["KGF, teminatı yetersiz KOBİ’lere kefalet sağlar","Kefalet borcu ortadan kaldırmaz","Başvuru banka üzerinden yapılır"],
+      ["Teminatı az olan KOBİ","Bir üretici firma, makine yatırımı için finansman istiyor ancak yeterli ipoteği yok. Banka, KGF kefaletiyle finansman verebileceğini söylüyor.","Banka KGF’ye başvuru yapar; KGF kefalet verirse banka finansmanın bir kısmını bu kefaletle güvence altına alır. Firma, KGF komisyonunu da maliyet hesabına katar. Borç ödenmezse KGF bankaya öder, ancak firma borcundan kurtulmaz; KGF alacağını firmadan tahsil eder.","KGF kefaleti teminat eksiğini tamamlar, borcu silmez; komisyon maliyeti hesaba katılmalıdır."]),
+  ]},
+  { ad:"Uygulama", ozet:"Katılım bankasında teminat, teminat tamamlama ve kontrol listesi", dersler:[
+    EGD("tm12","Katılım bankalarında teminat",4,[
+      "Katılım bankalarında da finansman verilirken teminat alınır; ipotek, rehin, kefalet ve blokaj gibi yöntemler kullanılır. Finansmanın faizsiz bir yapıda (murabaha, icara gibi) sunulması teminat ihtiyacını ortadan kaldırmaz.",
+      "Murabaha ve kiralama (icara) gibi yapılarda ürün (ör. konut, taşıt) çoğu zaman teminat olarak da kullanılır. Örneğin konut finansmanında ipotek tesis edilir; taşıtta ise rehin şerhi konabilir.",
+      "Teminat yapısı ve şartları bankaya, ürüne ve müşterinin durumuna göre değişir. Sözleşmede teminat kapsamı, sigorta yükümlülüğü ve temerrüt halinde yapılacak işlemler yazılıdır."],
+      ["Katılım bankaları da teminat alır","Konutta ipotek, taşıtta rehin şerhi yaygındır","Teminat şartları sözleşmede yazılıdır"],
+      ["Konut finansmanı teminatı","Elif, katılım bankasından murabaha yoluyla konut finansmanı kullanıyor. Banka tapuda ipotek konulmasını ve konutun sigortalanmasını istiyor.","Konut finansmanında ipotek, konutun borca karşılık güvencesi olur; sigorta ise yangın ve deprem gibi risklere karşı değeri korur. Elif, sözleşmede ipotek tutarını, sigorta yükümlülüğünü ve temerrüt halinde yapılacak işlemleri okuyarak imzalar.","Faizsiz finansmanda da teminat alınır; sözleşmedeki teminat ve sigorta şartları okunmalıdır."]),
+    EGD("tm13","Teminat yönetimi ve teminat tamamlama",5,[
+      "Teminatın değeri zamanla değişebilir. Hisse, döviz veya altın gibi dalgalanan varlıklar teminat gösterildiyse banka, değer düştüğünde ek teminat (teminat tamamlama) isteyebilir.",
+      "Ek teminat verilmezse banka sözleşmeye göre teminatı satabilir veya limiti düşürebilir. Bu nedenle değeri dalgalanan varlıklarla teminat verirken güvenlik payı bırakılmalıdır.",
+      "Teminat yönetimi için teminat listesinin, değerlerinin ve bitiş tarihlerinin düzenli takip edilmesi gerekir. Borç kapanınca teminatın serbest bırakılması için yazılı onay alınmalıdır."],
+      ["Değeri düşen teminatta ek teminat istenebilir","Teminat tamamlanmazsa banka sözleşmedeki yetkileri kullanabilir","Borç bitince teminat serbest bırakma yazısı alınmalıdır"],
+      ["Teminat tamamlama","Bir firma, 800.000 TL’lik finansman için değeri 1.500.000 TL olan hisse portföyünü teminat gösterdi. Banka teminat oranını %60 uyguluyor. Portföy değeri 1.200.000 TL’ye düştü.","Portföy 1.500.000 TL iken kabul edilen değer 1.500.000 × 0,60 = 900.000 TL olup 800.000 TL finansmanı karşılar. Portföy 1.200.000 TL’ye düşünce kabul edilen değer 720.000 TL’ye iner ve 80.000 TL eksik kalır. Bu eksiği kapatmak için yaklaşık 80.000 ÷ 0,60 ≈ 133.333 TL’lik ek portföy değeri, 80.000 TL nakit teminat veya borcun bir kısmının kapatılması gerekir.","Teminat değeri düştüğünde eksik hızla kapatılmalıdır; baştan güvenlik payı bırakmak riski azaltır."]),
+    EGD("tm14","Teminat verirken ve alırken kontrol listesi",4,[
+      "Teminat verirken şunlar kontrol edilmelidir: teminatın hangi borçları kapsadığı, tutarı ve süresi, değer kaybı halinde ne olacağı, serbest bırakma şartları, sigorta ve masraf yükümlülükleri ile temerrüt halinde alacaklının yetkileri.",
+      "Teminat alırken ise teminatın gerçek değeri, üzerinde başka haklar (öndeki ipotekler, haciz, şerh) bulunup bulunmadığı, teminatın hukuken geçerli şekilde kurulduğu ve kolayca paraya çevrilebilirliği incelenmelidir.",
+      "Her iki taraf için de yazılı kayıt, güncel değerleme ve düzenli takip önemlidir. Karmaşık teminat yapılarında bir hukuk danışmanının görüşü alınmalıdır."],
+      ["Teminatın kapsamı, süresi ve değeri sorgulanmalı","Tapudaki şerh, haciz ve öndeki ipotekler kontrol edilmeli","Yazılı kayıt ve düzenli takip gerekir"],
+      ["Teminat kontrol listesi","Bir firma, ticari alacağına karşılık karşı taraftan bir taşınmaz üzerinde ipotek almayı düşünüyor.","Firma, tapu kaydında öndeki ipotekleri, haciz ve şerhleri, güncel ekspertiz değerini ve imar durumunu inceler. Öndeki ipotekler değerin büyük kısmını karşılıyorsa teminat zayıf demektir. Firma bu durumda ek teminat ister veya tutarı düşürür; kararı yazılı sözleşmeyle bağlar.","Teminat, ancak üzerindeki haklar ve gerçek değeri bilindiğinde güvence sayılır."]),
+  ]},
+  ],
+  sorular:[
+    EGQ("Teminatın temel amacı nedir?",["Maliyeti artırmak","Borcun ödenmemesi riskini azaltmak","Vergi ödemek","Hesap açmak"],1,"Teminat, borcun ödenmemesi riskine karşı alacaklıya ek güvence sağlar."),
+    EGQ("Kefalet hangi teminat türüne girer?",["Ayni teminat","İpotek","Şahsi teminat","Rehin"],2,"Kefalet, bir kişinin sorumluluğuna dayanan şahsi teminattır."),
+    EGQ("İpotek hangi tür mal üzerinde kurulur?",["Taşınır mal","Hisse senedi","Mevduat","Taşınmaz"],3,"İpotek taşınmaz üzerinde, rehin taşınır mal veya hak üzerinde kurulur."),
+    EGQ("İpotek nasıl kurulur?",["Yalnızca bankada imzayla","Tapu müdürlüğünde tapu siciline kayıtla","Belediyede","Sözlü anlaşmayla"],1,"İpotek, resmî şekilde tapu siciline kaydedilerek kurulur."),
+    EGQ("Değeri 2.000.000 TL olan taşınmaza %70 oranında kredi verilirse azami tutar nedir?",["1.200.000 TL","1.600.000 TL","1.400.000 TL","2.000.000 TL"],2,"2.000.000 × 0,70 = 1.400.000 TL."),
+    EGQ("Ticari işletme rehninin özelliği nedir?",["Yalnızca taşınmaz üzerinde kurulur","Kefil şartı vardır","Mal alacaklıya mutlaka teslim edilir","Mal teslim edilmeden, rehin sicile kayıtla kurulabilir"],3,"Ticari işletme rehninde mal işletmede kalır, rehin sicile kaydedilir."),
+    EGQ("İpotek derecesi neyi belirler?",["Faiz veya kâr payı oranını","Satış bedelinden alacaklıların ödeme sırasını","Vergi oranını","Ekspertiz değerini"],1,"Derece, satış bedelinden ödeme önceliğini belirler."),
+    EGQ("Satış bedeli 2.000.000 TL, birinci derece alacak 1.500.000 TL, ikinci derece alacak 800.000 TL ise ikinci dereceye (masraflar hariç) kaç TL ödenir?",["500.000 TL","300.000 TL","800.000 TL","0 TL"],0,"2.000.000 − 1.500.000 = 500.000 TL kalır ve ikinci dereceye gider."),
+    EGQ("Borç bittikten sonra tapudaki ipoteğin kaldırılmasına ne denir?",["Haciz","Rehin","Aval","Fek"],3,"İpoteğin tapu kaydından kaldırılmasına fek denir."),
+    EGQ("Üst sınır ipoteği neyi güvenceler?",["Kefilin borcunu","Yalnızca geçmiş borcu","Belirli bir tutara kadar, ileride doğabilecek alacakları","Vergi borcunu"],2,"Üst sınır ipoteği belirli tutara kadar ileride doğacak alacakları da güvenceler."),
+    EGQ("Ekspertiz değeri 3.500.000 TL, finansman oranı %80 ise azami finansman nedir?",["2.800.000 TL","3.000.000 TL","3.500.000 TL","2.100.000 TL"],0,"3.500.000 × 0,80 = 2.800.000 TL."),
+    EGQ("Kefalet sözleşmesinin geçerliliği için hangisi gereklidir?",["Sözlü anlaşma yeterlidir","Yazılı şekil ve azami tutarın kefilce el yazısıyla yazılması","Yalnızca tanık bulunması","Hiçbir şart gerekmez"],1,"Kefalet yazılı yapılır; azami tutar ve tarih kefilin el yazısıyla belirtilir."),
+    EGQ("Müteselsil kefil için hangisi doğrudur?",["Alacaklı önce asıl borçluya başvurmak zorundadır","Kefil hiçbir koşulda ödemez","Kefalet borcu siler","Alacaklı doğrudan kefile başvurabilir"],3,"Müteselsil kefalette alacaklı doğrudan kefile başvurabilir."),
+    EGQ("Kefil borcu öderse ne yapabilir?",["Asıl borçluya rücu edebilir","Hiçbir hakkı yoktur","Bankadan komisyon alır","Teminat iptal olur"],0,"Kefil, ödediği tutar için asıl borçluya rücu edebilir."),
+    EGQ("KGF kefaleti için hangisi doğrudur?",["Borcu ortadan kaldırır","Yalnızca bireysel finansmanda geçerlidir","Teminatı yetersiz KOBİ’lerin finansmanına kefalet sağlar","Hiçbir bedeli yoktur"],2,"KGF, teminatı yetersiz KOBİ’lere kefalet verir; borcu silmez ve komisyon alınabilir."),
+    EGQ("Teminat olarak gösterilen varlığın değeri düşerse banka ne isteyebilir?",["Hiçbir şey","Borcu siler","Faizi iade eder","Ek teminat (teminat tamamlama)"],3,"Değer düşünce banka teminat tamamlama isteyebilir."),
+    EGQ("800.000 TL finansman için teminat portföyü %60 oranla değerlendiriliyor. Portföy 1.200.000 TL’ye düşerse durum nedir?",["Kabul edilen değer 720.000 TL; 80.000 TL eksik","Kabul edilen değer 900.000 TL; sorun yok","Kabul edilen değer 1.200.000 TL; sorun yok","Kabul edilen değer 600.000 TL; 200.000 TL eksik"],0,"1.200.000 × 0,60 = 720.000 TL; 800.000 TL’nin 80.000 TL altındadır."),
+    EGQ("Katılım bankalarında konut finansmanında genellikle hangi teminat alınır?",["İpotek","Hamiline çek","Yalnızca sözlü güvence","Teminat alınmaz"],0,"Konut finansmanında genellikle tapuda ipotek tesis edilir."),
+    EGQ("Taşınmaz teminatı alınırken önceden hangisi incelenmelidir?",["Komşunun adı","Tapu kaydındaki ipotek, haciz ve şerhler","Pencere sayısı","Kapı rengi"],1,"Öndeki haklar teminatın gerçek değerini belirler."),
+    EGQ("Borç kapandığında hangisi yapılmalıdır?",["Hiçbir şey yapılmaz","Teminat yeniden verilir","Kefil değiştirilir","Teminat serbest bırakma yazısı veya fek belgesi alınır"],3,"Borç bitince teminatın serbest bırakıldığı yazılı olarak belgelenmelidir."),
+  ],
+},
+{
+  id:"muhasebe", ad:"Muhasebe ve finansal tablolar", kisa:"Muhasebe", renk:"#84CC16", ikon:"🧮", seviye:"Temel → Orta",
+  aciklama:"Temel muhasebe, bilanço, gelir tablosu, nakit akışı, oran analizi ve kredi ile hisse analizinde tablo okuma",
+  uniteler:[
+  { ad:"Temel muhasebe", ozet:"Muhasebenin amacı, bilanço denklemi, tahakkuk ve çift taraflı kayıt", dersler:[
+    EGD("mu01","Muhasebe nedir, neden tutulur?",4,[
+      "Muhasebe, bir işletmenin parasal olaylarını kaydeden, sınıflandıran ve özetleyen sistemdir. Amacı işletmenin mali durumunu ve faaliyet sonucunu doğru göstermek; yöneticilere, ortaklara, bankalara ve vergi idaresine güvenilir bilgi sağlamaktır.",
+      "Türkiye’de ticari işletmeler Vergi Usul Kanunu ve Türk Ticaret Kanunu kapsamında defter tutmak zorundadır. Büyük şirketler ayrıca TMS/TFRS gibi standartlara uygun finansal tablo hazırlar.",
+      "Muhasebe verisi; finansman kararı, yatırım analizi, vergi hesabı ve işletme yönetimi için temel kaynaktır. Verinin güvenilirliği, kayıtların düzenli ve belgeye dayalı tutulmasına bağlıdır."],
+      ["Muhasebe parasal olayları kaydedip özetler","Defter tutma yasal bir zorunluluktur","Karar vericiler muhasebe verisine dayanır"],
+      ["Belgesiz kayıt","Bir esnaf, tahsilatlarını not defterine yazıyor ancak fatura ve makbuz saklamıyor. Banka, finansman başvurusunda gelir belgesi istiyor.","Belgeye dayanmayan kayıtlar, bankanın gelir tespitinde güvenilir kabul edilmeyebilir. Esnaf; faturaları ve makbuzları düzenli saklamalı, muhasebecisiyle birlikte kayıtlarını düzene sokmalıdır. Böylece hem vergi uyumu hem finansman başvurusu güçlenir.","Muhasebe, belgeye dayalı ve düzenli kayıtla anlam kazanır; banka ve vergi idaresi buna bakar."]),
+    EGD("mu02","Varlık, borç ve özkaynak",4,[
+      "İşletmenin sahip olduğu kaynaklara varlık, başkalarına olan yükümlülüklerine borç (yabancı kaynak), ortaklara ait kısma özkaynak denir. Bilanço denklemi şöyledir: Varlıklar = Borçlar + Özkaynak.",
+      "Varlıklar nakit, alacak, stok, makine ve bina gibi kalemlerdir. Borçlar banka finansmanı, tedarikçi borcu ve vergi borcu gibi ödenecek tutarlardır. Özkaynak ise ortakların koyduğu sermaye ile biriken kârlardan oluşur.",
+      "Özkaynak = Varlıklar − Borçlar olarak da hesaplanır. Borç arttıkça özkaynağın payı azalır; özkaynak negatife düşerse işletme borçlarını varlıklarıyla karşılayamıyor demektir."],
+      ["Varlıklar = Borçlar + Özkaynak","Özkaynak = Varlıklar − Borçlar","Negatif özkaynak ciddi bir risk işaretidir"],
+      ["Bilanço denklemi","Bir firmanın varlıkları 5.000.000 TL, borçları 3.200.000 TL.","Özkaynak = 5.000.000 − 3.200.000 = 1.800.000 TL’dir. Borçların varlıklara oranı %64’tür (3.200.000 ÷ 5.000.000). Varlıklar 3.000.000 TL’ye düşerse özkaynak negatife geçer (3.000.000 − 3.200.000 = −200.000 TL).","Bilanço dengelidir; varlıklar borç ve özkaynakla finanse edilir."]),
+    EGD("mu03","Gelir, gider, kâr ve tahakkuk ilkesi",5,[
+      "Gelir, işletmenin faaliyetlerinden elde ettiği hasılattır; gider ise bu geliri elde etmek için katlanılan maliyetlerdir. Kâr, gelir ile giderin farkıdır. Gelir giderden büyükse kâr, küçükse zarar oluşur.",
+      "Tahakkuk ilkesine göre gelir ve gider, para girişi ve çıkışı olduğunda değil, ait olduğu dönemde kaydedilir. Örneğin Aralık ayında yapılan satış, tahsilat Ocak’ta olsa bile Aralık’ın gelirine yazılır.",
+      "Bu nedenle bir şirket kâr göstermesine rağmen nakit sıkıntısı yaşayabilir; çünkü satışların tahsilatı geç olabilir. Kâr ile nakit akışının birbirinden ayrı izlenmesi gerekir."],
+      ["Kâr = gelir − gider","Tahakkukta kayıt, ait olduğu döneme yapılır","Kâr ile nakit akışı aynı şey değildir"],
+      ["Kâr var, nakit yok","Bir firma Aralık ayında 1.000.000 TL’lik mal sattı; tahsilat Mart’ta yapılacak. Aralık giderleri 700.000 TL ve bunlar peşin ödendi.","Tahakkuka göre Aralık’ın geliri 1.000.000 TL, kârı 1.000.000 − 700.000 = 300.000 TL’dir. Ancak Aralık’ta kasaya giren para yoktur, 700.000 TL çıkmıştır. Firma kârlı görünür ama nakit sıkıntısı yaşayabilir; bu yüzden nakit akışı ayrıca izlenmelidir.","Kâr hesap dönemine ait bir sonuçtur; nakit ise tahsilatla gelir."]),
+    EGD("mu04","Çift taraflı kayıt ve hesap planı",5,[
+      "Muhasebede her işlem iki yönlü kaydedilir: bir hesap borçlandırılır, bir hesap alacaklandırılır ve toplamları eşit olur. Bu sisteme çift taraflı kayıt denir ve kayıt hatalarını yakalamayı kolaylaştırır.",
+      "Türkiye’de işletmeler Tekdüzen Hesap Planı’na göre hesap kodlarını kullanır. Örneğin 100 Kasa, 102 Bankalar, 120 Alıcılar, 320 Satıcılar, 600 Yurt İçi Satışlar gibi kodlar bu planda yer alır.",
+      "Bir mal peşin satıldığında Kasa veya Bankalar borçlanır, Satışlar alacaklanır. Mal vadeli satıldığında ise Alıcılar borçlanır. Mantık, kaynağın nereden geldiğini ve nereye gittiğini göstermektir."],
+      ["Her işlem borç ve alacak olarak iki yönlü kaydedilir","Tekdüzen Hesap Planı hesapları kodlarla gösterir","Borç ve alacak toplamları eşit olmalıdır"],
+      ["Bir satışın kaydı","Bir firma, 100.000 TL’lik malı peşin olarak banka hesabına tahsil ederek sattı (KDV ihmal edilmiştir).","Kayıt şöyledir: 102 Bankalar hesabı 100.000 TL borçlanır, 600 Yurt İçi Satışlar hesabı 100.000 TL alacaklanır. Borç ve alacak eşittir. Aynı satış vadeli olsaydı 102 yerine 120 Alıcılar borçlanırdı.","Her kaydın bir borç, bir alacak tarafı vardır; ikisi eşit olmalıdır."]),
+  ]},
+  { ad:"Finansal tablolar", ozet:"Bilanço, gelir tablosu, nakit akışı, dipnot ve denetim raporu", dersler:[
+    EGD("mu05","Bilanço nasıl okunur?",5,[
+      "Bilanço, işletmenin belirli bir tarihteki mali durumunu gösterir. Aktif (varlıklar) tarafında dönen varlıklar (nakit, alacak, stok) ve duran varlıklar (makine, bina) yer alır. Pasif tarafta kısa vadeli ve uzun vadeli yabancı kaynaklar ile özkaynaklar bulunur.",
+      "Dönen varlıklar bir yıl içinde nakde dönüşmesi beklenen kalemlerdir; kısa vadeli borçlar da bir yıl içinde ödenecek yükümlülüklerdir. İkisinin karşılaştırılması işletmenin kısa vadeli ödeme gücünü gösterir.",
+      "Bilançoda aktif toplamı pasif toplamına eşittir. Bilançoyu okurken borçların vadesine, alacak ve stokların büyüklüğüne ve özkaynak oranına bakılır. Tek bir döneme değil, birkaç dönemin karşılaştırmasına dayanmak gerekir."],
+      ["Bilanço, belirli tarihteki mali durumu gösterir","Dönen varlık ile kısa vadeli borç karşılaştırılır","Birkaç dönemin bilançosu birlikte okunmalıdır"],
+      ["Bilançoda kısa vadeli ödeme gücü","Bir firmanın dönen varlıkları 2.400.000 TL, kısa vadeli borçları 3.000.000 TL.","Kısa vadeli borçlar dönen varlıklardan 600.000 TL fazladır; firma önümüzdeki yıl içindeki borçlarını mevcut dönen varlıklarıyla karşılamakta zorlanabilir. Cari oran 2.400.000 ÷ 3.000.000 = 0,8’dir. Bu durum tek başına karar için yeterli değildir; alacak tahsil hızı ve yeni finansman imkânı da değerlendirilmelidir.","Dönen varlıklar kısa vadeli borçların altındaysa likidite baskısı olabilir."]),
+    EGD("mu06","Gelir tablosu nasıl okunur?",5,[
+      "Gelir tablosu, belirli bir dönemde işletmenin kazancını gösterir. Üst kısımda net satışlar, ardından satışların maliyeti ve brüt kâr yer alır. Brüt kârdan faaliyet giderleri düşülerek faaliyet kârı bulunur.",
+      "Faaliyet kârından finansman gelir ve giderleri, diğer gelir ve giderler ile vergi çıkarıldıktan sonra net dönem kârı bulunur. Her aşama farklı bir soruya cevap verir: ürün kâr getiriyor mu, işletme giderleriyle birlikte kârlı mı, borç yükü kârı eritiyor mu?",
+      "Gelir tablosu okunurken satış artışına, brüt kâr marjının seyrine ve finansman giderinin faaliyet kârına oranına bakılır. Tek seferlik gelir ve giderler kâr kalitesini etkileyebilir."],
+      ["Brüt kâr = net satışlar − satışların maliyeti","Faaliyet kârı = brüt kâr − faaliyet giderleri","Finansman gideri net kârı belirgin etkileyebilir"],
+      ["Kâr nerede eridi?","Bir firmanın net satışları 10.000.000 TL, satışların maliyeti 7.000.000 TL, faaliyet giderleri 1.500.000 TL, finansman gideri 1.200.000 TL (vergi ihmal edilmiştir).","Brüt kâr = 10.000.000 − 7.000.000 = 3.000.000 TL. Faaliyet kârı = 3.000.000 − 1.500.000 = 1.500.000 TL. Finansman gideri sonrası kâr = 1.500.000 − 1.200.000 = 300.000 TL. Faaliyet kârının büyük kısmı finansman giderine gitmiştir; borç yükü kârlılığı belirgin biçimde azaltır.","Kâr aşama aşama okunmalıdır; faaliyet kârı iyi olsa da finansman gideri net kârı eritebilir."]),
+    EGD("mu07","Nakit akış tablosu",4,[
+      "Nakit akış tablosu, bir dönemde işletmeye giren ve işletmeden çıkan nakdi üç başlıkta gösterir: işletme faaliyetlerinden, yatırım faaliyetlerinden ve finansman faaliyetlerinden nakit akışı.",
+      "İşletme faaliyetlerinden nakit akışı, işin kendisinin nakit üretip üretmediğini gösterir. Sürekli negatifse işletme faaliyetleri nakit yaratmıyor demektir; bu durumda şirket borçlanma veya sermaye artırımıyla ayakta kalıyor olabilir.",
+      "Yatırım faaliyetlerinden nakit çıkışı (makine, bina alımı) büyümeye işaret edebilir. Finansman faaliyetleri ise kredi alımı, geri ödeme ve temettü gibi kalemleri içerir. Kârlı görünen ama nakit yaratmayan şirket nakit akış tablosuyla fark edilir."],
+      ["Nakit akışı üç gruptur: işletme, yatırım, finansman","İşletme nakit akışı kalıcı olarak pozitif olmalıdır","Kâr ile nakit akışı birlikte okunmalıdır"],
+      ["Kârlı ama nakitsiz","Bir firma 2 milyon TL net kâr bildirdi; ancak işletme faaliyetlerinden nakit akışı −500.000 TL.","Kâr yazılsa bile işletme faaliyetleri nakit çıkışına yol açıyor. Bunun nedeni alacak ve stok artışı olabilir: satış yapılmış ama tahsil edilmemiştir. Firma bu açığı finansmanla kapatıyorsa borç yükü artar. Banka bu durumu nakit akışının zayıf olduğu şeklinde yorumlar.","Kâr tek başına yeterli değildir; işletme nakit akışının da pozitif olması gerekir."]),
+    EGD("mu08","Özkaynak değişimi, dipnotlar ve denetim raporu",4,[
+      "Özkaynak değişim tablosu, dönem içinde özkaynağın hangi nedenlerle arttığını veya azaldığını gösterir: dönem kârı, sermaye artırımı, temettü ödemesi ve diğer kalemler.",
+      "Dipnotlar, finansal tablolardaki rakamların nasıl oluştuğunu açıklar: muhasebe politikaları, borçların vade yapısı, şarta bağlı yükümlülükler (dava, garanti) ve ilişkili taraf işlemleri. Tablodaki rakamı anlamak için dipnotların okunması gerekir.",
+      "Bağımsız denetim raporu, tabloların doğru ve makul sunulup sunulmadığını denetçinin görüşüyle belirtir. Görüş “olumlu” ise tablolar önemli açıdan doğru sunulmuştur; “şartlı”, “olumsuz” veya “görüş bildirmekten kaçınma” ise dikkatle incelenmesi gereken bir uyarıdır."],
+      ["Özkaynak değişim tablosu özkaynağın nedenlerini gösterir","Dipnotlar rakamların nasıl oluştuğunu açıklar","Denetim raporunun görüş türü önem taşır"],
+      ["Denetim görüşü","Bir şirketin yıllık raporunda denetçi “şartlı görüş” bildirmiş ve gerekçede bir alacak kaleminin değerinin doğrulanamadığını belirtmiş.","Şartlı görüş, tabloların büyük bölümünün doğru olduğunu ancak belirtilen konuda çekince bulunduğunu gösterir. Alacak kaleminin tutarı büyükse tabloların güvenilirliği etkilenir. Okuyucu, dipnotlarda bu kalemin ayrıntısını inceler ve kararını buna göre ayarlar.","Denetim görüşü ve dipnotlar, rakamların güvenilirliğini değerlendirmede ilk bakılacak yerlerdir."]),
+  ]},
+  { ad:"Oran analizi", ozet:"Likidite, borçluluk, kârlılık ve faaliyet verimliliği oranları", dersler:[
+    EGD("mu09","Likidite oranları",5,[
+      "Likidite oranları, işletmenin kısa vadeli borçlarını ödeme gücünü ölçer. Cari oran = Dönen varlıklar ÷ Kısa vadeli borçlar formülüyle hesaplanır. Genel olarak 1’in üzerinde olması beklenir; ancak uygun düzey sektöre göre değişir.",
+      "Asit-test (likidite) oranı stokları dışarıda bırakır: (Dönen varlıklar − Stoklar) ÷ Kısa vadeli borçlar. Stoklar kolay nakde çevrilemeyebileceğinden bu oran daha temkinli bir ölçüdür. Nakit oranı ise yalnızca nakit ve benzerlerini dikkate alır.",
+      "Likidite oranı çok yüksekse atıl kaynak olabilir; düşükse ödeme güçlüğü riski vardır. Oranlar tek başına değil, aynı sektördeki firmalarla ve firmanın kendi geçmişiyle karşılaştırılarak yorumlanmalıdır."],
+      ["Cari oran = dönen varlıklar ÷ kısa vadeli borçlar","Asit-test oranı stokları dışarıda bırakır","Oranlar sektör ve geçmişle karşılaştırılmalıdır"],
+      ["Cari oran ve asit-test","Bir firmanın dönen varlıkları 3.000.000 TL, bunun 1.200.000 TL’si stok; kısa vadeli borçları 2.000.000 TL.","Cari oran = 3.000.000 ÷ 2.000.000 = 1,5. Asit-test = (3.000.000 − 1.200.000) ÷ 2.000.000 = 0,9. Cari oran rahat görünse de asit-test 1’in altındadır; stoklar hızlı satılamazsa kısa vadeli borçlar zorlayabilir. Firmanın stok devir hızı ayrıca incelenmelidir.","Stok payı yüksekse cari oran yanıltıcı olabilir; asit-test daha temkinli bir resim verir."]),
+    EGD("mu10","Borçluluk ve kaldıraç oranları",5,[
+      "Borçluluk oranları, işletmenin ne kadar borçla finanse edildiğini gösterir. Toplam borç ÷ toplam varlık oranı varlıkların ne kadarının borçla finanse edildiğini, borç ÷ özkaynak oranı ise borcun özkaynağa göre büyüklüğünü ölçer.",
+      "Finansal kaldıraç yüksekse kâr arttığında özkaynak getirisi büyür; ancak kâr düştüğünde faiz ve borç ödemesi yükü işletmeyi zorlar. Faiz karşılama oranı (faaliyet kârı ÷ finansman gideri), borç yükünün kârla ne kadar karşılandığını gösterir.",
+      "Borç oranı sektöre göre değişir; sermaye yoğun sektörlerde yüksek olması normaldir. Kısa vadeli borcun payı yüksekse yeniden finansman riski artar. Oranlar birkaç dönem boyunca izlenmelidir."],
+      ["Borç/varlık ve borç/özkaynak borçluluğu ölçer","Faiz karşılama oranı borç yükünü kârla karşılaştırır","Kısa vadeli borç payı yüksekse yeniden finansman riski artar"],
+      ["Borç yükü","Bir firmanın toplam varlıkları 8.000.000 TL, toplam borcu 6.000.000 TL, özkaynağı 2.000.000 TL; faaliyet kârı 900.000 TL, finansman gideri 600.000 TL.","Borç/varlık = 6.000.000 ÷ 8.000.000 = %75. Borç/özkaynak = 6.000.000 ÷ 2.000.000 = 3. Faiz karşılama oranı = 900.000 ÷ 600.000 = 1,5. Oran 1’e yakın olduğundan küçük bir kâr düşüşü borç yükünün karşılanmasını zorlaştırabilir. Banka bu firmaya ek teminat veya daha düşük limit önerebilir.","Yüksek borçluluk ve düşük faiz karşılama oranı birlikte görülürse risk artar."]),
+    EGD("mu11","Kârlılık oranları",5,[
+      "Kârlılık oranları, işletmenin kazanç gücünü ölçer. Brüt kâr marjı = Brüt kâr ÷ Net satışlar; faaliyet kâr marjı = Faaliyet kârı ÷ Net satışlar; net kâr marjı = Net kâr ÷ Net satışlar şeklinde hesaplanır.",
+      "Aktif kârlılığı (ROA) = Net kâr ÷ Toplam varlıklar; özkaynak kârlılığı (ROE) = Net kâr ÷ Özkaynak formülüyle bulunur. ROA varlıkların ne kadar verimli kullanıldığını, ROE ise ortakların sermayesine kazandırılan getiriyi gösterir.",
+      "Yüksek ROE, borç ağırlıklı finansmandan da kaynaklanabilir; bu nedenle ROE tek başına değil, borçluluk oranlarıyla birlikte okunmalıdır. Marjlar sektöre göre farklılaşır ve zaman içindeki seyri önemlidir."],
+      ["Marjlar satışlardan kalan kârı gösterir","ROA varlık verimliliğini, ROE özkaynak getirisini ölçer","Yüksek ROE borçluluğun sonucu olabilir"],
+      ["ROA ve ROE","Bir firmanın net kârı 600.000 TL, net satışları 6.000.000 TL, toplam varlıkları 5.000.000 TL, özkaynağı 1.500.000 TL.","Net kâr marjı = 600.000 ÷ 6.000.000 = %10. ROA = 600.000 ÷ 5.000.000 = %12. ROE = 600.000 ÷ 1.500.000 = %40. ROE’nin ROA’dan çok yüksek olması, firmanın büyük ölçüde borçla finanse edildiğini gösterir. Bu nedenle %40’lık ROE tek başına olumlu bir işaret sayılmamalıdır.","Yüksek ROE, borçluluk ile birlikte değerlendirilmelidir."]),
+    EGD("mu12","Faaliyet verimliliği: alacak, stok ve nakit döngüsü",5,[
+      "Alacak devir hızı = Net satışlar ÷ Ortalama ticari alacaklar; alacak tahsil süresi ise 365 ÷ alacak devir hızıdır. Süre uzadıkça tahsilat gecikir ve nakit ihtiyacı artar.",
+      "Stok devir hızı = Satışların maliyeti ÷ Ortalama stok; stokta kalma süresi 365 ÷ stok devir hızıdır. Yüksek stok süresi, satılamayan mal ve nakdin bağlanması anlamına gelebilir. Borç ödeme süresi ise tedarikçilere ortalama kaç günde ödeme yapıldığını gösterir.",
+      "Nakit döngüsü = Stokta kalma süresi + Alacak tahsil süresi − Borç ödeme süresi. Döngü uzadıkça işletme sermayesi ihtiyacı büyür; bu ihtiyaç çoğunlukla kısa vadeli finansmanla karşılanır."],
+      ["Alacak tahsil süresi tahsilat hızını gösterir","Stok süresi nakdin ne kadar bağlı kaldığını gösterir","Nakit döngüsü uzadıkça finansman ihtiyacı artar"],
+      ["Nakit döngüsü hesabı","Bir firmada stokta kalma süresi 60 gün, alacak tahsil süresi 75 gün, borç ödeme süresi 45 gün.","Nakit döngüsü = 60 + 75 − 45 = 90 gündür. Firma, mal alımından tahsilata kadar 90 gün boyunca işletme sermayesini finanse etmek zorundadır. Tahsil süresi 15 gün kısaltılırsa döngü 75 güne iner ve finansman ihtiyacı azalır.","Alacak ve stok süresi kısaldıkça, borç ödeme süresi uzadıkça nakit döngüsü kısalır."]),
+  ]},
+  { ad:"Uygulama", ozet:"Kredi analizi, hisse analizi ve tablo okuma kontrol listesi", dersler:[
+    EGD("mu13","Bankanın finansman analizinde finansal tablo",5,[
+      "Banka, finansman başvurusunda firmanın bilanço, gelir tablosu ve nakit akışını inceler. Ana soru şudur: firma borcu geri ödemek için yeterli nakit yaratıyor mu? Bu nedenle faaliyet kârı, işletme nakit akışı ve borç servisi (anapara + faiz veya kâr payı) karşılaştırılır.",
+      "Bankanın baktığı temel göstergeler şunlardır: likidite oranları, borçluluk, faiz karşılama, kârlılık, nakit döngüsü ve özkaynak yeterliliği. Ayrıca sektörel risk, yönetimin deneyimi ve teminat da değerlendirmeye girer.",
+      "Başvuru sahibi açısından hazırlıklı olmak için tabloların güncel ve tutarlı olması, vergi beyannameleri ile uyumlu bulunması ve finansal oranların önceden hesaplanması yararlıdır. Katılım bankaları da aynı analizi yapar; fark, finansmanın faizsiz bir yapıda sunulmasıdır."],
+      ["Bankanın temel sorusu geri ödeme gücüdür","Nakit akışı, borç servisi ve teminat birlikte değerlendirilir","Tablolar güncel ve beyannamelerle uyumlu olmalıdır"],
+      ["Borç servisi karşılama","Bir firma yeni bir finansmana başvuruyor. Bu finansmanın yıllık anapara ve kâr payı/faiz ödemesi toplam 600.000 TL; firmanın yıllık işletme nakit akışı 900.000 TL (mevcut borç ödemeleri hariç).","Borç servisi karşılama = 900.000 ÷ 600.000 = 1,5’tir. Firmanın nakit akışı yeni finansmanın ödemesini 1,5 kez karşılıyor; banka genellikle 1’in üzerinde, çoğu zaman biraz daha rahat bir marj arar. Mevcut borçların ödemesi de varsa toplam borç servisi artar ve oran düşer; hesap tüm ödemelerle yapılmalıdır.","Finansman nakit akışıyla geri ödenir; borç servisi karşılama oranı bankanın temel göstergelerinden biridir."]),
+    EGD("mu14","Hisse analizinde finansal tablo okuma",5,[
+      "Hisse senedi yatırımcısı finansal tabloyu şirketin kâr gücünü, büyümesini ve borç yükünü anlamak için okur. Gelir tablosundaki satış ve kâr trendi, bilançodaki borç yapısı ve nakit akışı ana başlıklardır.",
+      "Hisse başına kâr (HBK), net kârın hisse sayısına bölünmesiyle bulunur. Fiyat/kazanç (F/K) oranı hisse fiyatının HBK’ya oranıdır; PD/DD ise piyasa değerinin defter değerine oranıdır. Bu oranlar tek başına değil, sektör ve şirketin büyümesiyle birlikte yorumlanır.",
+      "Dikkat edilecek uyarı işaretleri: kârın nakit akışıyla uyumsuz olması, alacak ve stokların satıştan hızlı artması, sürekli finansman gideri baskısı, denetim görüşünde çekince ve tek seferlik gelirlerle şişmiş kâr. Katılım endeksi hisselerinde uygunluk için borç ve faiz geliri oranları ayrıca izlenir."],
+      ["HBK, net kârın hisse sayısına bölünmesidir","F/K ve PD/DD sektörle birlikte yorumlanır","Kâr ile nakit uyumsuzluğu bir uyarı işaretidir"],
+      ["Kâr kalitesi","Bir şirketin net kârı bir yılda %50 artmış; ancak işletme nakit akışı düşmüş ve alacaklar satıştan daha hızlı büyümüş.","Kâr artışı satış tahsilatına dönüşmüyor olabilir; alacaklar büyüdüğü için kâr kâğıt üzerinde kalmış olabilir. Yatırımcı alacak tahsil süresini, nakit akışını ve dipnotlardaki alacak ayrıntısını inceler. Kâr kalitesi zayıfsa yatırım kararı temkinli verilmelidir.","Net kâr artışı nakit akışı ve alacak yapısıyla desteklenmiyorsa kâr kalitesi sorgulanmalıdır."]),
+    EGD("mu15","Finansal tablo okuma kontrol listesi",4,[
+      "Finansal tablo okumak için pratik bir sıra izlenebilir: önce denetim görüşüne ve dipnotlara bakılır; sonra bilançoda likidite ve borç yapısı, gelir tablosunda satış ve kâr seyri, nakit akış tablosunda işletme nakit akışı incelenir.",
+      "Ardından temel oranlar (cari, asit-test, borç/özkaynak, faiz karşılama, marjlar, ROE) hesaplanır ve bir önceki dönemle ve sektör ortalamasıyla karşılaştırılır. Değişimin nedeni dipnotlardan ve yönetim açıklamalarından anlaşılmaya çalışılır.",
+      "Karar tek bir orana dayandırılmaz. Birkaç dönemin trendine bakılır, tek seferlik kalemler ayrıştırılır ve gerekirse bir muhasebeci veya finansal analist ile görüşülür."],
+      ["Önce denetim görüşü ve dipnotlar okunmalı","Oranlar önceki dönem ve sektörle karşılaştırılmalı","Karar birden çok göstergeye dayandırılmalı"],
+      ["Dört adımlı okuma","Bir yatırımcı, ilgilendiği şirketin yıllık finansal tablolarını ilk kez okuyacak.","Dört adım izlenir: (1) denetim görüşü ve dipnotlar, (2) bilançoda likidite ve borç yapısı, (3) gelir tablosunda satış ve kâr seyri, (4) nakit akışında işletme nakit akışı. Sonra oranlar önceki dönem ve sektörle karşılaştırılır. Çelişen göstergeler varsa karar ertelenir veya ek bilgi aranır.","Tablo okuma sıralı bir iştir; tek orana bakılarak karar verilmez."]),
+  ]},
+  ],
+  sorular:[
+    EGQ("Bilanço denklemi hangisidir?",["Varlıklar = Borçlar + Özkaynak","Varlıklar = Gelir − Gider","Özkaynak = Borçlar + Gelir","Kâr = Varlıklar − Gelir"],0,"Varlıklar, borç ve özkaynakla finanse edilir: Varlıklar = Borçlar + Özkaynak."),
+    EGQ("Varlıkları 5.000.000 TL, borçları 3.200.000 TL olan firmanın özkaynağı nedir?",["2.200.000 TL","1.800.000 TL","3.200.000 TL","8.200.000 TL"],1,"5.000.000 − 3.200.000 = 1.800.000 TL."),
+    EGQ("Tahakkuk ilkesine göre gelir ne zaman kaydedilir?",["Yalnızca para tahsil edildiğinde","Yıl sonunda","Fatura ödenince","Ait olduğu dönemde, tahsilattan bağımsız olarak"],3,"Tahakkuk ilkesinde gelir ve gider ait olduğu döneme yazılır."),
+    EGQ("Muhasebede çift taraflı kayıt neyi ifade eder?",["Her işlemin iki hesabı borç ve alacak olarak etkilemesini","Her işlemin iki kez yazılmasını","İki muhasebecinin kayıt tutmasını","Aynı işlemin iki dönemde kaydedilmesini"],0,"Her işlemde bir hesap borçlanır, bir hesap alacaklanır ve toplamlar eşit olur."),
+    EGQ("Tekdüzen Hesap Planı’nda 102 kodlu hesap hangisidir?",["Kasa","Bankalar","Alıcılar","Satıcılar"],1,"100 Kasa, 102 Bankalar, 120 Alıcılar, 320 Satıcılar."),
+    EGQ("Brüt kâr nasıl hesaplanır?",["Net satışlar + satışların maliyeti","Net satışlar − faaliyet giderleri","Net satışlar − satışların maliyeti","Net kâr − vergi"],2,"Brüt kâr = net satışlar − satışların maliyeti."),
+    EGQ("Net satışlar 10.000.000 TL, satışların maliyeti 7.000.000 TL, faaliyet giderleri 1.500.000 TL ise faaliyet kârı nedir?",["3.000.000 TL","1.500.000 TL","1.200.000 TL","8.500.000 TL"],1,"Brüt kâr 3.000.000 TL; faaliyet giderleri düşülünce 1.500.000 TL kalır."),
+    EGQ("Cari oran nasıl hesaplanır?",["Dönen varlıklar ÷ kısa vadeli borçlar","Duran varlıklar ÷ özkaynak","Net kâr ÷ varlıklar","Borç ÷ özkaynak"],0,"Cari oran, dönen varlıkların kısa vadeli borçlara oranıdır."),
+    EGQ("Dönen varlıklar 3.000.000 TL (stok 1.200.000 TL), kısa vadeli borç 2.000.000 TL ise asit-test oranı nedir?",["1,5","0,6","2,4","0,9"],3,"(3.000.000 − 1.200.000) ÷ 2.000.000 = 0,9."),
+    EGQ("Asit-test oranında hangi kalem dışarıda bırakılır?",["Nakit","Alacaklar","Stoklar","Banka hesapları"],2,"Stoklar kolay nakde çevrilemeyebileceğinden hesaba katılmaz."),
+    EGQ("Toplam varlıkları 8.000.000 TL, toplam borcu 6.000.000 TL olan firmada borç/varlık oranı nedir?",["%25","%60","%75","%133"],2,"6.000.000 ÷ 8.000.000 = %75."),
+    EGQ("Faiz karşılama oranı nasıl hesaplanır?",["Faaliyet kârı ÷ finansman gideri","Net kâr ÷ özkaynak","Satış ÷ borç","Stok ÷ satış"],0,"Faiz karşılama oranı faaliyet kârının finansman giderini kaç kez karşıladığını gösterir."),
+    EGQ("Net kâr 600.000 TL, özkaynak 1.500.000 TL ise ROE nedir?",["%10","%25","%40","%60"],2,"600.000 ÷ 1.500.000 = %40."),
+    EGQ("ROE çok yüksek, ROA ise düşükse ne anlaşılabilir?",["Firma borçsuzdur","Firma büyük ölçüde borçla finanse edilmiştir","Firma zarar etmektedir","Firma stok tutmamaktadır"],1,"ROE ile ROA arasındaki büyük fark yüksek borçluluğa işaret eder."),
+    EGQ("Nakit döngüsü nasıl hesaplanır?",["Alacak süresi + borç ödeme süresi","Stok süresi − alacak süresi","Stok süresi + alacak süresi − borç ödeme süresi","Satış ÷ stok"],2,"Nakit döngüsü = stok süresi + alacak tahsil süresi − borç ödeme süresi."),
+    EGQ("Stok 60 gün, alacak 75 gün, borç ödeme 45 gün ise nakit döngüsü kaç gündür?",["30","90","120","180"],1,"60 + 75 − 45 = 90 gün."),
+    EGQ("İşletme faaliyetlerinden nakit akışı sürekli negatifse ne anlaşılabilir?",["İşin kendisi yeterli nakit yaratmıyor olabilir","Firma çok kârlıdır","Firma borçsuzdur","Firma vergi ödemiyordur"],0,"Sürekli negatif işletme nakit akışı, işin nakit üretmediğini gösterebilir."),
+    EGQ("Denetim raporunda ‘şartlı görüş’ ne anlama gelir?",["Tablolar kusursuzdur","Şirket kapanmıştır","Denetim yapılmamıştır","Genel olarak doğru sunum vardır ancak belirli bir konuda çekince bulunur"],3,"Şartlı görüş, belirli bir konuda çekince bulunduğunu gösterir."),
+    EGQ("Yıllık işletme nakit akışı 900.000 TL, yeni finansmanın yıllık ödemesi 600.000 TL ise borç servisi karşılama oranı nedir?",["0,67","2","1,5","6"],2,"900.000 ÷ 600.000 = 1,5."),
+    EGQ("Hisse analizinde hangisi bir uyarı işaretidir?",["Kârın nakit akışıyla uyumlu olması","Net kâr artarken işletme nakit akışının düşmesi ve alacakların hızla büyümesi","Borcun azalması","Denetim görüşünün olumlu olması"],1,"Kâr artışı nakit akışıyla desteklenmiyorsa kâr kalitesi sorgulanmalıdır."),
   ],
 },
 ];
@@ -2939,9 +3306,9 @@ function Egitim({kimlik, nav}:{kimlik:any; nav:(e:string)=>void}){
 
   const listeyeKatil = async () => {
     const ad = takmaAdGiris.trim();
-    if(!uid){ setLiderHata("Liderlik tablosuna katılmak için giriş yapmalısın."); return; }
-    if(!egitimTakmaAdGecerliMi(ad)){ setLiderHata("Takma ad 2-20 karakter olmalı; harf, rakam, boşluk, nokta, tire veya alt çizgi kullanabilirsin."); return; }
-    if(toplamPuan<=0){ setLiderHata("Listeye katılmak için önce bir sınav çöz."); return; }
+    if(!uid){ setLiderHata("Liderlik tablosuna katılmak için giriş yapılmalıdır."); return; }
+    if(!egitimTakmaAdGecerliMi(ad)){ setLiderHata("Takma ad 2-20 karakter olmalı; harf, rakam, boşluk, nokta, tire veya alt çizgi kullanılabilir."); return; }
+    if(toplamPuan<=0){ setLiderHata("Listeye katılmak için önce bir sınav çözülmelidir."); return; }
     setLiderHata("");
     const ok = await egitimLiderlikYaz(uid, ad, toplamPuan);
     if(!ok){ setLiderHata("Liderlik tablosuna şu an kaydedilemedi. Biraz sonra tekrar dene."); return; }
@@ -2968,7 +3335,7 @@ function Egitim({kimlik, nav}:{kimlik:any; nav:(e:string)=>void}){
   const katilKarti = () => (
     <div style={kart}>
       <p style={{margin:"0 0 4px",fontSize:14,fontWeight:700,color:C.label}}>Liderlik tablosuna katıl</p>
-      <p style={{margin:"0 0 10px",fontSize:12,lineHeight:1.5,color:C.sub}}>Sıralamada yalnızca seçtiğin takma ad ve toplam puanın görünür. Gerçek adın ve e-postan paylaşılmaz. İstediğin zaman listeden çıkabilirsin.</p>
+      <p style={{margin:"0 0 10px",fontSize:12,lineHeight:1.5,color:C.sub}}>Sıralamada yalnızca seçilen takma ad ve toplam puan görünür. Gerçek ad ve e-posta paylaşılmaz. İstediğiniz zaman listeden çıkabilirsiniz.</p>
       <input value={takmaAdGiris} onChange={e=>{ setTakmaAdGiris(e.target.value); setLiderHata(""); }} placeholder="Takma ad" maxLength={20}
         style={{width:"100%",boxSizing:"border-box",padding:"10px 12px",borderRadius:10,border:`1px solid ${C.border}`,background:"transparent",color:C.label,fontSize:14,fontFamily:"inherit",marginBottom:8}}/>
       {liderHata && <p style={{margin:"0 0 8px",fontSize:12,color:C.red}}>{liderHata}</p>}
@@ -3022,7 +3389,7 @@ function Egitim({kimlik, nav}:{kimlik:any; nav:(e:string)=>void}){
                 <p style={{margin:"2px 0 4px",fontSize:12,lineHeight:1.4,color:C.sub}}>{m.aciklama}</p>
                 <p style={{margin:0,fontSize:11,color:C.sub2}}>
                   {m.uniteler.length} ünite · {b}/{m.dersler.length} ders
-                  {p ? ` · Sınav ${p.puan}${p.puan>=EGITIM_GECME_NOTU?" ✓":""}` : (bitti ? " · Sınava hazırsın" : "")}
+                  {p ? ` · Sınav ${p.puan}${p.puan>=EGITIM_GECME_NOTU?" ✓":""}` : (bitti ? " · Sınava hazırsınız" : "")}
                 </p>
               </div>
               <span style={{color:C.sub,fontSize:18}}>›</span>
@@ -3103,7 +3470,7 @@ function Egitim({kimlik, nav}:{kimlik:any; nav:(e:string)=>void}){
           <p style={{margin:"0 0 10px",fontSize:12,lineHeight:1.5,color:C.sub}}>
             {EGITIM_SORU_SAYISI} soru ({m.sorular.length} soruluk bankadan rastgele) · {Math.round(EGITIM_SINAV_SN/60)} dakika · geçme notu {EGITIM_GECME_NOTU}.
             {biti.length<m.dersler.length ? " Önce dersleri tamamlaman önerilir." : ""}
-            {p ? ` En iyi puanın: ${p.puan}.` : ""}
+            {p ? ` En iyi puanınız: ${p.puan}.` : ""}
           </p>
           {uyari && <p style={{margin:"0 0 8px",fontSize:12,color:C.red}}>{uyari}</p>}
           <button className="eg-btn" onClick={()=>sinavaBasla(m)} style={{width:"100%",padding:"12px 14px",borderRadius:12,border:"none",background:C.blue,color:"#fff",fontSize:14,fontWeight:700,fontFamily:"inherit",cursor:"pointer"}}>{p?"Sınavı tekrar çöz":"Sınava başla"}</button>
@@ -3130,7 +3497,7 @@ function Egitim({kimlik, nav}:{kimlik:any; nav:(e:string)=>void}){
       kaydet({ ...ilerlemeRef.current, dersler, seri:egitimSeriGuncelle(ilerlemeRef.current.seri), son: sonrakiHedef ? {m:m.id, d:sonrakiHedef.id} : null });
       if(sonraki){ dersAc(m.id, sonraki.id, "ileri"); return; }
       const tum = (dersler[m.id]||[]).length===m.dersler.length;
-      setBilgi(tum ? "Tüm dersleri tamamladın. Modül sınavına hazırsın." : "Son dersi bitirdin. Atladığın dersler varsa listeden tamamlayabilirsin.");
+      setBilgi(tum ? "Tüm dersler tamamlandı. Modül sınavına geçilebilir." : "Son ders tamamlandı. Atlanan dersler varsa listeden tamamlanabilir.");
       setGor({t:"modul", m:m.id});
     };
     icerik = (
@@ -3184,12 +3551,12 @@ function Egitim({kimlik, nav}:{kimlik:any; nav:(e:string)=>void}){
       <div style={{padding:"0 14px 26px"}}>
         <div style={{...kart,textAlign:"center",padding:"18px 14px"}}>
           <div style={{display:"flex",justifyContent:"center",marginBottom:10}}><EgitimPuanHalkasi puan={gor.puan} gecti={gecti}/></div>
-          <p style={{margin:0,fontSize:17,fontWeight:700,color:C.label}}>{gecti?"Tebrikler, geçtin":"Bu sefer olmadı"}</p>
+          <p style={{margin:0,fontSize:17,fontWeight:700,color:C.label}}>{gecti?"Tebrikler, sınavı geçtiniz":"Bu sefer olmadı"}</p>
           <p style={{margin:"4px 0 0",fontSize:13,color:C.sub}}>{m.ad} · {gor.dogru} / {gor.toplam} doğru</p>
           {gecti && <p className="eg-pop" style={{margin:"8px 0 0",display:"inline-block",fontSize:12,fontWeight:700,padding:"3px 10px",borderRadius:10,background:C.greenLight,color:C.green}}>🏅 {m.kisa} rozeti</p>}
           {gor.yeniEnIyi && <p style={{margin:"8px 0 0",fontSize:12,fontWeight:700,color:C.green}}>Yeni en iyi puanın</p>}
           {gecti && <button className="eg-btn" onClick={()=>setGor({t:"sertifika",m:m.id})} style={{display:"block",width:"100%",marginTop:12,padding:"11px 12px",borderRadius:12,border:"none",background:"#D8A94E",color:"#3B2A05",fontSize:14,fontWeight:700,fontFamily:"inherit",cursor:"pointer"}}>🎓 Sertifikanı al</button>}
-          <p style={{margin:"8px 0 0",fontSize:12,color:C.sub}}>Toplam puanın: {toplamPuan} / {EGITIM_MODULLERI.length*100}</p>
+          <p style={{margin:"8px 0 0",fontSize:12,color:C.sub}}>Toplam puanınız: {toplamPuan} / {EGITIM_MODULLERI.length*100}</p>
         </div>
         {uid && !ilerleme.listede && toplamPuan>0 && katilKarti()}
         {gor.yanlislar.length>0 && (
@@ -3223,7 +3590,7 @@ function Egitim({kimlik, nav}:{kimlik:any; nav:(e:string)=>void}){
         <div style={{padding:"0 14px 26px"}}>
           <EgitimGeri onClick={()=>setGor({t:"modul",m:m.id})} etiket={m.kisa}/>
           <div style={{...kart,textAlign:"center"}}>
-            <p style={{margin:0,fontSize:14,lineHeight:1.5,color:C.sub}}>Sertifika için {m.ad} modül sınavını en az {EGITIM_GECME_NOTU} puanla geçmelisin.</p>
+            <p style={{margin:0,fontSize:14,lineHeight:1.5,color:C.sub}}>Sertifika için {m.ad} modül sınavını en az {EGITIM_GECME_NOTU} puanla geçilmelidir.</p>
           </div>
         </div>
       );
@@ -3244,7 +3611,7 @@ function Egitim({kimlik, nav}:{kimlik:any; nav:(e:string)=>void}){
           <EgitimGeri onClick={()=>setGor({t:"modul",m:m.id})} etiket={m.kisa}/>
           <div style={kart}>
             <p style={{margin:"0 0 6px",fontSize:14,fontWeight:700,color:C.label}}>🎓 Katılım sertifikan</p>
-            <p style={{margin:"0 0 10px",fontSize:12,lineHeight:1.5,color:C.sub}}>{m.ad} modül sınavını {p.puan} puanla geçtin. Sertifikada görünecek adı yaz. Yatay A4 PDF olarak kaydedilir.</p>
+            <p style={{margin:"0 0 10px",fontSize:12,lineHeight:1.5,color:C.sub}}>{m.ad} modül sınavını {p.puan} puanla geçtiniz. Sertifikada görünecek adı yazınız. Yatay A4 PDF olarak kaydedilir.</p>
             <input value={sertAd} onChange={e=>setSertAd(e.target.value.slice(0,40))} placeholder="Ad Soyad" autoComplete="name" maxLength={40}
               style={{width:"100%",boxSizing:"border-box",padding:"11px 12px",borderRadius:10,border:`1px solid ${sertAd && !gecerli ? C.red : C.border}`,background:"transparent",color:C.label,fontSize:15,fontFamily:"inherit",outline:"none"}}/>
             {sertAd && !gecerli && <p style={{margin:"6px 0 0",fontSize:12,color:C.red}}>3–40 karakter; yalnızca harf, boşluk ve . ' - kullan.</p>}
@@ -3270,10 +3637,10 @@ function Egitim({kimlik, nav}:{kimlik:any; nav:(e:string)=>void}){
       <div style={{padding:"0 14px 26px"}}>
         <EgitimGeri onClick={()=>setGor({t:"liste"})} etiket="Eğitim"/>
         <p style={{margin:"0 2px 4px",fontSize:19,fontWeight:700,color:C.label}}>Liderlik tablosu</p>
-        <p style={{margin:"0 2px 12px",fontSize:12,lineHeight:1.5,color:C.sub}}>Sıralama, altı modülün en yüksek sınav puanlarının toplamına göre yapılır (en çok {EGITIM_MODULLERI.length*100}). Yalnızca takma ad ve puan görünür.</p>
+        <p style={{margin:"0 2px 12px",fontSize:12,lineHeight:1.5,color:C.sub}}>Sıralama, tüm modüllerin en yüksek sınav puanlarının toplamına göre yapılır (en çok {EGITIM_MODULLERI.length*100}). Yalnızca takma ad ve puan görünür.</p>
         {!uid ? (
           <div style={kart}>
-            <p style={{margin:"0 0 10px",fontSize:13,lineHeight:1.5,color:C.label}}>Liderlik tablosunu görmek için giriş yapmalısın.</p>
+            <p style={{margin:"0 0 10px",fontSize:13,lineHeight:1.5,color:C.label}}>Liderlik tablosunu görmek için giriş yapmalısınız.</p>
             <button className="eg-btn" onClick={()=>nav("hesapGiris")} style={{width:"100%",padding:"11px 14px",borderRadius:12,border:"none",background:C.blue,color:"#fff",fontSize:14,fontWeight:700,fontFamily:"inherit",cursor:"pointer"}}>Giriş yap</button>
           </div>
         ) : liderlik===undefined ? (
@@ -3281,7 +3648,7 @@ function Egitim({kimlik, nav}:{kimlik:any; nav:(e:string)=>void}){
         ) : liderlik===null ? (
           <div style={kart}><p style={{margin:0,fontSize:13,lineHeight:1.5,color:C.label}}>Liderlik tablosu şu an yüklenemedi. Biraz sonra tekrar dene.</p></div>
         ) : liderlik.length===0 ? (
-          <div style={kart}><p style={{margin:0,fontSize:13,lineHeight:1.5,color:C.label}}>Henüz listede kimse yok. İlk sen ol: bir sınav çöz ve listeye katıl.</p></div>
+          <div style={kart}><p style={{margin:0,fontSize:13,lineHeight:1.5,color:C.label}}>Henüz listede kimse yok. Bir sınav çözerek listeye ilk katılan siz olabilirsiniz.</p></div>
         ) : (
           <div style={{...kart,padding:0,overflow:"hidden"}}>
             {liderlik.map((x,k)=>{
@@ -3289,18 +3656,18 @@ function Egitim({kimlik, nav}:{kimlik:any; nav:(e:string)=>void}){
               return (
                 <div key={x.uid} style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px",borderBottom:k<liderlik.length-1?`1px solid ${C.border}`:"none",background:ben?C.blueLight:"transparent"}}>
                   <span style={{width:26,fontSize:13,fontWeight:700,color:k<3?"#D8A94E":C.sub}}>{k+1}</span>
-                  <span style={{flex:1,minWidth:0,fontSize:14,fontWeight:ben?700:500,color:C.label,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.takmaAd}{ben?" (sen)":""}</span>
+                  <span style={{flex:1,minWidth:0,fontSize:14,fontWeight:ben?700:500,color:C.label,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.takmaAd}{ben?" (siz)":""}</span>
                   <span style={{fontSize:14,fontWeight:700,fontFamily:"inherit",fontVariantNumeric:"tabular-nums",color:C.label}}>{x.toplam}</span>
                 </div>
               );
             })}
           </div>
         )}
-        {uid && liderlik && benim<0 && ilerleme.listede && <p style={{margin:"0 2px 10px",fontSize:12,color:C.sub}}>İlk 25 dışındasın. Toplam puanın: {toplamPuan}.</p>}
+        {uid && liderlik && benim<0 && ilerleme.listede && <p style={{margin:"0 2px 10px",fontSize:12,color:C.sub}}>İlk 25 dışındasınız. Toplam puanınız: {toplamPuan}.</p>}
         {uid && !ilerleme.listede && katilKarti()}
         {uid && ilerleme.listede && (
           <div style={{textAlign:"center",marginTop:6}}>
-            <p style={{margin:"0 0 6px",fontSize:12,color:C.sub}}>Takma adın: {ilerleme.takmaAd}</p>
+            <p style={{margin:"0 0 6px",fontSize:12,color:C.sub}}>Takma adınız: {ilerleme.takmaAd}</p>
             {liderHata && <p style={{margin:"0 0 6px",fontSize:12,color:C.red}}>{liderHata}</p>}
             <button onClick={listedenCik} style={{background:"none",border:"none",color:C.red,fontSize:13,fontWeight:700,fontFamily:"inherit",cursor:"pointer",textDecoration:"underline"}}>Listeden çık</button>
           </div>
@@ -3313,6 +3680,452 @@ function Egitim({kimlik, nav}:{kimlik:any; nav:(e:string)=>void}){
     <div ref={ustRef} style={{scrollMarginTop:"calc(env(safe-area-inset-top,0px) + 70px)"}}>
       <style>{EGITIM_CSS}</style>
       <div key={anahtar} className={sinif} style={{overflowX:"hidden"}}>{icerik}</div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+// SORU ODASI (2026-10-17, 1. sürüm: tek başına) — bilgi yarışması
+// • 15 konu (6 genel + 9 Eğitim modülü) × en az 50 soru. Eğitim konularında modülün 20 sınav sorusu + 30 ek soru kullanılır.
+// • Puan: doğru cevap 500 + kalan süreye göre en çok 500 (soru başı en çok 1000). Süre bitince o soru yanlış sayılır.
+// • Puanlar cihazda saklanır (kp_soru_odasi_v1). Giriş yapıp sıralamaya katılanların en yüksek puanı Firestore'da:
+//   soruSkor/{konu}_{soruSayisi}/kayit/{uid} = { takmaAd, puan, dogru, guncelleme } — yalnızca takma ad + puan (gerçek ad/e-posta yazılmaz).
+// • Sıralama konu ve soru sayısına (5/10/15) göre ayrıdır; hesap silinince bu kayıtlar da silinir (kpKullaniciVerisiniSil).
+// • Çok oyunculu oda kurma sonraki aşamada (Firebase Realtime Database) eklenecek.
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+const SO_LS_KEY = "kp_soru_odasi_v1";
+const SO_SORU_SAYILARI = [5, 10, 15];
+const SO_SURELER = [10, 15, 20];
+const SO_BANKA_GENEL: Record<string, string[][]> = {"genel":[["Işığın boşluktaki hızı saniyede yaklaşık kaç kilometredir?","300.000","30.000","3.000.000","3.000"],["Hangi gezegen “Kızıl Gezegen” olarak bilinir?","Mars","Venüs","Jüpiter","Satürn"],["Yetişkin bir insanın vücudunda kaç kemik bulunur?","206","106","306","256"],["Altının kimyasal simgesi hangisidir?","Au","Ag","Al","Go"],["Yumurtlayan memeli hayvan hangisidir?","Ornitorenk","Yarasa","Penguen","Kunduz"],["Satranç tahtasında toplam kaç kare vardır?","64","49","81","72"],["Dünyanın en büyük okyanusu hangisidir?","Pasifik","Atlas","Hint","Arktik"],["Bir üçgenin iç açılarının toplamı kaç derecedir?","180","90","270","360"],["Ana dili olarak en çok konuşulan dil hangisidir?","Mandarin Çincesi","İngilizce","İspanyolca","Hintçe"],["Suyun kimyasal formülü nedir?","H2O","CO2","O2","NaCl"],["Bir gün kaç saniyedir?","86.400","3.600","14.400","8.640"],["Bir kilometre kaç metredir?","1.000","100","10.000","500"],["Hangi hayvan “çölün gemisi” olarak bilinir?","Deve","At","Fil","Zebra"],["Gökkuşağında kaç renk bulunur?","7","5","6","8"],["Dünyanın en büyük kara hayvanı hangisidir?","Afrika fili","Zürafa","Gergedan","Su aygırı"],["İnsan vücudunun en büyük organı hangisidir?","Deri","Karaciğer","Akciğer","Kalp"],["Ses hangi ortamda yayılamaz?","Boşlukta","Suda","Havada","Çelikte"],["Telefonun mucidi olarak en çok bilinen isim kimdir?","Alexander Graham Bell","Thomas Edison","Nikola Tesla","Samuel Morse"],["Ampulün mucidi olarak en çok bilinen isim kimdir?","Thomas Edison","Isaac Newton","Albert Einstein","Marie Curie"],["Genel görelilik kuramını kim geliştirmiştir?","Albert Einstein","Isaac Newton","Galileo Galilei","Stephen Hawking"],["Pi sayısı yaklaşık kaçtır?","3,14","2,71","1,61","4,13"],["Roma rakamlarında “X” kaç demektir?","10","5","50","100"],["Vücutta oksijen taşıyan kan hücreleri hangileridir?","Alyuvarlar","Akyuvarlar","Trombositler","Plazma"],["Aşağıdakilerden hangisi nüfusu bir milyarı aşan ülkelerden biridir?","Hindistan","Japonya","Rusya","Brezilya"],["Işığın tüm renklerinin karışımı hangi renk olarak görünür?","Beyaz","Siyah","Gri","Kahverengi"],["İnsan DNA’sının yapısı nasıl adlandırılır?","Çift sarmal","Üçlü halka","Tek zincir","Kare ağ"],["Bilgisayarda “CPU” neyin kısaltmasıdır?","Merkezi işlem birimi","Kişisel yazıcı birimi","Bellek kartı","Ekran sürücüsü"],["İnternet adreslerindeki “www” neyin kısaltmasıdır?","World Wide Web","Wide Web World","Web World Wide","World Web Window"],["Oda sıcaklığında sıvı halde bulunan metal hangisidir?","Cıva","Demir","Bakır","Alüminyum"],["Güneş Sistemi’nin en küçük gezegeni hangisidir?","Merkür","Mars","Venüs","Neptün"],["Bir futbol takımı sahada kaç oyuncuyla oynar (kaleci dahil)?","11","9","10","12"],["Dünya’nın doğal uydusu hangisidir?","Ay","Titan","Europa","Phobos"],["Hangisi bir memeli değildir?","Kartal","Yunus","Yarasa","Balina"],["Su deniz seviyesinde kaç derecede kaynar?","100 °C","90 °C","80 °C","120 °C"],["Kuzey Yarım Küre’de yılın en uzun gündüzü hangi mevsimdedir?","Yaz","Kış","İlkbahar","Sonbahar"],["Hangisi bir asal sayıdır?","17","15","21","27"],["Japonya’nın para birimi nedir?","Yen","Won","Yuan","Ringgit"],["Euro hangi ülkenin resmî para birimidir?","Almanya","Birleşik Krallık","İsviçre","Polonya"],["Bir asırda kaç yıl vardır?","100","10","1.000","50"],["Satrançta kaybedilmesi oyunu bitiren taş hangisidir?","Şah","Vezir","Kale","Fil"],["Hangi şehir “Işıklar Şehri” olarak bilinir?","Paris","Roma","Madrid","Viyana"],["Mısır piramitlerinin en ünlüleri hangi şehrin yakınlarındadır?","Gize","İskenderiye","Luksor","Asvan"],["Hangi ülke aynı zamanda bir kıtadır?","Avustralya","Kanada","Hindistan","Brezilya"],["Bir mil yaklaşık kaç kilometredir?","1,6","0,6","2,5","3,2"],["Mısır’dan geçen ünlü nehir hangisidir?","Nil","Amazon","Ganj","Tuna"],["Kuzey Kutbu’nda yaşayan beyaz tüylü büyük yırtıcı hangisidir?","Kutup ayısı","Penguen","Kurt","Yaban domuzu"],["Bir dikdörtgenin alanı nasıl hesaplanır?","Kısa kenar × uzun kenar","Kısa kenar + uzun kenar","Kenarların toplamı × 2","Uzun kenar ÷ 2"],["Dünya nüfusu yaklaşık kaç milyardır?","8","4","12","2"],["Bir haftanın ortasındaki gün genel olarak hangisi kabul edilir?","Çarşamba","Pazartesi","Cuma","Pazar"],["Hangi renk trafik ışıklarında “dur” anlamına gelir?","Kırmızı","Yeşil","Mavi","Sarı"]],"tarih":[["İstanbul hangi yıl fethedildi?","1453","1071","1517","1299"],["Türkiye Cumhuriyeti hangi yıl ilan edildi?","1923","1919","1920","1938"],["İlyada destanı kime atfedilir?","Homeros","Sokrates","Herodot","Vergilius"],["Malazgirt Savaşı hangi yıl yapıldı?","1071","1176","1243","1402"],["Fransız Devrimi hangi yıl başladı?","1789","1776","1815","1848"],["İlk modern Olimpiyat Oyunları (1896) hangi şehirde yapıldı?","Atina","Paris","Roma","Londra"],["Osmanlı Devleti’nin kurucusu kimdir?","Osman Bey","Orhan Bey","Yıldırım Bayezid","II. Murad"],["Berlin Duvarı hangi yıl yıkıldı?","1989","1961","1975","1991"],["Sakarya Meydan Muharebesi hangi yıl yapıldı?","1921","1919","1922","1923"],["Çanakkale Deniz Zaferi hangi yıl kazanıldı?","1915","1912","1918","1920"],["Lozan Antlaşması hangi yıl imzalandı?","1923","1920","1921","1925"],["Soyadı Kanunu hangi yıl kabul edildi?","1934","1923","1928","1938"],["Harf Devrimi (Latin alfabesine geçiş) hangi yıl yapıldı?","1928","1923","1934","1925"],["Türkiye’de kadınlara milletvekili seçme ve seçilme hakkı hangi yıl tanındı?","1934","1923","1930","1946"],["Birinci Dünya Savaşı hangi yıllar arasında sürdü?","1914–1918","1905–1910","1920–1924","1939–1945"],["İkinci Dünya Savaşı hangi yıl sona erdi?","1945","1939","1941","1950"],["Amerika Birleşik Devletleri bağımsızlığını hangi yıl ilan etti?","1776","1789","1812","1865"],["Kristof Kolomb Amerika kıtasına hangi yıl ulaştı?","1492","1453","1519","1588"],["Piramitleri yaptıran uygarlık hangisidir?","Eski Mısırlılar","Sümerler","Hititler","Persler"],["Hititlerin başkenti neresidir?","Hattuşa","Truva","Efes","Sardes"],["Mezopotamya’da çivi yazısını kullanan uygarlık hangisidir?","Sümerler","Fenikeliler","Lidyalılar","Urartular"],["Parayı ilk kullanan uygarlıklardan biri hangisidir?","Lidyalılar","Hititler","Frigler","Urartular"],["Roma İmparatorluğu hangi yılda doğu ve batı olarak ikiye ayrıldı?","395","476","1054","330"],["Kanuni Sultan Süleyman hangi padişahın oğludur?","Yavuz Sultan Selim","II. Mehmed","I. Ahmed","II. Bayezid"],["Lale Devri hangi padişah döneminde yaşanmıştır?","III. Ahmed","II. Abdülhamid","IV. Murad","I. Mahmud"],["Tanzimat Fermanı hangi yıl ilan edildi?","1839","1876","1908","1856"],["I. Meşrutiyet hangi yıl ilan edildi?","1876","1908","1839","1921"],["Mohaç Meydan Muharebesi hangi yıl yapıldı?","1526","1453","1571","1683"],["İstanbul’u fetheden padişah kimdir?","II. Mehmed (Fatih)","Yavuz Sultan Selim","Kanuni Sultan Süleyman","I. Murad"],["Mısır’ı Osmanlı topraklarına katan padişah kimdir?","Yavuz Sultan Selim","II. Murad","Fatih Sultan Mehmed","IV. Murad"],["Malazgirt Savaşı’nda Bizans ordusunu yenen Selçuklu sultanı kimdir?","Alp Arslan","Tuğrul Bey","Melikşah","Kılıç Arslan"],["Anadolu Selçuklu Devleti’nin en bilinen başkenti neresidir?","Konya","Bursa","Ankara","Sivas"],["Türkiye Cumhuriyeti’nin ilk cumhurbaşkanı kimdir?","Mustafa Kemal Atatürk","İsmet İnönü","Celal Bayar","Fevzi Çakmak"],["Ankara hangi yıl başkent olmuştur?","1923","1919","1920","1921"],["Mustafa Kemal Samsun’a hangi tarihte çıkmıştır?","19 Mayıs 1919","23 Nisan 1920","30 Ağustos 1922","29 Ekim 1923"],["TBMM hangi tarihte açılmıştır?","23 Nisan 1920","19 Mayıs 1919","29 Ekim 1923","30 Ağustos 1922"],["Büyük Taarruz hangi yıl başladı?","1922","1921","1920","1923"],["Fransız Devrimi’nin ünlü sloganı hangisidir?","Özgürlük, eşitlik, kardeşlik","Barış, ekmek, toprak","Hak, adalet, kanun","Birlik, güç, zafer"],["Sanayi Devrimi hangi ülkede başlamıştır?","İngiltere","Fransa","Almanya","İtalya"],["Rönesans hareketi hangi ülkede doğmuştur?","İtalya","İspanya","Almanya","İngiltere"],["Matbaayı Avrupa’da yaygınlaştıran kişi kimdir?","Gutenberg","Galileo","Newton","Kopernik"],["Soğuk Savaş’ın iki ana kutbu hangisiydi?","ABD ve SSCB","Almanya ve Fransa","Çin ve Japonya","İngiltere ve İspanya"],["SSCB hangi yıl dağıldı?","1991","1985","1989","1999"],["Ay’a ilk ayak basan insan kimdir?","Neil Armstrong","Yuri Gagarin","Buzz Aldrin","Alan Shepard"],["İlk insanlı uzay uçuşunu gerçekleştiren kişi kimdir?","Yuri Gagarin","Neil Armstrong","John Glenn","Valentina Tereshkova"],["Birleşmiş Milletler hangi yıl kurulmuştur?","1945","1919","1950","1938"],["Magna Carta hangi ülkede imzalanmıştır?","İngiltere","Fransa","İspanya","Almanya"],["Antik Olimpiyat Oyunları hangi ülkede başlamıştır?","Yunanistan","İtalya","Mısır","Türkiye"],["Büyük İskender hangi krallıktan çıkmıştır?","Makedonya","Roma","Pers","Mısır"],["Truva efsanesinde şehre sokulan ünlü hile nedir?","Tahta at","Gizli tünel","Sahte elçi","Zehirli su"],["Birinci İnönü Muharebesi hangi yıl yapıldı?","1921","1919","1920","1922"]],"cografya":[["Türkiye sınırları içinde en uzun akan nehir hangisidir?","Kızılırmak","Fırat","Sakarya","Yeşilırmak"],["Dünyanın en yüksek dağı hangisidir?","Everest","K2","Kilimanjaro","Mont Blanc"],["Avustralya’nın başkenti neresidir?","Canberra","Sidney","Melbourne","Perth"],["Türkiye’nin en büyük gölü hangisidir?","Van Gölü","Tuz Gölü","Beyşehir Gölü","Eğirdir Gölü"],["Kanada’nın başkenti neresidir?","Ottawa","Toronto","Vancouver","Montreal"],["Türkiye’nin en yüksek dağı hangisidir?","Ağrı Dağı","Erciyes","Uludağ","Kaçkar Dağı"],["Sahra Çölü hangi kıtadadır?","Afrika","Asya","Avustralya","Güney Amerika"],["Brezilya’da resmî dil nedir?","Portekizce","İspanyolca","İngilizce","Fransızca"],["Türkiye kaç coğrafi bölgeye ayrılır?","7","5","9","12"],["Türkiye’nin en kalabalık şehri hangisidir?","İstanbul","Ankara","İzmir","Bursa"],["Hangi şehir iki kıtada yer alır?","İstanbul","Ankara","İzmir","Trabzon"],["İstanbul Boğazı hangi iki denizi birbirine bağlar?","Karadeniz ve Marmara","Marmara ve Ege","Ege ve Akdeniz","Karadeniz ve Akdeniz"],["Çanakkale Boğazı hangi iki denizi bağlar?","Marmara ve Ege","Karadeniz ve Marmara","Ege ve Akdeniz","Akdeniz ve Karadeniz"],["Türkiye’nin en uzun kıyı şeridine sahip denizi hangisidir?","Ege Denizi","Akdeniz","Karadeniz","Marmara Denizi"],["Göreme hangi ilimizin sınırları içindedir?","Nevşehir","Konya","Antalya","Aksaray"],["Pamukkale hangi ilimizdedir?","Denizli","Muğla","Aydın","Afyonkarahisar"],["Nemrut Dağı’ndaki dev heykellerin bulunduğu il hangisidir?","Adıyaman","Malatya","Diyarbakır","Şanlıurfa"],["Efes Antik Kenti hangi ilimizdedir?","İzmir","Aydın","Muğla","Manisa"],["Türkiye’nin en büyük yüzölçümüne sahip ili hangisidir?","Konya","Sivas","Erzurum","Ankara"],["Tuz Gölü hangi bölgemizdedir?","İç Anadolu","Ege","Marmara","Karadeniz"],["Çay üretiminin en yoğun yapıldığı bölgemiz hangisidir?","Karadeniz","Ege","Akdeniz","Marmara"],["Fındık üretiminde öne çıkan bölgemiz hangisidir?","Karadeniz","İç Anadolu","Güneydoğu Anadolu","Ege"],["Dünyanın yüzölçümü bakımından en büyük gölü hangisidir?","Hazar Denizi","Victoria Gölü","Baykal Gölü","Superior Gölü"],["Dünyanın en derin gölü hangisidir?","Baykal Gölü","Hazar Denizi","Tanganika Gölü","Van Gölü"],["Sıcak çöller arasında dünyanın en büyüğü hangisidir?","Sahra Çölü","Gobi Çölü","Kalahari Çölü","Atacama Çölü"],["Amazon Nehri hangi kıtadadır?","Güney Amerika","Afrika","Asya","Avustralya"],["Alpler hangi kıtadadır?","Avrupa","Asya","Afrika","Kuzey Amerika"],["Japonya’nın başkenti neresidir?","Tokyo","Kyoto","Osaka","Nagoya"],["Mısır’ın başkenti neresidir?","Kahire","İskenderiye","Gize","Luksor"],["Rusya’nın başkenti neresidir?","Moskova","Sankt Peterburg","Kazan","Novosibirsk"],["Almanya’nın başkenti neresidir?","Berlin","Münih","Hamburg","Frankfurt"],["İtalya’nın başkenti neresidir?","Roma","Milano","Venedik","Napoli"],["İspanya’nın başkenti neresidir?","Madrid","Barselona","Sevilla","Valensiya"],["Yeni Zelanda’nın başkenti neresidir?","Wellington","Auckland","Christchurch","Queenstown"],["Aşağıdakilerden hangisi Güney Afrika’nın başkentlerinden biridir?","Pretoria","Johannesburg","Durban","Port Elizabeth"],["Aşağıdaki ülkelerden hangisi Türkiye ile kara sınırı paylaşmaz?","Ürdün","Irak","İran","Bulgaristan"],["Türkiye’nin kuzeyinde hangi deniz bulunur?","Karadeniz","Akdeniz","Ege Denizi","Hazar Denizi"],["Yüzölçümü bakımından dünyanın en küçük ülkesi hangisidir?","Vatikan","Monako","San Marino","Lihtenştayn"],["Hangi ülke “Doğan Güneşin Ülkesi” olarak bilinir?","Japonya","Çin","Güney Kore","Tayland"],["Panama Kanalı hangi iki okyanusu birleştirir?","Atlas ve Pasifik","Hint ve Pasifik","Atlas ve Hint","Arktik ve Atlas"],["Süveyş Kanalı hangi iki denizi birleştirir?","Akdeniz ve Kızıldeniz","Karadeniz ve Akdeniz","Hazar ve Karadeniz","Kızıldeniz ve Ege"],["Ekvator çizgisi aşağıdaki kıtalardan hangisinden geçmez?","Avrupa","Afrika","Güney Amerika","Asya"],["Hem Avrupa’da hem Asya’da toprağı bulunan ülke hangisidir?","Türkiye","Mısır","Yunanistan","İran"],["Norveç, İsveç ve Danimarka’nın içinde bulunduğu bölgeye ne ad verilir?","İskandinavya","Balkanlar","Kafkasya","Baltık"],["Aşağıdakilerden hangisi Balkan Yarımadası’nda yer alan bir ülkedir?","Bulgaristan","Portekiz","Polonya","Norveç"],["Büyük Göller hangi iki ülke arasında paylaşılır?","ABD ve Kanada","ABD ve Meksika","Kanada ve Grönland","Meksika ve Küba"],["Himalaya Dağları hangi kıtadadır?","Asya","Avrupa","Afrika","Güney Amerika"],["Yüzölçümü en küçük okyanus hangisidir?","Arktik (Kuzey Buz) Okyanusu","Hint Okyanusu","Atlas Okyanusu","Pasifik Okyanusu"],["Türkiye’nin en büyük adası hangisidir?","Gökçeada","Marmara Adası","Bozcaada","Büyükada"],["Nil Nehri hangi kıtadadır?","Afrika","Asya","Avrupa","Güney Amerika"]],"spor":[["Maraton koşusu kaç kilometredir?","42,195","40","45","21,097"],["Tenisin en eski Grand Slam turnuvası hangisidir?","Wimbledon","Roland Garros","US Open","Avustralya Açık"],["İlk Dünya Kupası hangi ülkede oynandı?","Uruguay","Brezilya","İtalya","Fransa"],["Olimpiyat bayrağında kaç halka vardır?","5","4","6","7"],["2002 Dünya Kupası’nda Türkiye kaçıncı oldu?","Üçüncü","İkinci","Dördüncü","Birinci"],["Basketbolda serbest atış kaç sayıdır?","1","2","3","4"],["Voleybolda set kaç sayıya oynanır (ilk 4 set)?","25","21","15","30"],["Sumo hangi ülkenin geleneksel sporudur?","Japonya","Çin","Kore","Tayland"],["Futbolda bir takım sahada kaç oyuncuyla başlar?","11","10","9","12"],["Basketbolda bir takım sahada kaç oyuncuyla oynar?","5","6","7","4"],["Voleybolda bir takım sahada kaç oyuncuyla oynar?","6","5","7","8"],["Olimpiyat Oyunları kaç yılda bir yapılır?","4","2","3","5"],["Dünya Kupası (futbol) kaç yılda bir yapılır?","4","2","3","5"],["Modern Olimpiyat Oyunları ilk kez hangi şehirde düzenlendi (1896)?","Atina","Paris","Londra","Roma"],["Tenis maçında “ace” ne demektir?","Karşı tarafın dokunamadığı servis","Çift hata","Ağa çarpan top","Maçın uzaması"],["Futbolda korner atışı nereden kullanılır?","Saha köşesinden","Ceza yayından","Orta sahadan","Kale çizgisi ortasından"],["Golf sporunda topa vurulan alete ne denir?","Sopa","Raket","Pedal","Gürz"],["Satranç hangi spor dalı sınıfında kabul edilir?","Zihin sporu","Atletizm","Kombat","Su sporu"],["Judo hangi ülke kökenlidir?","Japonya","Çin","Kore","Hindistan"],["Atletizmde 100 metre koşusu hangi yarış türündendir?","Sürat","Dayanıklılık","Engelli","Yürüyüş"],["Futbolda penaltı noktası kaleye yaklaşık kaç metre uzaktadır?","11","9","7","16"],["Basketbolda şut saati profesyonel (FIBA) maçlarda kaç saniyedir?","24","30","20","14"],["Yüzmede dört temel stil arasında hangisi yoktur?","Yunus kurbağalama","Kurbağalama","Kelebek","Sırtüstü"],["Hangi spor dalında ring kullanılır?","Boks","Tenis","Voleybol","Golf"],["Futbolda hakem hangi kartla oyuncuyu oyundan çıkarır?","Kırmızı","Sarı","Mavi","Yeşil"],["Hentbolda bir takım sahada kaç oyuncuyla oynar (kaleci dahil)?","7","6","5","8"],["Buz hokeyi hangi yüzeyde oynanır?","Buz","Çim","Kum","Parke"],["Sporda “hat-trick” bir maçta aynı oyuncunun kaç gol atmasıdır?","3","2","4","5"],["Dünyanın en yüksek tepesine tırmanmak hangi spor türündedir?","Dağcılık","Yelken","Okçuluk","Kayak"],["Olimpiyat meşalesi hangi şehirden yakılarak gönderilir?","Olimpiya","Atina","Roma","Paris"],["Futbolda bir maç normalde kaç dakikadır?","90","80","100","120"],["Basketbolda bir üçlük atış kaç sayı verir?","3","2","1","4"],["Okçulukta atış hangi araçla yapılır?","Yay","Mızrak","Sapan","Tüfek"],["Güreşte Türkiye’nin ulusal sporu hangisidir?","Yağlı güreş","Sumo","Judo","Karate"],["Kırkpınar Yağlı Güreşleri hangi ilde yapılır?","Edirne","Bursa","Konya","Sivas"],["Tenis servis hakkı karşılaşmada kaç kez verilir (hata yapınca)?","2","1","3","4"],["Bisiklet sporunun en ünlü etap yarışı hangisidir?","Tour de France","Wimbledon","Roland Garros","Super Bowl"],["Satrançta en güçlü taş hangisidir?","Vezir","Kale","At","Fil"],["Basketbolda “faul” ne demektir?","Kural ihlali","Sayı atışı","Süre bitişi","Takım değişikliği"],["Futbolda ofsayt kuralı hangi bölgede önemlidir?","Rakip yarı saha","Kendi yarı saha","Orta daire","Kale alanı"],["Kayak hangi mevsim sporlarındandır?","Kış","Yaz","İlkbahar","Sonbahar"],["Maratonun adı hangi antik savaştan gelir?","Maraton Savaşı","Truva Savaşı","Çanakkale Savaşı","Kadeş Savaşı"],["Tekvando hangi ülke kökenli savunma sporudur?","Güney Kore","Japonya","Çin","Tayland"],["Olimpiyat madalyaları sırayla hangi renklerdir?","Altın, gümüş, bronz","Gümüş, altın, bronz","Bronz, altın, gümüş","Altın, bronz, gümüş"],["Bir golün ardından futbol maçı nereden yeniden başlar?","Orta noktadan","Köşe noktasından","Ceza alanından","Kale çizgisinden"],["Futbol tarihinde en çok Dünya Kupası kazanan ülke hangisidir?","Brezilya","Almanya","Arjantin","İtalya"],["Wimbledon turnuvası hangi zeminde oynanır?","Çim","Kil","Sert zemin","Parke"],["Roland Garros turnuvası hangi zeminde oynanır?","Kil","Çim","Sert zemin","Halı"],["NBA hangi ülkenin basketbol ligidir?","ABD","Kanada","İngiltere","Avustralya"],["Usain Bolt hangi ülkenin atletidir?","Jamaika","ABD","Kenya","Nijerya"],["Naim Süleymanoğlu hangi spor dalıyla tanınır?","Halter","Güreş","Boks","Yüzme"],["Michael Schumacher hangi ülkenin Formula 1 pilotudur?","Almanya","İtalya","Fransa","İngiltere"],["Anadolu’nun geleneksel güreşi olan yağlı güreşte kullanılan sürülen madde nedir?","Zeytinyağı","Su","Un","Gres yağı"]],"sanat":[["Ay Işığı Sonatı’nın bestecisi kimdir?","Beethoven","Mozart","Bach","Chopin"],["Mona Lisa’yı kim yapmıştır?","Leonardo da Vinci","Michelangelo","Raphael","Van Gogh"],["Orhan Pamuk hangi yıl Nobel Edebiyat Ödülü’nü aldı?","2006","1996","2010","2002"],["Suç ve Ceza romanının yazarı kimdir?","Dostoyevski","Tolstoy","Gogol","Çehov"],["Standart bir piyanoda kaç tuş vardır?","88","76","92","100"],["İnce Memed romanının yazarı kimdir?","Yaşar Kemal","Orhan Kemal","Nazım Hikmet","Aziz Nesin"],["Edirne’deki Selimiye Camii’nin mimarı kimdir?","Mimar Sinan","Vedat Tek","Kemaleddin","Sedefkâr Mehmed Ağa"],["Romeo ve Juliet’in yazarı kimdir?","Shakespeare","Dickens","Goethe","Hugo"],["Yıldızlı Gece tablosunun ressamı kimdir?","Van Gogh","Monet","Picasso","Dalí"],["Guernica tablosunun ressamı kimdir?","Picasso","Dalí","Matisse","Goya"],["Çığlık tablosu hangi ressama aittir?","Edvard Munch","Van Gogh","Gauguin","Klimt"],["Dört Mevsim eserinin bestecisi kimdir?","Vivaldi","Bach","Handel","Verdi"],["Türk Beşleri arasında yer alan besteci kimdir?","Ahmed Adnan Saygun","Zeki Müren","Tanburi Cemil Bey","Itri"],["Don Kişot romanının yazarı kimdir?","Cervantes","Dante","Molière","Kafka"],["Safahat hangi şairimizin eseridir?","Mehmet Akif Ersoy","Yahya Kemal","Ziya Gökalp","Namık Kemal"],["İstiklal Marşı’nın yazarı kimdir?","Mehmet Akif Ersoy","Ziya Gökalp","Orhan Veli","Fazıl Say"],["Bale müziği Kuğu Gölü’nün bestecisi kimdir?","Çaykovski","Mozart","Verdi","Wagner"],["Dokuzuncu Senfoni’deki “Neşeye Övgü” hangi bestecinindir?","Beethoven","Mozart","Brahms","Schubert"],["Hangi enstrüman telli çalgıdır?","Keman","Flüt","Trompet","Davul"],["Hangi enstrüman nefesli çalgıdır?","Klarnet","Gitar","Piyano","Ud"],["Hangi enstrüman vurmalı çalgıdır?","Davul","Keman","Ney","Saz"],["Ney hangi çalgı grubundandır?","Nefesli","Telli","Vurmalı","Tuşlu"],["Bağlama hangi çalgı grubundandır?","Telli","Nefesli","Vurmalı","Tuşlu"],["Nâzım Hikmet’in en bilinen şiir kitaplarından biri hangisidir?","Memleketimden İnsan Manzaraları","Safahat","Garip","Çile"],["Sait Faik Abasıyanık hangi türde eser vermiştir?","Hikâye","Tiyatro","Roman","Deneme"],["Dede Korkut Hikâyeleri hangi dilde yazılmıştır?","Türkçe","Arapça","Farsça","Latince"],["Divan edebiyatında bir şiir türü olan gazel ne anlatır?","Genellikle aşk ve güzellik","Savaş","Tarım","Mimari"],["Hangi akım izlenimcilik (empresyonizm) ressamlarındandır?","Claude Monet","Pablo Picasso","Salvador Dalí","Rembrandt"],["Rönesans Avrupa’da hangi yüzyıllarda yoğunlaştı?","14.–16. yüzyıl","10. yüzyıl","18. yüzyıl","20. yüzyıl"],["Sistina Şapeli’nin tavan freskleri kime aittir?","Michelangelo","Raphael","Donatello","Caravaggio"],["Venüs’ün Doğuşu tablosu kime aittir?","Botticelli","Leonardo","Titian","Giotto"],["Hangi ressam sürrealizmin ünlü isimlerindendir?","Salvador Dalí","Claude Monet","Rembrandt","Vermeer"],["Beyaz Zambaklar Ülkesinde kitabının yazarı kimdir?","Grigory Petrov","Tolstoy","Victor Hugo","Gorki"],["Sefiller romanının yazarı kimdir?","Victor Hugo","Balzac","Zola","Flaubert"],["Savaş ve Barış romanının yazarı kimdir?","Tolstoy","Dostoyevski","Puşkin","Gogol"],["Bülbülü Öldürmek romanının yazarı kimdir?","Harper Lee","Hemingway","Steinbeck","Fitzgerald"],["1984 romanının yazarı kimdir?","George Orwell","Aldous Huxley","Kafka","Camus"],["Yüzüklerin Efendisi’nin yazarı kimdir?","J. R. R. Tolkien","C. S. Lewis","J. K. Rowling","Roald Dahl"],["Küçük Prens romanının yazarı kimdir?","Antoine de Saint-Exupéry","Jules Verne","Victor Hugo","Albert Camus"],["Dönüşüm (Die Verwandlung) hangi yazarın eseridir?","Franz Kafka","Thomas Mann","Hermann Hesse","Goethe"],["Aşk-ı Memnu romanının yazarı kimdir?","Halit Ziya Uşaklıgil","Reşat Nuri Güntekin","Ahmet Hamdi Tanpınar","Peyami Safa"],["Çalıkuşu romanının yazarı kimdir?","Reşat Nuri Güntekin","Halide Edib Adıvar","Yakup Kadri Karaosmanoğlu","Refik Halit Karay"],["Huzur romanının yazarı kimdir?","Ahmet Hamdi Tanpınar","Orhan Pamuk","Sabahattin Ali","Oğuz Atay"],["Kürk Mantolu Madonna’nın yazarı kimdir?","Sabahattin Ali","Orhan Kemal","Yusuf Atılgan","Haldun Taner"],["Tutunamayanlar romanının yazarı kimdir?","Oğuz Atay","Yusuf Atılgan","Ahmet Hamdi Tanpınar","Peyami Safa"],["Hangi müzik türü Brezilya kökenlidir?","Bossa nova","Flamenko","Opera","Blues"],["Flamenko hangi ülkeyle özdeşleşmiştir?","İspanya","İtalya","Fransa","Portekiz"],["Opera sanatı ilk olarak hangi ülkede doğdu?","İtalya","Fransa","Almanya","İngiltere"],["Sinemada en prestijli ödüllerden biri olan “Oscar” hangi ülkede verilir?","ABD","Fransa","İngiltere","İtalya"],["Cannes Film Festivali hangi ülkede yapılır?","Fransa","İtalya","İspanya","Almanya"],["Mozart hangi ülkenin bestecisidir?","Avusturya","İtalya","Fransa","İspanya"],["Fazıl Say hangi çalgıyla tanınır?","Piyano","Keman","Ney","Gitar"]],"bilim":[["Dünya Güneş’in etrafında yaklaşık kaç günde döner?","365","30","180","730"],["İnsan kalbinde kaç oda vardır?","4","2","3","5"],["Havanın büyük bölümünü hangi gaz oluşturur?","Azot","Oksijen","Karbondioksit","Argon"],["Elmas hangi elementin kristal biçimidir?","Karbon","Silisyum","Demir","Kalay"],["Güneş Sistemi’nin en büyük gezegeni hangisidir?","Jüpiter","Satürn","Neptün","Dünya"],["Bitkilerin fotosentezde kullandığı gaz hangisidir?","Karbondioksit","Oksijen","Azot","Hidrojen"],["Kara hayvanları arasında en hızlı koşan hangisidir?","Çita","Aslan","Antilop","At"],["Kanı süzen organ hangisidir?","Böbrek","Karaciğer","Akciğer","Dalak"],["Suyun kaynama noktası deniz seviyesinde kaç °C’dir?","100","90","110","120"],["Dünya’ya ısı ve ışık sağlayan en önemli kaynak hangisidir?","Güneş","Ay","Mars","Venüs"],["Dünyaya en yakın gök cismi hangisidir?","Ay","Mars","Güneş","Venüs"],["Güneş Sistemi’nde Güneş’e en yakın gezegen hangisidir?","Merkür","Venüs","Dünya","Mars"],["Halkalarıyla ünlü gezegen hangisidir?","Satürn","Mars","Venüs","Merkür"],["Atomun merkezinde ne bulunur?","Çekirdek","Elektron","Foton","Molekül"],["Elektrik akımının birimi nedir?","Amper","Volt","Watt","Ohm"],["Gerilimin birimi nedir?","Volt","Amper","Watt","Joule"],["Kütle çekimi yasasını bulan bilim insanı kimdir?","Isaac Newton","Albert Einstein","Galileo","Nikola Tesla"],["Görelilik kuramını ortaya koyan bilim insanı kimdir?","Albert Einstein","Newton","Faraday","Bohr"],["Evrim kuramıyla tanınan bilim insanı kimdir?","Charles Darwin","Mendel","Pasteur","Linnaeus"],["Penisilini bulan bilim insanı kimdir?","Alexander Fleming","Pasteur","Koch","Jenner"],["Periyodik tabloyu geliştiren bilim insanı kimdir?","Mendeleyev","Dalton","Curie","Bohr"],["Kandaki oksijeni taşıyan hücreler hangileridir?","Alyuvarlar","Akyuvarlar","Trombositler","Plazma"],["Vücudumuzdaki en büyük organ hangisidir?","Deri","Karaciğer","Akciğer","Bağırsak"],["Rüzgâr enerjisi hangi türdür?","Yenilenebilir","Fosil","Nükleer","Kömür temelli"],["Hangisi fosil yakıttır?","Kömür","Güneş","Rüzgâr","Jeotermal"],["Suyun donma noktası kaç °C’dir?","0","10","-10","32"],["Ses hızının katı olarak ifade edilen hız birimi hangisidir?","Mach","Newton","Hertz","Pascal"],["Ses en hızlı hangi ortamda yayılır?","Katı","Gaz","Boşluk","Sıvı"],["Ses boşlukta yayılır mı?","Hayır","Evet","Yalnızca gündüz","Yalnızca soğukta"],["Hangi hayvan memeli değildir?","Penguen","Yunus","Balina","Yarasa"],["Dünyanın en büyük memelisi hangisidir?","Mavi balina","Fil","Zürafa","Orka"],["Hangi kuş uçamaz?","Devekuşu","Kartal","Serçe","Güvercin"],["Dünyanın en uzun boylu kara hayvanı hangisidir?","Zürafa","Fil","Deve","At"],["Arılar hangi ürünü üretir?","Bal","Süt","İpek","Yün"],["İpek böceği ne üretir?","İpek","Bal","Balmumu","Yün"],["Bitkilerin yeşil rengi hangi maddeden gelir?","Klorofil","Hemoglobin","Keratin","Kolajen"],["Mevsimlerin oluşmasının asıl nedeni nedir?","Dünya’nın eksen eğikliği","Dünya’nın Güneş’e uzaklığı","Ay’ın etkisi","Güneş lekeleri"],["Gece ve gündüzün oluşmasının nedeni nedir?","Dünya’nın kendi ekseni etrafında dönmesi","Dünya’nın Güneş etrafında dönmesi","Ay’ın dönmesi","Güneş’in yön değiştirmesi"],["Ay tutulması hangi durumda olur?","Dünya, Güneş ile Ay arasına girince","Ay, Güneş ile Dünya arasına girince","Mars araya girince","Güneş sönünce"],["Güneş tutulması hangi durumda olur?","Ay, Güneş ile Dünya arasına girince","Dünya, Güneş ile Ay arasına girince","Venüs araya girince","Ay sönünce"],["Samanyolu nedir?","Bir galaksi","Bir gezegen","Bir yıldız","Bir kuyruklu yıldız"],["Dünyanın doğal uydusu hangisidir?","Ay","Phobos","Titan","Europa"],["Mars’ın kırmızı görünmesinin nedeni nedir?","Demir oksit","Su buharı","Karbon","Kükürt"],["Depremleri kaydeden cihaz hangisidir?","Sismograf","Barometre","Termometre","Higrometre"],["Hava basıncı hangi cihazla ölçülür?","Barometre","Termometre","Sismograf","Pusula"],["Pusulanın iğnesi hangisini gösterir?","Manyetik kuzeyi","Güneşi","Ayı","Doğuyu"],["Mikroskop ne işe yarar?","Çok küçük cisimleri büyütmeye","Uzak yıldızları görmeye","Sesi ölçmeye","Basıncı ölçmeye"],["Teleskop ne işe yarar?","Uzak cisimleri yakın göstermeye","Küçük cisimleri büyütmeye","Sıcaklığı ölçmeye","Ses kaydetmeye"],["pH ölçeğinde 7 değeri neyi gösterir?","Nötr","Asit","Baz","Tuzlu"],["İnsan vücudunda kanı pompalayan organ hangisidir?","Kalp","Karaciğer","Mide","Akciğer"],["Gökkuşağında kaç renk geleneksel olarak sayılır?","7","5","6","9"]]};
+const SO_BANKA_EK: Record<string, string[][]> = {"katilim":[["Katılım finans sisteminin temel yasağı hangisidir?","Faiz (riba)","Kâr payı","Ortaklık","Kira"],["Katılım bankacılığında “kâr” hangi kaynaktan doğar?","Gerçek ticari ve ekonomik faaliyetten","Paranın zaman içindeki ödünç bedelinden","Sabit faiz garantisinden","Cezai şart gelirinden"],["Belirsizliği (gararı) aşırı olan sözleşmeler katılım ilkelerinde nasıl değerlendirilir?","Sakıncalı kabul edilir","Tercih edilir","Zorunludur","Vergiden muaftır"],["Katılım ilkelerine göre aşağıdakilerden hangisi finansman konusu olamaz?","Kumar ve alkol ticareti","Gıda üretimi","Tekstil üretimi","Eğitim hizmeti"],["Murabahada malın maliyeti ve kâr payı müşteriye nasıl bildirilir?","Açıkça","Gizli tutulur","Sonradan değiştirilir","Hiç bildirilmez"],["Murabaha vadeli satışta ödeme planı sonradan nasıl değişir?","Sabit kalır, gecikmeye göre yeniden pazarlık yapılmaz","Her ay yeniden artar","Piyasaya göre otomatik artar","Banka tek taraflı değiştirir"],["Mudarebede sermayeyi koyan tarafa ne ad verilir?","Rabbülmal","Mudarip","Kefil","Muhatap"],["Mudarebede emeği ve uzmanlığı koyan tarafa ne ad verilir?","Mudarip","Rabbülmal","Müşteri","Ciranta"],["Mudarebede kâr nasıl paylaşılır?","Önceden belirlenen oranla","Sermaye sahibi tamamını alır","Eşit olması şarttır","Zarar çıkınca yine kâr dağıtılır"],["Müşarekede ortakların sermaye payı neye göre belirlenir?","Koydukları sermayeye","Yaşlarına","Şube sayısına","Tahsil gücüne"],["Katılım bankacılığında finansman verilirken esas alınan unsur nedir?","Gerçek bir mal, hizmet veya ortaklık işlemi","Para karşılığı para ödünç vermek","Sabit faizli borç","Belirsiz spekülasyon"],["Selem sözleşmesinin özelliği nedir?","Bedel peşin ödenir, mal sonra teslim edilir","Mal peşin, bedel sonra","Hem mal hem bedel sonra","Hiçbir teslim olmaz"],["İstisna sözleşmesi neye uygundur?","Sipariş üzerine imalat veya inşaat","Günlük döviz alım satımı","Kişisel borç para","Bağış toplama"],["İcara sözleşmesinde mülkiyet kimdedir?","Finansman veren tarafta (kira süresince)","Kiracıda","Noterde","Kefilde"],["Finansal kiralamayla (leasing) benzer işleyen katılım ürünü hangisidir?","İcara","Mudarebe","Özel cari","Zekât"],["Vakıf, zekât ve sadaka aşağıdakilerden hangi alana yakındır?","Sosyal dayanışma","Kredi kartı","Türev ürün","Döviz işlemi"],["Katılım bankaları kâr payı oranını nasıl ilan eder?","Tahmini oran olarak, gerçekleşen sonuçla kesinleşir","Garantili sabit oran","Hiç ilan etmez","Yalnızca yıllık"],["Katılma hesabında getiri nasıl belirlenir?","Havuz sonucuna göre, önceden garanti edilmez","Önceden garantilidir","Her zaman sabit faizdir","Enflasyona bağlanır"],["Katılım hesabı sahibi hangi taraf gibi davranır?","Fon sağlayıcı ortak","Borçlu","Kefil","Sigortacı"],["Katılım bankalarındaki “fon havuzu” neyi ifade eder?","Hesapların birlikte işletildiği ortak fon","Banka kasası","Personel ödenek kalemi","Reklam bütçesi"],["Kira sertifikasında yatırımcının hakkı neye dayanır?","Varlığın kira gelirine ve mülkiyetine","Faiz ödemesine","Kefilin imzasına","Çek tutarına"],["Kira sertifikası ihracında temel dayanak olarak ne bulunmalıdır?","Gerçek bir varlık veya haklar","Hiçbir şey","Yalnızca nakit borç","Kişisel güven"],["Tekafül (katılım sigortası) hangi ilkeye dayanır?","Karşılıklı yardımlaşma ve ortak risk paylaşımı","Faizli birikim","Piyasa spekülasyonu","Tek taraflı kâr"],["Katılım finans sisteminde “gharar” ne demektir?","Aşırı belirsizlik","Faiz","Kâr payı","Teminat"],["Katılım finans sisteminde “riba” ne demektir?","Faiz","Kâr","Kira","Ortaklık"],["Murabahada müşteri malı satın alınmadan önce bankaya ne verebilir?","Satın alma vaadi (talep)","Malın mülkiyetini","Teslim belgesini","Hiçbir şey"],["Danışma kurulu ürün sunulmadan önce neyi değerlendirir?","Uygunluğu","Reklam metnini","Şube dekorunu","Personel sayısını"],["Katılım endeksine alınan şirketlerin ortak özelliği nedir?","Faaliyet ve finansal oran ölçütlerine uygunluk","Yüksek temettü","Borsada ilk sırada olmak","Yabancı ortaklık"],["Bir şirketin faizli borç/aktif oranı çok yüksekse katılım endeksi açısından ne olur?","Endeks dışında kalabilir","Endekste öne çıkar","Hiçbir etkisi olmaz","Zorunlu olarak girer"],["Vadeli bir finansmanda gecikme halinde alınan tutarın ilkesel yaklaşımı nedir?","Gecikme faizi alınmaz; hayır işlerine aktarılan bedel uygulanabilir","Gecikme faizi alınır","Sonsuza kadar artar","Hiç tahsil edilmez"]],"ekonomi":[["Enflasyon nedir?","Genel fiyat düzeyindeki sürekli artış","Fiyatların düşmesi","Kurun sabit kalması","Faizin artması"],["Deflasyon nedir?","Genel fiyat düzeyindeki sürekli düşüş","Fiyat artışı","Ücret artışı","Kur artışı"],["Reel faiz nasıl hesaplanır (yaklaşık)?","Nominal faiz − enflasyon","Nominal faiz + enflasyon","Nominal faiz × enflasyon","Nominal faiz ÷ kur"],["Çekirdek enflasyon neyi dışarıda bırakır?","Fiyatı çok oynak kalemleri","Kiraları","Eğitimi","Sağlığı"],["Para arzı artarsa, diğer şartlar sabitken enflasyon baskısı ne olur?","Artar","Azalır","Değişmez","Sıfırlanır"],["Faiz oranı artınca kredi talebi genellikle ne olur?","Azalır","Artar","Değişmez","Sıfırlanır"],["Büyüme hızı artarken işsizlik genellikle nasıl değişir?","Azalma eğilimi gösterir","Artar","Hiç değişmez","Önce iki katına çıkar"],["Kişi başına milli gelir nasıl bulunur?","Toplam gelir ÷ nüfus","Toplam gelir × nüfus","Toplam borç ÷ nüfus","Toplam ihracat ÷ nüfus"],["Merkez bankasının temel amacı genellikle nedir?","Fiyat istikrarı","Hisse kâr payı dağıtmak","Sebze fiyatı belirlemek","Ücret belirlemek"],["Para politikası hangi araçlarla yürütülür?","Faiz, rezerv gereklilikleri, açık piyasa işlemleri","Vergi oranları","Ücret tarifeleri","Gümrük tarifeleri"],["Maliye politikası neyi kapsar?","Vergi ve kamu harcamaları","Politika faizi","Zorunlu karşılık","Altın alımı"],["Genişletici maliye politikasında devlet ne yapar?","Harcamaları artırır veya vergileri azaltır","Harcamaları keser","Faizi artırır","Parayı yok eder"],["Dış borç ne demektir?","Yurt dışı kaynaklı borçlar","Yurt içi borçlar","Ödenmiş borçlar","Devlet alacakları"],["Ödemeler dengesi neyi kaydeder?","Bir ülkenin dış dünyayla para akışlarını","Yalnızca bütçeyi","Yalnızca vergileri","Yalnızca enflasyonu"],["Kur riskinden korunma örneği hangisidir?","Forward veya opsiyon","Kredi kartı","Bono ciro","Bağış"],["Bir ülke parası değer kazanırsa ithalat nasıl etkilenir?","Ucuzlar","Pahalılaşır","Durur","Değişmez"],["Bir ülke parası değer kaybederse ihracat genellikle nasıl etkilenir?","Rekabet gücü artabilir","Mutlaka düşer","Mutlaka durur","Vergiden muaf olur"],["Enflasyon beklentisi neden önemlidir?","Fiyat ve ücret kararlarını etkiler","Yalnızca turizmi etkiler","Hiçbir etkisi yoktur","Sadece vergiyi belirler"],["“Stagflasyon” ne demektir?","Düşük büyüme ve yüksek enflasyonun birlikte görülmesi","Yüksek büyüme ve düşük enflasyon","Düşük faiz ve düşük kur","Yüksek ihracat ve düşük ithalat"],["Resesyon neyi ifade eder?","Ekonomik faaliyetlerde belirgin ve süreğen daralma","Fiyat artışı","Faiz artışı","İhracat artışı"],["Gelir dağılımı eşitsizliğini ölçen yaygın gösterge hangisidir?","Gini katsayısı","Beta katsayısı","F/K","ROE"],["Piyasada arz-talep dengesini sağlayan fiyata ne denir?","Denge fiyatı","Maliyet fiyatı","Tavan fiyat","Etiket fiyatı"],["Fiyat tavanı konursa genellikle ne görülebilir?","Kıtlık ve karaborsa","Fazla arz","Fiyatların düşmesi","Her zaman refah artışı"],["Esneklik neyi ölçer?","Talebin veya arzın fiyata duyarlılığını","Enflasyonu","Faizi","Kuru"],["Zorunlu ürünlerde fiyat artışında talep genellikle nasıl değişir?","Az değişir (esnek değildir)","Çok düşer","Sıfırlanır","İkiye katlanır"],["Vergilerin temel amacı nedir?","Kamu harcamalarını finanse etmek","Faiz ödemek","Kur belirlemek","Enflasyonu artırmak"],["Dolaylı vergiye örnek hangisidir?","KDV","Gelir vergisi","Kurumlar vergisi","Servet vergisi (genel)"],["Dolaysız (doğrudan) vergiye örnek hangisidir?","Gelir vergisi","KDV","ÖTV","Gümrük vergisi"],["Büyüme rakamlarını “reel” yapan düzeltme nedir?","Fiyat değişiminden arındırma","Kur ile çarpma","Faizle bölme","Nüfusla çarpma"],["Piyasalarda risk iştahı arttığında genellikle hangi varlıklara talep artar?","Hisse senedi gibi riskli varlıklara","Yalnızca altına","Sadece nakde","Hiçbirine"]],"fon":[["Yatırım fonu nedir?","Birçok yatırımcının parasının profesyonelce yönetildiği havuz","Bir banka hesabı","Bir kredi türü","Bir sigorta poliçesi"],["Fon portföyünü kim yönetir?","Portföy yönetim şirketi","Tapu idaresi","Noter","Gümrük"],["Fon saklama kuruluşunun görevi nedir?","Fon varlıklarını saklamak","Fonu reklam etmek","Fon getirisini garanti etmek","Fon fiyatını belirlemek"],["Fon toplam gider oranı neyi gösterir?","Fonun yıllık yönetim vb. maliyetini","Fonun getirisini","Fonun kârını","Fonun büyüklüğünü"],["Para piyasası fonu hangi araçlara yatırım yapar?","Kısa vadeli borçlanma ve benzeri araçlara","Yalnızca hisseye","Yalnızca gayrimenkule","Yalnızca altına"],["Hisse senedi fonu hangi riske daha çok maruzdur?","Fiyat dalgalanması riski","Hiç risk taşımaz","Yalnızca vade riski","Sabit faiz riski"],["Karma fon neyi ifade eder?","Birden fazla varlık sınıfına yatırım","Sadece tahvil","Sadece döviz","Sadece nakit"],["Değişken fon için doğru ifade hangisidir?","Yönetici varlık dağılımını piyasaya göre değiştirebilir","Dağılım hiç değişmez","Yalnızca altın içerir","Garantili getiri sağlar"],["Serbest fon kimler içindir?","Genellikle nitelikli yatırımcılar","Yalnızca çocuklar","Yalnızca emekliler","Herkes için ücretsiz"],["Fon fiyatı ne sıklıkla açıklanır (yaygın uygulama)?","Her iş günü","Yılda bir","Ayda bir","Hiçbir zaman"],["Fon alım-satımında valör ne demektir?","İşlemin hesaba yansıdığı tarih","Fonun adı","Fonun logosu","Fon kodu"],["Fon kodu ne işe yarar?","Fonu tanımlayan kısa kod","Vergi numarası","Hesap şifresi","Kimlik numarası"],["Fon karşılaştırırken hangi süre getirisi daha anlamlı olabilir?","Aynı dönemdeki kıyaslama","Farklı dönemlerin kıyaslaması","Tek günlük getiri","Rastgele seçilmiş gün"],["Standart sapma fonda neyi gösterir?","Getiri dalgalanmasını (riski)","Fonun adını","Fonun kuruluş yılını","Vergiyi"],["Beta katsayısı neyi ölçer?","Piyasaya duyarlılığı","Fon yaşını","Fon sahibini","Fon maliyetini"],["Sharpe oranı neyi gösterir?","Alınan risk başına getiriyi","Vergi oranını","Fon büyüklüğünü","Kâr payını"],["Portföy çeşitlendirmesi hangi riski azaltır?","Tek varlığa bağlı riski","Enflasyon riskini tamamen","Kur riskini tamamen","Piyasa riskini tamamen"],["Hisse senedi sahibi olmak ne anlama gelir?","Şirkete ortak olmak","Şirkete borç vermek","Şirketi kiralamak","Şirketi sigortalamak"],["Temettü nedir?","Şirket kârından hissedara dağıtılan pay","Şirketin borcu","Şirketin vergisi","Komisyon"],["Halka arz nedir?","Şirket paylarının ilk kez yatırımcılara satılması","Şirketin kapanması","Şirketin birleşmesi","Borsa kuralı"],["Borsa endeksi neyi gösterir?","Seçilmiş hisselerin toplu performansını","Tek şirketin kârını","Kur farkını","Faiz oranını"],["Tahvil nedir?","Borçlanma aracı","Ortaklık belgesi","Sigorta poliçesi","Hesap cüzdanı"],["Kupon ödemesi nedir?","Tahvilin dönemsel faiz/getiri ödemesi","Hisse kâr payı","Kredi masrafı","Prim"],["Vadeye kalan süre uzadıkça faiz değişimine duyarlılık genellikle nasıl olur?","Artar","Azalır","Sıfırlanır","Değişmez"],["Altın fonu hangi varlığa dayalıdır?","Altın","Hisse","Döviz","Gayrimenkul"],["Gayrimenkul yatırım fonu neye yatırım yapar?","Gayrimenkul ve ilgili varlıklara","Yalnızca hisseye","Yalnızca kripto varlığa","Yalnızca nakde"],["Fon getirisi vergilendirilirken genellikle hangi uygulama görülür?","Stopaj","Gelir beyanı zorunluluğu hiç yok","Damga vergisi","Veraset vergisi"],["Düzenli ve sabit tutarlı alım yöntemi hangisidir?","Maliyet ortalaması","Zamanlama tahmini","Spekülasyon","Kaldıraçlı işlem"],["Yatırımda “risk getiri” ilişkisi genel olarak nasıldır?","Yüksek getiri beklentisi genelde yüksek riskle gelir","Risk ile getiri ilgisizdir","Riskli olan her zaman kazanır","Risksiz olan en çok kazanır"],["Yatırım yaparken önce neyi belirlemek gerekir?","Hedef, vade ve risk toleransı","Komşunun tavsiyesi","Son günün getirisi","Sosyal medya trendi"]],"okuryazar":[["Bütçe yapmanın ilk adımı nedir?","Gelir ve giderleri kaydetmek","Kredi çekmek","Yatırım yapmak","Alışveriş yapmak"],["Sabit gidere örnek hangisidir?","Kira","Sinema bileti","Tatil","Hediye"],["Değişken gidere örnek hangisidir?","Market harcaması","Kira","Aidat","Kredi taksiti"],["Acil durum fonu ne içindir?","Beklenmedik giderler","Tatil","Yatırım","Lüks tüketim"],["Acil durum fonu hangi tür araçta tutulmalıdır?","Kolay nakde dönüşen, düşük riskli","Yüksek riskli","Gayrimenkul","Uzun vadeli kilitli"],["Kredi kartında “son ödeme tarihi” kaçırılırsa ne olur?","Gecikme faizi/ek maliyet doğar","Hiçbir şey olmaz","Borç silinir","Limit artar"],["Kredi kartı limitini sürekli doldurmak kredi notunu nasıl etkiler?","Olumsuz etkileyebilir","Olumlu etkiler","Etkilemez","Sıfırlar"],["Taksitli alışverişte toplam maliyeti ne belirler?","Faiz/masraf ve vade","Yalnızca ürün adı","Yalnızca marka","Yalnızca renk"],["Yıllık maliyet oranı neyi gösterir?","Kredinin toplam yıllık maliyetini","Aylık maaşı","Hesap numarasını","Vergi dairesini"],["Enflasyon birikimin satın alma gücünü nasıl etkiler?","Azaltır","Artırır","Etkilemez","Sabitler"],["Reel getiri pozitif olması ne demektir?","Getiri enflasyonun üzerindedir","Getiri enflasyonun altındadır","Getiri sıfırdır","Getiri vergidir"],["Çeşitlendirme neyi ifade eder?","Birikimi farklı varlıklara dağıtmak","Tüm parayı tek varlığa yatırmak","Parayı yastık altında tutmak","Borçlanmak"],["Sigorta ne işe yarar?","Riski transfer eder","Faiz kazandırır","Borcu siler","Vergiyi düşürür"],["Hayat planlamasında emeklilik birikimi için en kritik unsur nedir?","Erken başlamak ve düzenli birikim","Son anda büyük tutar","Hiç yatırım yapmamak","Sadece borçlanmak"],["Bileşik faizin etkisi hangi süreyle artar?","Süre uzadıkça","Süre kısaldıkça","Hiç artmaz","Yalnızca ilk yıl"],["Borç/gelir oranı yükseldikçe ne olur?","Borç yönetimi zorlaşır","Rahatlık artar","Kredi notu iyileşir","Faiz düşer"],["Dolandırıcılıkta sık görülen işaret hangisidir?","Acele ettirme ve gizlilik baskısı","Resmi belge sunma","Yazılı bilgilendirme","Geri arama imkânı"],["Parolalarla ilgili doğru uygulama hangisidir?","Uzun ve her hesapta farklı parola","Aynı parolayı her yerde kullanmak","Doğum tarihi kullanmak","Parolayı paylaşmak"],["İki adımlı doğrulama ne sağlar?","Ek güvenlik katmanı","Daha hızlı giriş","Daha düşük faiz","Daha yüksek limit"],["Sahte sözleşme veya bağlantıdan korunmak için ne yapılmalıdır?","Bağlantıya tıklamadan resmi kanaldan teyit etmek","Hemen tıklamak","Şifreyi göndermek","Telefonu kapatmamak"],["Tüketici olarak sözleşmeyi imzalamadan önce ne yapılmalıdır?","Şartları dikkatlice okumak","İmzalayıp sonra bakmak","Sadece başlığa bakmak","Okumadan onaylamak"],["Vade farkı nedir?","Vadeli satışta ek bedel","İndirim","Vergi iadesi","Bağış"],["Faiz ile kâr payı arasındaki kavramsal fark nedir?","Kâr payı ticari faaliyete bağlı sonuçtan gelir","Faiz ticari faaliyete bağlıdır","İkisi aynıdır","İkisi de garantilidir"],["Hedef belirlemede SMART ilkesi ne demektir?","Özgül, ölçülebilir, ulaşılabilir, ilgili, zamanlı","Sadece büyük hedefler","Sadece kısa hedefler","Hedefsiz plan"],["Bir harcamanın ihtiyaç mı istek mi olduğunu ayırmak neden önemlidir?","Bütçeyi kontrol altında tutar","Gelir artırır","Borcu siler","Faiz kazandırır"],["“Kendine önce öde” ilkesi ne demektir?","Gelirden önce tasarruf ayırmak","Önce harcamak","Borç ertelemek","Yatırımı sonra yapmak"],["Kredi notu neyi gösterir?","Borç ödeme geçmişinin ve davranışının özetini","Maaşı","Servet vergisini","Hesap bakiyesini"],["Enflasyonlu ortamda nakdi yastık altında tutmanın riski nedir?","Satın alma gücünün erimesi","Faiz geliri","Vergi artışı","Hiç risk yoktur"],["Kayıtlı ve yetkili kurumlarla işlem yapmanın faydası nedir?","Güvence ve şikâyet yolu sağlar","Her zaman daha yüksek getiri","Vergi muafiyeti","Garantili kazanç"],["Yatırım tavsiyesi alırken kimin yetkili olduğuna bakmak neden önemlidir?","Yetkisiz tavsiye zarara ve dolandırıcılığa yol açabilir","Önemsizdir","Daha ucuzdur","Daha hızlıdır"]],"disticaret":[["İhracat nedir?","Malın yurt dışına satılması","Malın yurt içine alınması","Malın depolanması","Malın üretilmesi"],["İthalat nedir?","Malın yurt dışından satın alınıp getirilmesi","Malın yurt dışına satılması","Malın imhası","Malın tamiri"],["Gümrük beyannamesi neyi bildirir?","Eşyanın cinsi, değeri ve miktarını","Kişisel geliri","Banka bakiyesini","Evlilik durumunu"],["Serbest bölge neyi ifade eder?","Gümrük ve vergi avantajı olan özel bölge","Ücretsiz otopark","Turistik bölge","Askeri bölge"],["Menşe şahadetnamesi neyi gösterir?","Malın üretildiği/ait olduğu ülkeyi","Malın fiyatını","Malın rengini","Malın ağırlığını"],["Konşimento hangi taşıma türünde kullanılır?","Deniz taşımacılığı","Karayolu (CMR)","Havayolu (AWB)","Boru hattı"],["CMR belgesi hangi taşımada kullanılır?","Karayolu","Denizyolu","Havayolu","Demiryolu"],["Hava konşimentosu kısaltması nedir?","AWB","CMR","B/L","FOB"],["EXW teslim şeklinde satıcının sorumluluğu nedir?","Malı kendi tesisinde alıcıya hazır tutmak","Malı alıcının deposuna götürmek","Gümrük vergisini ödemek","Sigorta yaptırmak"],["DAP teslimde mal nereye kadar satıcının sorumluluğundadır?","Varış yerinde teslime hazır olana kadar","Çıkış limanına kadar","Alıcının kapısından sonra","Hiçbir yere"],["CIF teslimde satıcı neyi karşılar?","Navlun ve sigorta","Yalnızca fabrika çıkışı","Alıcı gümrük vergisi","Yerel nakliye"],["Nakliye sigortası neyi güvence altına alır?","Taşıma sırasındaki hasar/kayıp riskini","Kur riskini","Faiz riskini","Vergi riskini"],["Ön ödemeli satışta riski kim taşır?","Alıcı","Satıcı","Banka","Gümrük"],["Peşin ödemeli satışın satıcı açısından avantajı nedir?","Tahsilat riskinin çok düşük olması","Alıcıya güven sağlamaması","Vade tanıması","Daha uzun bekleme"],["Akreditif nedir?","Bankanın koşulları sağlanınca ödeme taahhüdü","Bir tür sigorta","Bir çek karnesi","Bir hesap cüzdanı"],["Akreditifte lehtar kimdir?","Satıcı (ihracatçı)","Alıcı","Banka","Nakliyeci"],["Akreditifte talimat veren (açtıran) kimdir?","Alıcı (ithalatçı)","Satıcı","Banka çalışanı","Gümrükçü"],["Teyitli akreditifin farkı nedir?","İkinci bir bankanın ödeme taahhüdü bulunur","Ödeme olmaz","Sigorta gerekmez","Belge istenmez"],["Dahilde işleme rejimi neyi amaçlar?","İhracata dönük üretimde girdilerin vergisiz/avantajlı ithali","Yurt içi satışı artırmak","Vergi artırmak","İthalatı yasaklamak"],["Gümrük tarifesi ne demektir?","Eşya cinslerine göre vergi oranları listesi","Kargo fiyat listesi","Banka faiz listesi","Mağaza fiyatları"],["GTİP (gümrük tarife kodu) ne işe yarar?","Eşyanın vergi ve mevzuatını belirlemeye","Kargo takibine","Banka hesabı açmaya","Sigorta primini ödemeye"],["Ek mali yükümlülük gümrükte ne işe yarar?","İthalata ek vergi/koruma sağlar","İhracatı yasaklar","Kur belirler","Prim öder"],["Antrepo nedir?","Gümrük gözetiminde eşya depolanan yer","Alışveriş merkezi","Banka şubesi","Okul"],["Navlun nedir?","Taşıma bedeli","Sigorta primi","Gümrük vergisi","Komisyon"],["Konteyner ölçüsünde yaygın standart hangisidir?","20 ve 40 ayak","5 ve 10 ayak","100 ayak","1 ayak"],["İhracat kredisi ne içindir?","İhracat sürecinin finansmanı","Konut alımı","Bireysel tüketim","Ev kirası"],["Döviz gelirli ihracatçı için kur düşüşü ne anlama gelir?","TL karşılığında gelir azalır","TL karşılığı artar","Etkilenmez","Vergi düşer"],["Dış ticaret açığı hangi durumda oluşur?","İthalat ihracattan fazlaysa","İhracat ithalattan fazlaysa","İkisi eşitse","Hiçbir zaman"],["Serbest ticaret anlaşmaları genel olarak neyi hedefler?","Gümrük vergilerini azaltmayı","Vergileri artırmayı","Ticareti yasaklamayı","Kuru sabitlemeyi"],["Ürün standartlarına uygunluk işareti olarak AB’de kullanılan işaret hangisidir?","CE","KDV","USD","EUR"],["İhracatta KDV uygulaması genel olarak nasıldır?","İstisna/iade mekanizması vardır","Her zaman iki katıdır","Hiç yoktur","Sadece peşinde alınır"]],"hazine":[["Hazine biriminin temel görevlerinden biri nedir?","Likidite ve piyasa risklerini yönetmek","Müşteri şikâyeti dinlemek","Tapu işlemi yapmak","Kargo takibi yapmak"],["Spot işlem nedir?","Kısa valörlü, anlık fiyatlı alım satım","Gelecekte teslimli işlem","Opsiyon","Swap"],["Valör ne demektir?","Takas/teslim tarihi","Kur","Faiz","Komisyon"],["Forward işlemde kur ne zaman belirlenir?","Sözleşme anında","Vade günü piyasada","Sorulmadan","Her gün"],["Vadeli işlem (futures) forward’dan nasıl ayrılır?","Standart ve borsada işlem görür","Standart değildir","Özel sözleşmedir","Teslim yoktur"],["Opsiyon primi neyi ifade eder?","Hakkın bedelini","Faiz","Teminat","Komisyon"],["Put opsiyonu ne hakkı verir?","Belirli fiyattan satma hakkı","Belirli fiyattan alma hakkı","Faiz ödeme hakkı","Teslim erteleme hakkı"],["Opsiyonda kullanma fiyatı ne demektir?","Hakkın kullanılacağı sabit fiyat","Prim","Vade","Faiz"],["Swap puanı hangi iki kuru farkından türer?","Spot ve vadeli kur","Alış ve satış","Dolar ve euro","Altın ve gümüş"],["Faiz oranları artınca kısa vadeli tahvil fiyatı ne olur?","Düşer","Artar","Değişmez","Sıfırlanır"],["Tahvilin vadesi uzadıkça faiz riski genellikle nasıl olur?","Artar","Azalır","Sıfırlanır","Değişmez"],["Reeskont nedir?","Vadesi gelmemiş kıymetli evrakın iskonto edilmesi","Hesap kapatma","Döviz alımı","Hisse satışı"],["Repo işlemi ne demektir?","Geri alım taahhütlü menkul kıymet satışı","Kalıcı satış","Hibe","Bağış"],["Ters repo ne demektir?","Geri satım taahhütlü menkul kıymet alımı","Kalıcı alım","Hibe","Borç silme"],["Gecelik faiz ne demektir?","Bir günlük vadeli borçlanma faizi","Bir yıllık faiz","Aylık faiz","Haftalık faiz"],["Likidite riski nedir?","Yükümlülükleri zamanında karşılayamama riski","Fiyat riski","Vergi riski","Yasal risk"],["Kur riski nedir?","Döviz kurlarının olumsuz yönde hareket etme riski","Faiz riski","Vergi riski","Kredi riski"],["Karşı taraf riski nedir?","İşlem yapılan tarafın yükümlülüğünü yerine getirememe riski","Fiyat riski","Vade riski","İklim riski"],["Pozisyon limiti neden konur?","Riski sınırlandırmak için","Kâr artırmak için","Vergi azaltmak için","Reklam için"],["Zarar kes (stop loss) neyi sağlar?","Belirli zarara ulaşınca pozisyon kapatmayı","Kârı garantiler","Vergi öder","Faizi artırır"],["Altın alış-satış makası neyi ifade eder?","Alış ve satış fiyatı arasındaki fark","Altının saflığı","Altının ağırlığı","Altın vergisi"],["Ons altın hangi para birimiyle fiyatlanır (uluslararası)?","ABD doları","Euro","Sterlin","Yen"],["Ons ağırlığı yaklaşık kaç gramdır (troy ons)?","31,1","28","25","50"],["Gram altın TL fiyatı hangi iki veriye bağlıdır?","Ons altın fiyatı ve USD/TRY kuru","Yalnızca faiz","Yalnızca enflasyon","Yalnızca nüfus"],["Kâğıdın “getirisi” ile “fiyatı” arasındaki ilişki nasıldır?","Ters yönlüdür","Aynı yönlüdür","İlişkisizdir","Sabittir"],["Kısa pozisyon ne demektir?","Fiyat düşüşünden kazanç beklentisiyle satış pozisyonu","Fiyat artışı beklentisi","Hiç pozisyon yok","Vadeli mevduat"],["Uzun pozisyon ne demektir?","Fiyat artışı beklentisiyle alım pozisyonu","Satış pozisyonu","Pozisyonsuzluk","Zorunlu satış"],["Çapraz kur ne demektir?","Üçüncü bir para birimi üzerinden hesaplanan kur","İki ülke arası resmi kur","Dolar kuru","Altın kuru"],["Hazine bonosu nasıl bir araçtır?","Devletin kısa vadeli borçlanma aracı","Hisse senedi","Fon payı","Sigorta"],["Devlet tahvilinin tipik özelliği nedir?","Daha uzun vadeli borçlanma aracıdır","Daima 1 gün vadelidir","Hissedir","Hesap cüzdanıdır"]],"kiymetli":[["Çekin vadesi hakkında doğru bilgi hangisidir?","Görüldüğünde ödenir","Her zaman 6 ay vadelidir","Her zaman 1 yıl vadelidir","Vade zorunludur"],["Çekin ibraz süresi aynı ilde yaklaşık kaç gündür?","10","30","60","90"],["Bonoyu düzenleyene ne denir?","Keşideci/borçlu","Muhatap","Lehtar","Ciranta"],["Poliçede ödeme yapması istenen kişiye ne denir?","Muhatap","Keşideci","Ciranta","Aval veren"],["Lehtar kimdir?","Ödemenin yapılacağı kişi","Ödemeyi yapacak kişi","Kefil","Noter"],["Beyaz ciro (açık ciro) ne demektir?","Cirantanın sadece imzasının bulunması","Ciro yapılmaması","Yalnızca banka ciro etmesi","Cironun silinmesi"],["Ciranta kimdir?","Senedi devreden kişi","Senedi düzenleyen","Senedi ödeyen","Senede kefil olmayan"],["Aval veren kişi neyi güvence eder?","Senet borcunu","Mal kalitesini","Kur riskini","Vergiyi"],["Çekte karşılıksız işleminde sonuç ne olabilir?","Hukuki ve idari yaptırımlar doğar","Hiçbir şey olmaz","Borç silinir","Faiz kalkar"],["Senette zamanaşımı kavramı neyi ifade eder?","Hakkın belirli süre sonra dava edilememesini","Faizin artmasını","Borcun otomatik ödenmesini","Senedin yenilenmesini"],["Senedin tahsile verilmesinde vade geldiğinde ne olur?","Bedel tahsil edilince hesaba geçer","Anında para ödenir","Senet iptal edilir","Faiz yazılır"],["İskonto işleminde banka ne yapar?","Senedi vadesinden önce bedelinden indirimle satın alır","Senedi yok sayar","Senet düzenler","Senedi bağışlar"],["İskonto tutarı hangi unsurlara bağlıdır?","Tutar, vade ve oran","Sadece tutar","Sadece renk","Sadece şube"],["Kıymetli evrakta “soyutluk” ne demektir?","Hakkın temelindeki sebepten bağımsız olması","Senedin görünmez olması","Senedin silinebilmesi","Senedin yok sayılması"],["Kıymetli evrakta “senet olmadan hak kullanılamaz” ilkesi hangisidir?","Hakkın senede bağlılığı","Soyutluk","Kefalet","Rehin"],["Hamiline yazılı çek ne demektir?","Elinde bulunduran kişiye ödenir","Sadece ismi yazılı kişiye ödenir","Ödeme yapılmaz","Her zaman noter onaylıdır"],["Emre yazılı senet neyi ifade eder?","Ciro ile devredilebilir","Devredilemez","Sadece nakit ödenir","Yalnızca noterde ödenir"],["Nama yazılı senedin devri nasıl yapılır?","Alacağın devri ve teslim ile","Ciro yoluyla","Sadece sözle","Posta ile"],["Senet metninde borçlunun imzası olmazsa senet ne olur?","Geçersiz sayılır","Geçerlidir","Noter onaylar","Faiz işler"],["Çekte “karşılıksız işlemi yapıldı” damgası neyi gösterir?","Hesapta yeterli bakiye bulunmadığını","Çekin tahsil edildiğini","Çekin iptal edildiğini","Vergi ödendiğini"],["Protesto süresi geçirilirse ne olabilir?","Rücu hakkı zayıflayabilir","Borç silinir","Faiz artar","Çek iptal olur"],["Rücu nedir?","Ödemeyi yapan cirantanın önceki borçlulara başvurması","Banka hesabı kapatma","Vergi iadesi","Teminat artırma"],["Çek karnesi verilirken bankanın yaptığı temel değerlendirme nedir?","Müşterinin kredibilitesi ve geçmişi","Müşterinin yaşı","Boy-kilosu","Telefon markası"],["Elektronik ortamda saklanan ve senet hükmünde olan belgelere ne denebilir?","Dematerialize (kaydi) kıymetli evrak","Fotokopi","Taslak","Fatura"],["Kıymetli evrakın kaybında önce yapılması gereken nedir?","İlgili bankaya ve yetkili mercilere bildirmek","Beklemek","Fotoğrafını çekmek","Silmek"],["Konşimento bir kıymetli evrak mıdır?","Evet, mal üzerinde temsil hakkı sağlar","Hayır","Yalnızca hava taşımada","Yalnızca ihracatta"],["Varant ve rehin senedi hangi alanla ilgilidir?","Depolanan mallar üzerinde rehin/teminat","Konut kredisi","Kredi kartı","Sigorta"],["Çek hangi biçimde düzenlenir?","Yetkili kuruluşça verilen çek yaprağı üzerine","Herhangi bir kâğıda","Fatura üzerine","Dekont üzerine"],["Poliçenin kabulü ne demektir?","Muhatabın ödeme yükümlülüğünü üstlenmesi","Düzenleyenin imzası","Cironun iptali","Çekin reddi"],["Senet üzerindeki vade tarihi neyi belirler?","Ödemenin yapılacağı günü","Faiz oranını","Düzenleme yerini","İmza şeklini"]],"teminat":[["Rehin nedir?","Taşınır malın alacaklıya güvence olarak verilmesi","Taşınmaz üzerinde kayıt","Kişisel kefalet","Sigorta"],["Taşınır rehninde malın zilyetliği genelde kimdedir?","Alacaklıda","Borçluda (daima)","Noterde","Kefilde"],["Ticari işletme rehninde mal borçluda kalırsa ne gerekir?","Tescil/sicil kaydı","Hiçbir şey","Noter ilanı","Gümrük belgesi"],["Taşınmaz ipoteği hangi sicile kaydedilir?","Tapu sicili","Ticaret sicili","Nüfus sicili","Gemi sicili"],["İpotek bedeli ne demektir?","Teminat altına alınan azami tutar","Kredi faizi","Vergi","Tapu harcı"],["Ekspertiz raporunun amacı nedir?","Teminatın değerini bağımsız belirlemek","Kredi faizini belirlemek","Vergi hesaplamak","Reklam yapmak"],["Kefaletin şekil şartı nedir?","Yazılı şekil ve gerekli unsurlar","Sözlü yeterlidir","Hiçbir şart yok","Yalnızca sözlü beyan"],["Kefilin sorumluluğu ne ile sınırlıdır?","Sözleşmede belirtilen azami tutarla","Sınırsızdır","Yalnızca faizle","Yalnızca masrafla"],["Adi kefilde alacaklı kefile ne zaman başvurabilir?","Asıl borçluya başvurup sonuç alınamadıktan sonra","Hemen ilk gün","Hiçbir zaman","Yalnızca noterde"],["Müteselsil kefilde alacaklı kime başvurabilir?","Asıl borçluya veya kefile doğrudan","Sadece kefile","Sadece borçluya","Sadece noter"],["Garanti ile kefalet arasındaki fark nedir?","Garantide bağımsız bir taahhüt vardır","Aynı şeydir","Kefalet bağımsızdır","Garanti yazılı değildir"],["Teminat mektubu nedir?","Bankanın üçüncü kişiye karşı verdiği ödeme taahhüdü","Hesap cüzdanı","Çek karnesi","Vergi levhası"],["Kesin teminat mektubu ne için verilir?","Sözleşme yükümlülüğünün yerine getirilmesi için","Faiz ödemek için","Mal almak için","Kur sabitlemek için"],["Geçici teminat mektubu ne için verilir?","İhaleye katılım güvencesi olarak","Kredi çekmek için","Sigorta yaptırmak için","Mal teslim için"],["Avans teminat mektubu ne içindir?","Verilen avansın güvence altına alınması","Faiz ödemek","Tapu devri","Ücret ödemek"],["Nakit blokaj nedir?","Mevduatın teminat olarak bloke edilmesi","Hesap kapatma","Vergi iadesi","Kredi kartı"],["Hisse senedi rehni teminat olarak nasıl değerlendirilir?","Piyasa değerine göre iskonto edilerek","Nominal değerle tam","Hiç dikkate alınmaz","Sadece adıyla"],["Altın teminatında hangi risk vardır?","Fiyat dalgalanması","Hiç risk yok","Vergi riski yok","Kur riski yok"],["LTV (kredi/değer oranı) neyi ifade eder?","Kredi tutarının teminat değerine oranını","Faiz oranını","Vergi oranını","Komisyon oranını"],["LTV yükseldikçe banka riski nasıl değişir?","Artar","Azalır","Sıfırlanır","Değişmez"],["Sıra (derece) ipotekte neyi belirler?","Paylaşımda öncelik sırasını","Faiz oranını","Vergi tutarını","Tapu harcını"],["Yapılandırma (yeniden yapılandırma) nedir?","Borç şartlarının yeniden düzenlenmesi","Borcun silinmesi","Faiz kalkması","Kredinin kapanması"],["Taşınmaz teminatı için sigorta (deprem, yangın vb.) neden istenir?","Teminatın zarar riskine karşı korunması için","Faiz artırmak için","Vergi azaltmak için","Rastgele"],["Teminat yetersizse banka ne isteyebilir?","Ek teminat","Borcun silinmesini","Faiz indirimini","Vade uzatmayı"],["Bir borcun teminatsız (kefilsiz) verilmesine ne denir?","Açık kredi","Rehinli kredi","İpotekli kredi","Mevduat"],["Haciz nedir?","Borç ödenmezse malın cebri icra ile satılması süreci","Borç silme","Sigorta","Vergi iadesi"],["Teminat değeri neden iskontolu kabul edilir?","Değer dalgalanması ve satış maliyeti riski nedeniyle","Vergi nedeniyle","Reklam nedeniyle","Hiç iskonto yapılmaz"],["Taşınmaz üzerindeki diğer kayıtlar nereden öğrenilir?","Tapu kaydından","Vergi levhasından","Sigorta poliçesinden","Sosyal medyadan"],["Alacaklının teminatı paraya çevirebilmesi için genelde ne gerekir?","Borcun vadesinde ödenmemesi ve yasal takip","Borçlunun taşınması","Faiz değişimi","Hiçbir şey"],["Teminat portföyünde çeşitlendirme neden önemlidir?","Tek varlığın değer kaybı riskini azaltır","Vergiyi azaltır","Faizi sıfırlar","Hiçbir etkisi yoktur"],["Rehinli alacaklının önceliği ne anlama gelir?","Satış bedelinden önce tahsil hakkı","Her zaman tam ödeme garantisi","Vergisiz ödeme","Borcun silinmesi"]],"muhasebe":[["Varlıklar hangi iki gruba ayrılır?","Dönen ve duran varlıklar","Borç ve özkaynak","Gelir ve gider","Aktif ve pasif"],["Bilançonun sol tarafı neyi gösterir?","Varlıkları (aktif)","Borçları","Özkaynağı","Giderleri"],["Bilançonun sağ tarafı neyi gösterir?","Kaynakları (borç ve özkaynak)","Sadece varlık","Sadece gelir","Sadece kâr"],["Kısa vadeli yabancı kaynak nedir?","1 yıl içinde ödenecek borçlar","Uzun vadeli borçlar","Özkaynak","Sermaye"],["Özkaynak ne demektir?","Ortakların şirkete koyduğu ve biriken kaynaklar","Banka kredisi","Tedarikçi borcu","Vergi borcu"],["Gelir tablosu ne gösterir?","Belirli dönemde gelir, gider ve kârı","Belirli tarihteki varlıkları","Nakit hareketlerini","Ortaklık yapısını"],["Nakit akış tablosu ne gösterir?","Nakit giriş ve çıkışlarını","Sadece kârı","Sadece borcu","Sadece stoku"],["Amortisman nedir?","Duran varlığın değerinin zamana yayılarak giderleştirilmesi","Kâr dağıtımı","Borç ödemesi","Vergi indirimi"],["Stok değerleme yöntemlerinden biri hangisidir?","FIFO","VUK","SPK","KDV"],["FIFO ne anlama gelir?","İlk giren ilk çıkar","Son giren ilk çıkar","Ortalama","Rastgele"],["Kâr marjı nasıl hesaplanır?","Kâr ÷ satış","Satış ÷ kâr","Gider ÷ kâr","Kâr × satış"],["Net kâr nasıl bulunur?","Gelirlerden tüm giderler ve vergiler düşülerek","Sadece brüt kâr","Sadece satış","Sadece vergi"],["FAVÖK ne demektir?","Faiz, amortisman ve vergi öncesi kâr","Faiz sonrası kâr","Vergi sonrası kâr","Brüt kâr"],["Borçlanma oranı nasıl bulunur?","Toplam borç ÷ toplam varlık","Toplam varlık ÷ borç","Net kâr ÷ varlık","Satış ÷ borç"],["Alacak devir hızı neyi gösterir?","Alacakların ne hızla tahsil edildiğini","Stok hızını","Borç hızını","Satış hızını"],["Stok devir hızı yüksekse genellikle ne anlaşılır?","Stokların hızlı satıldığı","Satışların durduğu","Borcun arttığı","Kârın azaldığı"],["Aktif devir hızı neyi ölçer?","Varlıkların satış üretme verimini","Borç tutarını","Vergiyi","Kârı"],["Likidite oranları neyi ölçer?","Kısa vadeli borçları ödeme gücünü","Uzun vadeli kârlılığı","Vergi yükünü","Satış büyümesini"],["Cari oran 1’in altındaysa genellikle ne söylenebilir?","Kısa vadeli ödeme gücü zayıf olabilir","Güçlü likidite","Kâr yüksek","Borç yok"],["Net işletme sermayesi nasıl bulunur?","Dönen varlıklar − kısa vadeli borçlar","Duran varlıklar − borç","Kâr − gider","Satış − maliyet"],["Tahakkuk ilkesi nedir?","Gelir ve giderlerin ait olduğu dönemde kaydı","Nakit çıkınca kayıt","Rastgele kayıt","Yıl sonunda kayıt"],["Karşılaştırılabilirlik ilkesi ne gerektirir?","Dönemler arası aynı yöntemin kullanılması","Her yıl farklı yöntem","Hiç yöntem olmaması","Sadece iç kullanım"],["Kayıtlarda “borç/alacak” kavramı neyi ifade eder?","Hesabın hangi tarafına yazıldığını","Para borcunu","Vergi borcunu","Kredi borcunu"],["Bağımsız denetimin amacı nedir?","Finansal tabloların güvenilirliğine görüş vermek","Kâr dağıtmak","Vergi toplamak","Satış yapmak"],["Vergi öncesi kârdan hangi kalem düşülerek net kâra ulaşılır?","Kurumlar vergisi","KDV alacağı","Stok","Alacak"],["Cari dönem kârı bilançoda nerede yer alır?","Özkaynak içinde","Dönen varlıkta","Duran varlıkta","Kısa vadeli borçta"],["Ticari alacak neyi ifade eder?","Satış karşılığı tahsil edilecek tutar","Ödenecek borç","Kasa","Sermaye"],["Ticari borç neyi ifade eder?","Mal/hizmet alımı karşılığı ödenecek tutar","Tahsil edilecek alacak","Banka","Sermaye"],["Sermaye artırımı bilançoyu nasıl etkiler?","Özkaynağı artırır","Özkaynağı azaltır","Etkilemez","Varlığı sıfırlar"],["Brüt kâr marjı nasıl hesaplanır?","Brüt kâr ÷ net satışlar","Net kâr ÷ varlık","Satış ÷ brüt kâr","Borç ÷ özkaynak"],["Dönem sonu stok sayımı neyi sağlar?","Kayıtlı stokla fiili stokun uyumunu","Faiz hesabını","Vergi iadesini","Kâr dağıtımını"]]};
+type SoKonu = { id: string; ad: string; grup: "genel" | "finans"; mod?: string };
+const SO_KONULAR: SoKonu[] = [
+  { id: "genel", ad: "Genel Kültür", grup: "genel" },
+  { id: "tarih", ad: "Tarih", grup: "genel" },
+  { id: "cografya", ad: "Coğrafya", grup: "genel" },
+  { id: "spor", ad: "Spor", grup: "genel" },
+  { id: "sanat", ad: "Sanat & Müzik", grup: "genel" },
+  { id: "bilim", ad: "Bilim & Doğa", grup: "genel" },
+  { id: "katilim", ad: "Katılım Finans", grup: "finans", mod: "katilim" },
+  { id: "ekonomi", ad: "Ekonomi", grup: "finans", mod: "ekonomi" },
+  { id: "fon", ad: "Fon ve Yatırım", grup: "finans", mod: "fon" },
+  { id: "okuryazar", ad: "Finansal Okuryazarlık", grup: "finans", mod: "okuryazar" },
+  { id: "disticaret", ad: "Dış Ticaret", grup: "finans", mod: "disticaret" },
+  { id: "hazine", ad: "Hazine", grup: "finans", mod: "hazine" },
+  { id: "kiymetli", ad: "Kıymetli Evrak", grup: "finans", mod: "kiymetli" },
+  { id: "teminat", ad: "Teminat ve İpotek", grup: "finans", mod: "teminat" },
+  { id: "muhasebe", ad: "Muhasebe", grup: "finans", mod: "muhasebe" },
+];
+type SoSoru = { s: string; sec: string[]; d: number; ac?: string; kid: string };
+type SoVeri = { takmaAd: string; listede: boolean; ayar: { konu: string; n: number; sure: number }; rek: Record<string, { en: number; oyun: number; dogru: number }> };
+
+function soKonuAdi(id: string): string { return id === "karisik" ? "Karışık" : (SO_KONULAR.find(k => k.id === id)?.ad || id); }
+function soKova(konu: string, n: number): string { return konu + "_" + n; }
+function soTumKovalar(): string[] {
+  const l: string[] = [];
+  for (const k of ["karisik", ...SO_KONULAR.map(x => x.id)]) for (const n of SO_SORU_SAYILARI) l.push(soKova(k, n));
+  return l;
+}
+function soVeriBos(): SoVeri { return { takmaAd: "", listede: false, ayar: { konu: "karisik", n: 5, sure: 15 }, rek: {} }; }
+function soVeriOku(): SoVeri {
+  const b = soVeriBos();
+  try {
+    const j = JSON.parse(localStorage.getItem(SO_LS_KEY) || "null");
+    if (!j || typeof j !== "object") return b;
+    const rek: SoVeri["rek"] = {};
+    if (j.rek && typeof j.rek === "object") for (const k of Object.keys(j.rek)) {
+      const x = j.rek[k];
+      if (x && typeof x.en === "number" && x.en >= 0 && x.en <= 15000) rek[k] = { en: Math.round(x.en), oyun: Math.max(1, Math.round(Number(x.oyun) || 1)), dogru: Math.max(0, Math.round(Number(x.dogru) || 0)) };
+    }
+    const a = j.ayar || {};
+    const konu = a.konu === "karisik" || SO_KONULAR.some(k => k.id === a.konu) ? a.konu : "karisik";
+    return {
+      takmaAd: typeof j.takmaAd === "string" ? j.takmaAd.slice(0, 20) : "",
+      listede: !!j.listede,
+      ayar: { konu, n: SO_SORU_SAYILARI.includes(a.n) ? a.n : 5, sure: SO_SURELER.includes(a.sure) ? a.sure : 15 },
+      rek,
+    };
+  } catch { return b; }
+}
+function soVeriYaz(v: SoVeri) { try { localStorage.setItem(SO_LS_KEY, JSON.stringify(v)); } catch {} }
+
+function soHavuz(id: string): SoSoru[] {
+  const k = SO_KONULAR.find(x => x.id === id);
+  if (!k) return [];
+  const out: SoSoru[] = [];
+  const kompakt = (a: string[]) => {
+    const sec = egitimKaristir(a.slice(1));
+    out.push({ s: a[0], sec, d: sec.indexOf(a[1]), kid: id });
+  };
+  if (k.grup === "genel") (SO_BANKA_GENEL[id] || []).forEach(kompakt);
+  else {
+    const m = EGITIM_MODULLERI.find(x => x.id === k.mod);
+    (m?.sorular || []).forEach(q => {
+      const dogru = q.sec[q.d];
+      const sec = egitimKaristir(q.sec.slice());
+      out.push({ s: q.s, sec, d: sec.indexOf(dogru), ac: q.ac, kid: id });
+    });
+    (SO_BANKA_EK[id] || []).forEach(kompakt);
+  }
+  return out;
+}
+function soSorular(konu: string, n: number): SoSoru[] {
+  let havuz: SoSoru[] = [];
+  if (konu === "karisik") SO_KONULAR.forEach(k => { havuz = havuz.concat(soHavuz(k.id)); });
+  else havuz = soHavuz(konu);
+  return egitimKaristir(havuz).slice(0, n);
+}
+
+async function soSkorYaz(uid: string, kova: string, takmaAd: string, puan: number, dogru: number): Promise<boolean> {
+  try {
+    const app = await kpFirebaseWebApp();
+    const { getFirestore, doc, setDoc } = await import("firebase/firestore");
+    await setDoc(doc(getFirestore(app), "soruSkor", kova, "kayit", uid), { takmaAd, puan, dogru, guncelleme: new Date().toISOString() });
+    return true;
+  } catch (e) { console.error("Soru Odası puanı yazılamadı:", e); return false; }
+}
+async function soSkorGetir(kova: string): Promise<{ uid: string; takmaAd: string; puan: number; dogru: number }[] | null> {
+  try {
+    const app = await kpFirebaseWebApp();
+    const { getFirestore, collection, query, orderBy, limit, getDocs } = await import("firebase/firestore");
+    const sn = await getDocs(query(collection(getFirestore(app), "soruSkor", kova, "kayit"), orderBy("puan", "desc"), limit(25)));
+    return sn.docs.map((d: any) => { const x = d.data() || {}; return { uid: d.id, takmaAd: String(x.takmaAd || "—"), puan: typeof x.puan === "number" ? x.puan : 0, dogru: typeof x.dogru === "number" ? x.dogru : 0 }; });
+  } catch (e) { console.error("Soru Odası sıralaması okunamadı:", e); return null; }
+}
+async function soSkorlariSil(uid: string): Promise<boolean> {
+  try {
+    const app = await kpFirebaseWebApp();
+    const { getFirestore, doc, deleteDoc } = await import("firebase/firestore");
+    const db = getFirestore(app);
+    const sonuc = await Promise.all(soTumKovalar().map(async k => { try { await deleteDoc(doc(db, "soruSkor", k, "kayit", uid)); return true; } catch { return false; } }));
+    return sonuc.every(Boolean);
+  } catch (e) { console.error("Soru Odası kayıtları silinemedi:", e); return false; }
+}
+
+function SoOyun({ oyun, onBitti, onCik }: { oyun: { sorular: SoSoru[]; sure: number; konu: string }; onBitti: (r: { puan: number; dogru: number; yanlislar: any[] }) => void; onCik: () => void }) {
+  const { sorular, sure } = oyun;
+  const [idx, setIdx] = useState(0);
+  const [secili, setSecili] = useState<number | null>(null);
+  const [cevaplandi, setCevaplandi] = useState(false);
+  const [kalanMs, setKalanMs] = useState(sure * 1000);
+  const [puan, setPuan] = useState(0);
+  const [kazanc, setKazanc] = useState(0);
+  const [cikisOnay, setCikisOnay] = useState(false);
+  const baslaRef = useRef(Date.now());
+  const cevapRef = useRef(false);
+  const puanRef = useRef(0);
+  const dogruRef = useRef(0);
+  const yanlisRef = useRef<any[]>([]);
+  const onBittiRef = useRef(onBitti); onBittiRef.current = onBitti;
+  const q = sorular[idx];
+
+  const cevapla = (i: number) => {
+    if (cevapRef.current) return;
+    cevapRef.current = true;
+    const kal = Math.max(0, sure * 1000 - (Date.now() - baslaRef.current));
+    const dogru = i === q.d;
+    const k = dogru ? 500 + Math.round(500 * kal / (sure * 1000)) : 0;
+    if (dogru) dogruRef.current += 1;
+    else yanlisRef.current.push({ s: q.s, dogruMetin: q.sec[q.d], kid: q.kid });
+    puanRef.current += k;
+    setPuan(puanRef.current); setKazanc(k); setSecili(i); setKalanMs(kal); setCevaplandi(true);
+  };
+  useEffect(() => {
+    baslaRef.current = Date.now();
+    setKalanMs(sure * 1000);
+    const t = setInterval(() => {
+      if (cevapRef.current) return;
+      const k = sure * 1000 - (Date.now() - baslaRef.current);
+      if (k <= 0) { setKalanMs(0); cevapla(-1); } else setKalanMs(k);
+    }, 100);
+    return () => clearInterval(t);
+  }, [idx]);
+  const ileri = () => {
+    if (idx + 1 >= sorular.length) { onBittiRef.current({ puan: puanRef.current, dogru: dogruRef.current, yanlislar: yanlisRef.current }); return; }
+    cevapRef.current = false;
+    setIdx(idx + 1); setSecili(null); setCevaplandi(false); setKazanc(0);
+  };
+  const sn = Math.ceil(Math.max(0, kalanMs) / 1000);
+  const renkler = [C.blue, C.green, C.orange, C.purple];
+  const acikRenk = [C.blueLight, C.greenLight, C.orangeLight, C.purpleLight];
+  const sureDolu = Math.max(0, Math.min(1, kalanMs / (sure * 1000)));
+  const dogruMu = cevaplandi && secili === q.d;
+
+  return (
+    <div style={{ padding: "0 14px 26px" }}>
+      <style>{EGITIM_CSS}</style>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "2px 2px 6px" }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: C.sub }}>{CV("Soru")} {idx + 1} / {sorular.length} · {CV(soKonuAdi(q.kid))}</span>
+        <span style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: sn <= 3 && !cevaplandi ? C.red : C.orange }}>{sn} {CV("sn")}</span>
+      </div>
+      <div style={{ height: 6, background: WA(0.08), borderRadius: 3, marginBottom: 12, overflow: "hidden" }}>
+        <div style={{ width: `${sureDolu * 100}%`, height: 6, background: sn <= 3 && !cevaplandi ? C.red : C.orange, borderRadius: 3, transition: "width .12s linear" }} />
+      </div>
+      <div key={idx} className="eg-ileri" style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 14 }}>
+        <p style={{ margin: "0 0 12px", fontSize: 16, fontWeight: 700, lineHeight: 1.4, color: C.label }}>{q.s}</p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+          {q.sec.map((metin, i) => {
+            const dogruSik = cevaplandi && i === q.d;
+            const yanlisSik = cevaplandi && secili === i && i !== q.d;
+            const kenar = dogruSik ? C.green : yanlisSik ? C.red : C.border;
+            const zemin = dogruSik ? C.greenLight : yanlisSik ? "rgba(248,113,113,0.14)" : "transparent";
+            return (
+              <button key={i} className="eg-btn" disabled={cevaplandi} onClick={() => cevapla(i)}
+                style={{ display: "flex", alignItems: "center", gap: 12, textAlign: "left", padding: "10px 12px", borderRadius: 12, border: `1.5px solid ${kenar}`, background: zemin, color: C.label, fontSize: 14.5, lineHeight: 1.35, fontFamily: "inherit", cursor: cevaplandi ? "default" : "pointer", opacity: cevaplandi && !dogruSik && !yanlisSik ? 0.6 : 1 }}>
+                <span style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 14, background: acikRenk[i], color: renkler[i] }}>{String.fromCharCode(65 + i)}</span>
+                <span style={{ flex: 1, minWidth: 0 }}>{metin}</span>
+              </button>
+            );
+          })}
+        </div>
+        {cevaplandi && (
+          <div className="eg-acil" style={{ marginTop: 12, padding: "10px 12px", borderRadius: 10, background: dogruMu ? C.greenLight : "rgba(248,113,113,0.14)", fontSize: 13, lineHeight: 1.55, color: C.label }}>
+            <b style={{ color: dogruMu ? C.green : C.red }}>{dogruMu ? CV("Doğru.") : secili === -1 ? CV("Süre doldu.") : CV("Yanlış.")}</b>
+            {dogruMu && <span> +{kazanc} {CV("puan")}</span>}
+            {q.ac && <span> {q.ac}</span>}
+          </div>
+        )}
+        {cevaplandi && (
+          <button className="eg-btn" onClick={ileri}
+            style={{ width: "100%", marginTop: 12, padding: "12px 14px", borderRadius: 12, border: "none", background: C.blue, color: "#fff", fontSize: 14, fontWeight: 700, fontFamily: "inherit", cursor: "pointer" }}>
+            {idx + 1 >= sorular.length ? CV("Sonucu gör") : CV("Sonraki soru")}
+          </button>
+        )}
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "12px 4px 0" }}>
+        <span style={{ fontSize: 12, color: C.sub }}>{CV("Puanın")}</span>
+        <b style={{ fontSize: 16, color: C.label, fontVariantNumeric: "tabular-nums" }}>{puan}</b>
+      </div>
+      <div style={{ marginTop: 10, textAlign: "center" }}>
+        {!cikisOnay
+          ? <button onClick={() => setCikisOnay(true)} style={{ background: "none", border: "none", color: C.sub, fontSize: 12, fontFamily: "inherit", cursor: "pointer", textDecoration: "underline" }}>{CV("Oyundan çık")}</button>
+          : <div className="eg-acil" style={{ fontSize: 12, color: C.sub }}>
+              {CV("Çıkarsan bu oyun kaydedilmez.")}{" "}
+              <button onClick={onCik} style={{ background: "none", border: "none", color: C.red, fontSize: 12, fontWeight: 700, fontFamily: "inherit", cursor: "pointer" }}>{CV("Evet, çık")}</button>{" · "}
+              <button onClick={() => setCikisOnay(false)} style={{ background: "none", border: "none", color: C.blue, fontSize: 12, fontWeight: 700, fontFamily: "inherit", cursor: "pointer" }}>{CV("Devam et")}</button>
+            </div>}
+      </div>
+    </div>
+  );
+}
+
+function SoruOdasi({ kimlik, nav }: { kimlik: any; nav: (e: string) => void }) {
+  const uid: string | null = kimlik?.kullanici?.uid || null;
+  const [veri, setVeri] = useState<SoVeri>(() => soVeriOku());
+  const veriRef = useRef(veri); veriRef.current = veri;
+  const [gor, setGor] = useState<"ayar" | "oyun" | "sonuc" | "sira">("ayar");
+  const [oyun, setOyun] = useState<any>(null);
+  const [sonuc, setSonuc] = useState<any>(null);
+  const [siraKonu, setSiraKonu] = useState<string>(() => soVeriOku().ayar.konu);
+  const [siraN, setSiraN] = useState<number>(() => soVeriOku().ayar.n);
+  const [liste, setListe] = useState<{ uid: string; takmaAd: string; puan: number; dogru: number }[] | null | undefined>(undefined);
+  const [takmaAdGiris, setTakmaAdGiris] = useState<string>(() => { const v = soVeriOku(); if (v.takmaAd) return v.takmaAd; try { return egitimIlerlemeOku().takmaAd || ""; } catch { return ""; } });
+  const [hata, setHata] = useState("");
+  const [yukleniyor, setYukleniyor] = useState(false);
+  const kart: any = { background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: "13px 14px", marginBottom: 10 };
+  const ayar = veri.ayar;
+
+  const ayarla = (p: Partial<SoVeri["ayar"]>) => { const n = { ...veriRef.current, ayar: { ...veriRef.current.ayar, ...p } }; soVeriYaz(n); setVeri(n); };
+  const basla = () => {
+    const sorular = soSorular(ayar.konu, ayar.n);
+    if (sorular.length === 0) return;
+    setOyun({ sorular, sure: ayar.sure, konu: ayar.konu, n: sorular.length, nOrj: ayar.n });
+    setGor("oyun");
+  };
+  const bitti = (r: { puan: number; dogru: number; yanlislar: any[] }) => {
+    const kova = soKova(oyun.konu, oyun.nOrj);
+    const v = veriRef.current;
+    const onceki = v.rek[kova];
+    const yeniRekor = !onceki || r.puan > onceki.en;
+    const nv: SoVeri = { ...v, rek: { ...v.rek, [kova]: { en: yeniRekor ? r.puan : onceki.en, oyun: (onceki?.oyun || 0) + 1, dogru: yeniRekor ? r.dogru : onceki.dogru } } };
+    soVeriYaz(nv); setVeri(nv);
+    if (yeniRekor && uid && nv.listede && nv.takmaAd) soSkorYaz(uid, kova, nv.takmaAd, r.puan, r.dogru);
+    setSonuc({ ...r, konu: oyun.konu, n: oyun.n, nOrj: oyun.nOrj, yeniRekor, onceki: onceki?.en || 0 });
+    setHata("");
+    setGor("sonuc");
+  };
+  const katil = async () => {
+    const ad = takmaAdGiris.trim();
+    if (!uid) { setHata("Sıralamaya katılmak için giriş yapılmalıdır."); return; }
+    if (!egitimTakmaAdGecerliMi(ad)) { setHata("Takma ad 2-20 karakter olmalı; harf, rakam, boşluk, nokta, tire veya alt çizgi kullanılabilir."); return; }
+    setHata(""); setYukleniyor(true);
+    const rek = veriRef.current.rek;
+    const sonuclar = await Promise.all(Object.keys(rek).filter(k => rek[k].en > 0).map(k => soSkorYaz(uid, k, ad, rek[k].en, rek[k].dogru)));
+    setYukleniyor(false);
+    if (!sonuclar.every(Boolean)) { setHata("Sıralamaya şu an kaydedilemedi. Biraz sonra tekrar dene."); return; }
+    const nv = { ...veriRef.current, takmaAd: ad, listede: true };
+    soVeriYaz(nv); setVeri(nv); setListe(undefined);
+  };
+  const cik = async () => {
+    if (!uid) return;
+    setYukleniyor(true);
+    const ok = await soSkorlariSil(uid);
+    setYukleniyor(false);
+    if (!ok) { setHata("Sıralamadan çıkarılamadı. Biraz sonra tekrar dene."); return; }
+    setHata("");
+    const nv = { ...veriRef.current, listede: false };
+    soVeriYaz(nv); setVeri(nv); setListe(undefined);
+  };
+  useEffect(() => {
+    if (gor !== "sira" || !uid || liste !== undefined) return;
+    let iptal = false;
+    soSkorGetir(soKova(siraKonu, siraN)).then(l => { if (!iptal) setListe(l); });
+    return () => { iptal = true; };
+  }, [gor, uid, liste, siraKonu, siraN]);
+
+  const chip = (aktif: boolean, etiket: string, tikla: () => void, key?: string) => (
+    <button key={key || etiket} className="eg-btn" onClick={tikla}
+      style={{ padding: "7px 12px", borderRadius: 999, border: `1px solid ${aktif ? C.blue : C.border}`, background: aktif ? C.blue : "transparent", color: aktif ? "#fff" : C.sub, fontSize: 12.5, fontWeight: 600, fontFamily: "inherit", cursor: "pointer", margin: "0 6px 6px 0" }}>{etiket}</button>
+  );
+  const grupBaslik = (t: string) => <p style={{ margin: "6px 0 7px", fontSize: 11, fontWeight: 700, letterSpacing: 0.6, color: C.sub2 }}>{CV(t)}</p>;
+  const konuChipleri = (secili: string, sec: (id: string) => void) => (
+    <div>
+      {chip(secili === "karisik", CV("Karışık"), () => sec("karisik"), "k")}
+      {grupBaslik("GENEL")}
+      {SO_KONULAR.filter(k => k.grup === "genel").map(k => chip(secili === k.id, CV(k.ad), () => sec(k.id), k.id))}
+      {grupBaslik("FİNANS VE EĞİTİM")}
+      {SO_KONULAR.filter(k => k.grup === "finans").map(k => chip(secili === k.id, CV(k.ad), () => sec(k.id), k.id))}
+    </div>
+  );
+  const sayiChipleri = (secili: number, sec: (n: number) => void) => <div>{SO_SORU_SAYILARI.map(n => chip(secili === n, String(n), () => sec(n), "n" + n))}</div>;
+  const btn = (etiket: string, tikla: () => void, birincil = true) => (
+    <button className="eg-btn" onClick={tikla}
+      style={{ width: "100%", padding: "12px 14px", borderRadius: 12, border: birincil ? "none" : `1px solid ${C.border}`, background: birincil ? C.blue : C.card, color: birincil ? "#fff" : C.label, fontSize: 14, fontWeight: 700, fontFamily: "inherit", cursor: "pointer", marginBottom: 8 }}>{CV(etiket)}</button>
+  );
+  const katilKarti = () => (
+    <div style={kart}>
+      <p style={{ margin: "0 0 4px", fontSize: 14, fontWeight: 700, color: C.label }}>{CV("Sıralamaya katıl")}</p>
+      <p style={{ margin: "0 0 10px", fontSize: 12, lineHeight: 1.5, color: C.sub }}>{CV("Sıralamada yalnızca seçilen takma ad ve puan görünür. Gerçek ad ve e-posta paylaşılmaz. İstediğiniz zaman sıralamadan çıkabilirsiniz.")}</p>
+      {!uid ? btn("Giriş yap", () => nav("hesapGiris")) : (
+        <div>
+          <input value={takmaAdGiris} onChange={e => { setTakmaAdGiris(e.target.value); setHata(""); }} placeholder={CV("Takma ad")} maxLength={20}
+            style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.border}`, background: "transparent", color: C.label, fontSize: 14, fontFamily: "inherit", marginBottom: 8 }} />
+          {hata && <p style={{ margin: "0 0 8px", fontSize: 12, color: C.red }}>{CV(hata)}</p>}
+          <button className="eg-btn" disabled={yukleniyor} onClick={katil} style={{ width: "100%", padding: "11px 14px", borderRadius: 12, border: "none", background: C.blue, color: "#fff", fontSize: 14, fontWeight: 700, fontFamily: "inherit", cursor: "pointer", opacity: yukleniyor ? 0.6 : 1 }}>{CV("Sıralamaya katıl")}</button>
+        </div>
+      )}
+    </div>
+  );
+
+  if (gor === "oyun" && oyun) {
+    return <SoOyun oyun={oyun} onBitti={bitti} onCik={() => { setGor("ayar"); setOyun(null); }} />;
+  }
+
+  let icerik: any = null;
+  if (gor === "ayar") {
+    const rk = veri.rek[soKova(ayar.konu, ayar.n)];
+    icerik = (
+      <div style={{ padding: "0 14px 26px" }}>
+        <div style={kart}>
+          <p style={{ margin: "0 0 8px", fontSize: 12, fontWeight: 700, letterSpacing: 0.6, color: C.sub2 }}>{CV("KONU")}</p>
+          {konuChipleri(ayar.konu, id => { ayarla({ konu: id }); setSiraKonu(id); setListe(undefined); })}
+        </div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <div style={{ ...kart, flex: 1, minWidth: 0 }}>
+            <p style={{ margin: "0 0 8px", fontSize: 12, fontWeight: 700, letterSpacing: 0.6, color: C.sub2 }}>{CV("SORU")}</p>
+            {sayiChipleri(ayar.n, n => { ayarla({ n }); setSiraN(n); setListe(undefined); })}
+          </div>
+          <div style={{ ...kart, flex: 1, minWidth: 0 }}>
+            <p style={{ margin: "0 0 8px", fontSize: 12, fontWeight: 700, letterSpacing: 0.6, color: C.sub2 }}>{CV("SÜRE")}</p>
+            <div>{SO_SURELER.map(s => chip(ayar.sure === s, s + " " + CV("sn"), () => ayarla({ sure: s }), "s" + s))}</div>
+          </div>
+        </div>
+        {rk && <p style={{ margin: "0 2px 10px", fontSize: 12, color: C.sub }}>{CV("Bu ayarda rekorun:")} <b style={{ color: C.label }}>{rk.en}</b> {CV("puan")} · {rk.oyun} {CV("oyun")}</p>}
+        {btn("Başla", basla)}
+        {btn("Sıralama", () => { setSiraKonu(ayar.konu); setSiraN(ayar.n); setListe(undefined); setHata(""); setGor("sira"); }, false)}
+        <p style={{ margin: "4px 2px 0", textAlign: "center", fontSize: 12, color: C.sub2 }}>{CV("Arkadaşlarla oda kurup yarışma: yakında")}</p>
+      </div>
+    );
+  }
+
+  if (gor === "sonuc" && sonuc) {
+    const maks = sonuc.n * 1000;
+    icerik = (
+      <div style={{ padding: "0 14px 26px" }}>
+        <div style={{ ...kart, textAlign: "center", padding: 18 }}>
+          <div style={{ fontSize: 12, color: C.sub }}>{CV(soKonuAdi(sonuc.konu))} · {sonuc.n} {CV("soru")}</div>
+          <div className="eg-pop" style={{ fontSize: 36, fontWeight: 800, margin: "6px 0 2px", color: C.label, fontVariantNumeric: "tabular-nums" }}>{sonuc.puan}</div>
+          <div style={{ fontSize: 12, color: C.sub }}>{CV("puan")} · {sonuc.dogru} / {sonuc.n} {CV("doğru")} · {CV("en çok")} {maks}</div>
+          {sonuc.yeniRekor
+            ? <div style={{ marginTop: 8, fontSize: 13, fontWeight: 700, color: C.green }}>{CV(sonuc.onceki > 0 ? "Yeni kişisel rekor" : "İlk puanın kaydedildi")}</div>
+            : <div style={{ marginTop: 8, fontSize: 12, color: C.sub }}>{CV("Rekorun:")} {sonuc.onceki} {CV("puan")}</div>}
+        </div>
+        {sonuc.yanlislar.length > 0 && (
+          <div style={kart}>
+            <p style={{ margin: "0 0 8px", fontSize: 12, fontWeight: 700, letterSpacing: 0.6, color: C.sub2 }}>{CV("YANLIŞLAR")}</p>
+            {sonuc.yanlislar.map((y: any, i: number) => (
+              <div key={i} style={{ fontSize: 13, lineHeight: 1.45, marginBottom: i < sonuc.yanlislar.length - 1 ? 9 : 0, color: C.label }}>
+                <b>{y.s}</b>
+                <div style={{ fontSize: 12, color: C.sub }}>{CV("Doğru:")} {y.dogruMetin}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        {!veri.listede && katilKarti()}
+        {btn("Tekrar oyna", basla)}
+        {btn("Sıralamayı gör", () => { setSiraKonu(sonuc.konu); setSiraN(sonuc.nOrj); setListe(undefined); setHata(""); setGor("sira"); }, false)}
+        {btn("Konu değiştir", () => { setHata(""); setGor("ayar"); }, false)}
+      </div>
+    );
+  }
+
+  if (gor === "sira") {
+    const benim = liste ? liste.findIndex(x => x.uid === uid) : -1;
+    const rk = veri.rek[soKova(siraKonu, siraN)];
+    icerik = (
+      <div style={{ padding: "0 14px 26px" }}>
+        <EgitimGeri onClick={() => { setHata(""); setGor("ayar"); }} etiket="Soru Odası" />
+        <p style={{ margin: "0 2px 4px", fontSize: 19, fontWeight: 700, color: C.label }}>{CV("Sıralama")}</p>
+        <p style={{ margin: "0 2px 12px", fontSize: 12, lineHeight: 1.5, color: C.sub }}>{CV("Her konu ve soru sayısı için ayrı sıralama tutulur; en yüksek puanın sayılır. Yalnızca takma ad ve puan görünür.")}</p>
+        <div style={kart}>
+          <p style={{ margin: "0 0 8px", fontSize: 12, fontWeight: 700, letterSpacing: 0.6, color: C.sub2 }}>{CV("KONU")}</p>
+          {konuChipleri(siraKonu, id => { setSiraKonu(id); setListe(undefined); })}
+          <p style={{ margin: "8px 0 8px", fontSize: 12, fontWeight: 700, letterSpacing: 0.6, color: C.sub2 }}>{CV("SORU")}</p>
+          {sayiChipleri(siraN, n => { setSiraN(n); setListe(undefined); })}
+        </div>
+        {rk && <p style={{ margin: "0 2px 10px", fontSize: 12, color: C.sub }}>{CV("Bu ayarda rekorun:")} <b style={{ color: C.label }}>{rk.en}</b> {CV("puan")}</p>}
+        {!uid ? (
+          <div style={kart}>
+            <p style={{ margin: "0 0 10px", fontSize: 13, lineHeight: 1.5, color: C.label }}>{CV("Sıralamayı görmek için giriş yapmalısınız.")}</p>
+            {btn("Giriş yap", () => nav("hesapGiris"))}
+          </div>
+        ) : liste === undefined ? (
+          <p style={{ fontSize: 13, color: C.sub }}>{CV("Yükleniyor…")}</p>
+        ) : liste === null ? (
+          <div style={kart}><p style={{ margin: 0, fontSize: 13, lineHeight: 1.5, color: C.label }}>{CV("Sıralama şu an yüklenemedi. Biraz sonra tekrar dene.")}</p></div>
+        ) : liste.length === 0 ? (
+          <div style={kart}><p style={{ margin: 0, fontSize: 13, lineHeight: 1.5, color: C.label }}>{CV("Bu sıralamada henüz kimse yok. İlk puanı sen kaydedebilirsin.")}</p></div>
+        ) : (
+          <div style={{ ...kart, padding: 0, overflow: "hidden" }}>
+            {liste.map((x, k) => {
+              const ben = x.uid === uid;
+              return (
+                <div key={x.uid} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", borderBottom: k < liste.length - 1 ? `1px solid ${C.border}` : "none", background: ben ? C.blueLight : "transparent" }}>
+                  <span style={{ width: 26, fontSize: 13, fontWeight: 700, color: k < 3 ? "#D8A94E" : C.sub }}>{k + 1}</span>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: ben ? 700 : 500, color: C.label, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.takmaAd}{ben ? " (" + CV("siz") + ")" : ""}</span>
+                  <span style={{ fontSize: 14, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: C.label }}>{x.puan}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {uid && liste && benim < 0 && veri.listede && rk && <p style={{ margin: "0 2px 10px", fontSize: 12, color: C.sub }}>{CV("İlk 25 dışındasınız. Puanınız:")} {rk.en}</p>}
+        {uid && !veri.listede && katilKarti()}
+        {uid && veri.listede && (
+          <div style={{ textAlign: "center", marginTop: 6 }}>
+            <p style={{ margin: "0 0 6px", fontSize: 12, color: C.sub }}>{CV("Takma adınız:")} {veri.takmaAd}</p>
+            {hata && <p style={{ margin: "0 0 6px", fontSize: 12, color: C.red }}>{CV(hata)}</p>}
+            <button disabled={yukleniyor} onClick={cik} style={{ background: "none", border: "none", color: C.red, fontSize: 13, fontWeight: 700, fontFamily: "inherit", cursor: "pointer", textDecoration: "underline" }}>{CV("Sıralamadan çık")}</button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ scrollMarginTop: "calc(env(safe-area-inset-top,0px) + 70px)" }}>
+      <style>{EGITIM_CSS}</style>
+      <div key={gor} className="eg-fade" style={{ overflowX: "hidden" }}>{icerik}</div>
     </div>
   );
 }
@@ -5216,7 +6029,7 @@ function KvkkAydinlatma(){
       <YmBaslik>2. İşlenen Kişisel Veriler</YmBaslik>
       <YmP>Hesap oluşturduğunuzda: ad soyad, e-posta adresi ve şifreniz (Firebase Authentication tarafından şifrelenmiş biçimde saklanır, biz ham şifrenizi hiçbir zaman görmeyiz/saklamayız).</YmP>
       <YmP>Uygulamayı kullanırken: cihaz push bildirim jetonu (bildirim göndermek için), favori ve geçmiş hesaplama kayıtlarınız ile uygulama tercihleriniz (cihazınızda ve hesabınıza bağlı olarak bulutta).</YmP>
-      <YmP>Hesabınıza bağlı diğer bulut kayıtları: portföy kalemleriniz ve eğitim ilerlemeniz; liderlik tablosuna katılırsanız takma adınız ve toplam puanınız (herkese açık). Fiyat alarmlarınız sunucumuzda tutulur.</YmP>
+      <YmP>Hesabınıza bağlı diğer bulut kayıtları: portföy kalemleriniz ve eğitim ilerlemeniz; liderlik tablosuna katılırsanız takma adınız ve toplam puanınız; Soru Odası sıralamasına katılırsanız takma adınız ve konu bazlı en yüksek puanlarınız (herkese açık). Fiyat alarmlarınız sunucumuzda tutulur.</YmP>
       <YmP>Kimlik doğrulama sağlayıcı tercihinize göre: Google veya Apple hesabınızdan paylaşmayı seçtiğiniz ad ve e-posta bilgisi.</YmP>
       <YmP>Pro abonelik satın aldığınızda: hesap kimliğinize bağlı abonelik durumu, abonelik türü ve dönem bilgisi. Kredi kartı veya banka bilgisi tarafımızca toplanmaz; ödeme Apple veya Google tarafından alınır.</YmP>
       <YmP>Müşteri Portföyüm'ü kullanırsanız: sizin girdiğiniz müşteri adı, telefon, sektör ve görüşme/takip notları. Bu kayıtlarla ilgili bağlı olduğunuz kurumun politikalarına ve ilgili mevzuata uymak sizin sorumluluğunuzdadır.</YmP>
@@ -5249,7 +6062,7 @@ function GizlilikPolitikasi(){
       <YmBaslik>1. Topladığımız Veriler</YmBaslik>
       <YmP>• Hesap bilgileri: ad soyad, e-posta, şifre (Firebase Authentication ile şifrelenmiş) — hesap oluşturmanız hâlinde.</YmP>
       <YmP>• Cihaz bilgileri: push bildirim jetonu, platform (iOS/Android/web).</YmP>
-      <YmP>• Kullanım verileri: favori hesaplamalarınız, hesaplama geçmişiniz ve tercihleriniz (tema, dil, Piyasa Özeti seçimi, Zekât ve Vade Takibi kayıtları dahil) cihazınızda (localStorage) saklanır; hesabınız varsa cihaz değiştirdiğinizde de erişebilmeniz için hesabınıza bağlı olarak bulutta da saklanır. Ayrıca hesabınıza bağlı olarak bulutta saklananlar: portföy kalemleriniz (ürün, miktar, alış fiyatı ve tarihi) ve eğitim ilerlemeniz. Eğitim liderlik tablosuna katılırsanız takma adınız ve toplam puanınız herkese açık görünür.</YmP>
+      <YmP>• Kullanım verileri: favori hesaplamalarınız, hesaplama geçmişiniz ve tercihleriniz (tema, dil, Piyasa Özeti seçimi, Zekât ve Vade Takibi kayıtları dahil) cihazınızda (localStorage) saklanır; hesabınız varsa cihaz değiştirdiğinizde de erişebilmeniz için hesabınıza bağlı olarak bulutta da saklanır. Ayrıca hesabınıza bağlı olarak bulutta saklananlar: portföy kalemleriniz (ürün, miktar, alış fiyatı ve tarihi) ve eğitim ilerlemeniz. Eğitim liderlik tablosuna katılırsanız takma adınız ve toplam puanınız, Soru Odası sıralamasına katılırsanız takma adınız ve konu bazlı en yüksek puanlarınız herkese açık görünür.</YmP>
       <YmP>• Alarmlar ve bildirimler: Fiyat alarmlarınız ve bildirim jetonunuz sunucumuzda tutulur; hesabınız varsa hesabınıza bağlanır.</YmP>
       <YmP>• Müşteri Portföyüm (üye girişi gerektirir): kullanıcının elle girdiği müşteri adı, telefon, sektör ve görüşme/takip notları hesabınıza bağlı olarak bulut altyapımızda (Google Firebase) saklanır ve yalnızca hesabınız tarafından okunup yazılabilir. Banka sistemlerinden hiçbir veri alınmaz. Müşterilerinize ait kişisel verileri girerken bağlı olduğunuz kurumun politikalarına ve ilgili mevzuata uymak kullanıcının sorumluluğundadır; hesabınızı sildiğinizde bu kayıtlar da silinir.</YmP>
       <YmP>• Ödemeler: Pro abonelik satın alımı Apple App Store veya Google Play üzerinden yapılır. Uygulama kredi kartı veya banka hesap bilginizi görmez ve TOPLAMAZ. Abonelik durumunuzu doğrulamak için hesap kimliğiniz ve satın alma bilginiz (abonelik türü, başlangıç ve bitiş tarihi) abonelik altyapı sağlayıcımız RevenueCat'e iletilir. Uygulama üzerinden banka işlemi veya para transferi yapılmaz.</YmP>
@@ -5267,7 +6080,7 @@ function GizlilikPolitikasi(){
       <YmP>Şifreniz hiçbir zaman düz metin olarak saklanmaz — kimlik doğrulama tamamen Google Firebase Authentication altyapısı üzerinden, endüstri standardı şifreleme ile yürütülür.</YmP>
 
       <YmBaslik>6. Haklarınız</YmBaslik>
-      <YmP>Hesabınızı ve ilişkili verilerinizi istediğiniz zaman Profil → Hesabımı Sil yoluyla kalıcı olarak silebilirsiniz; hesap silme Müşteri Portföyüm kayıtlarınızı, portföyünüzü, eğitim ilerlemenizi, liderlik kaydınızı ve hesabınızda saklanan ayarlarınızı (favoriler, geçmiş vb.) da siler. Bu politikanın tam metni katilimplus.com/gizlilik adresinde de yayımlanır. KVKK kapsamındaki detaylı haklarınız için KVKK Aydınlatma Metni'ne bakınız.</YmP>
+      <YmP>Hesabınızı ve ilişkili verilerinizi istediğiniz zaman Profil → Hesabımı Sil yoluyla kalıcı olarak silebilirsiniz; hesap silme Müşteri Portföyüm kayıtlarınızı, portföyünüzü, eğitim ilerlemenizi, liderlik ve Soru Odası sıralama kayıtlarınızı ve hesabınızda saklanan ayarlarınızı (favoriler, geçmiş vb.) da siler. Bu politikanın tam metni katilimplus.com/gizlilik adresinde de yayımlanır. KVKK kapsamındaki detaylı haklarınız için KVKK Aydınlatma Metni'ne bakınız.</YmP>
 
       <YmBaslik>7. Çocukların Gizliliği</YmBaslik>
       <YmP>Uygulama, 18 yaş altı bireylere yönelik değildir ve bilerek 18 yaş altı kullanıcılardan veri toplamaz.</YmP>
@@ -5431,6 +6244,7 @@ const ICON_MAP: Record<string, any> = {
   katilimSigorta: ShieldCheck,
   kamuHaznedarligi: Landmark,
   hazineSukuk: Landmark,      // 2026-10-16: Hazine Kira Sertifikası Takibi
+  soruOdasi: Trophy,          // 2026-10-17: Soru Odası (bilgi yarışması)
   icazetBelgeleri: FileBadge,   // 2026-10-03: belge/sertifika ikonu; FileBadge zaten import edilmiş (yeni import riski yok). Bu harita yoksa Araçlar kartı ve sol menü İKONSUZ görünür.
   egitim: GraduationCap,   // 2026-10-04: Eğitim bölümü (Araçlar kartı + sol menü ikonu)
   musteriPortfoyum: Briefcase,   // 2026-10-04: Müşteri Portföyüm (Araçlar kartı + sol menü ikonu); Briefcase zaten import edilmiş
@@ -5616,6 +6430,62 @@ const temaDegistir = (t: "koyu" | "acik" | "sistem") => {
   }
 };
 const EN_SOZLUK: Record<string, string> = {
+  "Soru Odası": "Quiz Room",
+  "Karışık": "Mixed",
+  "Genel Kültür": "General Knowledge",
+  "Coğrafya": "Geography",
+  "Spor": "Sports",
+  "Sanat & Müzik": "Art & Music",
+  "Bilim & Doğa": "Science & Nature",
+  "Katılım Finans": "Participation Finance",
+  "Ekonomi": "Economy",
+  "Fon ve Yatırım": "Funds & Investing",
+  "Finansal Okuryazarlık": "Financial Literacy",
+  "Kıymetli Evrak": "Negotiable Instruments",
+  "Teminat ve İpotek": "Collateral & Mortgage",
+  "Muhasebe": "Accounting",
+  "Soru": "Question",
+  "soru": "questions",
+  "sn": "s",
+  "puan": "points",
+  "oyun": "games",
+  "doğru": "correct",
+  "en çok": "max",
+  "siz": "you",
+  "Süre doldu.": "Time is up.",
+  "Puanın": "Your score",
+  "Oyundan çık": "Leave game",
+  "Çıkarsan bu oyun kaydedilmez.": "If you leave, this game will not be saved.",
+  "GENEL": "GENERAL",
+  "FİNANS VE EĞİTİM": "FINANCE & LEARNING",
+  "KONU": "TOPIC",
+  "SORU": "QUESTIONS",
+  "SÜRE": "TIME",
+  "Başla": "Start",
+  "Sıralama": "Ranking",
+  "Sıralamayı gör": "View ranking",
+  "Arkadaşlarla oda kurup yarışma: yakında": "Rooms to compete with friends: coming soon",
+  "Bu ayarda rekorun:": "Your best with these settings:",
+  "Rekorun:": "Your best:",
+  "Yeni kişisel rekor": "New personal best",
+  "İlk puanın kaydedildi": "Your first score is saved",
+  "YANLIŞLAR": "WRONG ANSWERS",
+  "Doğru:": "Correct:",
+  "Tekrar oyna": "Play again",
+  "Konu değiştir": "Change topic",
+  "Sıralamaya katıl": "Join the ranking",
+  "Sıralamada yalnızca seçilen takma ad ve puan görünür. Gerçek ad ve e-posta paylaşılmaz. İstediğiniz zaman sıralamadan çıkabilirsiniz.": "Only the chosen nickname and score are shown in the ranking. Your real name and email are never shared. You can leave the ranking at any time.",
+  "Sıralamaya katılmak için giriş yapılmalıdır.": "You must sign in to join the ranking.",
+  "Takma ad 2-20 karakter olmalı; harf, rakam, boşluk, nokta, tire veya alt çizgi kullanılabilir.": "The nickname must be 2-20 characters; letters, digits, spaces, dots, hyphens or underscores are allowed.",
+  "Sıralamaya şu an kaydedilemedi. Biraz sonra tekrar dene.": "Could not save to the ranking right now. Please try again shortly.",
+  "Sıralamadan çıkarılamadı. Biraz sonra tekrar dene.": "Could not leave the ranking. Please try again shortly.",
+  "Her konu ve soru sayısı için ayrı sıralama tutulur; en yüksek puanın sayılır. Yalnızca takma ad ve puan görünür.": "A separate ranking is kept for each topic and question count; your highest score counts. Only nickname and score are shown.",
+  "Sıralamayı görmek için giriş yapmalısınız.": "You must sign in to see the ranking.",
+  "Sıralama şu an yüklenemedi. Biraz sonra tekrar dene.": "The ranking could not be loaded right now. Please try again shortly.",
+  "Bu sıralamada henüz kimse yok. İlk puanı sen kaydedebilirsin.": "No one is in this ranking yet. You can post the first score.",
+  "İlk 25 dışındasınız. Puanınız:": "You are outside the top 25. Your score:",
+  "Sıralamadan çık": "Leave the ranking",
+  "Bilgi yarışması: 15 konu, puan ve sıralama": "Quiz: 15 topics, scores and ranking",
   // ── Alt bar / yan menü / genel gezinme ──
   "Ana Sayfa": "Home",
   "Hesapla": "Calculate",
@@ -7895,7 +8765,7 @@ const EN_SOZLUK: Record<string, string> = {
   "Liderlik tablosu okunamadı:": "Leaderboard could not be read:",
   "Liderlik tablosuna yazılamadı:": "Leaderboard could not be written to:",
   "Liste": "List",
-  "Listeye katılmak için önce bir sınav çöz.": "Take a quiz first to join the list.",
+  "Listeye katılmak için önce bir sınav çözülmelidir.": "Take a quiz first to join the list.",
   "Maliyet:": "Cost:",
   "Marj maliyeti": "Margin cost",
   "Merhaba 👋": "Hello 👋",
@@ -7946,7 +8816,7 @@ const EN_SOZLUK: Record<string, string> = {
   "Sil": "Delete",
   "Sola kaydır": "Swipe left",
   "Son 30 gün gösteriliyor · toplam": "Showing last 30 days · total",
-  "Son dersi bitirdin. Atladığın dersler varsa listeden tamamlayabilirsin.": "You finished the last lesson. If you skipped any lessons, you can complete them from the list.",
+  "Son ders tamamlandı. Atlanan dersler varsa listeden tamamlanabilir.": "You finished the last lesson. If you skipped any lessons, you can complete them from the list.",
   "Son güncelleme: 5 Ekim 2026": "Last updated: 5 October 2026",
   "Sonraki aksiyon": "Next action",
   "Sonraki takip": "Next follow-up",
@@ -7980,7 +8850,7 @@ const EN_SOZLUK: Record<string, string> = {
   "Ticari ₺": "Commercial ₺",
   "Tolerans (+%": "Tolerance (+%",
   "Toplam finansman": "Total financing",
-  "Tüm dersleri tamamladın. Modül sınavına hazırsın.": "You completed all lessons. You are ready for the module quiz.",
+  "Tüm dersler tamamlandı. Modül sınavına geçilebilir.": "You completed all lessons. You are ready for the module quiz.",
   "Tüm veriler silindi": "All data deleted",
   "Tümü Hesaplamaları": "All Calculations",
   "Tüzel — Para Piyasası Fonu — %": "Corporate — Money Market Fund — %",
@@ -8183,7 +9053,7 @@ const EN_SOZLUK: Record<string, string> = {
   "Ekstra": "Extra",
   "Elindeki Para": "Cash on Hand",
   "Emin misiniz? (tekrar dokun)": "Are you sure? (tap again)",
-  "En iyi puanın:": "Your best score:",
+  "En iyi puanınız:": "Your best score:",
   "Enerji": "Energy",
   "Enflasyon": "Inflation",
   "Enflasyon Raporu 2026-III — TCMB": "Inflation Report 2026-III — TCMB",
@@ -8222,7 +9092,7 @@ const EN_SOZLUK: Record<string, string> = {
   "Hazine Bonosu": "Treasury Bill",
   "Haziran 2026": "June 2026",
   "Hedef fiyat": "Target price",
-  "Henüz listede kimse yok. İlk sen ol: bir sınav çöz ve listeye katıl.": "No one is on the list yet. Be the first: take a quiz and join the list.",
+  "Henüz listede kimse yok. Bir sınav çözerek listeye ilk katılan siz olabilirsiniz.": "No one is on the list yet. Be the first: take a quiz and join the list.",
   "Hepsini sil": "Delete all",
   "Her gün": "Every day",
   "Hesaba BSMV ve KKDF dâhildir.": "BSMV and KKDF are included in the calculation.",
@@ -8326,7 +9196,7 @@ const EN_SOZLUK: Record<string, string> = {
   "Takip listesine ekle": "Add to watchlist",
   "Takip planla": "Schedule follow-up",
   "Takip tarihi": "Follow-up date",
-  "Takma adın:": "Your nickname:",
+  "Takma adınız:": "Your nickname:",
   "Takvimden belirle": "Pick from calendar",
   "Tarih": "Date",
   "Tarih seç…": "Select date…",
@@ -8337,7 +9207,7 @@ const EN_SOZLUK: Record<string, string> = {
   "Tetiklendi ·": "Triggered ·",
   "Ticari BSMV": "Commercial BSMV",
   "Ticari YP": "Commercial FX",
-  "Toplam puanın:": "Your total score:",
+  "Toplam puanınız:": "Your total score:",
   "Tüm değişiklikler hesabına kaydedildi": "All changes saved to your account",
   "Tüm veriler silinsin mi?": "Delete all data?",
   "Unutulmasın": "Don't forget",
@@ -8389,7 +9259,7 @@ const EN_SOZLUK: Record<string, string> = {
   "müşteri kaydı bulundu": "customer records found",
   "otomatik bulundu": "found automatically",
   "planlı takip": "scheduled follow-up",
-  "puanla geçmelisin.": "points.",
+  "puanla geçilmelidir.": "points.",
   "stopajla tahmin edilir — gerçek erken bozdurma tutarı bankanıza göre değişebilir.": "estimated with withholding tax — the actual early redemption amount may vary by your bank.",
   "tablosunda herhangi bir bankanın herhangi bir oranı değişirse tek bildirimle haber verilir.": "table, if any bank's rate changes, you are notified with a single notification.",
   "tanesi değer kazanırken": "while one unit gains value",
@@ -8592,7 +9462,7 @@ const EN_SOZLUK: Record<string, string> = {
   "Kısayollar": "Shortcuts",
   "Liderlik kaydı silinemedi:": "Leaderboard entry could not be deleted:",
   "Liderlik tablosuna katıl": "Join the leaderboard",
-  "Liderlik tablosunu görmek için giriş yapmalısın.": "You must sign in to see the leaderboard.",
+  "Liderlik tablosunu görmek için giriş yapmalısınız.": "You must sign in to see the leaderboard.",
   "Listeden çıkarılamadı. Biraz sonra tekrar dene.": "Could not be removed from the list. Try again in a bit.",
   "MB Rezervleri": "CB Reserves",
   "Madencilik/Metal": "Mining/Metals",
@@ -8672,7 +9542,7 @@ const EN_SOZLUK: Record<string, string> = {
   "Banka Finansman Karşılaştırma": "Bank Financing Comparison",
   "Tarih *": "Date *",
   "Tarih:": "Date:",
-  "Tebrikler, geçtin": "Congratulations, you passed",
+  "Tebrikler, sınavı geçtiniz": "Congratulations, you passed",
   "Teknoloji": "Technology",
   "Telefon": "Phone",
   "Teminat Mektubu": "Letter of Guarantee",
@@ -8734,7 +9604,7 @@ const EN_SOZLUK: Record<string, string> = {
   "komisyon için max:": "max for commission:",
   "kur riski": "FX risk",
   "müşteri kullanıldı": "customers used",
-  "puanla geçtin. Sertifikada görünecek adı yaz. Yatay A4 PDF olarak kaydedilir.": "points, you passed. Enter the name to appear on the certificate. It is saved as a landscape A4 PDF.",
+  "puanla geçtiniz. Sertifikada görünecek adı yazınız. Yatay A4 PDF olarak kaydedilir.": "points, you passed. Enter the name to appear on the certificate. It is saved as a landscape A4 PDF.",
   "sa önce": "h ago",
   "sonuna göre (yılbaşından)": "as of the end (year-to-date)",
   "tablosunda herhangi bir bankanın oranı değişirse bildirim gelir.": "table, you get a notification if any bank's rate changes.",
@@ -8757,7 +9627,7 @@ const EN_SOZLUK: Record<string, string> = {
   "ÜNİTE": "UNIT",
   "Ücretsiz sürümde": "In the free version",
   "üründeki fiyat değişiminin ortalaması": "average price change across the products",
-  "İlk 25 dışındasın. Toplam puanın:": "You're outside the top 25. Your total score:",
+  "İlk 25 dışındasınız. Toplam puanınız:": "You're outside the top 25. Your total score:",
   "İlk müşteriyi ekle": "Add your first customer",
   "İşletme": "Business",
   "Şifremi Unuttum": "Forgot My Password",
@@ -8957,7 +9827,7 @@ const EN_SOZLUK: Record<string, string> = {
   "Küresel tarafta EUR/USD paritesi": "On the global side, the EUR/USD parity",
   "Kıymetli madenlerde altının ons fiyatı dolar bazında": "In precious metals, gold's price per ounce in dollar terms",
   "Liderlik tablosu": "Leaderboard",
-  "Liderlik tablosuna katılmak için giriş yapmalısın.": "You must sign in to join the leaderboard.",
+  "Liderlik tablosuna katılmak için giriş yapılmalıdır.": "You must sign in to join the leaderboard.",
   "Listeye katıl": "Join the list",
   "MODÜLLER": "MODULES",
   "Makas": "Spread",
@@ -9013,7 +9883,7 @@ const EN_SOZLUK: Record<string, string> = {
   "Swap Geliri": "Swap Income",
   "Sıfırlama bağlantısı e-postana gönderildi.": "Reset link has been sent to your email.",
   "Sınıra ulaştın. Yeni müşteri eklemek için Pro'ya geç.": "You've reached the limit. Upgrade to Pro to add new customers.",
-  "Sıralama, altı modülün en yüksek sınav puanlarının toplamına göre yapılır (en çok": "Ranking is based on the sum of your highest quiz scores across the six modules (max",
+  "Sıralama, tüm modüllerin en yüksek sınav puanlarının toplamına göre yapılır (en çok": "Ranking is based on the sum of your highest quiz scores across all modules (max",
   "TAKIP": "FOLLOW-UP",
   "TCMB Net Rezerv": "TCMB Net Reserves",
   "TCMB rezervi, PPK takvimi ve enflasyon tek ekranda": "TCMB reserves, MPC calendar and inflation on one screen",
@@ -9098,7 +9968,7 @@ const EN_SOZLUK: Record<string, string> = {
   "yıllık ≈ %": "annual ≈ %",
   "· KAP verisi": "· KAP data",
   "· SON 15 GÜN": "· LAST 15 DAYS",
-  "· Sınava hazırsın": "· You're ready for the quiz",
+  "· Sınava hazırsınız": "· You're ready for the quiz",
   "· dünkü getiri": "· yesterday's return",
   "· kıst dönem kâr payı hariç, yaklaşık değerdir": "· excludes pro-rated period profit share, approximate value",
   "· vade doldu": "· maturity reached",
@@ -9237,6 +10107,62 @@ const EN_SOZLUK: Record<string, string> = {
 // ── 2026-10-08: ARAPÇA SÖZLÜĞÜ (Türkçe metin → Arapça; anahtarlar EN_SOZLUK ile aynı küme) ──
 // Yerleşim SOLDAN-SAĞA kalır (ekranlar aynen korunur); Arapça metin tarayıcının çift yönlü (bidi) kuralıyla doğru okunur.
 const AR_SOZLUK: Record<string, string> = {
+  "Soru Odası": "غرفة الأسئلة",
+  "Karışık": "متنوع",
+  "Genel Kültür": "ثقافة عامة",
+  "Coğrafya": "الجغرافيا",
+  "Spor": "الرياضة",
+  "Sanat & Müzik": "الفن والموسيقى",
+  "Bilim & Doğa": "العلوم والطبيعة",
+  "Katılım Finans": "التمويل التشاركي",
+  "Ekonomi": "الاقتصاد",
+  "Fon ve Yatırım": "الصناديق والاستثمار",
+  "Finansal Okuryazarlık": "الثقافة المالية",
+  "Kıymetli Evrak": "الأوراق التجارية",
+  "Teminat ve İpotek": "الضمانات والرهن",
+  "Muhasebe": "المحاسبة",
+  "Soru": "سؤال",
+  "soru": "أسئلة",
+  "sn": "ث",
+  "puan": "نقطة",
+  "oyun": "ألعاب",
+  "doğru": "صحيحة",
+  "en çok": "الحد الأقصى",
+  "siz": "أنت",
+  "Süre doldu.": "انتهى الوقت.",
+  "Puanın": "نقاطك",
+  "Oyundan çık": "الخروج من اللعبة",
+  "Çıkarsan bu oyun kaydedilmez.": "إذا خرجت فلن تُحفظ هذه اللعبة.",
+  "GENEL": "عام",
+  "FİNANS VE EĞİTİM": "التمويل والتعليم",
+  "KONU": "الموضوع",
+  "SORU": "الأسئلة",
+  "SÜRE": "الوقت",
+  "Başla": "ابدأ",
+  "Sıralama": "الترتيب",
+  "Sıralamayı gör": "عرض الترتيب",
+  "Arkadaşlarla oda kurup yarışma: yakında": "إنشاء غرف للمنافسة مع الأصدقاء: قريبًا",
+  "Bu ayarda rekorun:": "أفضل نتيجة لك بهذه الإعدادات:",
+  "Rekorun:": "أفضل نتيجة لك:",
+  "Yeni kişisel rekor": "رقم قياسي شخصي جديد",
+  "İlk puanın kaydedildi": "تم حفظ نتيجتك الأولى",
+  "YANLIŞLAR": "الإجابات الخاطئة",
+  "Doğru:": "الصحيح:",
+  "Tekrar oyna": "العب مرة أخرى",
+  "Konu değiştir": "تغيير الموضوع",
+  "Sıralamaya katıl": "انضم إلى الترتيب",
+  "Sıralamada yalnızca seçilen takma ad ve puan görünür. Gerçek ad ve e-posta paylaşılmaz. İstediğiniz zaman sıralamadan çıkabilirsiniz.": "يظهر في الترتيب الاسم المستعار والنقاط فقط. لا تتم مشاركة اسمك الحقيقي ولا بريدك الإلكتروني. يمكنك الخروج من الترتيب في أي وقت.",
+  "Sıralamaya katılmak için giriş yapılmalıdır.": "يجب تسجيل الدخول للانضمام إلى الترتيب.",
+  "Takma ad 2-20 karakter olmalı; harf, rakam, boşluk, nokta, tire veya alt çizgi kullanılabilir.": "يجب أن يتكون الاسم المستعار من 2 إلى 20 حرفًا؛ يمكن استخدام الحروف والأرقام والمسافات والنقاط والشرطات.",
+  "Sıralamaya şu an kaydedilemedi. Biraz sonra tekrar dene.": "تعذّر الحفظ في الترتيب الآن. حاول مرة أخرى بعد قليل.",
+  "Sıralamadan çıkarılamadı. Biraz sonra tekrar dene.": "تعذّر الخروج من الترتيب. حاول مرة أخرى بعد قليل.",
+  "Her konu ve soru sayısı için ayrı sıralama tutulur; en yüksek puanın sayılır. Yalnızca takma ad ve puan görünür.": "يُحتفظ بترتيب منفصل لكل موضوع وعدد أسئلة؛ تُحتسب أعلى نتيجة لك. يظهر الاسم المستعار والنقاط فقط.",
+  "Sıralamayı görmek için giriş yapmalısınız.": "يجب تسجيل الدخول لعرض الترتيب.",
+  "Sıralama şu an yüklenemedi. Biraz sonra tekrar dene.": "تعذّر تحميل الترتيب الآن. حاول مرة أخرى بعد قليل.",
+  "Bu sıralamada henüz kimse yok. İlk puanı sen kaydedebilirsin.": "لا أحد في هذا الترتيب بعد. يمكنك تسجيل أول نتيجة.",
+  "İlk 25 dışındasınız. Puanınız:": "أنت خارج المراكز الـ25 الأولى. نتيجتك:",
+  "Sıralamadan çık": "الخروج من الترتيب",
+  "Bilgi yarışması: 15 konu, puan ve sıralama": "مسابقة معلومات: 15 موضوعًا ونقاط وترتيب",
   "Ana Sayfa": "الرئيسية",
   "Asistan": "المساعد",
   "Katılım Finansının Akıllı Asistanı": "المساعد الذكي للتمويل بالمشاركة",
@@ -11504,7 +12430,7 @@ const AR_SOZLUK: Record<string, string> = {
   "Liderlik tablosu okunamadı:": "تعذّرت قراءة لوحة المتصدرين:",
   "Liderlik tablosuna yazılamadı:": "تعذّرت الكتابة إلى لوحة المتصدرين:",
   "Liste": "القائمة",
-  "Listeye katılmak için önce bir sınav çöz.": "حلّ اختبارًا أولًا للانضمام إلى القائمة.",
+  "Listeye katılmak için önce bir sınav çözülmelidir.": "حلّ اختبارًا أولًا للانضمام إلى القائمة.",
   "Lot": "لوت",
   "Maliyet:": "التكلفة:",
   "Marj maliyeti": "تكلفة الهامش",
@@ -11558,7 +12484,7 @@ const AR_SOZLUK: Record<string, string> = {
   "Sil": "حذف",
   "Sola kaydır": "اسحب لليسار",
   "Son 30 gün gösteriliyor · toplam": "عرض آخر 30 يومًا · الإجمالي",
-  "Son dersi bitirdin. Atladığın dersler varsa listeden tamamlayabilirsin.": "لقد أنهيت الدرس الأخير. إذا تخطيت أي دروس يمكنك إكمالها من القائمة.",
+  "Son ders tamamlandı. Atlanan dersler varsa listeden tamamlanabilir.": "لقد أنهيت الدرس الأخير. إذا تخطيت أي دروس يمكنك إكمالها من القائمة.",
   "Son güncelleme: 5 Ekim 2026": "آخر تحديث: 5 أكتوبر 2026",
   "Sonraki aksiyon": "الإجراء التالي",
   "Sonraki takip": "المتابعة التالية",
@@ -11592,7 +12518,7 @@ const AR_SOZLUK: Record<string, string> = {
   "Ticari ₺": "تجاري ₺",
   "Tolerans (+%": "التفاوت (+%",
   "Toplam finansman": "إجمالي التمويل",
-  "Tüm dersleri tamamladın. Modül sınavına hazırsın.": "لقد أكملت جميع الدروس. أنت جاهز لاختبار الوحدة.",
+  "Tüm dersler tamamlandı. Modül sınavına geçilebilir.": "لقد أكملت جميع الدروس. أنت جاهز لاختبار الوحدة.",
   "Tüm veriler silindi": "تم حذف جميع البيانات",
   "Tümü Hesaplamaları": "جميع الحسابات",
   "Tüzel — Para Piyasası Fonu — %": "اعتباري — صندوق أسواق النقد — %",
@@ -11795,7 +12721,7 @@ const AR_SOZLUK: Record<string, string> = {
   "Ekstra": "إضافي",
   "Elindeki Para": "المبلغ المتوفر لديك",
   "Emin misiniz? (tekrar dokun)": "هل أنت متأكد؟ (اضغط مرة أخرى)",
-  "En iyi puanın:": "أفضل نتيجة لك:",
+  "En iyi puanınız:": "أفضل نتيجة لك:",
   "Enerji": "الطاقة",
   "Enflasyon": "التضخم",
   "Enflasyon Raporu 2026-III — TCMB": "تقرير التضخم 2026-III — TCMB",
@@ -11835,7 +12761,7 @@ const AR_SOZLUK: Record<string, string> = {
   "Hazine Bonosu": "أذون الخزانة",
   "Haziran 2026": "يونيو 2026",
   "Hedef fiyat": "السعر المستهدف",
-  "Henüz listede kimse yok. İlk sen ol: bir sınav çöz ve listeye katıl.": "لا أحد في القائمة بعد. كن الأول: أجرِ اختبارًا وانضم إلى القائمة.",
+  "Henüz listede kimse yok. Bir sınav çözerek listeye ilk katılan siz olabilirsiniz.": "لا أحد في القائمة بعد. كن الأول: أجرِ اختبارًا وانضم إلى القائمة.",
   "Hepsini sil": "حذف الكل",
   "Her gün": "كل يوم",
   "Hesaba BSMV ve KKDF dâhildir.": "يشمل الحساب BSMV وKKDF.",
@@ -11940,7 +12866,7 @@ const AR_SOZLUK: Record<string, string> = {
   "Takip listesine ekle": "إضافة إلى قائمة المتابعة",
   "Takip planla": "جدولة متابعة",
   "Takip tarihi": "تاريخ المتابعة",
-  "Takma adın:": "اسمك المستعار:",
+  "Takma adınız:": "اسمك المستعار:",
   "Takvimden belirle": "حدد من التقويم",
   "Tarih": "التاريخ",
   "Tarih seç…": "اختر التاريخ…",
@@ -11951,7 +12877,7 @@ const AR_SOZLUK: Record<string, string> = {
   "Tetiklendi ·": "تم التفعيل ·",
   "Ticari BSMV": "BSMV التجاري",
   "Ticari YP": "تجاري بالعملة الأجنبية",
-  "Toplam puanın:": "مجموع نتيجتك:",
+  "Toplam puanınız:": "مجموع نتيجتك:",
   "Tüm değişiklikler hesabına kaydedildi": "تم حفظ جميع التغييرات في حسابك",
   "Tüm veriler silinsin mi?": "هل تريد حذف جميع البيانات؟",
   "Unutulmasın": "لا تنسَ",
@@ -12003,7 +12929,7 @@ const AR_SOZLUK: Record<string, string> = {
   "müşteri kaydı bulundu": "تم العثور على سجلات عملاء",
   "otomatik bulundu": "تم العثور عليه تلقائيًا",
   "planlı takip": "متابعة مجدولة",
-  "puanla geçmelisin.": "نقطة.",
+  "puanla geçilmelidir.": "نقطة.",
   "stopajla tahmin edilir — gerçek erken bozdurma tutarı bankanıza göre değişebilir.": "يُقدَّر مع الاقتطاع الضريبي — وقد يختلف مبلغ الفسخ المبكر الفعلي حسب بنكك.",
   "tablosunda herhangi bir bankanın herhangi bir oranı değişirse tek bildirimle haber verilir.": "جدول، وإذا تغيّرت أي نسبة لأي بنك فيه يصلك إشعار واحد.",
   "tanesi değer kazanırken": "بينما ترتفع قيمة الوحدة الواحدة",
@@ -12208,7 +13134,7 @@ const AR_SOZLUK: Record<string, string> = {
   "Kısayollar": "الاختصارات",
   "Liderlik kaydı silinemedi:": "تعذّر حذف سجل المتصدرين:",
   "Liderlik tablosuna katıl": "انضم إلى لوحة المتصدرين",
-  "Liderlik tablosunu görmek için giriş yapmalısın.": "يجب تسجيل الدخول لعرض لوحة المتصدرين.",
+  "Liderlik tablosunu görmek için giriş yapmalısınız.": "يجب تسجيل الدخول لعرض لوحة المتصدرين.",
   "Listeden çıkarılamadı. Biraz sonra tekrar dene.": "تعذّرت الإزالة من القائمة. حاول مرة أخرى بعد قليل.",
   "MB Rezervleri": "احتياطيات البنك المركزي",
   "Madencilik/Metal": "التعدين/المعادن",
@@ -12290,7 +13216,7 @@ const AR_SOZLUK: Record<string, string> = {
   "Banka Finansman Karşılaştırma": "مقارنة تمويل البنوك",
   "Tarih *": "التاريخ *",
   "Tarih:": "التاريخ:",
-  "Tebrikler, geçtin": "تهانينا، لقد اجتزت",
+  "Tebrikler, sınavı geçtiniz": "تهانينا، لقد اجتزت",
   "Teknoloji": "التكنولوجيا",
   "Telefon": "الهاتف",
   "Teminat Mektubu": "خطاب الضمان",
@@ -12354,7 +13280,7 @@ const AR_SOZLUK: Record<string, string> = {
   "kur riski": "مخاطر سعر الصرف",
   "max: %": "الحد الأقصى: %",
   "müşteri kullanıldı": "عميل مُستخدَم",
-  "puanla geçtin. Sertifikada görünecek adı yaz. Yatay A4 PDF olarak kaydedilir.": "نقطة، لقد اجتزت. اكتب الاسم الذي سيظهر على الشهادة. تُحفظ بصيغة PDF بحجم A4 أفقي.",
+  "puanla geçtiniz. Sertifikada görünecek adı yazınız. Yatay A4 PDF olarak kaydedilir.": "نقطة، لقد اجتزت. اكتب الاسم الذي سيظهر على الشهادة. تُحفظ بصيغة PDF بحجم A4 أفقي.",
   "sa önce": "ساعة مضت",
   "sonuna göre (yılbaşından)": "حتى نهاية (منذ بداية العام)",
   "tablosunda herhangi bir bankanın oranı değişirse bildirim gelir.": "جدول، يصلك إشعار إذا تغيّرت نسبة أي بنك.",
@@ -12377,7 +13303,7 @@ const AR_SOZLUK: Record<string, string> = {
   "ÜNİTE": "الوحدة",
   "Ücretsiz sürümde": "في النسخة المجانية",
   "üründeki fiyat değişiminin ortalaması": "متوسط تغيّر الأسعار في المنتجات",
-  "İlk 25 dışındasın. Toplam puanın:": "أنت خارج أول 25. مجموع نقاطك:",
+  "İlk 25 dışındasınız. Toplam puanınız:": "أنت خارج أول 25. مجموع نقاطك:",
   "İlk müşteriyi ekle": "أضف أول عميل",
   "İşletme": "الأعمال",
   "Şifremi Unuttum": "نسيت كلمة المرور",
@@ -12580,7 +13506,7 @@ const AR_SOZLUK: Record<string, string> = {
   "Kıymetli madenlerde altının ons fiyatı dolar bazında": "في المعادن الثمينة، سعر أونصة الذهب بالدولار",
   "LTV) · Max": "LTV) · الحد الأقصى",
   "Liderlik tablosu": "لوحة المتصدرين",
-  "Liderlik tablosuna katılmak için giriş yapmalısın.": "يجب تسجيل الدخول للانضمام إلى لوحة المتصدرين.",
+  "Liderlik tablosuna katılmak için giriş yapılmalıdır.": "يجب تسجيل الدخول للانضمام إلى لوحة المتصدرين.",
   "Listeye katıl": "انضم إلى القائمة",
   "MODÜLLER": "الوحدات",
   "Makas": "الفارق",
@@ -12639,7 +13565,7 @@ const AR_SOZLUK: Record<string, string> = {
   "Swap Geliri": "دخل المبادلة (السواب)",
   "Sıfırlama bağlantısı e-postana gönderildi.": "تم إرسال رابط إعادة التعيين إلى بريدك الإلكتروني.",
   "Sınıra ulaştın. Yeni müşteri eklemek için Pro'ya geç.": "وصلت إلى الحد. قم بالترقية إلى Pro لإضافة عملاء جدد.",
-  "Sıralama, altı modülün en yüksek sınav puanlarının toplamına göre yapılır (en çok": "يعتمد الترتيب على مجموع أعلى درجات الاختبار في الوحدات الست (الحد الأقصى",
+  "Sıralama, tüm modüllerin en yüksek sınav puanlarının toplamına göre yapılır (en çok": "يعتمد الترتيب على مجموع أعلى درجات الاختبار في جميع الوحدات (الحد الأقصى",
   "TAKIP": "المتابعة",
   "TCMB Net Rezerv": "صافي احتياطي TCMB",
   "TCMB rezervi, PPK takvimi ve enflasyon tek ekranda": "احتياطي TCMB وتقويم لجنة السياسة النقدية والتضخم في شاشة واحدة",
@@ -12725,7 +13651,7 @@ const AR_SOZLUK: Record<string, string> = {
   "yıllık ≈ %": "سنويًا ≈ %",
   "· KAP verisi": "· بيانات KAP",
   "· SON 15 GÜN": "· آخر 15 يومًا",
-  "· Sınava hazırsın": "· أنت جاهز للاختبار",
+  "· Sınava hazırsınız": "· أنت جاهز للاختبار",
   "· dünkü getiri": "· عائد الأمس",
   "· kıst dönem kâr payı hariç, yaklaşık değerdir": "· باستثناء ربح الفترة الجزئية، قيمة تقريبية",
   "· vade doldu": "· حل الأجل",
@@ -13319,7 +14245,7 @@ const EKRAN_KATEGORI: Record<string,string> = {
   // Piyasa & Veriler
   bistHisseTarayici:"piyasa", fonGetiriIzleme:"piyasa", karPayiOranlari:"piyasa", finansalGostergeler:"piyasa", piyasaHaberleri:"piyasa", fiyatAlarmlarim:"piyasa",
   // Araçlar / Hesaplama Araçları
-  finansalTakvim:"arac", vadeTakibi:"arac", katilimBankalari:"arac", katilimSigorta:"arac", kamuHaznedarligi:"arac", hazineSukuk:"arac",
+  finansalTakvim:"arac", vadeTakibi:"arac", katilimBankalari:"arac", katilimSigorta:"arac", kamuHaznedarligi:"arac", hazineSukuk:"arac", soruOdasi:"arac",
   hazineDoviz:"arac", hazineForward:"arac", hazineSwap:"arac", hazineBono:"arac", hazineSenaryo:"arac", hazineKurMakasi:"arac", hazineTcmbKur:"arac", isletmeFinans:"arac",
   asistan:"arac", sozluk:"arac", egitim:"arac", musteriPortfoyum:"arac",
 };
@@ -30594,7 +31520,7 @@ function khzSatirlar(kayit:any){
 
 // ── Hazine Kira Sertifikası (sukuk) Takibi (2026-10-16) ─────────────────────────────────────────
 // Veri /api/evds-proxy?sukuk=1'den gelir (Hazine duyurularından ISIN, 6 aylık kira oranı, valör, itfa, ödeme tarihleri, tutar).
-// API ulaşılamazsa aşağıdaki SUKUK_TOHUM ile çalışır. Getiri brüt gösterilir; sukuk stopajı kullanıcı alanıdır (varsayılan %0).
+// API ulaşılamazsa aşağıdaki SUKUK_TOHUM ile çalışır. Bireysel yatırımcıda sertifika stopajı %0 alınır; mevduat eşleniği Ayarlar'daki mevduat stopajıyla hesaplanır.
 const SUKUK_TOHUM:any[] = [
   {isin:"TRD130928T10",tur:"sabit",ihale:"2026-09-15",valor:"2026-09-16",itfa:"2028-09-13",vadeGun:728,donemOran:18.3,tutar:32206100000,birim:"TL",odemeler:["2027-03-17","2027-09-15","2028-03-15","2028-09-13"]},
   {isin:"TRD041028T26",tur:"tlrefk",ihale:"2026-10-05",valor:"2026-10-07",itfa:"2028-10-04",vadeGun:728,donemOran:18.9,tutar:59255500000,birim:"TL",odemeler:["2027-04-07","2027-10-06","2028-04-05","2028-10-04"]},
@@ -30638,15 +31564,21 @@ function sukukKalanYaz(gun:number):string{
   return `${gun} gün`;
 }
 
+function sukukKisaTarih(iso:string):string{
+  const [y,m,d]=iso.split("-").map(Number);
+  return `${d} ${((TARIH_AYLAR.tr||[])[m-1]||"").slice(0,3)} ${String(y).slice(2)}`;
+}
 function HazineSukuk({s}:{s?:any}){
   const [veri,setVeri]=useState<any>(null);
   const [yukleniyor,setYukleniyor]=useState(true);
   const [filtre,setFiltre]=useState<string>("tum");
   const [secili,setSecili]=useState<string>("");
-  const [stopajStr,setStopajStr]=useState<string>(()=>{ try{ const v=localStorage.getItem("kp_sukuk_stopaj"); if(v!=null&&v!=="") return v; }catch{} return "0"; });
-  const kutu:any={background:(TEMA==="acik"?"#E9EEF4":WA(0.05)),border:`1px solid ${WA(0.08)}`};
-  const baslikRenk=(TEMA==="acik"?C.label:"#fff");
-  const etiket:any={fontSize:11,fontWeight:600,color:(TEMA==="acik"?"#1A2430":"#A8C2DC")};
+  const acik=TEMA==="acik";
+  const kutu:any={background:(acik?"#FFFFFF":WA(0.05)),border:acik?"none":`1px solid ${WA(0.08)}`,boxShadow:acik?"0 1px 2px rgba(20,30,50,0.06)":"none",borderRadius:18};
+  const karo:any={background:(acik?"#F2F5F9":WA(0.06)),borderRadius:12,padding:"9px 10px"};
+  const baslikRenk=(acik?C.label:"#fff");
+  const etiket:any={fontSize:11,fontWeight:600,color:(acik?"#6B7685":"#A8C2DC")};
+  const yesil="#1FB87F";
 
   useEffect(()=>{
     let iptal=false;
@@ -30665,169 +31597,171 @@ function HazineSukuk({s}:{s?:any}){
   const gecmis = filtreli.filter((x:any)=> !yaklasan.includes(x));
   const x:any = gecmis.find((k:any)=>k.isin===secili) || gecmis[0] || null;
 
-  const setStopaj=(v:string)=>{ setStopajStr(v); try{ localStorage.setItem("kp_sukuk_stopaj",v); }catch{} };
-  const stopaj = (()=>{ const n=parseFloat(String(stopajStr).replace(",",".")); return isFinite(n)&&n>=0&&n<100?n:0; })();
-
-  // ── seçili ihraç hesapları ──
+  // ── seçili ihraç hesapları (bireysel yatırımcıda sertifika stopajı %0) ──
   const h = (()=>{
     if(!x) return null;
     const oran:number|null = x.donemOran!=null?x.donemOran:null;
     const yilBasit = oran!=null ? oran*2 : null;                          // 6 aylık kira × 2
-    const yilBilesik = oran!=null ? (Math.pow(1+oran/100,2)-1)*100 : null; // kira ödemeleri yeniden değerlendirilirse
-    const netBasit = yilBasit!=null ? yilBasit*(1-stopaj/100) : null;
+    const yilBilesik = oran!=null ? (Math.pow(1+oran/100,2)-1)*100 : null;
     const kalan = x.itfa ? sukukGunFarki(bugun,x.itfa) : null;
-    const toplamGun = (x.valor&&x.itfa) ? sukukGunFarki(x.valor,x.itfa) : null;
-    const gecen = (x.valor) ? sukukGunFarki(x.valor,bugun) : null;
-    const ilerleme = (toplamGun&&gecen!=null) ? Math.max(0,Math.min(100,gecen/toplamGun*100)) : null;
     const od = sukukOdemeler(x); const sonraki = od.find((t:string)=>t>=bugun)||null;
     const dovizli = x.tur==="usd"||x.tur==="eur"; const altin = x.tur==="altin";
-    const G = x.vadeGun || toplamGun || 365;
+    const G = x.vadeGun || ((x.valor&&x.itfa)?sukukGunFarki(x.valor,x.itfa):365);
     const sm = dovizli ? (s?.stopajYP_tum ?? 25) : (G<=180 ? (s?.stopajTL_0_180 ?? 17.5) : G<=365 ? (s?.stopajTL_181_365 ?? 15) : (s?.stopajTL_365plus ?? 10));
-    const mevduat = (!altin && netBasit!=null) ? netBasit/(1-sm/100) : null;
-    return {oran,yilBasit,yilBilesik,netBasit,kalan,ilerleme,od,sonraki,dovizli,altin,sm,mevduat,G};
+    const mevduat = (!altin && yilBasit!=null) ? yilBasit/(1-sm/100) : null;
+    // zaman çizgisi
+    let dugum:{p:number,ad:string,t:string,durum:string}[]=[];
+    if(x.valor&&x.itfa){
+      const top=Math.max(1,sukukGunFarki(x.valor,x.itfa));
+      const pos=(t:string)=>Math.max(0,Math.min(100,sukukGunFarki(x.valor,t)/top*100));
+      dugum.push({p:0,ad:"Valör",t:x.valor,durum:x.valor<=bugun?"gecti":"bekler"});
+      od.forEach((t:string,i:number)=>{
+        const son=(t===x.itfa);
+        dugum.push({p:son?100:pos(t),ad:son?"İtfa":`${i+1}. kira`,t,durum:t<bugun?"gecti":(t===sonraki?"siradaki":"bekler")});
+      });
+      const goster=od.length<=4; let sonEtiket=-100;
+      dugum=dugum.map((d,i)=>{
+        const zorunlu=i===0||i===dugum.length-1||d.t===sonraki;
+        let g=(goster||zorunlu);
+        if(g&&i!==0&&i!==dugum.length-1&&(d.p<18||d.p>82)) g=false;
+        if(g&&d.p-sonEtiket<18&&i!==dugum.length-1) g=false;
+        if(g) sonEtiket=d.p;
+        return {...d,etiket:g} as any;
+      });
+    }
+    return {oran,yilBasit,yilBilesik,kalan,od,sonraki,dovizli,altin,sm,mevduat,dugum,G};
   })();
+  const ilerleme = (x&&x.valor&&x.itfa) ? Math.max(0,Math.min(100,sukukGunFarki(x.valor,bugun)/Math.max(1,sukukGunFarki(x.valor,x.itfa))*100)) : null;
 
   const sonGuncelleme = (()=>{
     const t=veri?.guncelleme; if(!t) return "";
     const d=new Date(t);
     return `${d.getDate()} ${(TARIH_AYLAR.tr||[])[d.getMonth()]?.slice(0,3)} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
   })();
-  const rozet=(tur:string)=>{ const r=SUKUK_TUR_RENK[tur]||SUKUK_TUR_RENK.sabit; return <span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:6,background:r[0],color:r[1],marginLeft:6}}>{SUKUK_TUR_AD[tur]||tur}</span>; };
+  const rozet=(tur:string)=>{ const r=SUKUK_TUR_RENK[tur]||SUKUK_TUR_RENK.sabit; return <span style={{fontSize:10.5,fontWeight:700,padding:"2px 8px",borderRadius:999,background:r[0],color:r[1],marginLeft:6}}>{SUKUK_TUR_AD[tur]||tur}</span>; };
   const FILTRELER=[["tum","Tümü"],["sabit","TL Sabit"],["tlrefk","TLREFK"],["altin","Altın"],["doviz","Döviz"]];
+  const mevMax = h&&h.mevduat!=null&&h.yilBasit!=null ? Math.max(h.mevduat,h.yilBasit) : 1;
 
   return(
     <div style={{background:C.bg,padding:"12px 14px 92px",minHeight:"100%"}}>
-      <div style={{background:"linear-gradient(160deg, rgba(91,155,216,0.10), rgba(45,212,191,0.04))",border:"1px solid rgba(91,155,216,0.25)",borderRadius:16,padding:"14px 16px",marginBottom:14}}>
-        <p style={{margin:0,fontSize:14,fontWeight:700,color:baslikRenk}}>🏛️ Hazine Kira Sertifikası Takibi</p>
-        <p style={{margin:"5px 0 0",fontSize:12,color:WA(0.6),lineHeight:1.5}}>Hazine'nin ihraç ettiği kira sertifikalarının (sukuk) kira oranı, vadeye kalan günü ve mevduat eşleniği. Veriler Hazine ve Maliye Bakanlığı duyurularından alınır.</p>
-      </div>
-
-      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
+      <div style={{display:"flex",gap:6,overflowX:"auto",marginBottom:12,paddingBottom:2}}>
         {FILTRELER.map(([k,ad])=>(
           <span key={k} onClick={()=>{ setFiltre(k); setSecili(""); }} role="button"
-            style={{fontSize:12,fontWeight:600,padding:"7px 12px",borderRadius:999,cursor:"pointer",
-              background:filtre===k?"#2563EB":(TEMA==="acik"?"#E9EEF4":WA(0.07)),color:filtre===k?"#fff":WA(0.7)}}>{ad}</span>
+            style={{fontSize:12,fontWeight:600,padding:"7px 13px",borderRadius:999,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0,
+              background:filtre===k?(acik?"#16202C":"#2563EB"):(acik?"#FFFFFF":WA(0.07)),
+              color:filtre===k?"#fff":(acik?"#6B7685":WA(0.7)),
+              border:filtre===k?"none":(acik?"1px solid #E3E8EF":"none")}}>{ad}</span>
         ))}
       </div>
 
       {yukleniyor&&!veri&&<p style={{margin:"0 0 10px",fontSize:11,color:WA(0.5)}}>Güncel veriler alınıyor…</p>}
 
       {!x&&(
-        <div style={{...kutu,borderRadius:14,padding:"14px",marginBottom:12}}>
+        <div style={{...kutu,padding:"14px",marginBottom:12}}>
           <p style={{margin:0,fontSize:13,color:WA(0.7),lineHeight:1.5}}>Bu türde kayıtlı ihraç bulunamadı.</p>
         </div>
       )}
 
       {x&&h&&(
-        <div style={{...kutu,borderRadius:14,padding:"14px",marginBottom:12}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}>
-            <p style={{margin:0,...etiket}}>İhraç · {tarihYaz(x.ihale||x.valor)}{rozet(x.tur)}</p>
+        <div style={{...kutu,padding:"16px",marginBottom:12}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+            <p style={{margin:0,fontSize:12,color:WA(0.6)}}>{tarihYaz(x.ihale||x.valor)}{rozet(x.tur)}</p>
             <span style={{fontSize:11,color:WA(0.5)}}>{x.isin}</span>
           </div>
-          <div style={{display:"flex",alignItems:"baseline",gap:8,marginTop:8,flexWrap:"wrap"}}>
-            <span style={{fontSize:28,fontWeight:800,color:"#2cc58c",lineHeight:1.1}}>{sukukOran(h.oran)}</span>
-            <span style={{fontSize:12,color:WA(0.6)}}>{x.tur==="tlrefk"?"ilk dönem kira oranı (6 ay)":h.altin?"6 aylık kira oranı (altın cinsinden)":"6 aylık kira oranı"}</span>
+          <div style={{display:"flex",alignItems:"baseline",gap:8,marginTop:10,flexWrap:"wrap"}}>
+            <span style={{fontSize:40,fontWeight:800,color:yesil,lineHeight:1.05,letterSpacing:-1}}>{sukukOran(h.yilBasit)}</span>
+            <span style={{fontSize:12,color:WA(0.6)}}>{h.altin?"yıllık basit (altın cinsinden)":"yıllık basit getiri"}</span>
           </div>
-          {h.yilBasit!=null&&(
-            <p style={{margin:"6px 0 0",fontSize:12,color:WA(0.7),lineHeight:1.5}}>
-              Yıllık basit <b style={{color:baslikRenk}}>{sukukOran(h.yilBasit)}</b>
-              {!h.altin&&h.yilBilesik!=null&&<> · yıllık bileşik <b style={{color:baslikRenk}}>{sukukOran(h.yilBilesik)}</b></>}
-              {x.tur==="tlrefk"&&<> · sonraki dönemlerde oran TLREFK'ye göre değişir</>}
-            </p>
-          )}
-
-          <div style={{height:1,background:WA(0.07),margin:"12px 0"}}/>
-          <div style={{display:"flex",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
-            <div>
-              <p style={{margin:0,...etiket}}>Vadeye kalan</p>
-              <p style={{margin:"2px 0 0",fontSize:17,fontWeight:700,color:baslikRenk}}>{h.kalan!=null?sukukKalanYaz(h.kalan):"—"}</p>
-              <p style={{margin:"1px 0 0",fontSize:11,color:WA(0.55)}}>İtfa {x.itfa?tarihYaz(x.itfa):"—"}{x.valor?` · valör ${tarihYaz(x.valor)}`:""}</p>
-            </div>
-            <div style={{textAlign:"right"}}>
-              <p style={{margin:0,...etiket}}>Sonraki kira ödemesi</p>
-              <p style={{margin:"2px 0 0",fontSize:15,fontWeight:700,color:baslikRenk}}>{h.sonraki?tarihYaz(h.sonraki):"—"}</p>
-              <p style={{margin:"1px 0 0",fontSize:11,color:WA(0.55)}}>{h.sonraki?`${sukukGunFarki(bugun,h.sonraki)} gün sonra`:"Ödeme kalmadı"}</p>
-            </div>
-          </div>
-          {h.ilerleme!=null&&(
-            <div style={{marginTop:10}}>
-              <div style={{height:6,borderRadius:3,background:WA(0.1),overflow:"hidden"}}>
-                <div style={{width:`${h.ilerleme}%`,height:"100%",background:"#2cc58c",borderRadius:3}}/>
-              </div>
-              <p style={{margin:"4px 0 0",fontSize:10,color:WA(0.5)}}>Vadenin %{Math.round(h.ilerleme)}'i geçti</p>
-            </div>
-          )}
-
-          <div style={{height:1,background:WA(0.07),margin:"12px 0"}}/>
-          <div style={{display:"flex",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
-            <div>
-              <p style={{margin:0,...etiket}}>İhraç tutarı</p>
-              <p style={{margin:"2px 0 0",fontSize:14,fontWeight:700,color:baslikRenk}}>{sukukTutarYaz(x)}</p>
-            </div>
-            <div style={{textAlign:"right"}}>
-              <p style={{margin:0,...etiket}}>Vade</p>
-              <p style={{margin:"2px 0 0",fontSize:14,fontWeight:700,color:baslikRenk}}>{x.vadeGun?`${x.vadeGun} gün`:"—"}</p>
-            </div>
+          <p style={{margin:"6px 0 0",fontSize:12,color:WA(0.6),lineHeight:1.5}}>
+            {x.tur==="tlrefk"?"İlk dönem kira oranı":"Dönemsel kira oranı"} {sukukOran(h.oran)} (6 ay){x.tur==="tlrefk"?" · sonraki dönemlerde TLREFK'e göre değişir":""}
+          </p>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginTop:14}}>
+            <div style={karo}><p style={{margin:0,fontSize:10.5,color:WA(0.55)}}>{h.altin?"6 ay kira":"Yıllık bileşik"}</p><p style={{margin:"2px 0 0",fontSize:15,fontWeight:700,color:baslikRenk}}>{h.altin?sukukOran(h.oran):sukukOran(h.yilBilesik)}</p></div>
+            <div style={karo}><p style={{margin:0,fontSize:10.5,color:WA(0.55)}}>İhraç tutarı</p><p style={{margin:"2px 0 0",fontSize:14,fontWeight:700,color:baslikRenk,lineHeight:1.25}}>{sukukTutarYaz(x).replace(" altın","")}</p></div>
+            <div style={karo}><p style={{margin:0,fontSize:10.5,color:WA(0.55)}}>Vade</p><p style={{margin:"2px 0 0",fontSize:15,fontWeight:700,color:baslikRenk}}>{x.vadeGun?`${x.vadeGun} gün`:"—"}</p></div>
           </div>
         </div>
       )}
 
       {x&&h&&(
-        <div style={{...kutu,borderRadius:14,padding:"14px",marginBottom:12}}>
-          <p style={{margin:0,fontSize:13,fontWeight:700,color:baslikRenk}}>Mevduat eşleniği</p>
+        <div style={{...kutu,padding:"16px",marginBottom:12}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",gap:10}}>
+            <div>
+              <p style={{margin:0,fontSize:12,color:WA(0.6)}}>Vadeye kalan</p>
+              <p style={{margin:"2px 0 0",fontSize:24,fontWeight:800,color:baslikRenk}}>{h.kalan!=null?(h.kalan<0?"Vadesi doldu":h.kalan===0?"Bugün itfa":`${h.kalan} gün`):"—"}{h.kalan!=null&&h.kalan>=60&&<span style={{fontSize:12,fontWeight:500,color:WA(0.6)}}> ≈ {Math.floor(h.kalan/30.4375)} ay</span>}</p>
+            </div>
+            <div style={{textAlign:"right"}}>
+              <p style={{margin:0,fontSize:12,color:WA(0.6)}}>Sonraki kira</p>
+              <p style={{margin:"2px 0 0",fontSize:17,fontWeight:800,color:baslikRenk}}>{h.sonraki?tarihYaz(h.sonraki):"—"}</p>
+              <p style={{margin:"1px 0 0",fontSize:11,color:WA(0.55)}}>{h.sonraki?`${sukukGunFarki(bugun,h.sonraki)} gün sonra`:"Ödeme kalmadı"}</p>
+            </div>
+          </div>
+          {h.dugum.length>1&&(
+            <div style={{position:"relative",height:58,margin:"14px 9px 0"}}>
+              <div style={{position:"absolute",left:0,right:0,top:14,height:6,borderRadius:3,background:acik?"#E3E8EF":WA(0.12)}}/>
+              {ilerleme!=null&&<div style={{position:"absolute",left:0,top:14,height:6,borderRadius:3,background:yesil,width:`${Math.max(1.5,ilerleme)}%`}}/>}
+              {h.dugum.map((d:any,i:number)=>(
+                <div key={i} style={{position:"absolute",left:`${d.p}%`,top:8,width:18,height:18,marginLeft:-9,borderRadius:"50%",boxSizing:"border-box",
+                  background:d.durum==="gecti"?yesil:(acik?"#fff":C.bg),border:`3px solid ${d.durum==="bekler"?(acik?"#C7CFDA":WA(0.3)):yesil}`}}/>
+              ))}
+              {h.dugum.map((d:any,i:number)=>d.etiket&&(
+                <div key={"l"+i} style={{position:"absolute",top:32,left:`${d.p}%`,transform:i===0?"translateX(-9px)":i===h.dugum.length-1?"translateX(calc(-100% + 9px))":"translateX(-50%)",
+                  fontSize:10,color:WA(0.55),textAlign:i===0?"left":i===h.dugum.length-1?"right":"center",whiteSpace:"nowrap",lineHeight:1.25}}>
+                  <b style={{display:"block",fontSize:10.5,color:baslikRenk}}>{d.ad}</b>{sukukKisaTarih(d.t)}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {x&&h&&(
+        <div style={{...kutu,padding:"16px",marginBottom:12}}>
+          <p style={{margin:"0 0 12px",fontSize:13,fontWeight:700,color:baslikRenk}}>Mevduat karşılaştırması</p>
           {h.altin?(
-            <p style={{margin:"6px 0 0",fontSize:12,color:WA(0.65),lineHeight:1.5}}>Altına dayalı kira sertifikasının getirisi altın cinsindendir; TL mevduat oranıyla doğrudan karşılaştırılamaz.</p>
+            <p style={{margin:0,fontSize:12,color:WA(0.65),lineHeight:1.5}}>Altına dayalı kira sertifikasının getirisi altın cinsindendir; TL mevduat oranıyla doğrudan karşılaştırılamaz.</p>
           ):(
             <>
-              <div style={{display:"flex",alignItems:"center",gap:10,marginTop:8,flexWrap:"wrap"}}>
-                <span style={{...etiket}}>Sertifika stopajı</span>
-                <div style={{display:"flex",alignItems:"center",gap:4,background:(TEMA==="acik"?"#fff":WA(0.08)),border:`1px solid ${WA(0.12)}`,borderRadius:8,padding:"4px 8px"}}>
-                  <span style={{fontSize:13,color:WA(0.6)}}>%</span>
-                  <input value={stopajStr} inputMode="decimal" onChange={(e:any)=>setStopaj(e.target.value)}
-                    style={{width:44,background:"transparent",border:"none",outline:"none",fontSize:14,fontWeight:700,color:baslikRenk,fontFamily:"inherit"}}/>
-                </div>
-                <span style={{fontSize:11,color:WA(0.5)}}>mevduat stopajı %{h.sm.toLocaleString("tr-TR")} (Ayarlar)</span>
+              <div style={{marginBottom:12}}>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:baslikRenk,marginBottom:5}}><span>Kira sertifikası (yıllık basit)</span><b style={{fontSize:15}}>{sukukOran(h.yilBasit)}</b></div>
+                <div style={{height:12,borderRadius:6,background:acik?"#EEF1F5":WA(0.1),overflow:"hidden"}}><div style={{width:`${(h.yilBasit||0)/mevMax*100}%`,height:"100%",borderRadius:6,background:yesil}}/></div>
               </div>
-              <div style={{display:"flex",justifyContent:"space-between",gap:10,marginTop:12,flexWrap:"wrap"}}>
-                <div>
-                  <p style={{margin:0,...etiket}}>Sertifika net yıllık basit</p>
-                  <p style={{margin:"2px 0 0",fontSize:16,fontWeight:700,color:baslikRenk}}>{sukukOran(h.netBasit)}</p>
-                </div>
-                <div style={{textAlign:"right"}}>
-                  <p style={{margin:0,...etiket}}>Eşdeğer mevduat / katılma hesabı</p>
-                  <p style={{margin:"2px 0 0",fontSize:16,fontWeight:700,color:"#2cc58c"}}>{sukukOran(h.mevduat)}</p>
-                </div>
+              <div>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:baslikRenk,marginBottom:5}}><span>Eşdeğer {h.dovizli?"döviz mevduatı":"mevduat"} / katılma hesabı</span><b style={{fontSize:15}}>{sukukOran(h.mevduat)}</b></div>
+                <div style={{height:12,borderRadius:6,background:acik?"#EEF1F5":WA(0.1),overflow:"hidden"}}><div style={{width:`${(h.mevduat||0)/mevMax*100}%`,height:"100%",borderRadius:6,background:"#9AA7B8"}}/></div>
               </div>
-              <p style={{margin:"8px 0 0",fontSize:11,color:WA(0.55),lineHeight:1.5}}>Aynı net getiriyi elde etmek için gereken yıllık basit {h.dovizli?"döviz mevduatı":"mevduat"} oranı (mevduat stopajı %{h.sm.toLocaleString("tr-TR")} sonrası). Bunun üzerinde oran veren bir hesap, sertifikadan daha çok kazandırır.{x.tur==="tlrefk"?" TLREFK'de yalnızca ilk dönem oranı esas alınmıştır.":""}</p>
+              <p style={{margin:"12px 0 0",fontSize:11.5,lineHeight:1.5,borderRadius:10,padding:"9px 11px",background:acik?"#E6F7F0":"rgba(31,184,127,0.12)",color:acik?"#0F6E4C":"#7fe0b8"}}>
+                Sertifikada bireysel yatırımcıya stopaj uygulanmaz. Mevduat/katılma hesabı oranı {sukukOran(h.mevduat)}'nin (stopaj %{h.sm.toLocaleString("tr-TR")} sonrası) üzerindeyse hesap daha çok kazandırır.{x.tur==="tlrefk"?" TLREFK'de yalnızca ilk dönem oranı esas alınmıştır.":""}
+              </p>
             </>
           )}
         </div>
       )}
 
       {yaklasan.length>0&&(
-        <div style={{background:"rgba(251,191,36,0.1)",border:"1px solid rgba(251,191,36,0.3)",borderRadius:12,padding:"10px 13px",marginBottom:12}}>
-          <p style={{margin:0,fontSize:11,fontWeight:700,color:"#FDE68A"}}>Yaklaşan ihraç</p>
+        <div style={{background:"rgba(251,191,36,0.12)",border:"1px solid rgba(251,191,36,0.35)",borderRadius:14,padding:"10px 13px",marginBottom:12}}>
+          <p style={{margin:0,fontSize:11,fontWeight:700,color:acik?"#8A5A00":"#FDE68A"}}>Yaklaşan ihraç</p>
           {yaklasan.map((k:any)=>(
-            <p key={k.isin} style={{margin:"4px 0 0",fontSize:12,color:"#FDE68A",lineHeight:1.4}}>{tarihYaz(k.ihale||k.valor)} · {SUKUK_TUR_AD[k.tur]||k.tur}{k.donemOran!=null?` · 6 aylık kira ${sukukOran(k.donemOran)}`:""}</p>
+            <p key={k.isin} style={{margin:"4px 0 0",fontSize:12,color:acik?"#8A5A00":"#FDE68A",lineHeight:1.4}}>{tarihYaz(k.ihale||k.valor)} · {SUKUK_TUR_AD[k.tur]||k.tur}{k.donemOran!=null?` · 6 aylık kira ${sukukOran(k.donemOran)}`:""}</p>
           ))}
         </div>
       )}
 
       {gecmis.length>0&&(
-        <div style={{...kutu,borderRadius:14,padding:"4px 14px 6px",marginBottom:12}}>
-          <p style={{margin:"10px 0 2px",...etiket}}>İhraç geçmişi · ayrıntı için dokunun</p>
+        <div style={{...kutu,padding:"14px 16px 6px",marginBottom:12}}>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}><span style={{fontSize:13,fontWeight:700,color:baslikRenk}}>İhraç geçmişi</span><span style={{fontSize:11,color:WA(0.55)}}>ayrıntı için dokunun</span></div>
           {gecmis.map((k:any,i:number)=>{
             const kal=k.itfa?sukukGunFarki(bugun,k.itfa):null; const aktif=x&&k.isin===x.isin;
             return(
               <div key={k.isin} onClick={()=>setSecili(k.isin)} role="button"
-                style={{display:"flex",justifyContent:"space-between",gap:10,padding:"10px 0",borderTop:i>0?`1px solid ${WA(0.07)}`:"none",cursor:"pointer",opacity:aktif?1:0.85}}>
+                style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"12px 0",borderTop:i>0?`1px solid ${acik?"#E3E8EF":WA(0.07)}`:"none",cursor:"pointer",opacity:aktif?1:0.88}}>
                 <div style={{minWidth:0}}>
-                  <p style={{margin:0,fontSize:13,fontWeight:700,color:baslikRenk}}>{tarihYaz(k.ihale||k.valor)}{rozet(k.tur)}</p>
-                  <p style={{margin:"2px 0 0",fontSize:11,color:WA(0.55)}}>{sukukTutarYaz(k)} · {kal==null?"":kal<0?"vadesi doldu":`${kal} gün kaldı`}</p>
+                  <p style={{margin:0,fontSize:14,fontWeight:700,color:baslikRenk}}>{tarihYaz(k.ihale||k.valor)}{rozet(k.tur)}</p>
+                  <p style={{margin:"3px 0 0",fontSize:11.5,color:WA(0.55)}}>{sukukTutarYaz(k)} · {kal==null?"":kal<0?"vadesi doldu":`${kal} gün kaldı`}</p>
                 </div>
                 <div style={{textAlign:"right",flexShrink:0}}>
-                  <p style={{margin:0,fontSize:14,fontWeight:700,color:"#2cc58c"}}>{sukukOran(k.donemOran)}</p>
-                  <p style={{margin:"2px 0 0",fontSize:10,color:WA(0.5)}}>6 ay kira</p>
+                  <p style={{margin:0,fontSize:16,fontWeight:800,color:yesil}}>{sukukOran(k.donemOran)}</p>
+                  <p style={{margin:"2px 0 0",fontSize:11,color:WA(0.55)}}>6 ay kira</p>
                 </div>
               </div>
             );
@@ -30835,8 +31769,8 @@ function HazineSukuk({s}:{s?:any}){
         </div>
       )}
 
-      <p style={{margin:"4px 2px 0",fontSize:10,color:WA(0.5),lineHeight:1.5}}>
-        Kaynak: T.C. Hazine ve Maliye Bakanlığı ihraç duyuruları{sonGuncelleme?` · son kontrol ${sonGuncelleme}`:""}. Oranlar duyuruda yazan brüt dönemsel kira oranlarıdır; bileşik getiri 6 aylık orandan hesaplanır. Stopaj ve vergi durumunuz kişisel koşullara göre değişebilir; güncel mevzuata bakınız. Bilgilendirme amaçlıdır, yatırım tavsiyesi değildir.
+      <p style={{margin:"4px 4px 0",fontSize:10.5,color:WA(0.5),lineHeight:1.5}}>
+        Kaynak: T.C. Hazine ve Maliye Bakanlığı ihraç duyuruları{sonGuncelleme?` · son kontrol ${sonGuncelleme}`:""}. Oranlar duyuruda yazan brüt dönemsel kira oranlarıdır; yıllık getiri 6 aylık oranın iki katı, bileşik getiri ise 6 aylık orandan hesaplanır. Bireysel yatırımcı için sertifikada stopaj uygulanmaz; vergi durumunuz kişisel koşullara göre değişebilir, güncel mevzuata bakınız. Bilgilendirme amaçlıdır, yatırım tavsiyesi değildir.
       </p>
     </div>
   );
@@ -36762,6 +37696,7 @@ const MENU = {
   katilimSigorta:{title:"Katılım Sigortacılığı",back:"araclarMenu"},
   icazetBelgeleri:{title:"İcazet Belgeleri",back:"araclarMenu"},
   egitim:{title:"Eğitim",back:"araclarMenu"},
+  soruOdasi:{title:"Soru Odası",back:"araclarMenu"},
   musteriPortfoyum:{title:"Müşteri Portföyüm",back:"araclarMenu"},
   kfkNedir:{title:"Katılım Finans Kefalet (KFK) Nedir?",back:"araclarMenu"},
   katilimSektoru:{title:"Katılım Bankacılığı Sektörü",back:"araclarMenu"},
@@ -36809,7 +37744,7 @@ const TAB_OF_SCREEN:any = {
   hazineDoviz:"hesapla", hazineForward:"hesapla", hazineSwap:"hesapla",
   hazineBono:"hesapla", hazineSenaryo:"hesapla", hazineKurMakasi:"hesapla", hazineTcmbKur:"hesapla",
   piyasaHaberleri:"piyasa", finansalGostergeler:"piyasa",
-  araclarMenu:"araclar", sozluk:"araclar", egitim:"araclar", musteriPortfoyum:"araclar", isletmeFinans:"araclar", vadeTakibi:"araclar", katilimBankalari:"araclar",  katilimSigorta:"araclar", kamuHaznedarligi:"araclar", hazineSukuk:"araclar", kfkNedir:"araclar", zekatHesabi:"araclar", birikimHesaplayici:"araclar", erkenKapamaKarari:"hesapla", erkenKapamaKomisyonu:"hesapla", vadeFarkiKarari:"hesapla", teklifKarsilastirma:"hesapla", tlYpKarari:"hesapla", kiraSertifikasi:"araclar", getiriKarsilastirma:"araclar", haftalikOzet:"araclar", portfoyum:"araclar", fonDetay:"araclar",
+  araclarMenu:"araclar", sozluk:"araclar", egitim:"araclar", soruOdasi:"araclar", musteriPortfoyum:"araclar", isletmeFinans:"araclar", vadeTakibi:"araclar", katilimBankalari:"araclar",  katilimSigorta:"araclar", kamuHaznedarligi:"araclar", hazineSukuk:"araclar", kfkNedir:"araclar", zekatHesabi:"araclar", birikimHesaplayici:"araclar", erkenKapamaKarari:"hesapla", erkenKapamaKomisyonu:"hesapla", vadeFarkiKarari:"hesapla", teklifKarsilastirma:"hesapla", tlYpKarari:"hesapla", kiraSertifikasi:"araclar", getiriKarsilastirma:"araclar", haftalikOzet:"araclar", portfoyum:"araclar", fonDetay:"araclar",
   asistan:"yapayzeka",
   profil:"profil",
 };
@@ -36831,6 +37766,7 @@ const SIDEBAR_GRUPLARI: {baslik:string; varsayilanAcik:boolean; ogeler:{key:stri
   ]},
   {baslik:"BİLGİ", varsayilanAcik:false, ogeler:[
     {key:"egitim",label:"Eğitim"},
+    {key:"soruOdasi",label:"Soru Odası"},
     {key:"kiraSertifikasi",label:"Kira Sertifikası İhraçları"},
     {key:"kamuHaznedarligi",label:"Kamu Haznedarlığı Getiri İzleme"},
     {key:"hazineSukuk",label:"Hazine Kira Sertifikası Takibi"},
@@ -36878,6 +37814,7 @@ const SCREEN_TO_PATH: Record<string,string> = {
   fiyatAlarmlarim: "/fiyat-alarmlarim",
   sozluk: "/finans-sozlugu",
   egitim: "/egitim",
+  soruOdasi: "/soru-odasi",
   musteriPortfoyum: "/musteri-portfoyum",
   ayarlar: "/ayarlar",
   toggFinansman: "/togg-finansmani",
@@ -37052,6 +37989,7 @@ const MENU_ARAMA_LIST=[
   {key:"katilimSektoru",     label:"Katılım Bankacılığı Sektörü",               icon:"🏦", grup:"Araçlar", alt:["sektör","bddk","pay","aktif","toplanan fon","kullandırılan fon","katılma hesabı","özel cari","roe","kârlılık"]},
   {key:"icazetBelgeleri",    label:"İcazet Belgeleri",                          icon:"📑", grup:"Araçlar", alt:["icazet","icazet belgesi","danışma komitesi","faizsiz","uygunluk","fetva","murabaha","katılma hesabı","belge"]},
   {key:"egitim",               label:"Eğitim",                                    icon:"🎓", grup:"Araçlar", alt:["eğitim","ders","sınav","quiz","puan","liderlik","öğren","katılım bankacılığı","ekonomi","finansal okuryazarlık","fon","yatırım"]},
+  {key:"soruOdasi",             label:"Soru Odası",                                icon:"🏆", grup:"Araçlar", alt:["soru odası","bilgi yarışması","yarışma","quiz","oyun","soru","puan","sıralama","genel kültür","tarih","coğrafya","spor"]},
   {key:"musteriPortfoyum",      label:"Müşteri Portföyüm",                         icon:"🗂️", grup:"Araçlar", alt:["müşteri","portföy","bankacı","görüşme","takip","hatırlatma","not","crm","aksiyon","telefon","arama"]},
   {key:"isletmeFinans",       label:"İşletmem · Finans Asistanım",                icon:"🏢", grup:"Araçlar", alt:["işletme","kobi","nakit akış","nakit akışı","tahsilat","ödeme takvimi","nakit radarı","finans asistanı","finansman ihtiyacı","açık","alacak","borç","çek","senet"]},
   {key:"ekonomiSozluk",      label:"Ekonomi Sözlüğü",                           icon:"📚", grup:"Araçlar", alt:["ekonomi","terim","sözlük","enflasyon","gsyh","faiz","tanım","kavram","makro"]},
@@ -49285,7 +50223,8 @@ function App(){
               {key:"musteriPortfoyum", label:"Müşteri Portföyüm", desc:"Bankacılar için müşteri, görüşme ve takip defteri. Bugün kimi arayacağını gör; üyelik gerekir, kayıtlar hesabına bağlı saklanır", uyelik:true},
             ]},
             {baslik:"ÖĞREN", items:[
-              {key:"egitim", label:"Eğitim", desc:"6 modül, 132 ders; örnek senaryolar, modül sınavı, puan ve liderlik tablosu"},
+              {key:"egitim", label:"Eğitim", desc:"9 modül, 175 ders; örnek senaryolar, modül sınavı, puan ve liderlik tablosu"},
+              {key:"soruOdasi", label:"Soru Odası", desc:"Bilgi yarışması: 15 konu, puan ve sıralama"},
               {key:"ekonomiSozluk", label:"Ekonomi Sözlüğü", desc:"196 ekonomi ve finans terimi — enflasyondan rezervlere, sade tanımlarla"},
               {key:"sozluk", label:"Katılım Bankacılığı Sözlüğü", desc:"Terim ve tanımları hızlıca ara"},
               {key:"katilimBlog", label:"Katılım Blog", desc:"Kâr payı, murabaha, TLREF ve daha fazlası — anlaşılır rehberler", harici:true},
@@ -49657,6 +50596,7 @@ function App(){
         {screen==="katilimSigorta"&&<KatilimSigorta/>}
         {screen==="icazetBelgeleri"&&<IcazetBelgeleri/>}
         {screen==="egitim"&&<Egitim kimlik={kimlik} nav={nav}/>}
+        {screen==="soruOdasi"&&<SoruOdasi kimlik={kimlik} nav={nav}/>}
         {screen==="isletmeFinans"&&<IsletmeFinans kimlik={kimlik} nav={nav} girisAc={isletmeFinansIcinHesapAc} geri={back}/>}
         {screen==="musteriPortfoyum"&&<MusteriPortfoyumEkrani kimlik={kimlik} nav={nav} girisAc={musteriPortfoyuIcinHesapAc} geri={back}/>}
         {screen==="kfkNedir"&&<KfkNedir/>}
